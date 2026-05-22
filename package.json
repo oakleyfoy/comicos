@@ -1,0 +1,31 @@
+{
+  "name": "comic-os",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:migrate": "powershell -NoProfile -Command \"Set-Location 'apps/api'; .\\.venv\\Scripts\\alembic -c alembic.ini upgrade head\"",
+    "db:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\reset-local-db.ps1",
+    "db:up": "docker compose up -d postgres",
+    "kill:api": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\kill-local-api.ps1",
+    "kill:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\kill-local-dev.ps1",
+    "kill:web": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\kill-local-web.ps1",
+    "redis:logs": "docker compose logs -f redis",
+    "redis:up": "docker compose up -d redis",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "apps\\api\\.venv\\Scripts\\python -m uvicorn --app-dir apps/api app.main:app --reload --reload-dir apps/api --host 127.0.0.1 --port 8000",
+    "dev:worker": "apps\\api\\.venv\\Scripts\\python -m app.workers.rq_worker",
+    "dev:worker:local": "apps\\api\\.venv\\Scripts\\python -m app.workers.rq_worker_local",
+    "dev:web": "npm --workspace apps/web run dev -- --host 127.0.0.1 --port 5173 --strictPort",
+    "build:web": "npm --workspace apps/web run build",
+    "worker:local:cleanup": "apps\\api\\.venv\\Scripts\\python -m app.workers.cleanup_started_jobs",
+    "worker:local:diagnose": "apps\\api\\.venv\\Scripts\\python -m app.workers.local_diagnostic",
+    "worker:local:diagnose:gmail": "apps\\api\\.venv\\Scripts\\python -m app.workers.local_diagnostic_gmail"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

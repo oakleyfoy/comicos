@@ -1,0 +1,18 @@
+Whatnot Order Receipt
+Seller: MidtownComicsLive
+Order Date: May 18, 2026
+Order ID: WN-48192
+
+Items:
+1x Invincible #1 Cover A - $12.00
+1x Ultimate Spider-Man #4 1:25 Variant - $18.00
+1x Amazing Spider-Man #252 - price not clearly shown
+
+Subtotal: $30.00
+Shipping: $5.25
+Tax: $2.10
+Total: $37.35
+
+Notes:
+- Third line item is intentionally incomplete for parser warning testing.
+- Review issue numbers, ratios, and prices before confirming any draft.
