@@ -5,11 +5,28 @@ import {
   ApiError,
   apiClient,
   type InventoryItem,
-  type PortfolioPerformance,
-  type PortfolioPerformanceItem,
+  type InventoryOwnershipNormalized,
   type InventoryQueryParams,
+  type InventoryReleaseCalendar,
   type InventorySummary,
   type InventoryUpdatePayload,
+  type InventoryIntelligenceHealthLevel,
+  type DuplicateOwnershipListResponse,
+  type DuplicateOwnershipClassification,
+  type RunDetectionAttachment,
+  type RunDetectionListResponse,
+  type RunDetectionSeriesStatus,
+  type PortfolioPerformance,
+  type PortfolioPerformanceItem,
+  type InventoryIntelligenceHealthRollup,
+  type InventoryIntelligenceRollupSummary,
+  type CollectionAnalyticsSummary,
+  type CollectionPublisherAnalyticsResponse,
+  type CollectionQualityAnalyticsResponse,
+  type InventoryRiskPriority,
+  type InventoryRiskRead,
+  type InventoryRiskSummary,
+  type InventoryRiskType,
   type SortBy,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
@@ -47,6 +64,327 @@ function variantLabel(item: InventoryItem): string {
   return [item.cover_name, item.printing, item.ratio, item.variant_type]
     .filter(Boolean)
     .join(" / ");
+}
+
+function inventoryReleaseChronologyCell(item: InventoryItem): JSX.Element {
+  return (
+    <div>
+      <p
+        className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${assetStateTone(
+          item.asset_state,
+        )}`}
+      >
+        {assetStateLabel(item.asset_state)}
+      </p>
+      <p className="text-slate-400">{item.release_year ?? "—"}</p>
+      {item.release_date ? (
+        <p className="text-[11px] text-slate-500">{formatDate(item.release_date)}</p>
+      ) : null}
+      {item.expected_ship_date ? (
+        <p className="text-[11px] text-slate-500">Expected {formatDate(item.expected_ship_date)}</p>
+      ) : null}
+      {item.received_at ? (
+        <p className="text-[11px] text-emerald-300">Received {formatDate(item.received_at)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function assetStateLabel(state: InventoryItem["asset_state"]): string {
+  switch (state) {
+    case "in_hand":
+      return "Owned / In Hand";
+    case "ordered_not_received":
+      return "Ordered / Not Received";
+    case "preorder_not_released_yet":
+      return "Preorder / Not Released Yet";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return state;
+  }
+}
+
+function assetStateTone(state: InventoryItem["asset_state"]): string {
+  switch (state) {
+    case "in_hand":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+    case "ordered_not_received":
+      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+    case "preorder_not_released_yet":
+      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-100";
+    case "cancelled":
+      return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function inventoryOwnershipIntelLabel(state: InventoryOwnershipNormalized): string {
+  switch (state) {
+    case "in_hand":
+      return "In hand";
+    case "preorder":
+      return "Preorder";
+    case "ordered_not_received":
+      return "Ordered (not received)";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Unknown ownership";
+  }
+}
+
+function intelligenceHealthTone(level: InventoryIntelligenceHealthLevel): string {
+  switch (level) {
+    case "healthy":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+    case "needs_review":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "incomplete":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "blocked":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function duplicateOwnershipClassificationTitle(value: DuplicateOwnershipClassification): string {
+  switch (value) {
+    case "intentional_multi_copy":
+      return "Intentional multi-copy";
+    case "probable_accidental_duplicate":
+      return "Probable accidental duplicate";
+    case "duplicate_scan_only":
+      return "Duplicate scan match";
+    case "preorder_plus_owned":
+      return "Preorder + received copy";
+    case "graded_plus_raw":
+      return "Graded + raw pairing";
+    case "unresolved_duplicate":
+      return "Unresolved duplicate review";
+    default:
+      return value;
+  }
+}
+
+function duplicateOwnershipBadgeTone(value: DuplicateOwnershipClassification): string {
+  switch (value) {
+    case "probable_accidental_duplicate":
+    case "unresolved_duplicate":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "duplicate_scan_only":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-100";
+    case "preorder_plus_owned":
+    case "graded_plus_raw":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    default:
+      return "border-white/15 bg-white/5 text-slate-200";
+  }
+}
+
+function runDetectionStatusTitle(value: RunDetectionSeriesStatus): string {
+  switch (value) {
+    case "partial_run":
+      return "Partial run";
+    case "complete_limited_series":
+      return "Complete limited series";
+    case "incomplete_limited_series":
+      return "Incomplete limited series";
+    case "probable_ongoing_series":
+      return "Probable ongoing";
+    case "isolated_special_annual":
+      return "Special / annual isolated";
+    default:
+      return value;
+  }
+}
+
+function runDetectionBadgeTone(value: RunDetectionSeriesStatus): string {
+  switch (value) {
+    case "incomplete_limited_series":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "partial_run":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "probable_ongoing_series":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "complete_limited_series":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    default:
+      return "border-white/15 bg-white/5 text-slate-200";
+  }
+}
+
+function countInventoryIntelUnresolvedPins(intel: NonNullable<InventoryItem["inventory_intelligence"]>): number {
+  let n = 0;
+  if (intel.has_open_relationship_conflict) n += 1;
+  if (intel.has_pending_canonical_suggestion) n += 1;
+  if (intel.in_pending_duplicate_inventory_group) n += 1;
+  if (intel.touches_probable_duplicate_scan_cluster) n += 1;
+  if (intel.touches_probable_variant_family_cluster) n += 1;
+  return n;
+}
+
+function InventoryIntelBadges(props: { item: InventoryItem; compact?: boolean }): JSX.Element | null {
+  const { item, compact } = props;
+  const intel = item.inventory_intelligence;
+  const dup = item.duplicate_ownership;
+  const run = item.run_detection;
+  if (!intel && !dup && !run) {
+    return null;
+  }
+
+  const pinCount = intel ? countInventoryIntelUnresolvedPins(intel) : 0;
+
+  const wrap = compact ? "mt-2 flex flex-wrap gap-2" : "mt-2 flex flex-wrap gap-2";
+
+  return (
+    <div className={wrap}>
+      {intel ? (
+        <>
+          <span
+            title="Normalized operational ownership (computed from existing order/release fields)."
+            className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200"
+          >
+            Ops: {inventoryOwnershipIntelLabel(intel.ownership_state)}
+          </span>
+          <span
+            title="Deterministic health bucket combining scan completeness, preorder calendar gaps, OCR/cover-processing failures, conflicts, duplicates, clusters, reviews."
+            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${intelligenceHealthTone(
+              intel.inventory_health,
+            )}`}
+          >
+            Health: {intel.inventory_health.replace(/_/g, " ")}
+          </span>
+          {!intel.has_cover_scan ? (
+            <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+              Unscanned
+            </span>
+          ) : null}
+          {intel.preorder_missing_release_calendar ? (
+            <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+              Preorder needs calendar
+            </span>
+          ) : null}
+          {pinCount > 0 ? (
+            <span className="inline-flex rounded-full border border-violet-400/35 bg-violet-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100">
+              {pinCount} open signal{pinCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
+        </>
+      ) : null}
+      {dup ? (
+        <span
+          title="Deterministic duplicate ownership grouping across metadata identity keys, scans, approvals, preorder/grade lanes, and review pins. Nothing here dedupes inventory."
+          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${duplicateOwnershipBadgeTone(
+            dup.classification,
+          )}`}
+        >
+          Dup owner: {duplicateOwnershipClassificationTitle(dup.classification)}
+        </span>
+      ) : null}
+      {run ? (
+        <span
+          title="Deterministic series-progress lane computed from known issue registry ordering, canonical series identity, ownership state, release timing, and pending canonical issue review pins."
+          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${runDetectionBadgeTone(
+            run.series_status,
+          )}`}
+        >
+          Run: {runDetectionStatusTitle(run.series_status)}
+          {run.missing_issue_numbers.length ? ` · missing ${run.missing_issue_numbers.length}` : ""}
+          {!run.missing_issue_numbers.length && run.pending_issue_numbers.length
+            ? ` · pending ${run.pending_issue_numbers.length}`
+            : ""}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function inventoryRiskPriorityTone(priority: InventoryRiskPriority): string {
+  switch (priority) {
+    case "critical":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "high":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "medium":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "low":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-100";
+    default:
+      return "border-slate-400/30 bg-white/5 text-slate-200";
+  }
+}
+
+function inventoryRiskLabel(value: InventoryRiskType): string {
+  switch (value) {
+    case "needs_canonical_review":
+      return "Canonical review";
+    case "needs_conflict_review":
+      return "Conflict review";
+    case "needs_scan":
+      return "Needs scan";
+    case "needs_ocr_retry":
+      return "OCR retry";
+    case "needs_cover_processing_review":
+      return "Cover proc review";
+    case "preorder_missing_release_date":
+      return "Preorder calendar gap";
+    case "released_not_received":
+      return "Released / not received";
+    case "duplicate_uncertainty":
+      return "Duplicate uncertainty";
+    case "run_gap_detected":
+      return "Run gap";
+    case "low_quality_scan":
+      return "Low-quality scan";
+    case "high_confidence_match_unreviewed":
+      return "Unreviewed match";
+    default:
+      return value;
+  }
+}
+
+function InventoryRiskBadges(props: { risks?: InventoryRiskRead[] | null }): JSX.Element | null {
+  const { risks } = props;
+  if (!risks || !risks.length) {
+    return null;
+  }
+
+  const top = risks.slice(0, 3);
+  const more = risks.length - top.length;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {top.map((risk) => (
+        <span
+          key={risk.risk_key}
+          title={JSON.stringify(risk.evidence_json)}
+          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${inventoryRiskPriorityTone(
+            risk.priority,
+          )}`}
+        >
+          {inventoryRiskLabel(risk.risk_type)}
+        </span>
+      ))}
+      {more > 0 ? (
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+          +{more} more
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function totalInventoryIntelUnresolvedRollup(summary: InventoryIntelligenceRollupSummary): number {
+  return (
+    summary.unresolved_relationship_conflicts +
+    summary.unresolved_canonical_suggestions +
+    summary.unresolved_duplicate_inventory_groups +
+    summary.unresolved_duplicate_scan_clusters +
+    summary.unresolved_variant_family_clusters
+  );
 }
 
 function gainLossClass(value: string | null): string {
@@ -87,6 +425,20 @@ export function DashboardPage() {
   const [publisher, setPublisher] = useState("");
   const [holdStatus, setHoldStatus] = useState("");
   const [gradeStatus, setGradeStatus] = useState("");
+  const [releaseYearFilter, setReleaseYearFilter] = useState("");
+  const [releaseCalendarFilter, setReleaseCalendarFilter] = useState<"" | InventoryReleaseCalendar>(
+    "",
+  );
+  const [assetStateFilter, setAssetStateFilter] = useState<"" | InventoryItem["asset_state"]>("");
+  const [intelHealthFilter, setIntelHealthFilter] = useState<
+    "" | InventoryIntelligenceHealthLevel | "not_healthy"
+  >("");
+  const [ownershipIntelFilter, setOwnershipIntelFilter] = useState<"" | InventoryOwnershipNormalized>(
+    "",
+  );
+  const [riskPriorityFilter, setRiskPriorityFilter] = useState<"" | InventoryRiskPriority>("");
+  const [riskTypeFilter, setRiskTypeFilter] = useState<"" | InventoryRiskType>("");
+  const [needsAttentionFilter, setNeedsAttentionFilter] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>("purchase_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [isLoading, setIsLoading] = useState(true);
@@ -100,6 +452,23 @@ export function DashboardPage() {
   const [activeNotesItem, setActiveNotesItem] = useState<InventoryItem | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [inventoryIntelSummary, setInventoryIntelSummary] = useState<InventoryIntelligenceRollupSummary | null>(
+    null,
+  );
+  const [inventoryIntelHealth, setInventoryIntelHealth] = useState<InventoryIntelligenceHealthRollup | null>(
+    null,
+  );
+  const [inventoryRiskSummary, setInventoryRiskSummary] = useState<InventoryRiskSummary | null>(null);
+  const [duplicateOwnershipReport, setDuplicateOwnershipReport] =
+    useState<DuplicateOwnershipListResponse | null>(null);
+  const [runDetectionReport, setRunDetectionReport] = useState<RunDetectionListResponse | null>(null);
+
+  const [collectionAnalyticsSummary, setCollectionAnalyticsSummary] = useState<CollectionAnalyticsSummary | null>(null);
+  const [collectionAnalyticsPublishers, setCollectionAnalyticsPublishers] =
+    useState<CollectionPublisherAnalyticsResponse | null>(null);
+  const [collectionAnalyticsQuality, setCollectionAnalyticsQuality] = useState<CollectionQualityAnalyticsResponse | null>(
+      null,
+    );
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -111,22 +480,74 @@ export function DashboardPage() {
       publisher: publisher || undefined,
       hold_status: holdStatus || undefined,
       grade_status: gradeStatus || undefined,
+      release_year: (() => {
+        const n = Number(releaseYearFilter.trim());
+        return Number.isInteger(n) ? n : undefined;
+      })(),
+      release_calendar: releaseCalendarFilter || undefined,
+      asset_state: assetStateFilter || undefined,
+      intelligence_health:
+        intelHealthFilter ||
+        undefined,
+      ownership_intel: ownershipIntelFilter || undefined,
+      risk_priority: riskPriorityFilter || undefined,
+      risk_type: riskTypeFilter || undefined,
+      needs_attention: needsAttentionFilter || undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [gradeStatus, holdStatus, page, pageSize, publisher, search, sortBy, sortDir],
+    [
+      gradeStatus,
+      holdStatus,
+      page,
+      pageSize,
+      publisher,
+      releaseCalendarFilter,
+      assetStateFilter,
+      intelHealthFilter,
+      needsAttentionFilter,
+      ownershipIntelFilter,
+      riskPriorityFilter,
+      riskTypeFilter,
+      releaseYearFilter,
+      search,
+      sortBy,
+      sortDir,
+    ],
   );
 
   async function loadDashboardData(query: InventoryQueryParams = inventoryQuery): Promise<void> {
-    const [summaryResponse, performanceResponse, inventoryResponse] = await Promise.all([
+    const [
+      summaryResponse,
+      performanceResponse,
+      inventoryResponse,
+      riskSummaryResponse,
+      dupOwnershipInsight,
+      runDetectionInsight,
+      caSummary,
+      caPublishers,
+      caQuality,
+    ] = await Promise.all([
       apiClient.getInventorySummary(),
       apiClient.getPortfolioPerformance(),
       apiClient.getInventory(query),
+      apiClient.getInventoryRisksSummary(),
+      apiClient.getDuplicateOwnershipList(),
+      apiClient.getRunDetectionList(),
+      apiClient.getCollectionAnalyticsSummary(),
+      apiClient.getCollectionAnalyticsPublishers(),
+      apiClient.getCollectionAnalyticsQuality(),
     ]);
     setSummary(summaryResponse);
     setPerformance(performanceResponse);
     setInventory(inventoryResponse.items);
     setTotal(inventoryResponse.total);
+    setInventoryRiskSummary(riskSummaryResponse);
+    setDuplicateOwnershipReport(dupOwnershipInsight);
+    setRunDetectionReport(runDetectionInsight);
+    setCollectionAnalyticsSummary(caSummary);
+    setCollectionAnalyticsPublishers(caPublishers);
+    setCollectionAnalyticsQuality(caQuality);
     setSelectedIds((current) =>
       current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
     );
@@ -140,11 +561,32 @@ export function DashboardPage() {
       setError(null);
 
       try {
-        const [summaryResponse, performanceResponse, inventoryResponse] = await Promise.all([
-          apiClient.getInventorySummary(),
-          apiClient.getPortfolioPerformance(),
-          apiClient.getInventory(inventoryQuery),
-        ]);
+        const [
+          summaryResponse,
+          performanceResponse,
+          inventoryResponse,
+          intelSummary,
+          intelHealth,
+          riskSummary,
+          dupOwnership,
+          runDetection,
+          caSummary,
+          caPublishers,
+          caQuality,
+        ] =
+          await Promise.all([
+            apiClient.getInventorySummary(),
+            apiClient.getPortfolioPerformance(),
+            apiClient.getInventory(inventoryQuery),
+            apiClient.getInventoryIntelligenceSummary(),
+            apiClient.getInventoryIntelligenceHealth(),
+            apiClient.getInventoryRisksSummary(),
+            apiClient.getDuplicateOwnershipList(),
+            apiClient.getRunDetectionList(),
+            apiClient.getCollectionAnalyticsSummary(),
+            apiClient.getCollectionAnalyticsPublishers(),
+            apiClient.getCollectionAnalyticsQuality(),
+          ]);
 
         if (ignore) {
           return;
@@ -154,6 +596,14 @@ export function DashboardPage() {
         setPerformance(performanceResponse);
         setInventory(inventoryResponse.items);
         setTotal(inventoryResponse.total);
+        setInventoryIntelSummary(intelSummary);
+        setInventoryIntelHealth(intelHealth);
+        setInventoryRiskSummary(riskSummary);
+        setDuplicateOwnershipReport(dupOwnership);
+        setRunDetectionReport(runDetection);
+        setCollectionAnalyticsSummary(caSummary);
+        setCollectionAnalyticsPublishers(caPublishers);
+        setCollectionAnalyticsQuality(caQuality);
         setSelectedIds((current) =>
           current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
         );
@@ -270,6 +720,10 @@ export function DashboardPage() {
 
   const cards = [
     { label: "Copies", value: summary?.total_copies ?? 0 },
+    { label: "In Hand", value: summary?.in_hand_copies ?? 0 },
+    { label: "Ordered", value: summary?.ordered_not_received_copies ?? 0 },
+    { label: "Preordered", value: summary?.preordered_copies ?? 0 },
+    { label: "Cancelled", value: summary?.cancelled_copies ?? 0 },
     { label: "Cost Basis", value: formatCurrency(summary?.total_cost_basis ?? "0") },
     { label: "Current FMV", value: formatCurrency(summary?.total_current_fmv ?? "0") },
     {
@@ -368,6 +822,482 @@ export function DashboardPage() {
             </article>
           ))}
       </section>
+
+      {inventoryRiskSummary ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Inventory risk</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Deterministic attention surface derived from existing conflicts, canonical review, scan/OCR quality,
+                preorder gaps, duplicate uncertainty, and run-detection signals. No pricing, speculation, or automated
+                fixes.
+              </p>
+            </div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              As of {inventoryRiskSummary.generated_as_of_date}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <article className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">Critical copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.critical_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">High copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.high_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Medium copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.medium_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Low copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.low_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Risk items</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.total_risk_items}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Copies with risk</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.copies_with_risk}</p>
+            </article>
+          </div>
+          <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+            <h3 className="text-sm font-semibold text-white">Top action items</h3>
+            <div className="mt-3 overflow-auto">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="pb-2 pr-3 font-medium">Copy</th>
+                    <th className="pb-2 pr-3 font-medium">Priority</th>
+                    <th className="pb-2 pr-3 font-medium">Risks</th>
+                    <th className="pb-2 font-medium">Evidence</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-200">
+                  {inventoryRiskSummary.top_action_items.slice(0, 5).map((item) => (
+                    <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
+                      <td className="py-2 pr-3 font-medium text-white">
+                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                          {item.publisher} · {item.title} #{item.issue_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${inventoryRiskPriorityTone(
+                            item.highest_priority,
+                          )}`}
+                        >
+                          {item.highest_priority}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="flex flex-wrap gap-1">
+                          {item.risk_types.map((riskType) => (
+                            <span
+                              key={riskType}
+                              className="inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200"
+                            >
+                              {inventoryRiskLabel(riskType)}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-2 text-slate-400">
+                        {item.evidence_preview.join(" · ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {inventoryIntelSummary && inventoryIntelHealth ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Inventory intelligence</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Read-only deterministic signals derived from scans, preorder calendar coverage, OCR and cover
+                processing state, unresolved conflicts/suggestions/duplicate-groups, plus probable clustering for
+                dedupe and variant surfaces. Nothing here modifies records.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-5">
+            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">In hand</p>
+              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_in_hand}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Preorder</p>
+              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_preorder}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Ordered (not recv)</p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                {inventoryIntelSummary.ownership_ordered_not_received}
+              </p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Cancelled</p>
+              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_cancelled}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Unknown ops state</p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                {inventoryIntelSummary.ownership_unknown_state}
+              </p>
+            </article>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Tracked copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelSummary.total_inventory_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Cover scans</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelSummary.scanned_copies}</p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {inventoryIntelSummary.unscanned_copies} still unscanned · OCR pending{" "}
+                {inventoryIntelSummary.ocr_pending_copies}, complete {inventoryIntelSummary.ocr_complete_copies} · corrupt
+                /failed cover processing {inventoryIntelSummary.cover_processing_failed_copies} · OCR failed{" "}
+                {inventoryIntelSummary.ocr_failed_copies}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Unresolved rollups</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {totalInventoryIntelUnresolvedRollup(inventoryIntelSummary)}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Conflicts {inventoryIntelSummary.unresolved_relationship_conflicts} · canonical{" "}
+                {inventoryIntelSummary.unresolved_canonical_suggestions} · dup-inv groups{" "}
+                {inventoryIntelSummary.unresolved_duplicate_inventory_groups} · dup-scan clusters touching you{" "}
+                {inventoryIntelSummary.unresolved_duplicate_scan_clusters} · variant-family clusters touching you{" "}
+                {inventoryIntelSummary.unresolved_variant_family_clusters}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-emerald-200/80">Healthy</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.healthy}</p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">Needs review</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.needs_review}</p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Incomplete</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.incomplete}</p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Blocked copies: {inventoryIntelHealth.blocked} (normally cancelled/stranded workflows)
+              </p>
+            </article>
+          </div>
+        </section>
+      ) : null}
+
+      {collectionAnalyticsSummary && collectionAnalyticsQuality ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Collection analytics</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Deterministic portfolio rollups across publishers, fulfillment, scans, OCR, canonical linkage, preorder
+              calendar exposure, and duplicate-ownership clustering. Reporting only (no mutations, pricing, or AI scoring).
+              As-of anchor:{" "}
+              <span className="font-semibold text-slate-200">{collectionAnalyticsSummary.generated_as_of_date}</span>
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preorder exposure</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.preorder_copies}</p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Missing calendar cues: {collectionAnalyticsSummary.preorder_missing_calendar_copies}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">In hand copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.in_hand_copies}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Total tracked: {collectionAnalyticsSummary.total_copies}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Unresolved review workload</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.unresolved_review_copies}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Distinct copies in needs_review health bucket.</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Canonical-linked copies</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.canonical_linked_copies}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Unscanned primaries: {collectionAnalyticsSummary.unscanned_primary_copies}</p>
+            </article>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <article className="rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-200">OCR complete</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {collectionAnalyticsQuality.inventory_quality.ocr_complete.percent}%{" "}
+                <span className="text-[11px] text-slate-400">
+                  ({collectionAnalyticsQuality.inventory_quality.ocr_complete.numerator}/
+                  {collectionAnalyticsQuality.inventory_quality.ocr_complete.denominator})
+                </span>
+              </p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100">Canonical coverage</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {collectionAnalyticsQuality.inventory_quality.canonical_linked.percent}%{" "}
+                <span className="text-[11px] text-slate-400">
+                  ({collectionAnalyticsQuality.inventory_quality.canonical_linked.numerator}/
+                  {collectionAnalyticsQuality.inventory_quality.canonical_linked.denominator})
+                </span>
+              </p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100">Dup ownership touch</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {collectionAnalyticsQuality.inventory_quality.duplicate_ownership_exposure_copies.percent}%{" "}
+                <span className="text-[11px] text-slate-400">
+                  (
+                  {
+                    collectionAnalyticsQuality.inventory_quality.duplicate_ownership_exposure_copies.numerator
+                  }/
+                  {collectionAnalyticsQuality.inventory_quality.duplicate_ownership_exposure_copies.denominator})
+                </span>
+              </p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/25 bg-violet-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-100">Open conflicts touch</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {
+                  collectionAnalyticsQuality.inventory_quality.unresolved_open_conflict_copies.percent
+                }%
+                <span className="text-[11px] text-slate-400">
+                  {" "}
+                  (
+                  {collectionAnalyticsQuality.inventory_quality.unresolved_open_conflict_copies.numerator}
+                  /
+                  {collectionAnalyticsQuality.inventory_quality.unresolved_open_conflict_copies.denominator})
+                </span>
+              </p>
+            </article>
+            <article className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-100">Cover processing failures</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {
+                  collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.percent
+                }%
+                <span className="text-[11px] text-slate-400">
+                  {" "}
+                  ({collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.numerator}/
+                  {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.denominator})
+                </span>
+              </p>
+            </article>
+            <article className="rounded-2xl border border-orange-400/25 bg-orange-400/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-100">Latest OCR failures</p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.percent}%
+                <span className="text-[11px] text-slate-400">
+                  {" "}
+                  ({collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.numerator}/
+                  {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.denominator})
+                </span>
+              </p>
+            </article>
+          </div>
+          {collectionAnalyticsPublishers && collectionAnalyticsPublishers.publishers.length ? (
+            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <h3 className="text-sm font-semibold text-white">Publisher breakdown</h3>
+              <p className="mt-1 text-xs text-slate-500">Sorted deterministically by publisher name.</p>
+              <div className="mt-3 overflow-auto">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="pb-2 pr-3 font-medium">Publisher</th>
+                      <th className="pb-2 pr-3 font-medium">Copies</th>
+                      <th className="pb-2 pr-3 font-medium">In hand</th>
+                      <th className="pb-2 pr-3 font-medium">Preorder</th>
+                      <th className="pb-2 pr-3 font-medium">Unresolved review</th>
+                      <th className="pb-2 font-medium">Canon-linked</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {collectionAnalyticsPublishers.publishers.slice(0, 20).map((row) => (
+                      <tr key={row.publisher_name} className="border-t border-white/5 align-top">
+                        <td className="py-2 pr-3 font-medium text-white">{row.publisher_name}</td>
+                        <td className="py-2 pr-3">{row.total_copies}</td>
+                        <td className="py-2 pr-3">{row.in_hand_copies}</td>
+                        <td className="py-2 pr-3">{row.preorder_copies}</td>
+                        <td className="py-2 pr-3">{row.unresolved_review_copies}</td>
+                        <td className="py-2">{row.canonical_linked_copies}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {duplicateOwnershipReport ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Duplicate ownership intelligence</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Read-only rollup that clusters copies you personally own using metadata identity overlap, deterministic
+              duplicate-scan intelligence, canonical edges, duplicate reviews, preorder + in-hand overlaps, graded vs raw
+              pairings, and approved human duplicate/same-cover links. There is never automatic dedupe, deletion, or
+              silent metadata rewriting from this lane.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Overlap groups</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.total_groups}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">Multi-copy groups only (&ge; two inventory IDs).</p>
+            </article>
+            <article className="rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-rose-100">
+                Probable accidental
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.probable_accidental_duplicate_groups}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-100/80">
+                Heuristic raw-heavy clusters flagged by deterministic scan/canonical cues.
+              </p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">
+                Preorder + received
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.preorder_plus_owned_groups}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-100/70">
+                You still carry a preorder row while another copy already shows in-hand for the clustered issue surface.
+              </p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-violet-100">
+                Duplicate scan only
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.duplicate_scan_only_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-cyan-300/25 bg-white/5 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Graded + raw</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.graded_plus_raw_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-amber-300/35 bg-amber-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100">
+                Unresolved duplicates
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.unresolved_duplicate_groups}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-100/75">
+                Touching duplicate-inventory candidate reviews that are still pending.
+              </p>
+            </article>
+            <article className="rounded-2xl border border-emerald-300/25 bg-emerald-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-100">
+                Intentional multi-copy
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {duplicateOwnershipReport.summary.intentional_multi_copy_groups}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-100/70">
+                Default bucket when overlaps exist without stronger deterministic escalation signals.
+              </p>
+            </article>
+          </div>
+        </section>
+      ) : null}
+
+      {runDetectionReport ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Run detection</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Read-only series progress computed from canonical series identity, deterministic issue ordering,
+              registry-backed known issues, ownership state, and future release visibility. This lane never creates a
+              wantlist or mutates metadata.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Tracked series</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.total_series_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100">Partial runs</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.partial_run_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-100">
+                Completed runs
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.complete_limited_series_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-rose-100">
+                Incomplete limited
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.incomplete_limited_series_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Probable ongoing</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.probable_ongoing_series_groups}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-violet-100">Missing issue rows</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.total_missing_issue_rows}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-100/70">
+                Confirmed {runDetectionReport.summary.confirmed_missing_rows} · likely{" "}
+                {runDetectionReport.summary.likely_missing_rows}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-300">Future / unresolved</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {runDetectionReport.summary.preorder_pending_rows +
+                  runDetectionReport.summary.unreleased_future_issue_rows +
+                  runDetectionReport.summary.unresolved_identity_gap_rows}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Preorder {runDetectionReport.summary.preorder_pending_rows} · unreleased{" "}
+                {runDetectionReport.summary.unreleased_future_issue_rows} · identity{" "}
+                {runDetectionReport.summary.unresolved_identity_gap_rows}
+              </p>
+            </article>
+          </div>
+        </section>
+      ) : null}
 
       {!hasPerformanceData ? (
         <div className="mt-6">
@@ -510,6 +1440,142 @@ export function DashboardPage() {
             </form>
 
             <div className="grid gap-3 md:grid-cols-3">
+              <input
+                type="number"
+                min={1800}
+                max={2999}
+                value={releaseYearFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setReleaseYearFilter(event.target.value);
+                  })
+                }
+                placeholder="Release year (optional)"
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
+              />
+              <select
+                value={releaseCalendarFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setReleaseCalendarFilter(
+                      event.target.value as "" | InventoryReleaseCalendar,
+                    );
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any calendar release date state</option>
+                <option value="present">Has exact calendar release date</option>
+                <option value="missing">Missing calendar release date</option>
+              </select>
+              <select
+                value={assetStateFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setAssetStateFilter(event.target.value as "" | InventoryItem["asset_state"]);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any ownership / release state</option>
+                <option value="preorder_not_released_yet">Upcoming preorder</option>
+                <option value="ordered_not_received">Released / not received</option>
+                <option value="in_hand">Received / in hand</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <select
+                value={intelHealthFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setIntelHealthFilter(
+                      event.target.value as "" | InventoryIntelligenceHealthLevel | "not_healthy",
+                    );
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any inventory health bucket</option>
+                <option value="not_healthy">Not healthy (review + incomplete + blocked)</option>
+                <option value="healthy">Healthy</option>
+                <option value="needs_review">Needs review</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="blocked">Blocked</option>
+              </select>
+              <select
+                value={ownershipIntelFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setOwnershipIntelFilter(event.target.value as "" | InventoryOwnershipNormalized);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any normalized ownership (intel)</option>
+                <option value="in_hand">Normalized: in_hand</option>
+                <option value="preorder">Normalized: preorder</option>
+                <option value="ordered_not_received">Normalized: ordered_not_received</option>
+                <option value="cancelled">Normalized: cancelled</option>
+                <option value="unknown_state">Normalized: unknown_state</option>
+              </select>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <select
+                value={riskPriorityFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setRiskPriorityFilter(event.target.value as "" | InventoryRiskPriority);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any risk priority</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+              <select
+                value={riskTypeFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setRiskTypeFilter(event.target.value as "" | InventoryRiskType);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any risk type</option>
+                <option value="needs_conflict_review">Conflict review</option>
+                <option value="needs_canonical_review">Canonical review</option>
+                <option value="needs_scan">Needs scan</option>
+                <option value="needs_ocr_retry">OCR retry</option>
+                <option value="needs_cover_processing_review">Cover processing review</option>
+                <option value="preorder_missing_release_date">Preorder missing release date</option>
+                <option value="released_not_received">Released not received</option>
+                <option value="duplicate_uncertainty">Duplicate uncertainty</option>
+                <option value="run_gap_detected">Run gap detected</option>
+                <option value="low_quality_scan">Low quality scan</option>
+                <option value="high_confidence_match_unreviewed">High confidence match</option>
+              </select>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={needsAttentionFilter}
+                  onChange={(event) =>
+                    resetPageAndUpdate(() => {
+                      setNeedsAttentionFilter(event.target.checked);
+                    })
+                  }
+                />
+                Needs attention only
+              </label>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
               <select
                 value={sortBy}
                 onChange={(event) =>
@@ -545,6 +1611,12 @@ export function DashboardPage() {
                   setPublisher("");
                   setHoldStatus("");
                   setGradeStatus("");
+                  setReleaseYearFilter("");
+                  setReleaseCalendarFilter("");
+                  setAssetStateFilter("");
+                  setRiskPriorityFilter("");
+                  setRiskTypeFilter("");
+                  setNeedsAttentionFilter(false);
                   setSortBy("purchase_date");
                   setSortDir("asc");
                   setPage(1);
@@ -641,6 +1713,7 @@ export function DashboardPage() {
                   </th>
                   <th className="px-4 py-3">Title</th>
                   <th className="px-4 py-3">Issue</th>
+                  <th className="px-4 py-3">Release meta</th>
                   <th className="px-4 py-3">Publisher</th>
                   <th className="px-4 py-3">Cover / Variant</th>
                   <th className="px-4 py-3">Retailer</th>
@@ -665,8 +1738,22 @@ export function DashboardPage() {
                         onChange={() => toggleSelection(item.inventory_copy_id)}
                       />
                     </td>
-                    <td className="px-4 py-3.5 font-medium text-white">{item.title}</td>
+                    <td className="px-4 py-3.5 font-medium text-white">
+                      <p>{item.title}</p>
+                      <p className="mt-1 text-[11px]">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 font-semibold ${assetStateTone(
+                            item.asset_state,
+                          )}`}
+                        >
+                          {assetStateLabel(item.asset_state)}
+                        </span>
+                      </p>
+                      <InventoryIntelBadges item={item} />
+                      <InventoryRiskBadges risks={item.inventory_risks} />
+                    </td>
                     <td className="px-4 py-3.5">#{item.issue_number}</td>
+                    <td className="align-top">{inventoryReleaseChronologyCell(item)}</td>
                     <td className="px-4 py-3.5">{item.publisher}</td>
                     <td className="px-4 py-3.5 text-slate-300">
                       {variantLabel(item) || "Standard cover"}
@@ -821,6 +1908,17 @@ export function DashboardPage() {
                     <p className="mt-1 text-sm text-slate-400">
                       {item.publisher} | {variantLabel(item) || "Standard cover"}
                     </p>
+                    <p className="mt-2">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${assetStateTone(
+                          item.asset_state,
+                        )}`}
+                      >
+                        {assetStateLabel(item.asset_state)}
+                      </span>
+                    </p>
+                    <InventoryIntelBadges item={item} />
+                    <InventoryRiskBadges risks={item.inventory_risks} />
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <input
@@ -841,6 +1939,10 @@ export function DashboardPage() {
                   <div>
                     <p className="text-slate-500">Order Date</p>
                     <p>{formatDate(item.order_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Release chronology</p>
+                    {inventoryReleaseChronologyCell(item)}
                   </div>
                   <div>
                     <p className="text-slate-500">Acquisition</p>

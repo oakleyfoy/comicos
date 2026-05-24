@@ -1,8 +1,9 @@
+from datetime import date, datetime
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -14,7 +15,77 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
+
+from app.schemas.collection_analytics import (
+    CollectionAnalyticsSummary,
+    CollectionCompositionResponse,
+    CollectionPublisherAnalyticsResponse,
+    CollectionQualityAnalyticsResponse,
+    CollectionTimelineResponse,
+)
+from app.schemas.canonical_issue_link_suggestions import (
+    CanonicalIssueLinkSuggestionRead,
+    CanonicalIssueSuggestionGenerateResponse,
+    CanonicalIssueSuggestionOpsListResponse,
+    CanonicalIssueSuggestionReviewActionResponse,
+    CanonicalIssueSuggestionReviewPayload,
+)
+from app.schemas.cover_images import (
+    CoverImageAssignExistingPayload,
+    CoverImageBarcodeCandidateExtractResponse,
+    CoverImageBarcodeCandidateRead,
+    CoverImageFingerprintGenerateResponse,
+    CoverImageFingerprintRead,
+    CoverImageMatchCandidateGenerateResponse,
+    CoverImageMatchCandidateRead,
+    CoverImageMatchGroupRead,
+    CoverImageMatchingEvaluationResponse,
+    CoverImageOcrCandidateExtractResponse,
+    CoverImageOcrCandidateRead,
+    CoverImageOcrCandidateReviewNotesPayload,
+    CoverImageOcrEnqueueResponse,
+    CoverImageOcrQualityAnalysisRead,
+    CoverImageOcrQualityAnalysisResponse,
+    CoverImageOcrReconciliationResponse,
+    CoverImageOcrReconciliationWarningRead,
+    CoverImageOcrRegionExtractResponse,
+    CoverImageOcrRegionRead,
+    CoverImageOcrReplayPayload,
+    CoverImageOcrResultRead,
+    CoverImageProcessingEnqueueResponse,
+    CoverImageRead,
+    CoverImageReturnToDraftPayload,
+    OpsCoverDuplicateGroup,
+    OpsCoverImageRecentRow,
+)
+from app.schemas.cover_link_decisions import (
+    CoverImageLinkDecisionCreate,
+    CoverImageLinkDecisionRead,
+)
+from app.schemas.cover_relationship_graph import CoverRelationshipGraphRead
 from app.schemas.debug import RuntimeDebugResponse
+from app.schemas.duplicate_candidate_review import (
+    DuplicateCandidateNotesUpdate,
+    DuplicateCandidateReviewCreate,
+    DuplicateCandidateReviewRead,
+)
+from app.schemas.duplicate_scan import (
+    DuplicateScanCandidatesResponse,
+    DuplicateScanClassificationFilter,
+    DuplicateScanClustersListResponse,
+)
+from app.schemas.duplicate_ownership import (
+    DuplicateOwnershipClassification,
+    DuplicateOwnershipGroupRead,
+    DuplicateOwnershipListRead,
+)
+from app.schemas.run_detection import (
+    MissingIssueClassification,
+    MissingIssueListRead,
+    RunDetectionListRead,
+    RunDetectionSeriesDetailRead,
+    RunDetectionSeriesStatus,
+)
 from app.schemas.gmail import (
     GmailConnectStartResponse,
     GmailDisconnectResponse,
@@ -43,14 +114,66 @@ from app.schemas.inventory import (
     InventorySummaryResponse,
     InventoryUpdate,
     PortfolioPerformanceResponse,
+    ReleaseCalendarPresence,
+)
+from app.schemas.inventory_risks import (
+    InventoryRiskListResponse,
+    InventoryRiskPriority,
+    InventoryRiskSummary,
+    InventoryRiskType,
+)
+from app.schemas.inventory_intelligence import (
+    InventoryIntelligenceBreakdown,
+    InventoryIntelligenceHealthSummary,
+    InventoryIntelligenceSummary,
 )
 from app.schemas.jobs import ImportParseJobEnqueueResponse, ImportParseJobStatusResponse
-from app.schemas.ops import OpsDashboardResponse
+from app.schemas.metadata_aliases import (
+    MetadataAliasCreate,
+    MetadataAliasRead,
+    MetadataAliasType,
+    MetadataAliasUpdate,
+)
+from app.schemas.ocr_batches import OcrBatchCreatePayload, OcrBatchRead
+from app.schemas.ocr_pipeline_health import OpsOcrPipelineRecoverResponse
+from app.schemas.ocr_replays import OcrReplayCreatePayload, OcrReplayRunRead
+from app.schemas.ocr_review_queue import (
+    BulkIdsPayload,
+    BulkMutationResult,
+    OcrReviewQueueResponse,
+    OcrReviewSummaryResponse,
+)
+from app.schemas.ops import (
+    OpsCanonicalCreatorRow,
+    OpsCanonicalSeriesRow,
+    OpsDashboardResponse,
+    OpsInventoryDuplicateCandidateGroup,
+    OpsMetadataAuditRow,
+    OpsMetadataReenrichmentEnqueueResponse,
+)
 from app.schemas.orders import (
     OrderCreate,
     OrderCreateResponse,
     OrderDetailResponse,
     OrderListResponse,
+)
+from app.schemas.relationship_conflicts import (
+    CoverRelationshipConflictActionResponse,
+    CoverRelationshipConflictDetectResponse,
+    CoverRelationshipConflictListResponse,
+    CoverRelationshipConflictStatusPayload,
+    RelationshipConflictSeverity,
+    RelationshipConflictStatus,
+    RelationshipConflictType,
+)
+from app.schemas.relationship_replays import (
+    RelationshipReplayCreatePayload,
+    RelationshipReplayRunRead,
+)
+from app.schemas.variant_family import (
+    VariantFamilyCandidatesResponse,
+    VariantFamilyClassificationFilter,
+    VariantFamilyClustersListResponse,
 )
 from app.services.ai_order_parser import (
     AiOrderParserError,
@@ -58,10 +181,131 @@ from app.services.ai_order_parser import (
     parse_order_draft_from_text,
 )
 from app.services.background_jobs import (
+    enqueue_cover_image_ocr_for_ops,
+    enqueue_cover_image_ocr_for_user,
+    enqueue_cover_image_ocr_replay_for_ops,
+    enqueue_cover_image_ocr_replay_for_user,
+    enqueue_cover_image_processing_for_ops,
+    enqueue_cover_image_processing_for_user,
     enqueue_gmail_sync_job_for_user,
     enqueue_import_parse_job_for_user,
+    enqueue_metadata_reenrichment_for_draft_import,
+    enqueue_metadata_reenrichment_for_inventory_copy,
     get_gmail_sync_job_status_for_user,
     get_import_parse_job_status_for_user,
+)
+from app.services.canonical_creators import list_canonical_creators_registry
+from app.services.canonical_issue_link_suggestions import (
+    approve_canonical_issue_suggestion_for_ops,
+    approve_canonical_issue_suggestion_for_owner,
+    generate_canonical_issue_suggestions_for_ops,
+    generate_canonical_issue_suggestions_for_owner,
+    ignore_canonical_issue_suggestion_for_ops,
+    ignore_canonical_issue_suggestion_for_owner,
+    list_canonical_issue_suggestions_for_cover_ops,
+    list_canonical_issue_suggestions_for_cover_owner,
+    list_canonical_issue_suggestions_for_ops,
+    reject_canonical_issue_suggestion_for_ops,
+    reject_canonical_issue_suggestion_for_owner,
+)
+from app.services.canonical_series import list_canonical_series_registry
+from app.services.cover_images import (
+    acknowledge_cover_match_candidate_for_ops,
+    acknowledge_cover_match_candidate_for_owner,
+    acknowledge_ocr_reconciliation_warning_for_ops,
+    acknowledge_ocr_reconciliation_warning_for_owner,
+    analyze_cover_image_ocr_quality_for_ops,
+    analyze_cover_image_ocr_quality_for_owner,
+    approve_cover_image_barcode_candidate_for_ops,
+    approve_cover_image_barcode_candidate_for_owner,
+    approve_cover_image_ocr_candidate_for_ops,
+    approve_cover_image_ocr_candidate_for_owner,
+    assign_existing_cover_image_to_inventory_copy,
+    dismiss_cover_match_candidate_for_ops,
+    dismiss_cover_match_candidate_for_owner,
+    dismiss_ocr_reconciliation_warning_for_ops,
+    dismiss_ocr_reconciliation_warning_for_owner,
+    evaluate_cover_image_matching_readiness,
+    extract_cover_image_barcode_candidates_for_ops,
+    extract_cover_image_barcode_candidates_for_owner,
+    extract_cover_image_ocr_candidates_for_ops,
+    extract_cover_image_ocr_candidates_for_owner,
+    extract_cover_image_ocr_regions_for_ops,
+    extract_cover_image_ocr_regions_for_owner,
+    generate_cover_image_fingerprints_for_ops,
+    generate_cover_image_fingerprints_for_owner,
+    generate_cover_image_match_candidates_for_ops,
+    generate_cover_image_match_candidates_for_owner,
+    get_cover_derivative_or_404,
+    get_cover_entity_for_processing_by_ops_or_404,
+    get_cover_entity_for_processing_by_owner,
+    get_cover_entity_or_404,
+    get_cover_match_group_for_ops,
+    get_cover_match_group_for_owner,
+    get_cover_ocr_region_or_404,
+    list_cover_barcode_candidate_reads_for_cover,
+    list_cover_fingerprint_reads_for_cover,
+    list_cover_image_ocr_reconciliation_warnings,
+    list_cover_match_candidate_reads_for_cover,
+    list_cover_ocr_candidate_reads_for_cover,
+    list_cover_ocr_quality_analysis_reads_for_cover,
+    list_cover_ocr_region_reads_for_cover,
+    list_cover_ocr_result_reads_for_cover,
+    list_duplicate_cover_image_groups_for_ops,
+    list_recent_cover_uploads_for_ops,
+    patch_cover_image_ocr_candidate_review_notes_for_ops,
+    patch_cover_image_ocr_candidate_review_notes_for_owner,
+    persist_cover_upload,
+    reconcile_cover_image_ocr_metadata_for_ops,
+    reconcile_cover_image_ocr_metadata_for_owner,
+    reject_cover_image_barcode_candidate_for_ops,
+    reject_cover_image_barcode_candidate_for_owner,
+    reject_cover_image_ocr_candidate_for_ops,
+    reject_cover_image_ocr_candidate_for_owner,
+    resolve_filesystem_path,
+    return_cover_image_to_draft_import,
+    set_draft_import_primary_cover_image,
+    set_inventory_primary_cover_image,
+    user_can_download_cover,
+)
+from app.services.cover_link_decisions import (
+    create_cover_link_decision_for_ops,
+    create_cover_link_decision_for_owner,
+    get_cover_link_decision_for_ops,
+    get_cover_link_decision_for_owner,
+    list_cover_link_decisions_for_ops,
+    list_cover_link_decisions_for_owner,
+    revert_cover_link_decision_for_ops,
+    revert_cover_link_decision_for_owner,
+)
+from app.services.cover_relationship_graph import (
+    get_cover_relationship_graph_for_ops,
+    get_cover_relationship_graph_for_owner,
+)
+from app.services.duplicate_candidate_reviews import (
+    serialize_duplicate_candidate_review_read,
+    upsert_duplicate_review_notes,
+    upsert_mark_duplicate_review,
+)
+from app.services.duplicate_scan_intelligence import (
+    duplicate_scan_candidates_for_cover_owner,
+    duplicate_scan_candidates_for_ops,
+    list_duplicate_scan_clusters_for_ops,
+    list_duplicate_scan_clusters_for_owner,
+)
+from app.services.duplicate_ownership_intelligence import (
+    get_duplicate_ownership_detail_ops,
+    get_duplicate_ownership_detail_owner,
+    list_duplicate_ownership_ops,
+    list_duplicate_ownership_owner,
+)
+from app.services.run_detection import (
+    get_run_detection_detail_ops,
+    get_run_detection_detail_owner,
+    list_missing_issues_ops,
+    list_missing_issues_owner,
+    list_run_detection_ops,
+    list_run_detection_owner,
 )
 from app.services.gmail_ingestion import (
     GmailIntegrationError,
@@ -87,6 +331,7 @@ from app.services.imports import (
 )
 from app.services.inventory import (
     bulk_update_inventory,
+    find_duplicate_inventory_candidates,
     get_inventory_copy_detail,
     get_inventory_fmv_history,
     inventory_summary,
@@ -94,13 +339,106 @@ from app.services.inventory import (
     portfolio_performance,
     update_inventory_copy,
 )
+from app.services.inventory_risks import (
+    get_inventory_risk_detail_ops,
+    get_inventory_risk_detail_owner,
+    get_inventory_risks_ops,
+    get_inventory_risks_owner,
+)
+from app.services.collection_analytics import (
+    analyze_collection_composition,
+    analyze_collection_publishers,
+    analyze_collection_quality,
+    analyze_collection_summary,
+    analyze_collection_timeline,
+)
+from app.services.inventory_intelligence import compute_inventory_intelligence
+from app.services.metadata_aliases import (
+    create_metadata_alias,
+    deactivate_metadata_alias,
+    list_metadata_aliases,
+    update_metadata_alias,
+)
+from app.services.metadata_audits import list_recent_metadata_audits
+from app.services.ocr_batches import (
+    cancel_ocr_batch_for_ops,
+    cancel_ocr_batch_for_owner,
+    create_ocr_batch_for_ops,
+    create_ocr_batch_for_owner,
+    enqueue_ocr_batch_for_ops,
+    enqueue_ocr_batch_for_owner,
+    get_ocr_batch_detail_for_ops,
+    get_ocr_batch_detail_for_owner,
+    list_ocr_batches_for_ops,
+    list_ocr_batches_for_owner,
+    retry_failed_ocr_batch_items_for_ops,
+    retry_failed_ocr_batch_items_for_owner,
+)
+from app.services.ocr_pipeline_health import recover_ocr_pipeline
+from app.services.ocr_replays import (
+    cancel_ocr_replay_run_for_ops,
+    cancel_ocr_replay_run_for_owner,
+    create_ocr_replay_run_for_ops,
+    create_ocr_replay_run_for_owner,
+    get_ocr_replay_run_detail_for_ops,
+    get_ocr_replay_run_detail_for_owner,
+    list_ocr_replay_runs_for_ops,
+    list_ocr_replay_runs_for_owner,
+    start_ocr_replay_run_for_ops,
+    start_ocr_replay_run_for_owner,
+)
+from app.services.ocr_review_queue import (
+    build_filters_from_http,
+    build_ocr_review_summary,
+    bulk_ack_warnings_for_ops,
+    bulk_ack_warnings_for_owner,
+    bulk_approve_barcodes_for_ops,
+    bulk_approve_barcodes_for_owner,
+    bulk_dismiss_warnings_for_ops,
+    bulk_dismiss_warnings_for_owner,
+    bulk_reject_barcodes_for_ops,
+    bulk_reject_barcodes_for_owner,
+    list_ocr_review_queue,
+)
 from app.services.ops_admin import build_ops_dashboard, ensure_ops_admin_access
 from app.services.orders import (
     create_order_for_user,
     get_order_detail_for_user,
     list_orders_for_user,
 )
+from app.services.relationship_conflicts import (
+    acknowledge_relationship_conflict_for_ops,
+    acknowledge_relationship_conflict_for_owner,
+    detect_relationship_conflicts_for_ops,
+    detect_relationship_conflicts_for_owner,
+    dismiss_relationship_conflict_for_ops,
+    dismiss_relationship_conflict_for_owner,
+    list_relationship_conflicts_for_cover_ops,
+    list_relationship_conflicts_for_cover_owner,
+    list_relationship_conflicts_for_ops,
+    list_relationship_conflicts_for_owner,
+    resolve_relationship_conflict_for_ops,
+    resolve_relationship_conflict_for_owner,
+)
+from app.services.relationship_replays import (
+    cancel_relationship_replay_run_for_ops,
+    cancel_relationship_replay_run_for_owner,
+    create_relationship_replay_run_for_ops,
+    create_relationship_replay_run_for_owner,
+    get_relationship_replay_run_detail_for_ops,
+    get_relationship_replay_run_detail_for_owner,
+    list_relationship_replay_runs_for_ops,
+    list_relationship_replay_runs_for_owner,
+    start_relationship_replay_run_for_ops,
+    start_relationship_replay_run_for_owner,
+)
 from app.services.runtime_debug import build_runtime_debug_response
+from app.services.variant_family_intelligence import (
+    list_variant_family_clusters_for_ops,
+    list_variant_family_clusters_for_owner,
+    variant_family_candidates_for_cover_owner,
+    variant_family_candidates_for_ops,
+)
 
 settings = get_settings()
 validate_production_settings(settings)
@@ -220,7 +558,578 @@ def ops_dashboard(
     settings: Settings = Depends(get_settings),
 ) -> OpsDashboardResponse:
     ensure_ops_admin_access(current_user, settings)
-    return build_ops_dashboard(session)
+    return build_ops_dashboard(session, settings)
+
+
+@app.get(
+    "/ops/inventory-intelligence/summary",
+    response_model=InventoryIntelligenceSummary,
+    include_in_schema=False,
+)
+def ops_inventory_intelligence_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> InventoryIntelligenceSummary:
+    ensure_ops_admin_access(current_user, settings)
+    summary, _, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=None,
+        include_signals=False,
+    )
+    return summary
+
+
+@app.get(
+    "/ops/inventory-intelligence/health",
+    response_model=InventoryIntelligenceHealthSummary,
+    include_in_schema=False,
+)
+def ops_inventory_intelligence_health(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> InventoryIntelligenceHealthSummary:
+    ensure_ops_admin_access(current_user, settings)
+    _, health, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=None,
+        include_signals=False,
+    )
+    return health
+
+
+@app.get(
+    "/ops/inventory-intelligence/breakdown",
+    response_model=InventoryIntelligenceBreakdown,
+    include_in_schema=False,
+)
+def ops_inventory_intelligence_breakdown(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> InventoryIntelligenceBreakdown:
+    ensure_ops_admin_access(current_user, settings)
+    _, _, breakdown, _ = compute_inventory_intelligence(
+        session,
+        current_user=None,
+        include_signals=False,
+    )
+    return breakdown
+
+
+@app.get(
+    "/ops/collection-analytics/summary",
+    response_model=CollectionAnalyticsSummary,
+    include_in_schema=False,
+)
+def ops_collection_analytics_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionAnalyticsSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return analyze_collection_summary(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/collection-analytics/publishers",
+    response_model=CollectionPublisherAnalyticsResponse,
+    include_in_schema=False,
+)
+def ops_collection_analytics_publishers(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionPublisherAnalyticsResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return analyze_collection_publishers(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/collection-analytics/timeline",
+    response_model=CollectionTimelineResponse,
+    include_in_schema=False,
+)
+def ops_collection_analytics_timeline(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionTimelineResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return analyze_collection_timeline(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/collection-analytics/quality",
+    response_model=CollectionQualityAnalyticsResponse,
+    include_in_schema=False,
+)
+def ops_collection_analytics_quality(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionQualityAnalyticsResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return analyze_collection_quality(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/collection-analytics/composition",
+    response_model=CollectionCompositionResponse,
+    include_in_schema=False,
+)
+def ops_collection_analytics_composition(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionCompositionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return analyze_collection_composition(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/duplicate-ownership",
+    response_model=DuplicateOwnershipListRead,
+    include_in_schema=False,
+)
+def ops_list_duplicate_ownership_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    dup_scan_classification: Annotated[
+        DuplicateScanClassificationFilter,
+        Query(alias="dup_scan_classification"),
+    ] = "all",
+    classification: Annotated[
+        DuplicateOwnershipClassification | None,
+        Query(description="Filter groups by deterministic duplicate ownership classification."),
+    ] = None,
+) -> DuplicateOwnershipListRead:
+    ensure_ops_admin_access(current_user, settings)
+    return list_duplicate_ownership_ops(
+        session,
+        dup_scan_classification=dup_scan_classification,
+        classification=classification,
+    )
+
+
+@app.get(
+    "/ops/duplicate-ownership/{group_key}",
+    response_model=DuplicateOwnershipGroupRead,
+    include_in_schema=False,
+)
+def ops_get_duplicate_ownership_route(
+    group_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> DuplicateOwnershipGroupRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_duplicate_ownership_detail_ops(session, group_key=group_key)
+
+
+@app.get(
+    "/ops/run-detection",
+    response_model=RunDetectionListRead,
+    include_in_schema=False,
+)
+def ops_list_run_detection_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter series groups by deterministic run-detection status."),
+    ] = None,
+) -> RunDetectionListRead:
+    ensure_ops_admin_access(current_user, settings)
+    return list_run_detection_ops(session, series_status=series_status)
+
+
+@app.get(
+    "/ops/run-detection/{series_key}",
+    response_model=RunDetectionSeriesDetailRead,
+    include_in_schema=False,
+)
+def ops_get_run_detection_detail_route(
+    series_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RunDetectionSeriesDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_run_detection_detail_ops(session, series_key=series_key)
+
+
+@app.get(
+    "/ops/missing-issues",
+    response_model=MissingIssueListRead,
+    include_in_schema=False,
+)
+def ops_list_missing_issues_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    classification: Annotated[
+        MissingIssueClassification | None,
+        Query(description="Filter missing issue rows by deterministic classification."),
+    ] = None,
+) -> MissingIssueListRead:
+    ensure_ops_admin_access(current_user, settings)
+    return list_missing_issues_ops(session, classification=classification)
+
+
+@app.post(
+    "/ops/ocr-pipeline/recover",
+    response_model=OpsOcrPipelineRecoverResponse,
+    include_in_schema=False,
+)
+def ops_ocr_pipeline_recover_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OpsOcrPipelineRecoverResponse:
+    ensure_ops_admin_access(current_user, settings)
+    counts = recover_ocr_pipeline(
+        session,
+        settings=settings,
+        actor_user_id=int(current_user.id) if current_user.id is not None else None,
+    )
+    return OpsOcrPipelineRecoverResponse(**counts)
+
+
+@app.get(
+    "/ops/inventory/duplicates",
+    response_model=list[OpsInventoryDuplicateCandidateGroup],
+    include_in_schema=False,
+)
+def get_inventory_duplicate_candidates(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    publisher: str | None = None,
+    series_title: str | None = None,
+    min_count: Annotated[int, Query(ge=2)] = 2,
+    review_status: Annotated[
+        Literal["pending", "confirmed_duplicate", "not_duplicate"] | None,
+        Query(description="Filter duplicate groups by review classification."),
+    ] = None,
+) -> list[OpsInventoryDuplicateCandidateGroup]:
+    ensure_ops_admin_access(current_user, settings)
+    return find_duplicate_inventory_candidates(
+        session,
+        publisher=publisher,
+        series_title=series_title,
+        min_count=min_count,
+        review_status=review_status,
+    )
+
+
+@app.post(
+    "/ops/inventory/duplicates/review",
+    response_model=DuplicateCandidateReviewRead,
+    include_in_schema=False,
+)
+def post_inventory_duplicate_review_decision(
+    payload: DuplicateCandidateReviewCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> DuplicateCandidateReviewRead:
+    ensure_ops_admin_access(current_user, settings)
+    dumped = payload.model_dump(exclude_unset=True)
+    notes_provided = "notes" in dumped
+    record = upsert_mark_duplicate_review(
+        session,
+        metadata_identity_key=payload.metadata_identity_key,
+        review_status=payload.review_status,
+        notes=payload.notes,
+        notes_provided=notes_provided,
+        reviewed_by_user=current_user,
+    )
+    return serialize_duplicate_candidate_review_read(session, record)
+
+
+@app.patch(
+    "/ops/inventory/duplicates/review/notes",
+    response_model=DuplicateCandidateReviewRead,
+    include_in_schema=False,
+)
+def patch_inventory_duplicate_review_notes_endpoint(
+    payload: DuplicateCandidateNotesUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> DuplicateCandidateReviewRead:
+    ensure_ops_admin_access(current_user, settings)
+    record = upsert_duplicate_review_notes(
+        session,
+        metadata_identity_key=payload.metadata_identity_key,
+        notes=payload.notes,
+        reviewer=current_user,
+    )
+    return serialize_duplicate_candidate_review_read(session, record)
+
+
+@app.get(
+    "/ops/canonical-creators",
+    response_model=list[OpsCanonicalCreatorRow],
+    include_in_schema=False,
+)
+def get_canonical_creators_registry(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    name: str | None = None,
+    canonical_name: str | None = None,
+    normalized_name: str | None = None,
+    creator_key: str | None = None,
+) -> list[OpsCanonicalCreatorRow]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_canonical_creators_registry(
+        session,
+        name=name,
+        canonical_name=canonical_name,
+        normalized_name=normalized_name,
+        creator_key=creator_key,
+    )
+
+
+@app.get(
+    "/ops/canonical-series",
+    response_model=list[OpsCanonicalSeriesRow],
+    include_in_schema=False,
+)
+def get_canonical_series_registry(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    publisher: str | None = None,
+    title: str | None = None,
+    earliest_release_year_min: Annotated[int | None, Query(ge=1800, le=2999)] = None,
+    earliest_release_year_max: Annotated[int | None, Query(ge=1800, le=2999)] = None,
+    latest_release_year_min: Annotated[int | None, Query(ge=1800, le=2999)] = None,
+    latest_release_year_max: Annotated[int | None, Query(ge=1800, le=2999)] = None,
+) -> list[OpsCanonicalSeriesRow]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_canonical_series_registry(
+        session,
+        publisher=publisher,
+        title=title,
+        earliest_release_year_min=earliest_release_year_min,
+        earliest_release_year_max=earliest_release_year_max,
+        latest_release_year_min=latest_release_year_min,
+        latest_release_year_max=latest_release_year_max,
+    )
+
+
+@app.get("/ops/metadata-aliases", response_model=list[MetadataAliasRead], include_in_schema=False)
+def get_metadata_aliases(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    alias_type: MetadataAliasType | None = None,
+    is_active: bool | None = None,
+) -> list[MetadataAliasRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_metadata_aliases(session, alias_type=alias_type, is_active=is_active)
+
+
+@app.post(
+    "/ops/metadata-aliases",
+    response_model=MetadataAliasRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def post_metadata_alias(
+    payload: MetadataAliasCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MetadataAliasRead:
+    ensure_ops_admin_access(current_user, settings)
+    return create_metadata_alias(session, payload=payload, actor_user_id=current_user.id)
+
+
+@app.patch(
+    "/ops/metadata-aliases/{alias_id}",
+    response_model=MetadataAliasRead,
+    include_in_schema=False,
+)
+def patch_metadata_alias(
+    alias_id: int,
+    payload: MetadataAliasUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MetadataAliasRead:
+    ensure_ops_admin_access(current_user, settings)
+    return update_metadata_alias(
+        session,
+        alias_id=alias_id,
+        payload=payload,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/metadata-aliases/{alias_id}/deactivate",
+    response_model=MetadataAliasRead,
+    include_in_schema=False,
+)
+def post_deactivate_metadata_alias(
+    alias_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MetadataAliasRead:
+    ensure_ops_admin_access(current_user, settings)
+    return deactivate_metadata_alias(session, alias_id=alias_id, actor_user_id=current_user.id)
+
+
+@app.get(
+    "/ops/metadata-audits",
+    response_model=list[OpsMetadataAuditRow],
+    include_in_schema=False,
+)
+def get_metadata_audits(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    entity_type: str | None = None,
+    action: str | None = None,
+) -> list[OpsMetadataAuditRow]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_recent_metadata_audits(
+        session,
+        limit=limit,
+        entity_type=entity_type,
+        action=action,
+    )
+
+
+@app.get(
+    "/ops/cover-images/recent",
+    response_model=list[OpsCoverImageRecentRow],
+    include_in_schema=False,
+)
+def get_ops_recent_cover_images(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    source_type: str | None = Query(None),
+    linkage: Literal["inventory", "import"] | None = Query(None),
+    matching_status: Literal["not_ready", "ready", "needs_review", "failed"] | None = Query(None),
+) -> list[OpsCoverImageRecentRow]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_recent_cover_uploads_for_ops(
+        session,
+        limit=limit,
+        source_type=source_type,
+        linkage=linkage,
+        matching_status=matching_status,
+    )
+
+
+@app.get(
+    "/ops/cover-images/duplicates",
+    response_model=list[OpsCoverDuplicateGroup],
+    include_in_schema=False,
+)
+def get_ops_cover_image_duplicates(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    min_count: Annotated[int, Query(ge=2, le=500)] = 2,
+    source_type: str | None = Query(None),
+    linkage: Literal["inventory", "import", "unlinked"] | None = Query(None),
+) -> list[OpsCoverDuplicateGroup]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_duplicate_cover_image_groups_for_ops(
+        session,
+        min_count=min_count,
+        limit=limit,
+        source_type=source_type,
+        linkage=linkage,
+    )
+
+
+@app.post(
+    "/ops/imports/{import_id}/re-enrich",
+    response_model=OpsMetadataReenrichmentEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def post_reenrich_import(
+    import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    reason: str | None = None,
+) -> OpsMetadataReenrichmentEnqueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_metadata_reenrichment_for_draft_import(
+        session,
+        current_user=current_user,
+        import_id=import_id,
+        reason=reason,
+    )
+
+
+@app.post(
+    "/ops/inventory/{inventory_copy_id}/re-enrich",
+    response_model=OpsMetadataReenrichmentEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def post_reenrich_inventory_copy(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    reason: str | None = None,
+) -> OpsMetadataReenrichmentEnqueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_metadata_reenrichment_for_inventory_copy(
+        session,
+        current_user=current_user,
+        inventory_copy_id=inventory_copy_id,
+        reason=reason,
+    )
 
 
 @app.get("/gmail/connect/start", response_model=GmailConnectStartResponse)
@@ -360,6 +1269,8 @@ def get_imports(
     current_user: User = Depends(get_current_user),
     status: DraftImportStatus | None = None,
     search: str | None = None,
+    needs_metadata_review: bool | None = None,
+    needs_release_date_review: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
     sort_by: str | None = None,
@@ -372,6 +1283,8 @@ def get_imports(
         page_size=page_size,
         status=status,
         search=search,
+        needs_metadata_review=needs_metadata_review,
+        needs_release_date_review=needs_release_date_review,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -474,6 +1387,2902 @@ def discard_import(
     return discard_import_for_user(session=session, current_user=current_user, import_id=import_id)
 
 
+COVER_IMAGE_SOURCE_TYPES = frozenset({"upload", "gmail_attachment", "import_image"})
+
+
+def validated_cover_source_type(source_type: str) -> str:
+    if source_type not in COVER_IMAGE_SOURCE_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail="source_type must be one of upload, gmail_attachment, import_image",
+        )
+    return source_type
+
+
+@app.post("/inventory/{inventory_copy_id}/cover-images", response_model=CoverImageRead)
+async def upload_inventory_cover_image(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file: UploadFile = File(...),
+    source_type: Annotated[str, Form()] = "upload",
+) -> CoverImageRead:
+    validated = validated_cover_source_type(source_type)
+    return await persist_cover_upload(
+        session,
+        settings=settings,
+        file=file,
+        inventory_copy_id=inventory_copy_id,
+        draft_import_id=None,
+        source_type=validated,
+        current_user=current_user,
+    )
+
+
+@app.post("/imports/{import_id}/cover-images", response_model=CoverImageRead)
+async def upload_import_cover_image(
+    import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file: UploadFile = File(...),
+    source_type: Annotated[str, Form()] = "import_image",
+) -> CoverImageRead:
+    validated = validated_cover_source_type(source_type)
+    return await persist_cover_upload(
+        session,
+        settings=settings,
+        file=file,
+        inventory_copy_id=None,
+        draft_import_id=import_id,
+        source_type=validated,
+        current_user=current_user,
+    )
+
+
+@app.post(
+    "/inventory/{inventory_copy_id}/cover-images/{cover_image_id}/primary",
+    response_model=CoverImageRead,
+)
+def set_inventory_cover_image_primary(
+    inventory_copy_id: int,
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageRead:
+    return set_inventory_primary_cover_image(
+        session,
+        current_user=current_user,
+        inventory_copy_id=inventory_copy_id,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/imports/{import_id}/cover-images/{cover_image_id}/primary",
+    response_model=CoverImageRead,
+)
+def set_import_cover_image_primary(
+    import_id: int,
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageRead:
+    return set_draft_import_primary_cover_image(
+        session,
+        current_user=current_user,
+        draft_import_id=import_id,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/inventory/{inventory_copy_id}/cover-images/assign-existing",
+    response_model=CoverImageRead,
+)
+def assign_inventory_cover_existing(
+    inventory_copy_id: int,
+    payload: CoverImageAssignExistingPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageRead:
+    return assign_existing_cover_image_to_inventory_copy(
+        session,
+        settings=settings,
+        current_user=current_user,
+        inventory_copy_id=inventory_copy_id,
+        cover_image_id=payload.cover_image_id,
+        set_primary=payload.set_primary,
+    )
+
+
+@app.post("/cover-images/{cover_image_id}/return-to-draft-import", response_model=CoverImageRead)
+def return_cover_image_to_import_draft_route(
+    cover_image_id: int,
+    payload: CoverImageReturnToDraftPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageRead:
+    return return_cover_image_to_draft_import(
+        session,
+        settings=settings,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+        draft_import_id=payload.draft_import_id,
+        set_primary=payload.set_primary,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/process",
+    response_model=CoverImageProcessingEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def process_cover_image_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageProcessingEnqueueResponse:
+    return enqueue_cover_image_processing_for_user(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/run-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def run_cover_image_ocr_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrEnqueueResponse:
+    return enqueue_cover_image_ocr_for_user(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/retry-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retry_cover_image_ocr_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrEnqueueResponse:
+    """Alias of ``run-ocr`` for operational clarity; preserves OCR history rows."""
+    return enqueue_cover_image_ocr_for_user(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/ocr-results",
+    response_model=list[CoverImageOcrResultRead],
+)
+def get_cover_image_ocr_results_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageOcrResultRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_ocr_result_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/ocr-candidates",
+    response_model=list[CoverImageOcrCandidateRead],
+)
+def get_cover_image_ocr_candidates_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageOcrCandidateRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_ocr_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/ocr-regions",
+    response_model=list[CoverImageOcrRegionRead],
+)
+def get_cover_image_ocr_regions_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageOcrRegionRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_ocr_region_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/extract-ocr-candidates",
+    response_model=CoverImageOcrCandidateExtractResponse,
+    status_code=status.HTTP_200_OK,
+)
+def extract_cover_image_ocr_candidates_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrCandidateExtractResponse:
+    return extract_cover_image_ocr_candidates_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ocr-candidates/{ocr_candidate_id}/approve",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def approve_ocr_candidate_for_owner(
+    ocr_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrCandidateRead:
+    return approve_cover_image_ocr_candidate_for_owner(
+        session,
+        current_user=current_user,
+        ocr_candidate_id=ocr_candidate_id,
+    )
+
+
+@app.post(
+    "/ocr-candidates/{ocr_candidate_id}/reject",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def reject_ocr_candidate_for_owner(
+    ocr_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrCandidateRead:
+    return reject_cover_image_ocr_candidate_for_owner(
+        session,
+        current_user=current_user,
+        ocr_candidate_id=ocr_candidate_id,
+    )
+
+
+@app.patch(
+    "/ocr-candidates/{ocr_candidate_id}/review-notes",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def patch_ocr_candidate_review_notes_owner(
+    ocr_candidate_id: int,
+    payload: CoverImageOcrCandidateReviewNotesPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrCandidateRead:
+    return patch_cover_image_ocr_candidate_review_notes_for_owner(
+        session,
+        current_user=current_user,
+        ocr_candidate_id=ocr_candidate_id,
+        review_notes=payload.review_notes,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/barcode-candidates",
+    response_model=list[CoverImageBarcodeCandidateRead],
+)
+def get_cover_image_barcode_candidates_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageBarcodeCandidateRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_barcode_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/extract-barcodes",
+    response_model=CoverImageBarcodeCandidateExtractResponse,
+    status_code=status.HTTP_200_OK,
+)
+def extract_cover_image_barcode_candidates_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageBarcodeCandidateExtractResponse:
+    return extract_cover_image_barcode_candidates_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.patch(
+    "/barcode-candidates/{barcode_candidate_id}/approve",
+    response_model=CoverImageBarcodeCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def approve_barcode_candidate_for_owner(
+    barcode_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageBarcodeCandidateRead:
+    return approve_cover_image_barcode_candidate_for_owner(
+        session,
+        current_user=current_user,
+        barcode_candidate_id=barcode_candidate_id,
+    )
+
+
+@app.patch(
+    "/barcode-candidates/{barcode_candidate_id}/reject",
+    response_model=CoverImageBarcodeCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def reject_barcode_candidate_for_owner(
+    barcode_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageBarcodeCandidateRead:
+    return reject_cover_image_barcode_candidate_for_owner(
+        session,
+        current_user=current_user,
+        barcode_candidate_id=barcode_candidate_id,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/fingerprints",
+    response_model=list[CoverImageFingerprintRead],
+)
+def get_cover_image_fingerprints_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageFingerprintRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_fingerprint_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/generate-fingerprints",
+    response_model=CoverImageFingerprintGenerateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def generate_cover_image_fingerprints_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageFingerprintGenerateResponse:
+    return generate_cover_image_fingerprints_for_owner(
+        session,
+        settings=settings,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/ocr-quality-analysis",
+    response_model=list[CoverImageOcrQualityAnalysisRead],
+)
+def get_cover_image_ocr_quality_analysis_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageOcrQualityAnalysisRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_ocr_quality_analysis_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/analyze-ocr-quality",
+    response_model=CoverImageOcrQualityAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+)
+def analyze_cover_image_ocr_quality_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrQualityAnalysisResponse:
+    return analyze_cover_image_ocr_quality_for_owner(
+        session,
+        settings=settings,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/match-candidates",
+    response_model=list[CoverImageMatchCandidateRead],
+)
+def get_cover_image_match_candidates_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageMatchCandidateRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_match_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/relationship-graph",
+    response_model=CoverRelationshipGraphRead,
+)
+def get_cover_image_relationship_graph_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipGraphRead:
+    return get_cover_relationship_graph_for_owner(
+        session,
+        center_cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/duplicate-scan-candidates",
+    response_model=DuplicateScanCandidatesResponse,
+)
+
+
+def get_cover_image_duplicate_scan_candidates_owner(
+    cover_image_id: int,
+
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+
+) -> DuplicateScanCandidatesResponse:
+
+
+    return duplicate_scan_candidates_for_cover_owner(
+        session,
+
+        cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+
+@app.get("/duplicate-scan-clusters", response_model=DuplicateScanClustersListResponse)
+
+
+def list_duplicate_scan_clusters_owner_endpoint(
+    classification_filter: Annotated[
+        DuplicateScanClassificationFilter,
+        Query(alias="classification_filter"),
+    ] = "all",
+
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DuplicateScanClustersListResponse:
+    return list_duplicate_scan_clusters_for_owner(
+        session,
+        current_user=current_user,
+        classification_filter=classification_filter,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/variant-family-candidates",
+    response_model=VariantFamilyCandidatesResponse,
+)
+def get_cover_image_variant_family_candidates_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> VariantFamilyCandidatesResponse:
+    return variant_family_candidates_for_cover_owner(
+        session,
+        cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+@app.get("/variant-family-clusters", response_model=VariantFamilyClustersListResponse)
+def list_variant_family_clusters_owner_endpoint(
+    classification_filter: Annotated[
+        VariantFamilyClassificationFilter,
+        Query(alias="classification_filter"),
+    ] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> VariantFamilyClustersListResponse:
+    return list_variant_family_clusters_for_owner(
+        session,
+        current_user=current_user,
+        classification_filter=classification_filter,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/generate-canonical-issue-suggestions",
+    response_model=CanonicalIssueSuggestionGenerateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def generate_canonical_issue_suggestions_owner_endpoint(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CanonicalIssueSuggestionGenerateResponse:
+    return generate_canonical_issue_suggestions_for_owner(
+        session,
+        cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/canonical-issue-suggestions",
+    response_model=list[CanonicalIssueLinkSuggestionRead],
+)
+def list_canonical_issue_suggestions_owner_endpoint(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CanonicalIssueLinkSuggestionRead]:
+    return list_canonical_issue_suggestions_for_cover_owner(
+        session,
+        cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+@app.patch(
+    "/canonical-issue-suggestions/{suggestion_id}/approve",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+)
+def approve_canonical_issue_suggestion_owner_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    return approve_canonical_issue_suggestion_for_owner(
+        session,
+        suggestion_id=suggestion_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/canonical-issue-suggestions/{suggestion_id}/reject",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+)
+def reject_canonical_issue_suggestion_owner_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    return reject_canonical_issue_suggestion_for_owner(
+        session,
+        suggestion_id=suggestion_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/canonical-issue-suggestions/{suggestion_id}/ignore",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+)
+def ignore_canonical_issue_suggestion_owner_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    return ignore_canonical_issue_suggestion_for_owner(
+        session,
+        suggestion_id=suggestion_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.post(
+    "/relationship-conflicts/detect",
+    response_model=CoverRelationshipConflictDetectResponse,
+    status_code=status.HTTP_200_OK,
+)
+def detect_relationship_conflicts_owner_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictDetectResponse:
+    return detect_relationship_conflicts_for_owner(session, current_user=current_user)
+
+
+@app.get(
+    "/relationship-conflicts",
+    response_model=CoverRelationshipConflictListResponse,
+)
+def list_relationship_conflicts_owner_endpoint(
+    severity: RelationshipConflictSeverity | Literal["all"] = "all",
+    status: RelationshipConflictStatus | Literal["all"] = "all",
+    conflict_type: RelationshipConflictType | Literal["all"] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictListResponse:
+    return list_relationship_conflicts_for_owner(
+        session,
+        current_user=current_user,
+        severity=severity,
+        status=status,
+        conflict_type=conflict_type,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/relationship-conflicts",
+    response_model=CoverRelationshipConflictListResponse,
+)
+def list_relationship_conflicts_for_cover_owner_endpoint(
+    cover_image_id: int,
+    severity: RelationshipConflictSeverity | Literal["all"] = "all",
+    status: RelationshipConflictStatus | Literal["all"] = "all",
+    conflict_type: RelationshipConflictType | Literal["all"] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictListResponse:
+    return list_relationship_conflicts_for_cover_owner(
+        session,
+        cover_image_id=cover_image_id,
+        current_user=current_user,
+        severity=severity,
+        status=status,
+        conflict_type=conflict_type,
+    )
+
+
+@app.patch(
+    "/relationship-conflicts/{conflict_id}/acknowledge",
+    response_model=CoverRelationshipConflictActionResponse,
+)
+def acknowledge_relationship_conflict_owner_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictActionResponse:
+    return acknowledge_relationship_conflict_for_owner(
+        session,
+        conflict_id=conflict_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/relationship-conflicts/{conflict_id}/dismiss",
+    response_model=CoverRelationshipConflictActionResponse,
+)
+def dismiss_relationship_conflict_owner_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictActionResponse:
+    return dismiss_relationship_conflict_for_owner(
+        session,
+        conflict_id=conflict_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/relationship-conflicts/{conflict_id}/resolve",
+    response_model=CoverRelationshipConflictActionResponse,
+)
+def resolve_relationship_conflict_owner_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipConflictActionResponse:
+    return resolve_relationship_conflict_for_owner(
+        session,
+        conflict_id=conflict_id,
+        current_user=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.get("/match-groups/{grouping_key}", response_model=CoverImageMatchGroupRead)
+def get_match_group_for_owner(
+    grouping_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageMatchGroupRead:
+    return get_cover_match_group_for_owner(
+        session,
+        current_user=current_user,
+        grouping_key=grouping_key,
+    )
+
+
+@app.get(
+    "/cover-relationship-graph",
+    response_model=CoverRelationshipGraphRead,
+)
+def get_cover_relationship_graph_query_owner(
+    cover_image_id: Annotated[
+        int,
+        Query(ge=1, description="Focal cover for the human-decision subgraph."),
+    ],
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverRelationshipGraphRead:
+    return get_cover_relationship_graph_for_owner(
+        session,
+        center_cover_image_id=cover_image_id,
+        current_user=current_user,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/generate-match-candidates",
+    response_model=CoverImageMatchCandidateGenerateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def generate_cover_image_match_candidates_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageMatchCandidateGenerateResponse:
+    return generate_cover_image_match_candidates_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/regenerate-match-confidence",
+    response_model=CoverImageMatchCandidateGenerateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def regenerate_cover_image_match_confidence_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageMatchCandidateGenerateResponse:
+    return generate_cover_image_match_candidates_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.patch(
+    "/match-candidates/{match_candidate_id}/acknowledge",
+    response_model=CoverImageMatchCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def acknowledge_cover_match_candidate_owner(
+    match_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageMatchCandidateRead:
+    return acknowledge_cover_match_candidate_for_owner(
+        session,
+        current_user=current_user,
+        match_candidate_id=match_candidate_id,
+    )
+
+
+@app.patch(
+    "/match-candidates/{match_candidate_id}/dismiss",
+    response_model=CoverImageMatchCandidateRead,
+    status_code=status.HTTP_200_OK,
+)
+def dismiss_cover_match_candidate_owner(
+    match_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageMatchCandidateRead:
+    return dismiss_cover_match_candidate_for_owner(
+        session,
+        current_user=current_user,
+        match_candidate_id=match_candidate_id,
+    )
+
+
+@app.post(
+    "/cover-link-decisions",
+    response_model=CoverImageLinkDecisionRead,
+    status_code=status.HTTP_200_OK,
+)
+def create_cover_link_decision_owner(
+    payload: CoverImageLinkDecisionCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageLinkDecisionRead:
+    return create_cover_link_decision_for_owner(
+        session,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@app.get(
+    "/cover-link-decisions",
+    response_model=list[CoverImageLinkDecisionRead],
+)
+def list_cover_link_decisions_owner(
+    cover_image_id: int | None = None,
+    include_inactive: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageLinkDecisionRead]:
+    return list_cover_link_decisions_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+        include_inactive=include_inactive,
+        limit=limit,
+    )
+
+
+@app.get(
+    "/cover-link-decisions/recent",
+    response_model=list[CoverImageLinkDecisionRead],
+)
+def list_recent_cover_link_decisions_owner(
+    include_inactive: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageLinkDecisionRead]:
+    return list_cover_link_decisions_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=None,
+        include_inactive=include_inactive,
+        limit=limit,
+    )
+
+
+@app.get(
+    "/cover-link-decisions/{decision_id}",
+    response_model=CoverImageLinkDecisionRead,
+)
+def get_cover_link_decision_owner(
+    decision_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageLinkDecisionRead:
+    return get_cover_link_decision_for_owner(
+        session,
+        decision_id=decision_id,
+        current_user=current_user,
+    )
+
+
+@app.post(
+    "/cover-link-decisions/{decision_id}/revert",
+    response_model=CoverImageLinkDecisionRead,
+    status_code=status.HTTP_200_OK,
+)
+def revert_cover_link_decision_owner(
+    decision_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageLinkDecisionRead:
+    return revert_cover_link_decision_for_owner(
+        session,
+        decision_id=decision_id,
+        current_user=current_user,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/reconcile-ocr-metadata",
+    response_model=CoverImageOcrReconciliationResponse,
+    status_code=status.HTTP_200_OK,
+)
+def reconcile_cover_image_ocr_metadata_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrReconciliationResponse:
+    return reconcile_cover_image_ocr_metadata_for_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/cover-images/{cover_image_id}/ocr-reconciliation-warnings",
+    response_model=list[CoverImageOcrReconciliationWarningRead],
+)
+def get_cover_image_ocr_reconciliation_warnings_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[CoverImageOcrReconciliationWarningRead]:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    return list_cover_image_ocr_reconciliation_warnings(session, cover_image_id=cover_image_id)
+
+
+@app.patch(
+    "/ocr-reconciliation-warnings/{warning_id}/acknowledge",
+    response_model=CoverImageOcrReconciliationWarningRead,
+    status_code=status.HTTP_200_OK,
+)
+def acknowledge_ocr_reconciliation_warning_owner(
+    warning_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrReconciliationWarningRead:
+    return acknowledge_ocr_reconciliation_warning_for_owner(
+        session,
+        current_user=current_user,
+        warning_id=warning_id,
+    )
+
+
+@app.patch(
+    "/ocr-reconciliation-warnings/{warning_id}/dismiss",
+    response_model=CoverImageOcrReconciliationWarningRead,
+    status_code=status.HTTP_200_OK,
+)
+def dismiss_ocr_reconciliation_warning_owner(
+    warning_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrReconciliationWarningRead:
+    return dismiss_ocr_reconciliation_warning_for_owner(
+        session,
+        current_user=current_user,
+        warning_id=warning_id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/extract-ocr-regions",
+    response_model=CoverImageOcrRegionExtractResponse,
+    status_code=status.HTTP_200_OK,
+)
+def extract_cover_image_ocr_regions_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrRegionExtractResponse:
+    return extract_cover_image_ocr_regions_for_owner(
+        session,
+        settings=settings,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/replay-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def replay_cover_image_ocr_for_owner(
+    cover_image_id: int,
+    payload: CoverImageOcrReplayPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CoverImageOcrEnqueueResponse:
+    return enqueue_cover_image_ocr_replay_for_user(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+        replay_reason=payload.replay_reason if payload is not None else None,
+    )
+
+
+@app.post("/ocr-batches", response_model=OcrBatchRead, status_code=status.HTTP_201_CREATED)
+def create_ocr_batch_owner(
+    payload: OcrBatchCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrBatchRead:
+    return create_ocr_batch_for_owner(session, current_user=current_user, payload=payload)
+
+
+@app.get("/ocr-batches", response_model=list[OcrBatchRead])
+def list_ocr_batches_owner(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[OcrBatchRead]:
+    return list_ocr_batches_for_owner(session, current_user=current_user, limit=limit)
+
+
+@app.get("/ocr-batches/{batch_id}", response_model=OcrBatchRead)
+def get_ocr_batch_owner(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrBatchRead:
+    return get_ocr_batch_detail_for_owner(session, current_user=current_user, batch_id=batch_id)
+
+
+@app.post("/ocr-batches/{batch_id}/enqueue", response_model=OcrBatchRead)
+def enqueue_ocr_batch_owner(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrBatchRead:
+    return enqueue_ocr_batch_for_owner(session, current_user=current_user, batch_id=batch_id)
+
+
+@app.post("/ocr-batches/{batch_id}/retry-failed", response_model=OcrBatchRead)
+def retry_failed_ocr_batch_items_owner(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrBatchRead:
+    return retry_failed_ocr_batch_items_for_owner(
+        session,
+        current_user=current_user,
+        batch_id=batch_id,
+    )
+
+
+@app.post("/ocr-batches/{batch_id}/cancel", response_model=OcrBatchRead)
+def cancel_ocr_batch_owner(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrBatchRead:
+    return cancel_ocr_batch_for_owner(session, current_user=current_user, batch_id=batch_id)
+
+
+@app.post("/ocr-replays", response_model=OcrReplayRunRead, status_code=status.HTTP_201_CREATED)
+def create_ocr_replay_owner(
+    payload: OcrReplayCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    return create_ocr_replay_run_for_owner(
+        session,
+        settings=settings,
+        current_user=current_user,
+        payload=payload,
+    )
+
+
+@app.get("/ocr-replays", response_model=list[OcrReplayRunRead])
+def list_ocr_replays_owner(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[OcrReplayRunRead]:
+    return list_ocr_replay_runs_for_owner(session, current_user=current_user, limit=limit)
+
+
+@app.get("/ocr-replays/{replay_id}", response_model=OcrReplayRunRead)
+def get_ocr_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrReplayRunRead:
+    return get_ocr_replay_run_detail_for_owner(
+        session,
+        current_user=current_user,
+        replay_id=replay_id,
+    )
+
+
+@app.post("/ocr-replays/{replay_id}/start", response_model=OcrReplayRunRead)
+def start_ocr_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    return start_ocr_replay_run_for_owner(
+        session,
+        settings=settings,
+        current_user=current_user,
+        replay_id=replay_id,
+    )
+
+
+@app.post("/ocr-replays/{replay_id}/cancel", response_model=OcrReplayRunRead)
+def cancel_ocr_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrReplayRunRead:
+    return cancel_ocr_replay_run_for_owner(session, current_user=current_user, replay_id=replay_id)
+
+
+@app.post(
+    "/relationship-replays",
+    response_model=RelationshipReplayRunRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_relationship_replay_owner(
+    payload: RelationshipReplayCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RelationshipReplayRunRead:
+    return create_relationship_replay_run_for_owner(
+        session,
+        current_user=current_user,
+        payload=payload,
+    )
+
+
+@app.get("/relationship-replays", response_model=list[RelationshipReplayRunRead])
+def list_relationship_replays_owner(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[RelationshipReplayRunRead]:
+    return list_relationship_replay_runs_for_owner(session, current_user=current_user, limit=limit)
+
+
+@app.get("/relationship-replays/{replay_id}", response_model=RelationshipReplayRunRead)
+def get_relationship_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RelationshipReplayRunRead:
+    return get_relationship_replay_run_detail_for_owner(
+        session,
+        current_user=current_user,
+        replay_id=replay_id,
+    )
+
+
+@app.post("/relationship-replays/{replay_id}/start", response_model=RelationshipReplayRunRead)
+def start_relationship_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RelationshipReplayRunRead:
+    return start_relationship_replay_run_for_owner(
+        session,
+        current_user=current_user,
+        replay_id=replay_id,
+    )
+
+
+@app.post("/relationship-replays/{replay_id}/cancel", response_model=RelationshipReplayRunRead)
+def cancel_relationship_replay_owner(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RelationshipReplayRunRead:
+    return cancel_relationship_replay_run_for_owner(
+        session,
+        current_user=current_user,
+        replay_id=replay_id,
+    )
+
+
+@app.get("/ocr-review-queue", response_model=OcrReviewQueueResponse)
+def get_ocr_review_queue_owner_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    queue_scope: Annotated[
+        Literal["attention", "all"],
+        Query(description="attention presets pending/open subsets per kind."),
+    ] = "attention",
+    item_kind: Annotated[list[str] | None, Query(description="repeat for multiple kinds")] = None,
+    publisher_id: int | None = None,
+    extraction_version: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    confidence_bucket: Literal["high", "medium", "low", "unknown"] | None = None,
+    severity: Literal["critical", "warning", "info"] | None = None,
+    candidate_type: str | None = None,
+    warning_type: str | None = None,
+    quality_type: str | None = None,
+    ocr_candidate_review_status: Literal["pending", "approved", "rejected"] | None = None,
+    reconciliation_warning_status: Literal["open", "acknowledged", "dismissed"] | None = None,
+    barcode_review_state: Literal["pending", "approved", "rejected"] | None = None,
+    match_review: Literal["pending", "acknowledged", "dismissed"] | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> OcrReviewQueueResponse:
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    filters = build_filters_from_http(
+        queue_scope=queue_scope,
+        ops_mode=False,
+        owner_user_id=current_user.id,
+        item_kind=item_kind,
+        publisher_id=publisher_id,
+        extraction_version=extraction_version,
+        created_after=created_after,
+        created_before=created_before,
+        confidence_bucket=confidence_bucket,
+        severity=severity,
+        candidate_type=candidate_type,
+        warning_type=warning_type,
+        quality_type=quality_type,
+        ocr_candidate_review_status=ocr_candidate_review_status,
+        reconciliation_warning_status=reconciliation_warning_status,
+        barcode_review_state=barcode_review_state,
+        match_review=match_review,
+    )
+    return list_ocr_review_queue(session, filters=filters, page=page, page_size=page_size)
+
+
+@app.get("/ocr-review-summary", response_model=OcrReviewSummaryResponse)
+def get_ocr_review_summary_owner_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OcrReviewSummaryResponse:
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return build_ocr_review_summary(session, ops_mode=False, owner_user_id=current_user.id)
+
+
+@app.post(
+    "/ocr-review/bulk/reconciliation-warnings/acknowledge",
+    response_model=BulkMutationResult,
+)
+def bulk_ack_ocr_warnings_owner_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> BulkMutationResult:
+    return bulk_ack_warnings_for_owner(session, current_user=current_user, payload=payload)
+
+
+@app.post(
+    "/ocr-review/bulk/reconciliation-warnings/dismiss",
+    response_model=BulkMutationResult,
+)
+def bulk_dismiss_ocr_warnings_owner_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> BulkMutationResult:
+    return bulk_dismiss_warnings_for_owner(session, current_user=current_user, payload=payload)
+
+
+@app.post("/ocr-review/bulk/barcode-candidates/approve", response_model=BulkMutationResult)
+def bulk_approve_barcode_candidates_owner_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> BulkMutationResult:
+    return bulk_approve_barcodes_for_owner(session, current_user=current_user, payload=payload)
+
+
+@app.post("/ocr-review/bulk/barcode-candidates/reject", response_model=BulkMutationResult)
+def bulk_reject_barcode_candidates_owner_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> BulkMutationResult:
+    return bulk_reject_barcodes_for_owner(session, current_user=current_user, payload=payload)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/process",
+    response_model=CoverImageProcessingEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def process_cover_image_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageProcessingEnqueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_cover_image_processing_for_ops(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/run-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def run_cover_image_ocr_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrEnqueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_cover_image_ocr_for_ops(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/retry-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def retry_cover_image_ocr_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrEnqueueResponse:
+    """Alias of ``run-ocr`` for operations; preserves OCR history rows."""
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_cover_image_ocr_for_ops(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/replay-ocr",
+    response_model=CoverImageOcrEnqueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,
+)
+def replay_cover_image_ocr_for_ops(
+    cover_image_id: int,
+    payload: CoverImageOcrReplayPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrEnqueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_cover_image_ocr_replay_for_ops(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+        replay_reason=payload.replay_reason if payload is not None else None,
+    )
+
+
+@app.post(
+    "/ops/ocr-batches",
+    response_model=OcrBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def create_ocr_batch_ops(
+    payload: OcrBatchCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return create_ocr_batch_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.get("/ops/ocr-batches", response_model=list[OcrBatchRead], include_in_schema=False)
+def list_ocr_batches_ops(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[OcrBatchRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_ocr_batches_for_ops(session, limit=limit)
+
+
+@app.get("/ops/ocr-batches/{batch_id}", response_model=OcrBatchRead, include_in_schema=False)
+def get_ocr_batch_ops(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_ocr_batch_detail_for_ops(session, batch_id=batch_id)
+
+
+@app.post(
+    "/ops/ocr-batches/{batch_id}/enqueue",
+    response_model=OcrBatchRead,
+    include_in_schema=False,
+)
+def enqueue_ocr_batch_ops(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return enqueue_ocr_batch_for_ops(session, batch_id=batch_id, actor_user_id=current_user.id)
+
+
+@app.post(
+    "/ops/ocr-batches/{batch_id}/retry-failed",
+    response_model=OcrBatchRead,
+    include_in_schema=False,
+)
+def retry_failed_ocr_batch_items_ops(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return retry_failed_ocr_batch_items_for_ops(
+        session,
+        batch_id=batch_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/ocr-batches/{batch_id}/cancel",
+    response_model=OcrBatchRead,
+    include_in_schema=False,
+)
+def cancel_ocr_batch_ops(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return cancel_ocr_batch_for_ops(session, batch_id=batch_id, actor_user_id=current_user.id)
+
+
+@app.post(
+    "/ops/ocr-replays",
+    response_model=OcrReplayRunRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def create_ocr_replay_ops(
+    payload: OcrReplayCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return create_ocr_replay_run_for_ops(
+        session,
+        settings=settings,
+        actor_user_id=current_user.id,
+        payload=payload,
+    )
+
+
+@app.get("/ops/ocr-replays", response_model=list[OcrReplayRunRead], include_in_schema=False)
+def list_ocr_replays_ops(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[OcrReplayRunRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_ocr_replay_runs_for_ops(session, limit=limit)
+
+
+@app.get("/ops/ocr-replays/{replay_id}", response_model=OcrReplayRunRead, include_in_schema=False)
+def get_ocr_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_ocr_replay_run_detail_for_ops(session, replay_id=replay_id)
+
+
+@app.post(
+    "/ops/ocr-replays/{replay_id}/start",
+    response_model=OcrReplayRunRead,
+    include_in_schema=False,
+)
+def start_ocr_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return start_ocr_replay_run_for_ops(
+        session,
+        settings=settings,
+        replay_id=replay_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/ocr-replays/{replay_id}/cancel",
+    response_model=OcrReplayRunRead,
+    include_in_schema=False,
+)
+def cancel_ocr_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return cancel_ocr_replay_run_for_ops(
+        session,
+        replay_id=replay_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/relationship-replays",
+    response_model=RelationshipReplayRunRead,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def create_relationship_replay_ops(
+    payload: RelationshipReplayCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RelationshipReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return create_relationship_replay_run_for_ops(
+        session,
+        actor_user_id=current_user.id,
+        payload=payload,
+    )
+
+
+@app.get(
+    "/ops/relationship-replays",
+    response_model=list[RelationshipReplayRunRead],
+    include_in_schema=False,
+)
+def list_relationship_replays_ops(
+    limit: int = Query(default=25, ge=1, le=100),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[RelationshipReplayRunRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_relationship_replay_runs_for_ops(session, limit=limit)
+
+
+@app.get(
+    "/ops/relationship-replays/{replay_id}",
+    response_model=RelationshipReplayRunRead,
+    include_in_schema=False,
+)
+def get_relationship_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RelationshipReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_relationship_replay_run_detail_for_ops(session, replay_id=replay_id)
+
+
+@app.post(
+    "/ops/relationship-replays/{replay_id}/start",
+    response_model=RelationshipReplayRunRead,
+    include_in_schema=False,
+)
+def start_relationship_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RelationshipReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return start_relationship_replay_run_for_ops(
+        session,
+        replay_id=replay_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/relationship-replays/{replay_id}/cancel",
+    response_model=RelationshipReplayRunRead,
+    include_in_schema=False,
+)
+def cancel_relationship_replay_ops(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RelationshipReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return cancel_relationship_replay_run_for_ops(
+        session,
+        replay_id=replay_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get("/ops/ocr-review-queue", response_model=OcrReviewQueueResponse, include_in_schema=False)
+def get_ocr_review_queue_ops_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    queue_scope: Annotated[
+        Literal["attention", "all"],
+        Query(description="attention presets pending/open subsets per kind."),
+    ] = "attention",
+    item_kind: Annotated[list[str] | None, Query(description="repeat for multiple kinds")] = None,
+    publisher_id: int | None = None,
+    extraction_version: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    confidence_bucket: Literal["high", "medium", "low", "unknown"] | None = None,
+    severity: Literal["critical", "warning", "info"] | None = None,
+    candidate_type: str | None = None,
+    warning_type: str | None = None,
+    quality_type: str | None = None,
+    ocr_candidate_review_status: Literal["pending", "approved", "rejected"] | None = None,
+    reconciliation_warning_status: Literal["open", "acknowledged", "dismissed"] | None = None,
+    barcode_review_state: Literal["pending", "approved", "rejected"] | None = None,
+    match_review: Literal["pending", "acknowledged", "dismissed"] | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> OcrReviewQueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    filters = build_filters_from_http(
+        queue_scope=queue_scope,
+        ops_mode=True,
+        owner_user_id=None,
+        item_kind=item_kind,
+        publisher_id=publisher_id,
+        extraction_version=extraction_version,
+        created_after=created_after,
+        created_before=created_before,
+        confidence_bucket=confidence_bucket,
+        severity=severity,
+        candidate_type=candidate_type,
+        warning_type=warning_type,
+        quality_type=quality_type,
+        ocr_candidate_review_status=ocr_candidate_review_status,
+        reconciliation_warning_status=reconciliation_warning_status,
+        barcode_review_state=barcode_review_state,
+        match_review=match_review,
+    )
+    return list_ocr_review_queue(session, filters=filters, page=page, page_size=page_size)
+
+
+@app.get(
+    "/ops/ocr-review-summary",
+    response_model=OcrReviewSummaryResponse,
+    include_in_schema=False,
+)
+def get_ocr_review_summary_ops_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OcrReviewSummaryResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return build_ocr_review_summary(session, ops_mode=True, owner_user_id=None)
+
+
+@app.post(
+    "/ops/ocr-review/bulk/reconciliation-warnings/acknowledge",
+    response_model=BulkMutationResult,
+    include_in_schema=False,
+)
+def bulk_ack_ocr_warnings_ops_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BulkMutationResult:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return bulk_ack_warnings_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.post(
+    "/ops/ocr-review/bulk/reconciliation-warnings/dismiss",
+    response_model=BulkMutationResult,
+    include_in_schema=False,
+)
+def bulk_dismiss_ocr_warnings_ops_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BulkMutationResult:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return bulk_dismiss_warnings_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.post(
+    "/ops/ocr-review/bulk/barcode-candidates/approve",
+    response_model=BulkMutationResult,
+    include_in_schema=False,
+)
+def bulk_approve_barcode_candidates_ops_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BulkMutationResult:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return bulk_approve_barcodes_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.post(
+    "/ops/ocr-review/bulk/barcode-candidates/reject",
+    response_model=BulkMutationResult,
+    include_in_schema=False,
+)
+def bulk_reject_barcode_candidates_ops_route(
+    payload: BulkIdsPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BulkMutationResult:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return bulk_reject_barcodes_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/extract-ocr-regions",
+    response_model=CoverImageOcrRegionExtractResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def extract_cover_image_ocr_regions_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrRegionExtractResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return extract_cover_image_ocr_regions_for_ops(
+        session,
+        settings=settings,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/extract-ocr-candidates",
+    response_model=CoverImageOcrCandidateExtractResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def extract_cover_image_ocr_candidates_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrCandidateExtractResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return extract_cover_image_ocr_candidates_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+    )
+
+
+@app.post(
+    "/ops/ocr-candidates/{ocr_candidate_id}/approve",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def approve_ocr_candidate_for_ops(
+    ocr_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return approve_cover_image_ocr_candidate_for_ops(
+        session,
+        ocr_candidate_id=ocr_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/ocr-candidates/{ocr_candidate_id}/reject",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def reject_ocr_candidate_for_ops(
+    ocr_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return reject_cover_image_ocr_candidate_for_ops(
+        session,
+        ocr_candidate_id=ocr_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/ocr-candidates/{ocr_candidate_id}/review-notes",
+    response_model=CoverImageOcrCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def patch_ocr_candidate_review_notes_ops(
+    ocr_candidate_id: int,
+    payload: CoverImageOcrCandidateReviewNotesPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return patch_cover_image_ocr_candidate_review_notes_for_ops(
+        session,
+        ocr_candidate_id=ocr_candidate_id,
+        review_notes=payload.review_notes,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/barcode-candidates",
+    response_model=list[CoverImageBarcodeCandidateRead],
+    include_in_schema=False,
+)
+def get_cover_image_barcode_candidates_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageBarcodeCandidateRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_barcode_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/extract-barcodes",
+    response_model=CoverImageBarcodeCandidateExtractResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def extract_cover_image_barcode_candidates_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageBarcodeCandidateExtractResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return extract_cover_image_barcode_candidates_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/barcode-candidates/{barcode_candidate_id}/approve",
+    response_model=CoverImageBarcodeCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def approve_barcode_candidate_for_ops(
+    barcode_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageBarcodeCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return approve_cover_image_barcode_candidate_for_ops(
+        session,
+        barcode_candidate_id=barcode_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/barcode-candidates/{barcode_candidate_id}/reject",
+    response_model=CoverImageBarcodeCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def reject_barcode_candidate_for_ops(
+    barcode_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageBarcodeCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return reject_cover_image_barcode_candidate_for_ops(
+        session,
+        barcode_candidate_id=barcode_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/ocr-results",
+    response_model=list[CoverImageOcrResultRead],
+    include_in_schema=False,
+)
+def get_cover_image_ocr_results_for_ops_route(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageOcrResultRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_ocr_result_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/ocr-candidates",
+    response_model=list[CoverImageOcrCandidateRead],
+    include_in_schema=False,
+)
+def get_cover_image_ocr_candidates_for_ops_route(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageOcrCandidateRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_ocr_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/fingerprints",
+    response_model=list[CoverImageFingerprintRead],
+    include_in_schema=False,
+)
+def get_cover_image_fingerprints_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageFingerprintRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_fingerprint_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/generate-fingerprints",
+    response_model=CoverImageFingerprintGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def generate_cover_image_fingerprints_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageFingerprintGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return generate_cover_image_fingerprints_for_ops(
+        session,
+        settings=settings,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/ocr-quality-analysis",
+    response_model=list[CoverImageOcrQualityAnalysisRead],
+    include_in_schema=False,
+)
+def get_cover_image_ocr_quality_analysis_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageOcrQualityAnalysisRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_ocr_quality_analysis_reads_for_cover(session, cover_image_id)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/analyze-ocr-quality",
+    response_model=CoverImageOcrQualityAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def analyze_cover_image_ocr_quality_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrQualityAnalysisResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return analyze_cover_image_ocr_quality_for_ops(
+        session,
+        settings=settings,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/match-candidates",
+    response_model=list[CoverImageMatchCandidateRead],
+    include_in_schema=False,
+)
+def get_cover_image_match_candidates_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageMatchCandidateRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+
+
+    return list_cover_match_candidate_reads_for_cover(session, cover_image_id)
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/relationship-graph",
+    response_model=CoverRelationshipGraphRead,
+    include_in_schema=False,
+)
+def get_cover_image_relationship_graph_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipGraphRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_cover_relationship_graph_for_ops(
+        session,
+        center_cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/ops/cover-relationship-graph",
+    response_model=CoverRelationshipGraphRead,
+    include_in_schema=False,
+)
+def get_cover_relationship_graph_query_ops(
+    cover_image_id: Annotated[
+        int,
+        Query(ge=1, description="Focal cover for the human-decision subgraph."),
+    ],
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipGraphRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_cover_relationship_graph_for_ops(
+        session,
+        center_cover_image_id=cover_image_id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/duplicate-scan-candidates",
+    response_model=DuplicateScanCandidatesResponse,
+    include_in_schema=False,
+)
+
+
+def get_cover_image_duplicate_scan_candidates_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> DuplicateScanCandidatesResponse:
+    ensure_ops_admin_access(current_user, settings)
+
+    return duplicate_scan_candidates_for_ops(session, cover_image_id=cover_image_id)
+
+
+
+@app.get(
+    "/ops/duplicate-scan-clusters",
+
+    response_model=DuplicateScanClustersListResponse,
+    include_in_schema=False,
+)
+
+
+
+def list_duplicate_scan_clusters_ops_route(
+    classification_filter: Annotated[
+        DuplicateScanClassificationFilter,
+        Query(alias="classification_filter"),
+
+    ] = "all",
+
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> DuplicateScanClustersListResponse:
+    ensure_ops_admin_access(current_user, settings)
+
+
+
+    return list_duplicate_scan_clusters_for_ops(
+        session,
+        classification_filter=classification_filter,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/variant-family-candidates",
+    response_model=VariantFamilyCandidatesResponse,
+    include_in_schema=False,
+)
+def get_cover_image_variant_family_candidates_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> VariantFamilyCandidatesResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return variant_family_candidates_for_ops(session, cover_image_id=cover_image_id)
+
+
+@app.get(
+    "/ops/variant-family-clusters",
+    response_model=VariantFamilyClustersListResponse,
+    include_in_schema=False,
+)
+def list_variant_family_clusters_ops_route(
+    classification_filter: Annotated[
+        VariantFamilyClassificationFilter,
+        Query(alias="classification_filter"),
+    ] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> VariantFamilyClustersListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_variant_family_clusters_for_ops(
+        session,
+        classification_filter=classification_filter,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/generate-canonical-issue-suggestions",
+    response_model=CanonicalIssueSuggestionGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def generate_canonical_issue_suggestions_ops_endpoint(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CanonicalIssueSuggestionGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return generate_canonical_issue_suggestions_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        reviewer=current_user,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/canonical-issue-suggestions",
+    response_model=list[CanonicalIssueLinkSuggestionRead],
+    include_in_schema=False,
+)
+def list_canonical_issue_suggestions_ops_endpoint(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CanonicalIssueLinkSuggestionRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_canonical_issue_suggestions_for_cover_ops(session, cover_image_id=cover_image_id)
+
+
+@app.post(
+    "/ops/relationship-conflicts/detect",
+    response_model=CoverRelationshipConflictDetectResponse,
+    include_in_schema=False,
+)
+def detect_relationship_conflicts_ops_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictDetectResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return detect_relationship_conflicts_for_ops(session, actor_user_id=current_user.id)
+
+
+@app.get(
+    "/ops/relationship-conflicts",
+    response_model=CoverRelationshipConflictListResponse,
+    include_in_schema=False,
+)
+def list_relationship_conflicts_ops_endpoint(
+    severity: RelationshipConflictSeverity | Literal["all"] = "all",
+    status: RelationshipConflictStatus | Literal["all"] = "all",
+    conflict_type: RelationshipConflictType | Literal["all"] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_relationship_conflicts_for_ops(
+        session,
+        severity=severity,
+        status=status,
+        conflict_type=conflict_type,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/relationship-conflicts",
+    response_model=CoverRelationshipConflictListResponse,
+    include_in_schema=False,
+)
+def list_relationship_conflicts_for_cover_ops_endpoint(
+    cover_image_id: int,
+    severity: RelationshipConflictSeverity | Literal["all"] = "all",
+    status: RelationshipConflictStatus | Literal["all"] = "all",
+    conflict_type: RelationshipConflictType | Literal["all"] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_relationship_conflicts_for_cover_ops(
+        session,
+        cover_image_id=cover_image_id,
+        severity=severity,
+        status=status,
+        conflict_type=conflict_type,
+    )
+
+
+@app.patch(
+    "/ops/relationship-conflicts/{conflict_id}/acknowledge",
+    response_model=CoverRelationshipConflictActionResponse,
+    include_in_schema=False,
+)
+def acknowledge_relationship_conflict_ops_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return acknowledge_relationship_conflict_for_ops(
+        session,
+        conflict_id=conflict_id,
+        actor_user_id=current_user.id,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/ops/relationship-conflicts/{conflict_id}/dismiss",
+    response_model=CoverRelationshipConflictActionResponse,
+    include_in_schema=False,
+)
+def dismiss_relationship_conflict_ops_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dismiss_relationship_conflict_for_ops(
+        session,
+        conflict_id=conflict_id,
+        actor_user_id=current_user.id,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/ops/relationship-conflicts/{conflict_id}/resolve",
+    response_model=CoverRelationshipConflictActionResponse,
+    include_in_schema=False,
+)
+def resolve_relationship_conflict_ops_endpoint(
+    conflict_id: int,
+    payload: CoverRelationshipConflictStatusPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverRelationshipConflictActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return resolve_relationship_conflict_for_ops(
+        session,
+        conflict_id=conflict_id,
+        actor_user_id=current_user.id,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/ops/canonical-issue-suggestions/{suggestion_id}/approve",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+    include_in_schema=False,
+)
+def approve_canonical_issue_suggestion_ops_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return approve_canonical_issue_suggestion_for_ops(
+        session,
+        suggestion_id=suggestion_id,
+        reviewer=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/ops/canonical-issue-suggestions/{suggestion_id}/reject",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+    include_in_schema=False,
+)
+def reject_canonical_issue_suggestion_ops_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return reject_canonical_issue_suggestion_for_ops(
+        session,
+        suggestion_id=suggestion_id,
+        reviewer=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.patch(
+    "/ops/canonical-issue-suggestions/{suggestion_id}/ignore",
+    response_model=CanonicalIssueSuggestionReviewActionResponse,
+    include_in_schema=False,
+)
+def ignore_canonical_issue_suggestion_ops_endpoint(
+    suggestion_id: int,
+    payload: CanonicalIssueSuggestionReviewPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CanonicalIssueSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return ignore_canonical_issue_suggestion_for_ops(
+        session,
+        suggestion_id=suggestion_id,
+        reviewer=current_user,
+        reason=payload.reason if payload is not None else None,
+    )
+
+
+@app.get(
+    "/ops/canonical-issue-suggestions",
+    response_model=CanonicalIssueSuggestionOpsListResponse,
+    include_in_schema=False,
+)
+def list_canonical_issue_suggestions_for_ops_endpoint(
+    review_state: Annotated[str, Query(alias="review_state")] = "all",
+    confidence_bucket: Annotated[str, Query(alias="confidence_bucket")] = "all",
+    suggestion_type: Annotated[str, Query(alias="suggestion_type")] = "all",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CanonicalIssueSuggestionOpsListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_canonical_issue_suggestions_for_ops(
+        session,
+        review_state=review_state,
+        confidence_bucket=confidence_bucket,
+        suggestion_type=suggestion_type,
+    )
+
+
+@app.get(
+    "/ops/match-groups/{grouping_key}",
+    response_model=CoverImageMatchGroupRead,
+    include_in_schema=False,
+)
+def get_match_group_for_ops(
+    grouping_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchGroupRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_cover_match_group_for_ops(session, grouping_key=grouping_key)
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/generate-match-candidates",
+    response_model=CoverImageMatchCandidateGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def generate_cover_image_match_candidates_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchCandidateGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return generate_cover_image_match_candidates_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/regenerate-match-confidence",
+    response_model=CoverImageMatchCandidateGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def regenerate_cover_image_match_confidence_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchCandidateGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return generate_cover_image_match_candidates_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/match-candidates/{match_candidate_id}/acknowledge",
+    response_model=CoverImageMatchCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def acknowledge_cover_match_candidate_ops(
+    match_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return acknowledge_cover_match_candidate_for_ops(
+        session,
+        match_candidate_id=match_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/match-candidates/{match_candidate_id}/dismiss",
+    response_model=CoverImageMatchCandidateRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def dismiss_cover_match_candidate_ops(
+    match_candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchCandidateRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return dismiss_cover_match_candidate_for_ops(
+        session,
+        match_candidate_id=match_candidate_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/cover-link-decisions",
+    response_model=CoverImageLinkDecisionRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def create_cover_link_decision_ops(
+    payload: CoverImageLinkDecisionCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageLinkDecisionRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return create_cover_link_decision_for_ops(
+        session,
+        payload=payload,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-link-decisions",
+    response_model=list[CoverImageLinkDecisionRead],
+    include_in_schema=False,
+)
+def list_cover_link_decisions_ops(
+    cover_image_id: int | None = None,
+    include_inactive: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageLinkDecisionRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_cover_link_decisions_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        include_inactive=include_inactive,
+        limit=limit,
+    )
+
+
+@app.get(
+    "/ops/cover-link-decisions/recent",
+    response_model=list[CoverImageLinkDecisionRead],
+    include_in_schema=False,
+)
+def list_recent_cover_link_decisions_ops(
+    include_inactive: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageLinkDecisionRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_cover_link_decisions_for_ops(
+        session,
+        cover_image_id=None,
+        include_inactive=include_inactive,
+        limit=limit,
+    )
+
+
+@app.get(
+    "/ops/cover-link-decisions/{decision_id}",
+    response_model=CoverImageLinkDecisionRead,
+    include_in_schema=False,
+)
+def get_cover_link_decision_ops(
+    decision_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageLinkDecisionRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_cover_link_decision_for_ops(
+        session,
+        decision_id=decision_id,
+    )
+
+
+@app.post(
+    "/ops/cover-link-decisions/{decision_id}/revert",
+    response_model=CoverImageLinkDecisionRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def revert_cover_link_decision_ops(
+    decision_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageLinkDecisionRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return revert_cover_link_decision_for_ops(
+        session,
+        decision_id=decision_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/reconcile-ocr-metadata",
+    response_model=CoverImageOcrReconciliationResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def reconcile_cover_image_ocr_metadata_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrReconciliationResponse:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return reconcile_cover_image_ocr_metadata_for_ops(
+        session,
+        cover_image_id=cover_image_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get(
+    "/ops/cover-images/{cover_image_id}/ocr-reconciliation-warnings",
+    response_model=list[CoverImageOcrReconciliationWarningRead],
+    include_in_schema=False,
+)
+def get_cover_image_ocr_reconciliation_warnings_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[CoverImageOcrReconciliationWarningRead]:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    return list_cover_image_ocr_reconciliation_warnings(session, cover_image_id=cover_image_id)
+
+
+@app.patch(
+    "/ops/ocr-reconciliation-warnings/{warning_id}/acknowledge",
+    response_model=CoverImageOcrReconciliationWarningRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def acknowledge_ocr_reconciliation_warning_ops(
+    warning_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrReconciliationWarningRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return acknowledge_ocr_reconciliation_warning_for_ops(
+        session,
+        warning_id=warning_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.patch(
+    "/ops/ocr-reconciliation-warnings/{warning_id}/dismiss",
+    response_model=CoverImageOcrReconciliationWarningRead,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+def dismiss_ocr_reconciliation_warning_ops(
+    warning_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageOcrReconciliationWarningRead:
+    ensure_ops_admin_access(current_user, settings)
+    if current_user.id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return dismiss_ocr_reconciliation_warning_for_ops(
+        session,
+        warning_id=warning_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.post(
+    "/cover-images/{cover_image_id}/evaluate-matching-readiness",
+    response_model=CoverImageMatchingEvaluationResponse,
+)
+def evaluate_matching_readiness_for_owner(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchingEvaluationResponse:
+    get_cover_entity_for_processing_by_owner(
+        session,
+        current_user=current_user,
+        cover_image_id=cover_image_id,
+    )
+    cover = evaluate_cover_image_matching_readiness(
+        session,
+        settings=settings,
+        cover_image_id=cover_image_id,
+    )
+    return CoverImageMatchingEvaluationResponse(
+        cover_image_id=cover.id,
+        matching_status=cover.matching_status,
+        matching_notes=cover.matching_notes,
+        ready_for_matching_at=cover.ready_for_matching_at,
+    )
+
+
+@app.post(
+    "/ops/cover-images/{cover_image_id}/evaluate-matching-readiness",
+    response_model=CoverImageMatchingEvaluationResponse,
+    include_in_schema=False,
+)
+def evaluate_matching_readiness_for_ops(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> CoverImageMatchingEvaluationResponse:
+    ensure_ops_admin_access(current_user, settings)
+    get_cover_entity_for_processing_by_ops_or_404(session, cover_image_id=cover_image_id)
+    cover = evaluate_cover_image_matching_readiness(
+        session,
+        settings=settings,
+        cover_image_id=cover_image_id,
+    )
+    return CoverImageMatchingEvaluationResponse(
+        cover_image_id=cover.id,
+        matching_status=cover.matching_status,
+        matching_notes=cover.matching_notes,
+        ready_for_matching_at=cover.ready_for_matching_at,
+    )
+
+
+@app.get("/files/cover-images/{cover_image_id}/derivatives/{derivative_type}")
+def download_cover_image_derivative_file(
+    cover_image_id: int,
+    derivative_type: Literal["thumb", "medium"],
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    cover = get_cover_entity_or_404(session, cover_image_id)
+    if not user_can_download_cover(session, cover, current_user):
+        ensure_ops_admin_access(current_user, settings)
+    derivative = get_cover_derivative_or_404(
+        session,
+        cover_image_id=cover_image_id,
+        derivative_type=derivative_type,
+    )
+    abs_path = resolve_filesystem_path(settings, derivative.storage_path)
+    if not abs_path.is_file():
+        raise HTTPException(status_code=404, detail="Cover image derivative file missing on disk")
+    filename = f"cover-{cover_image_id}-{derivative_type}.{derivative.mime_type.split('/')[-1]}"
+    return FileResponse(abs_path, media_type=derivative.mime_type, filename=filename)
+
+
+@app.get("/files/cover-images/{cover_image_id}/ocr-regions/{region_type}")
+def download_cover_image_ocr_region_file(
+    cover_image_id: int,
+    region_type: Literal[
+        "full_cover",
+        "title_region",
+        "issue_region",
+        "publisher_region",
+        "barcode_region",
+        "lower_text_region",
+    ],
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    cover = get_cover_entity_or_404(session, cover_image_id)
+    if not user_can_download_cover(session, cover, current_user):
+        ensure_ops_admin_access(current_user, settings)
+    region = get_cover_ocr_region_or_404(
+        session,
+        cover_image_id=cover_image_id,
+        region_type=region_type,
+    )
+    abs_path = resolve_filesystem_path(settings, region.storage_path)
+    if not abs_path.is_file():
+        raise HTTPException(status_code=404, detail="Cover image OCR region file missing on disk")
+    filename = f"cover-{cover_image_id}-{region_type}.{region.mime_type.split('/')[-1]}"
+    return FileResponse(abs_path, media_type=region.mime_type, filename=filename)
+
+
+@app.get("/files/cover-images/{cover_image_id}")
+def download_cover_image_file(
+    cover_image_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    cover = get_cover_entity_or_404(session, cover_image_id)
+    if user_can_download_cover(session, cover, current_user):
+        pass
+    else:
+        ensure_ops_admin_access(current_user, settings)
+    abs_path = resolve_filesystem_path(settings, cover.storage_path)
+    if not abs_path.is_file():
+        raise HTTPException(status_code=404, detail="Cover image file missing on disk")
+    filename = cover.original_filename or f"cover-{cover_image_id}.{cover.mime_type.split('/')[-1]}"
+    return FileResponse(abs_path, media_type=cover.mime_type, filename=filename)
+
+
 @app.post("/orders", response_model=OrderCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_order(
     payload: OrderCreate,
@@ -525,6 +4334,26 @@ def get_inventory(
     publisher: str | None = None,
     hold_status: str | None = None,
     grade_status: str | None = None,
+    release_year: Annotated[int | None, Query(ge=1800, le=2999)] = None,
+    release_calendar: ReleaseCalendarPresence | None = None,
+    asset_state: str | None = None,
+    intelligence_health: Annotated[
+        Literal["healthy", "needs_review", "incomplete", "blocked", "not_healthy"] | None,
+        Query(description="Filter rows by deterministic computed inventory-health bucket."),
+    ] = None,
+    ownership_intel: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter rows by normalized ownership state."),
+    ] = None,
+    risk_priority: Annotated[
+        InventoryRiskPriority | None,
+        Query(description="Filter rows by matching inventory risk priority."),
+    ] = None,
+    risk_type: Annotated[
+        InventoryRiskType | None,
+        Query(description="Filter rows by matching inventory risk type."),
+    ] = None,
+    needs_attention: bool = False,
     sort_by: str | None = None,
     sort_dir: Literal["asc", "desc"] = "asc",
 ) -> InventoryListResponse:
@@ -537,6 +4366,14 @@ def get_inventory(
         publisher=publisher,
         hold_status=hold_status,
         grade_status=grade_status,
+        release_year=release_year,
+        release_calendar=release_calendar,
+        asset_state=asset_state,
+        intelligence_health=intelligence_health,
+        ownership_intel=ownership_intel,
+        risk_priority=risk_priority,
+        risk_type=risk_type,
+        needs_attention=needs_attention,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -548,6 +4385,329 @@ def get_inventory_summary(
     current_user: User = Depends(get_current_user),
 ) -> InventorySummaryResponse:
     return inventory_summary(session=session, current_user=current_user)
+
+
+@app.get("/inventory-intelligence/summary", response_model=InventoryIntelligenceSummary)
+def get_inventory_intelligence_summary_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceSummary:
+    summary, _, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return summary
+
+
+@app.get("/inventory-intelligence/health", response_model=InventoryIntelligenceHealthSummary)
+def get_inventory_intelligence_health_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceHealthSummary:
+    _, health, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return health
+
+
+@app.get("/inventory-intelligence/breakdown", response_model=InventoryIntelligenceBreakdown)
+def get_inventory_intelligence_breakdown_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceBreakdown:
+    _, _, breakdown, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return breakdown
+
+
+@app.get("/inventory-risks", response_model=InventoryRiskListResponse)
+def get_inventory_risks_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    return get_inventory_risks_owner(
+        session,
+        user=current_user,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    )
+
+
+@app.get("/inventory-risks/summary", response_model=InventoryRiskSummary)
+def get_inventory_risk_summary_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskSummary:
+    summary = get_inventory_risks_owner(
+        session,
+        user=current_user,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    ).summary
+    return summary
+
+
+@app.get("/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse)
+def get_inventory_risk_detail_for_owner(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    return get_inventory_risk_detail_owner(
+        session,
+        user=current_user,
+        inventory_copy_id=inventory_copy_id,
+        priority=priority,
+        risk_type=risk_type,
+        open_only=open_only,
+    )
+
+
+@app.get("/ops/inventory-risks", response_model=InventoryRiskListResponse, include_in_schema=False)
+def get_ops_inventory_risks(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risks_ops(
+        session,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    )
+
+
+@app.get("/ops/inventory-risks/summary", response_model=InventoryRiskSummary, include_in_schema=False)
+def get_ops_inventory_risk_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risks_ops(
+        session,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    ).summary
+
+
+@app.get("/ops/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse, include_in_schema=False)
+def get_ops_inventory_risk_detail(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risk_detail_ops(
+        session,
+        inventory_copy_id=inventory_copy_id,
+        priority=priority,
+        risk_type=risk_type,
+        open_only=open_only,
+    )
+
+
+@app.get("/collection-analytics/summary", response_model=CollectionAnalyticsSummary)
+def get_collection_analytics_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionAnalyticsSummary:
+    assert current_user.id is not None
+    return analyze_collection_summary(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        as_of_date=as_of,
+    )
+
+
+@app.get("/collection-analytics/publishers", response_model=CollectionPublisherAnalyticsResponse)
+def get_collection_analytics_publishers(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionPublisherAnalyticsResponse:
+    assert current_user.id is not None
+    return analyze_collection_publishers(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        as_of_date=as_of,
+    )
+
+
+@app.get("/collection-analytics/timeline", response_model=CollectionTimelineResponse)
+def get_collection_analytics_timeline(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionTimelineResponse:
+    assert current_user.id is not None
+    return analyze_collection_timeline(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        as_of_date=as_of,
+    )
+
+
+@app.get("/collection-analytics/quality", response_model=CollectionQualityAnalyticsResponse)
+def get_collection_analytics_quality(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionQualityAnalyticsResponse:
+    assert current_user.id is not None
+    return analyze_collection_quality(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        as_of_date=as_of,
+    )
+
+
+@app.get("/collection-analytics/composition", response_model=CollectionCompositionResponse)
+def get_collection_analytics_composition(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    as_of: Annotated[date | None, Query(alias="as_of")] = None,
+) -> CollectionCompositionResponse:
+    assert current_user.id is not None
+    return analyze_collection_composition(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        as_of_date=as_of,
+    )
+
+
+@app.get("/duplicate-ownership", response_model=DuplicateOwnershipListRead)
+def list_duplicate_ownership_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    dup_scan_classification: Annotated[
+        DuplicateScanClassificationFilter,
+        Query(alias="dup_scan_classification"),
+    ] = "all",
+    classification: Annotated[
+        DuplicateOwnershipClassification | None,
+        Query(description="Filter groups by deterministic duplicate ownership classification."),
+    ] = None,
+) -> DuplicateOwnershipListRead:
+    return list_duplicate_ownership_owner(
+        session,
+        user=current_user,
+        dup_scan_classification=dup_scan_classification,
+        classification=classification,
+    )
+
+
+@app.get("/duplicate-ownership/{group_key}", response_model=DuplicateOwnershipGroupRead)
+def get_duplicate_ownership_detail_endpoint(
+    group_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DuplicateOwnershipGroupRead:
+    return get_duplicate_ownership_detail_owner(session, user=current_user, group_key=group_key)
+
+
+@app.get("/run-detection", response_model=RunDetectionListRead)
+def list_run_detection_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter series groups by deterministic run-detection status."),
+    ] = None,
+) -> RunDetectionListRead:
+    return list_run_detection_owner(session, user=current_user, series_status=series_status)
+
+
+@app.get("/run-detection/{series_key}", response_model=RunDetectionSeriesDetailRead)
+def get_run_detection_detail_endpoint(
+    series_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RunDetectionSeriesDetailRead:
+    return get_run_detection_detail_owner(session, user=current_user, series_key=series_key)
+
+
+@app.get("/missing-issues", response_model=MissingIssueListRead)
+def list_missing_issues_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    classification: Annotated[
+        MissingIssueClassification | None,
+        Query(description="Filter missing issue rows by deterministic classification."),
+    ] = None,
+) -> MissingIssueListRead:
+    return list_missing_issues_owner(session, user=current_user, classification=classification)
 
 
 @app.get("/inventory/{inventory_copy_id}", response_model=InventoryDetailResponse)

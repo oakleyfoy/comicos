@@ -4,6 +4,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.cover_images import CoverImageRead
+from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
+from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
+from app.schemas.inventory_risks import InventoryRiskRead
+from app.schemas.run_detection import RunDetectionCopyAttachment
+
+ReleaseCalendarPresence = Literal["present", "missing"]
+InventoryAssetState = Literal["in_hand", "ordered_not_received", "preorder_not_released_yet", "cancelled"]
+
 
 class InventoryRow(BaseModel):
     inventory_copy_id: int
@@ -24,6 +33,19 @@ class InventoryRow(BaseModel):
     hold_status: str
     star_rating: int | None
     condition_notes: str | None
+    purchase_date: date | None = None
+    release_date: date | None = None
+    release_year: int | None = None
+    release_status: Literal["released", "not_released_yet", "unknown"]
+    order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"]
+    expected_ship_date: date | None = None
+    received_at: datetime | None = None
+    asset_state: InventoryAssetState
+    is_in_hand: bool = False
+    inventory_intelligence: InventoryCopyIntelligenceSignals | None = None
+    duplicate_ownership: DuplicateOwnershipCopyAttachment | None = None
+    run_detection: RunDetectionCopyAttachment | None = None
+    inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
 
 
 class InventoryListResponse(BaseModel):
@@ -35,6 +57,10 @@ class InventoryListResponse(BaseModel):
 
 class InventorySummaryResponse(BaseModel):
     total_copies: int
+    in_hand_copies: int
+    ordered_not_received_copies: int
+    preordered_copies: int
+    cancelled_copies: int
     total_cost_basis: Decimal
     total_current_fmv: Decimal
     total_unrealized_gain_loss: Decimal
@@ -68,7 +94,21 @@ class InventoryDetailResponse(BaseModel):
     order_id: int
     order_item_id: int
     variant_id: int
+    purchase_date: date | None = None
+    release_date: date | None = None
+    release_year: int | None = None
+    release_status: Literal["released", "not_released_yet", "unknown"]
+    order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"]
+    expected_ship_date: date | None = None
+    received_at: datetime | None = None
+    asset_state: InventoryAssetState
+    is_in_hand: bool = False
     created_at: datetime
+    cover_images: list[CoverImageRead] = Field(default_factory=list)
+    inventory_intelligence: InventoryCopyIntelligenceSignals | None = None
+    duplicate_ownership: DuplicateOwnershipCopyAttachment | None = None
+    run_detection: RunDetectionCopyAttachment | None = None
+    inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
 
 
 class InventoryFmvSnapshotResponse(BaseModel):
@@ -104,6 +144,10 @@ class InventoryUpdate(BaseModel):
     star_rating: int | None = Field(default=None, ge=1, le=5)
     grade_status: Literal["raw", "submitted", "graded"] | None = None
     condition_notes: str | None = Field(default=None, max_length=2000)
+    release_status: Literal["released", "not_released_yet", "unknown"] | None = None
+    order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
+    expected_ship_date: date | None = None
+    received_at: datetime | None = None
 
 
 class BulkInventoryUpdateRequest(BaseModel):
