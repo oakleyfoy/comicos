@@ -7,6 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.scanner_profiles import ScannerProfileSnapshotRead
+from app.schemas.scan_pipeline_replays import ScanPipelineReplayRunSummaryRead
+
 ScanSessionType = Literal[
     "bulk_ingest",
     "high_res_review",
@@ -43,6 +46,12 @@ class InventoryScanSessionOriginRead(BaseModel):
     sequence_index: int
     ingest_status: ScanIngestStatus
     created_at: datetime
+    scanner_profile_id: int | None = None
+    scanner_profile_label: str | None = Field(
+        default=None,
+        description="Human label captured when the scan session row was recorded (frozen).",
+    )
+    scanner_profile_snapshot: ScannerProfileSnapshotRead | None = None
 
 
 class ScanSessionStatisticsRead(BaseModel):
@@ -83,9 +92,12 @@ class ScanSessionItemUpdatePayload(BaseModel):
 
 class ScanSessionCreatePayload(BaseModel):
     session_type: ScanSessionType = "manual_upload"
+    scanner_profile_id: int | None = Field(default=None, description="Pinned preset rows write a frozen snapshot.")
     scanner_profile: str | None = Field(default=None, max_length=120)
     source_device: str | None = Field(default=None, max_length=120)
     session_notes: str | None = Field(default=None, max_length=8000)
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class ScanSessionSummaryRead(BaseModel):
@@ -101,6 +113,8 @@ class ScanSessionSummaryRead(BaseModel):
     processed_items: int
     failed_items: int
     skipped_items: int
+    scanner_profile_id: int | None = None
+    scanner_profile: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -112,7 +126,9 @@ class ScanSessionDetailRead(BaseModel):
     owner_user_id: int
     session_type: ScanSessionType
     status: ScanSessionStatus
+    scanner_profile_id: int | None = None
     scanner_profile: str | None = None
+    scanner_profile_snapshot: ScannerProfileSnapshotRead | None = None
     source_device: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -125,15 +141,17 @@ class ScanSessionDetailRead(BaseModel):
     session_notes: str | None = None
     statistics: ScanSessionStatisticsRead
     items: list["ScanSessionItemRead"] = Field(default_factory=list)
-
-
-class ScanSessionListResponse(BaseModel):
-    sessions: list[ScanSessionSummaryRead]
+    latest_scan_pipeline_replay: ScanPipelineReplayRunSummaryRead | None = None
+    sessions: list[ScanSessionSummaryRead] = Field(default_factory=list)
 
 
 class ScanSessionDashboardResponse(BaseModel):
     active_sessions: list[ScanSessionSummaryRead]
     recent_sessions: list[ScanSessionSummaryRead]
+
+
+class ScanSessionListResponse(BaseModel):
+    sessions: list[ScanSessionSummaryRead]
 
 
 class ScanSessionItemRead(BaseModel):

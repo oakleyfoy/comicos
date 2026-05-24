@@ -154,6 +154,13 @@ from app.schemas.order_arrival_intelligence import (
     OrderArrivalIntelListResponse,
     OrderArrivalIntelSummary,
 )
+from app.schemas.physical_intake import (
+    CreatePhysicalIntakeScanSessionPayload,
+    MarkInventoryReceivedPayload,
+    PhysicalIntakeListResponse,
+    PhysicalIntakeState,
+    PhysicalIntakeSummaryResponse,
+)
 from app.schemas.inventory_intelligence import (
     InventoryIntelligenceBreakdown,
     InventoryIntelligenceHealthSummary,
@@ -226,6 +233,17 @@ from app.schemas.scan_qa import (
     OpsScanQaFleetSummaryRead,
     ScanQaItemRead,
     ScanSessionQaSummaryRead,
+)
+from app.schemas.scanner_profiles import (
+    ScannerProfileCreatePayload,
+    ScannerProfileListResponse,
+    ScannerProfileRead,
+    ScannerProfileUpdatePayload,
+)
+from app.schemas.scan_pipeline_replays import (
+    ScanPipelineReplayCreatePayload,
+    ScanPipelineReplayListRead,
+    ScanPipelineReplayRunRead,
 )
 from app.schemas.queue_routing import (
     QueueRoutingListResponse,
@@ -410,6 +428,23 @@ from app.services.scan_sessions import (
     patch_scan_session_item,
     start_scan_session,
 )
+from app.services.scanner_profiles import (
+    create_scanner_profile,
+    delete_scanner_profile_for_owner,
+    get_scanner_profile_detail_for_owner,
+    list_scanner_profiles_for_owner,
+    list_scanner_profiles_ops,
+    update_scanner_profile_for_owner,
+)
+from app.services.scan_pipeline_replays import (
+    cancel_scan_pipeline_replay_run,
+    create_scan_pipeline_replay_run,
+    get_scan_pipeline_replay_run_for_owner,
+    get_scan_pipeline_replay_run_ops,
+    list_scan_pipeline_replay_runs_owner,
+    list_scan_pipeline_replay_runs_ops,
+    start_scan_pipeline_replay_run,
+)
 from app.services.gmail_ingestion import (
     GmailIntegrationError,
     GmailIntegrationNotConfiguredError,
@@ -441,6 +476,12 @@ from app.services.inventory import (
     list_inventory,
     portfolio_performance,
     update_inventory_copy,
+)
+from app.services.physical_intake import (
+    build_physical_intake_summary,
+    create_physical_intake_scan_session,
+    list_physical_intake,
+    mark_physical_received,
 )
 from app.services.inventory_risks import (
     get_inventory_risk_detail_ops,
@@ -5797,6 +5838,113 @@ def get_run_detection_detail_endpoint(
     return get_run_detection_detail_owner(session, user=current_user, series_key=series_key)
 
 
+@app.post("/scanner-profiles", response_model=ScannerProfileRead, status_code=status.HTTP_201_CREATED)
+def owner_create_scanner_profile(
+    payload: ScannerProfileCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScannerProfileRead:
+    assert current_user.id is not None
+    return create_scanner_profile(session, owner_user_id=int(current_user.id), payload=payload)
+
+
+@app.get("/scanner-profiles", response_model=ScannerProfileListResponse)
+def owner_list_scanner_profiles_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScannerProfileListResponse:
+    assert current_user.id is not None
+    return list_scanner_profiles_for_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/scanner-profiles/{profile_id}", response_model=ScannerProfileRead)
+def owner_get_scanner_profile_endpoint(
+    profile_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScannerProfileRead:
+    assert current_user.id is not None
+    return get_scanner_profile_detail_for_owner(session, owner_user_id=int(current_user.id), profile_id=profile_id)
+
+
+@app.patch("/scanner-profiles/{profile_id}", response_model=ScannerProfileRead)
+def owner_patch_scanner_profile_endpoint(
+    profile_id: int,
+    payload: ScannerProfileUpdatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScannerProfileRead:
+    assert current_user.id is not None
+    return update_scanner_profile_for_owner(
+        session, owner_user_id=int(current_user.id), profile_id=profile_id, payload=payload
+    )
+
+
+@app.delete("/scanner-profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+def owner_delete_scanner_profile_endpoint(
+    profile_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    delete_scanner_profile_for_owner(session, owner_user_id=int(current_user.id), profile_id=profile_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.post("/scan-pipeline-replays", response_model=ScanPipelineReplayRunRead, status_code=status.HTTP_201_CREATED)
+def owner_create_scan_pipeline_replay_endpoint(
+    payload: ScanPipelineReplayCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineReplayRunRead:
+    assert current_user.id is not None
+    return create_scan_pipeline_replay_run(session, owner_user_id=int(current_user.id), payload=payload)
+
+
+@app.get("/scan-pipeline-replays", response_model=ScanPipelineReplayListRead)
+def owner_list_scan_pipeline_replays_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    scan_session_id: Annotated[int | None, Query(description="Filter runs for a scan session.")] = None,
+    limit: Annotated[int, Query(ge=1, le=250)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanPipelineReplayListRead:
+    assert current_user.id is not None
+    return list_scan_pipeline_replay_runs_owner(
+        session, owner_user_id=int(current_user.id), scan_session_id=scan_session_id, limit=limit, offset=offset
+    )
+
+
+@app.get("/scan-pipeline-replays/{replay_id}", response_model=ScanPipelineReplayRunRead)
+def owner_get_scan_pipeline_replay_endpoint(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineReplayRunRead:
+    assert current_user.id is not None
+    return get_scan_pipeline_replay_run_for_owner(session, owner_user_id=int(current_user.id), replay_id=replay_id)
+
+
+@app.post("/scan-pipeline-replays/{replay_id}/start", response_model=ScanPipelineReplayRunRead)
+def owner_start_scan_pipeline_replay_endpoint(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineReplayRunRead:
+    assert current_user.id is not None
+    return start_scan_pipeline_replay_run(session, owner_user_id=int(current_user.id), replay_id=replay_id)
+
+
+@app.post("/scan-pipeline-replays/{replay_id}/cancel", response_model=ScanPipelineReplayRunRead)
+def owner_cancel_scan_pipeline_replay_endpoint(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineReplayRunRead:
+    assert current_user.id is not None
+    return cancel_scan_pipeline_replay_run(session, owner_user_id=int(current_user.id), replay_id=replay_id)
+
+
 @app.post("/scan-sessions", response_model=ScanSessionSummaryRead, status_code=status.HTTP_201_CREATED)
 def owner_create_scan_session(
     payload: ScanSessionCreatePayload,
@@ -6162,6 +6310,47 @@ def owner_complete_high_res_review_request_endpoint(
     return complete_high_res_review_request(session, owner_user_id=int(current_user.id), request_id=request_id)
 
 
+@app.get("/ops/scanner-profiles", response_model=ScannerProfileListResponse, include_in_schema=False)
+def ops_list_scanner_profiles_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScannerProfileListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_scanner_profiles_ops(session)
+
+
+@app.get("/ops/scan-pipeline-replays", response_model=ScanPipelineReplayListRead, include_in_schema=False)
+def ops_list_scan_pipeline_replays_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    scan_session_id: Annotated[int | None, Query(description="Filter runs for a scan session.")] = None,
+    owner_user_id: Annotated[int | None, Query(description="Filter runs by deterministic owner user id.")] = None,
+    limit: Annotated[int, Query(ge=1, le=250)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanPipelineReplayListRead:
+    ensure_ops_admin_access(current_user, settings)
+    return list_scan_pipeline_replay_runs_ops(
+        session,
+        scan_session_id=scan_session_id,
+        owner_user_id=owner_user_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/scan-pipeline-replays/{replay_id}", response_model=ScanPipelineReplayRunRead, include_in_schema=False)
+def ops_get_scan_pipeline_replay_endpoint(
+    replay_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanPipelineReplayRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_scan_pipeline_replay_run_ops(session, replay_id=replay_id)
+
+
 @app.get("/ops/scan-sessions", response_model=ScanSessionListResponse, include_in_schema=False)
 def ops_list_scan_sessions(
     session: Session = Depends(get_session),
@@ -6416,6 +6605,59 @@ def get_portfolio_performance(
     return portfolio_performance(session=session, current_user=current_user)
 
 
+@app.get("/physical-intake/summary", response_model=PhysicalIntakeSummaryResponse)
+def get_physical_intake_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhysicalIntakeSummaryResponse:
+    assert current_user.id is not None
+    return build_physical_intake_summary(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/physical-intake", response_model=PhysicalIntakeListResponse)
+def get_physical_intake_list(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    intake_state: PhysicalIntakeState | None = Query(default=None),
+) -> PhysicalIntakeListResponse:
+    assert current_user.id is not None
+    return list_physical_intake(
+        session,
+        owner_user_id=int(current_user.id),
+        intake_state_filter=intake_state,
+    )
+
+
+@app.post("/physical-intake/create-scan-session", response_model=ScanSessionDetailRead)
+def post_physical_intake_create_scan_session(
+    payload: CreatePhysicalIntakeScanSessionPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionDetailRead:
+    return create_physical_intake_scan_session(session, current_user, payload)
+
+
+@app.get("/ops/physical-intake/summary", response_model=PhysicalIntakeSummaryResponse)
+def ops_physical_intake_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> PhysicalIntakeSummaryResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return build_physical_intake_summary(session, owner_user_id=None)
+
+
+@app.get("/ops/physical-intake", response_model=PhysicalIntakeListResponse)
+def ops_physical_intake_list(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    intake_state: PhysicalIntakeState | None = Query(default=None),
+) -> PhysicalIntakeListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_physical_intake(session, owner_user_id=None, intake_state_filter=intake_state)
+
+
 @app.patch("/inventory/bulk", response_model=BulkInventoryUpdateResponse)
 def patch_inventory_bulk(
     payload: BulkInventoryUpdateRequest,
@@ -6437,4 +6679,19 @@ def patch_inventory_copy(
         current_user=current_user,
         inventory_copy_id=inventory_copy_id,
         updates=payload,
+    )
+
+
+@app.post("/inventory/{inventory_copy_id}/mark-received", response_model=InventoryRow)
+def post_inventory_mark_received(
+    inventory_copy_id: int,
+    payload: MarkInventoryReceivedPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryRow:
+    return mark_physical_received(
+        session,
+        current_user,
+        inventory_copy_id=inventory_copy_id,
+        payload=payload,
     )

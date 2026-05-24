@@ -1241,6 +1241,76 @@ export interface RelationshipReplayCreatePayload {
   cover_image_ids: number[];
 }
 
+export type ScanPipelineReplayScope =
+  | "ingest"
+  | "qa"
+  | "routing"
+  | "ocr_visibility"
+  | "high_res_review";
+
+export type ScanPipelineReplayRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "completed_with_failures"
+  | "cancelled";
+
+export type ScanPipelineReplayItemState = "unchanged" | "changed" | "failed" | "cancelled";
+
+/** Ops + owner scan session recap for last booked replay header. */
+export interface ScanPipelineReplayRunSummaryRead {
+  id: number;
+  scan_session_id: number;
+  status: ScanPipelineReplayRunStatus;
+  changed_items: number;
+  unchanged_items: number;
+  failed_items: number;
+  cancelled_items: number;
+  total_items: number;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanPipelineReplayItemRead {
+  id: number;
+  replay_run_id: number;
+  scan_session_item_id: number;
+  result_state: ScanPipelineReplayItemState;
+  diff_categories: string[];
+  baseline_snapshot_json: Record<string, unknown>;
+  replay_snapshot_json: Record<string, unknown>;
+  diff_summary_json: Record<string, unknown>;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanPipelineReplayRunRead {
+  id: number;
+  scan_session_id: number;
+  owner_user_id: number;
+  replay_version: string;
+  scopes_json: string[];
+  cancellation_requested: boolean;
+  status: ScanPipelineReplayRunStatus;
+  total_items: number;
+  changed_items: number;
+  unchanged_items: number;
+  failed_items: number;
+  cancelled_items: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  items: ScanPipelineReplayItemRead[];
+}
+
+export interface ScanPipelineReplayListRead {
+  items: ScanPipelineReplayRunRead[];
+}
+
 export type OcrReviewItemKindLiteral =
   | "ocr_candidate"
   | "reconciliation_warning"
@@ -1931,6 +2001,78 @@ export interface OrderArrivalIntelCalendarResponse {
   rows: OrderArrivalCalendarRow[];
 }
 
+export type PhysicalIntakeState =
+  | "awaiting_release"
+  | "released_awaiting_receipt"
+  | "received_pending_scan"
+  | "received_scanned"
+  | "intake_blocked"
+  | "cancelled"
+  | "completed";
+
+export type PhysicalIntakeDashboardBucket =
+  | "released_not_received"
+  | "received_pending_scan"
+  | "overdue_expected_ship"
+  | "missing_release_date"
+  | "missing_expected_ship_date"
+  | "cancelled"
+  | "completed";
+
+export interface PhysicalIntakeSummaryCounts {
+  released_not_received: number;
+  received_pending_scan: number;
+  overdue_expected_ship: number;
+  missing_release_date: number;
+  missing_expected_ship_date: number;
+  cancelled: number;
+  completed: number;
+  awaiting_release: number;
+  released_awaiting_receipt: number;
+  intake_blocked: number;
+  received_scanned: number;
+}
+
+export interface PhysicalIntakeSummaryResponse {
+  generated_as_of: string;
+  counts: PhysicalIntakeSummaryCounts;
+}
+
+export interface PhysicalIntakeItemRead {
+  inventory_copy_id: number;
+  order_item_id: number;
+  order_id: number;
+  intake_state: PhysicalIntakeState;
+  retailer: string;
+  publisher: string;
+  title: string;
+  issue_number: string;
+  purchase_date?: string | null;
+  release_date?: string | null;
+  release_status: string;
+  order_status: string;
+  asset_state: string;
+  expected_ship_date?: string | null;
+  received_at?: string | null;
+  has_cover_scan: boolean;
+  ocr_complete_on_primary_cover: boolean;
+  dashboard_buckets: PhysicalIntakeDashboardBucket[];
+  order_arrival_classifications: OrderArrivalClassification[];
+}
+
+export interface PhysicalIntakeListResponse {
+  generated_as_of: string;
+  items: PhysicalIntakeItemRead[];
+}
+
+export interface MarkInventoryReceivedPayload {
+  received_at?: string | null;
+}
+
+export interface CreatePhysicalIntakeScanSessionPayload {
+  inventory_copy_ids: number[];
+}
+
 export type OrderArrivalIntelQueryParams = {
   classification?: OrderArrivalClassification;
   retailer?: string;
@@ -2005,6 +2147,86 @@ export type ScanIngestStatus =
   | "failed"
   | "skipped";
 
+export type ScannerProfileHardwareType =
+  | "fujitsu_bulk"
+  | "epson_high_res"
+  | "generic_flatbed"
+  | "manual_upload";
+
+export type ScannerColorMode = "color" | "grayscale" | "black_and_white";
+
+export type ScannerFileFormat = "png" | "jpg" | "tif";
+
+export type ScannerRecommendedUse =
+  | "bulk_ingest"
+  | "high_res_review"
+  | "intake_receiving"
+  | "archival_scan";
+
+export interface ScannerProfileSnapshotRead {
+  profile_name: string;
+  scanner_type: ScannerProfileHardwareType;
+  dpi: number | null;
+  color_mode: ScannerColorMode;
+  file_format: ScannerFileFormat;
+  duplex_enabled: boolean;
+  feeder_enabled: boolean;
+  recommended_use: ScannerRecommendedUse;
+}
+
+export interface ScannerProfileRead {
+  id: number;
+  owner_user_id: number | null;
+  profile_name: string;
+  scanner_type: ScannerProfileHardwareType;
+  dpi: number | null;
+  color_mode: ScannerColorMode;
+  file_format: ScannerFileFormat;
+  duplex_enabled: boolean;
+  feeder_enabled: boolean;
+  recommended_use: ScannerRecommendedUse;
+  is_default: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScannerProfileListResponse {
+  items: ScannerProfileRead[];
+}
+
+export interface ScannerProfileCreatePayload {
+  profile_name: string;
+  scanner_type: ScannerProfileHardwareType;
+  dpi?: number | null;
+  color_mode?: ScannerColorMode;
+  file_format?: ScannerFileFormat;
+  duplex_enabled?: boolean;
+  feeder_enabled?: boolean;
+  recommended_use?: ScannerRecommendedUse;
+  is_default?: boolean;
+  notes?: string | null;
+}
+
+export type ScannerProfileUpdatePayload = Partial<Omit<ScannerProfileCreatePayload, "profile_name">> & {
+  profile_name?: string;
+};
+
+export function scannerRecommendedUseLabel(use: ScannerRecommendedUse): string {
+  switch (use) {
+    case "bulk_ingest":
+      return "Bulk ingest";
+    case "high_res_review":
+      return "High-res review";
+    case "intake_receiving":
+      return "Intake / receiving";
+    case "archival_scan":
+      return "Archival scan";
+    default:
+      return use;
+  }
+}
+
 export interface InventoryScanSessionOrigin {
   scan_session_id: number;
   session_type: ScanSessionType;
@@ -2013,6 +2235,9 @@ export interface InventoryScanSessionOrigin {
   sequence_index: number;
   ingest_status: ScanIngestStatus;
   created_at: string;
+  scanner_profile_id?: number | null;
+  scanner_profile_label?: string | null;
+  scanner_profile_snapshot?: ScannerProfileSnapshotRead | null;
 }
 
 export interface ScanSessionStatistics {
@@ -2039,6 +2264,8 @@ export interface ScanSessionSummary {
   processed_items: number;
   failed_items: number;
   skipped_items: number;
+  scanner_profile_id?: number | null;
+  scanner_profile?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2061,12 +2288,16 @@ export interface ScanSessionItem {
 
 export interface ScanSessionDetail extends ScanSessionSummary {
   scanner_profile?: string | null;
+  scanner_profile_id?: number | null;
+  scanner_profile_snapshot?: ScannerProfileSnapshotRead | null;
   source_device?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
   session_notes?: string | null;
   statistics: ScanSessionStatistics;
   items: ScanSessionItem[];
+  /** Latest booked scan-pipeline replay (any status); comparison-only tooling. */
+  latest_scan_pipeline_replay?: ScanPipelineReplayRunSummaryRead | null;
 }
 
 export interface ScanSessionDashboardResponse {
@@ -2080,6 +2311,7 @@ export interface ScanSessionListResponse {
 
 export interface ScanSessionCreatePayload {
   session_type?: ScanSessionType;
+  scanner_profile_id?: number | null;
   scanner_profile?: string | null;
   source_device?: string | null;
   session_notes?: string | null;
@@ -2840,6 +3072,50 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
+  const token = getStoredToken();
+  const headers = new Headers(init?.headers);
+
+  const isFormBody = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  if (!isFormBody && !headers.has("Content-Type") && init?.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 401) {
+    clearStoredToken();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new ApiError("Authentication required", 401);
+  }
+
+  if (!response.ok) {
+    let message = "Request failed";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === "string") {
+        message = data.detail;
+      }
+    } catch {
+      // Ignore invalid error payloads.
+    }
+
+    throw new ApiError(message, response.status);
+  }
+
+  await response.blob().catch(() => undefined);
+}
+
 async function fetchBinary(path: string): Promise<Blob> {
   const token = getStoredToken();
   const headers = new Headers();
@@ -3585,6 +3861,36 @@ export const apiClient = {
     return request<ScanSessionSummary>(`/scan-sessions/${sessionId}/complete`, { method: "POST" });
   },
 
+  listScannerProfiles(): Promise<ScannerProfileListResponse> {
+    return request<ScannerProfileListResponse>("/scanner-profiles");
+  },
+
+  getScannerProfile(profileId: number): Promise<ScannerProfileRead> {
+    return request<ScannerProfileRead>(`/scanner-profiles/${profileId}`);
+  },
+
+  createScannerProfile(payload: ScannerProfileCreatePayload): Promise<ScannerProfileRead> {
+    return request<ScannerProfileRead>("/scanner-profiles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateScannerProfile(profileId: number, payload: ScannerProfileUpdatePayload): Promise<ScannerProfileRead> {
+    return request<ScannerProfileRead>(`/scanner-profiles/${profileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteScannerProfile(profileId: number): Promise<void> {
+    return requestEmpty(`/scanner-profiles/${profileId}`, { method: "DELETE" });
+  },
+
+  listOpsScannerProfiles(): Promise<ScannerProfileListResponse> {
+    return request<ScannerProfileListResponse>("/ops/scanner-profiles");
+  },
+
   createHighResReviewRequest(payload: HighResReviewRequestCreatePayload): Promise<HighResReviewRequestDetail> {
     return request<HighResReviewRequestDetail>("/high-res-review-requests", {
       method: "POST",
@@ -3725,6 +4031,43 @@ export const apiClient = {
 
   getPortfolioPerformance(): Promise<PortfolioPerformance> {
     return request<PortfolioPerformance>("/portfolio/performance");
+  },
+
+  getPhysicalIntakeSummary(): Promise<PhysicalIntakeSummaryResponse> {
+    return request<PhysicalIntakeSummaryResponse>("/physical-intake/summary");
+  },
+
+  getPhysicalIntake(params?: { intake_state?: PhysicalIntakeState }): Promise<PhysicalIntakeListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PhysicalIntakeListResponse>(`/physical-intake${query}`);
+  },
+
+  createPhysicalIntakeScanSession(payload: CreatePhysicalIntakeScanSessionPayload): Promise<ScanSessionDetail> {
+    return request<ScanSessionDetail>("/physical-intake/create-scan-session", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  markInventoryPhysicallyReceived(
+    inventoryCopyId: number,
+    payload?: MarkInventoryReceivedPayload | null,
+  ): Promise<InventoryItem> {
+    return request<InventoryItem>(`/inventory/${inventoryCopyId}/mark-received`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getOpsPhysicalIntakeSummary(): Promise<PhysicalIntakeSummaryResponse> {
+    return request<PhysicalIntakeSummaryResponse>("/ops/physical-intake/summary");
+  },
+
+  getOpsPhysicalIntake(params?: { intake_state?: PhysicalIntakeState }): Promise<PhysicalIntakeListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PhysicalIntakeListResponse>(`/ops/physical-intake${query}`);
   },
 
   getInventoryCopy(inventoryCopyId: number): Promise<InventoryDetail> {
@@ -4001,6 +4344,20 @@ export const apiClient = {
     return request<RelationshipReplayRun>(`/ops/relationship-replays/${replayId}/cancel`, {
       method: "POST",
     });
+  },
+
+  listOpsScanPipelineReplays(params?: {
+    scan_session_id?: number;
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanPipelineReplayListRead> {
+    const query = buildQueryString(params as Record<string, string | number | undefined>);
+    return request<ScanPipelineReplayListRead>(`/ops/scan-pipeline-replays${query}`);
+  },
+
+  getOpsScanPipelineReplay(replayId: number): Promise<ScanPipelineReplayRunRead> {
+    return request<ScanPipelineReplayRunRead>(`/ops/scan-pipeline-replays/${replayId}`);
   },
 
   getRecentCoverImagesForOps(params: {

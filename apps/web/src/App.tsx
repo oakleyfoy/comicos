@@ -16,6 +16,7 @@ import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
+import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
 function HomeRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/orders/import" element={<OrderImportPage />} />
         <Route path="/orders/new" element={<OrderNewPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
+        <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
       </Route>
       <Route element={<OpsProtectedRoute />}>
         <Route path="/ops" element={<OperationsPage />} />

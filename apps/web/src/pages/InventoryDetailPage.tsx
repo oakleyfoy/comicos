@@ -5,6 +5,7 @@ import {
   ApiError,
   apiClient,
   resolveCoverImageOcrHeadline,
+  scannerRecommendedUseLabel,
   type CoverLinkDecisionType,
   type CoverLinkRelationshipType,
   type CoverImageOcrHeadlineStatus,
@@ -953,6 +954,8 @@ export function InventoryDetailPage() {
   const [inventoryRoutingPanel, setInventoryRoutingPanel] = useState<ScanSessionRoutingRead | null>(null);
   const [inventoryRoutingError, setInventoryRoutingError] = useState<string | null>(null);
   const [inventoryRoutingBusy, setInventoryRoutingBusy] = useState(false);
+  const [physicalReceiveBusy, setPhysicalReceiveBusy] = useState(false);
+  const [physicalIntakeSessionBusy, setPhysicalIntakeSessionBusy] = useState(false);
 
   async function loadDetail(): Promise<void> {
     if (!Number.isInteger(parsedInventoryCopyId) || parsedInventoryCopyId <= 0) {
@@ -972,6 +975,48 @@ export function InventoryDetailPage() {
     setGradeDraft(detailResponse.grade_status);
     setStarDraft(detailResponse.star_rating ? String(detailResponse.star_rating) : "");
     setNotesDraft(detailResponse.condition_notes ?? "");
+  }
+
+  async function handlePhysicalMarkReceived(): Promise<void> {
+    if (!detail) {
+      return;
+    }
+    setPhysicalReceiveBusy(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      await apiClient.markInventoryPhysicallyReceived(detail.inventory_copy_id, {});
+      await loadDetail();
+      setSuccessMessage("Marked as physically received.");
+    } catch (markErr) {
+      setError(
+        markErr instanceof ApiError ? markErr.message : "Unable to mark this copy as received.",
+      );
+    } finally {
+      setPhysicalReceiveBusy(false);
+    }
+  }
+
+  async function handleCreateIntakeScanSessionPlaceholder(): Promise<void> {
+    if (!detail) {
+      return;
+    }
+    setPhysicalIntakeSessionBusy(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const sess = await apiClient.createPhysicalIntakeScanSession({
+        inventory_copy_ids: [detail.inventory_copy_id],
+      });
+      await loadDetail();
+      setSuccessMessage(`Intake scan session #${sess.id} created (${sess.session_type.replace(/_/g, " ")})`);
+    } catch (sessionErr) {
+      setError(
+        sessionErr instanceof ApiError ? sessionErr.message : "Unable to create intake receiving session.",
+      );
+    } finally {
+      setPhysicalIntakeSessionBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -2331,6 +2376,34 @@ export function InventoryDetailPage() {
               Session kind{" "}
               <span className="capitalize">{detail.originating_scan_session.session_type.replace(/_/g, " ")}</span>
             </p>
+            {(detail.originating_scan_session.scanner_profile_snapshot ??
+              detail.originating_scan_session.scanner_profile_label ??
+              detail.originating_scan_session.scanner_profile_id) != null ? (
+              <div className="mt-3 rounded-xl border border-cyan-400/25 bg-slate-900/65 px-3 py-2 text-xs text-slate-300">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Capture preset</p>
+                {detail.originating_scan_session.scanner_profile_snapshot ? (
+                  <p className="mt-1 text-sm text-white">
+                    {detail.originating_scan_session.scanner_profile_snapshot.profile_name}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-white">{detail.originating_scan_session.scanner_profile_label ?? "—"}</p>
+                )}
+                {detail.originating_scan_session.scanner_profile_snapshot ? (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {scannerRecommendedUseLabel(detail.originating_scan_session.scanner_profile_snapshot.recommended_use)}
+                    {detail.originating_scan_session.scanner_profile_snapshot.dpi !== null
+                      ? ` · ${detail.originating_scan_session.scanner_profile_snapshot.dpi} dpi`
+                      : ""}
+                    {` · ${detail.originating_scan_session.scanner_profile_snapshot.file_format.toUpperCase()}`}
+                  </p>
+                ) : null}
+                {detail.originating_scan_session.scanner_profile_id != null ? (
+                  <p className="mt-1 font-mono text-[10px] text-slate-500">
+                    profile id {detail.originating_scan_session.scanner_profile_id}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -2597,6 +2670,52 @@ export function InventoryDetailPage() {
                   <p className="mt-2 font-medium text-white">{detail.order_status.replace(/_/g, " ")}</p>
                 </div>
               </div>
+
+              <section className="mt-4 w-full rounded-2xl border border-emerald-400/30 bg-emerald-950/25 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical receiving</p>
+                <div className="mt-2 space-y-1 text-xs text-slate-300">
+                  <p>
+                    <span className="text-slate-500">Received at:</span>{" "}
+                    {detail.received_at ? formatDate(detail.received_at) : "—"}
+                  </p>
+                  <p className="text-slate-400">
+                    Marking received only adjusts receipt fields (no OCR, ingest, canonical, or speculative metadata writes).
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {(detail.order_status === "ordered" ||
+                    detail.order_status === "preordered" ||
+                    detail.order_status === "shipped") && (
+                    <button
+                      type="button"
+                      disabled={physicalReceiveBusy}
+                      onClick={() => void handlePhysicalMarkReceived()}
+                      className="rounded-2xl border border-emerald-400/35 bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {physicalReceiveBusy ? "Marking…" : "Mark physically received"}
+                    </button>
+                  )}
+                  {detail.order_status === "received" &&
+                  (!detail.cover_images || detail.cover_images.length === 0) ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={physicalIntakeSessionBusy}
+                        onClick={() => void handleCreateIntakeScanSessionPlaceholder()}
+                        className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition hover:border-cyan-400/35 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {physicalIntakeSessionBusy ? "Creating…" : "Create intake receiving scan session"}
+                      </button>
+                      <Link
+                        to="/scan-sessions"
+                        className="rounded-2xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-cyan-300/35 hover:text-white"
+                      >
+                        Open scan sessions
+                      </Link>
+                    </>
+                  ) : null}
+                </div>
+              </section>
             </div>
 
             <div className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-xl">

@@ -492,14 +492,17 @@ def _session_routing_summary_from_live(
     *,
     scan_session: ScanSession,
     persisted_rows: Mapping[int, QueueRoutingRecommendation] | None = None,
+    qa_rows: Sequence[ScanQaItemRead] | None = None,
 ) -> list[QueueRoutingRecommendationRead]:
-    qa_rows = _qa_rows_for_session(session, scan_session)
+    qa_eff: list[ScanQaItemRead] = (
+        list(qa_rows) if qa_rows is not None else _qa_rows_for_session(session, scan_session)
+    )
     item_map = _item_map_for_session(session, int(scan_session.id or 0))
     persisted_rows = persisted_rows or {}
     out: list[QueueRoutingRecommendationRead] = []
     for item_id in sorted(item_map.keys()):
         item, cover = item_map[item_id]
-        qa_row = _scan_qa_row_for_item(qa_rows, item_id)
+        qa_row = _scan_qa_row_for_item(qa_eff, item_id)
         ctx = _recommendation_for_item(session, qa_row=qa_row, item=item, cover=cover)
         stored = persisted_rows.get(item_id)
         if stored is not None:
@@ -771,5 +774,18 @@ def dismiss_queue_routing_recommendation(
         recommendation_id=recommendation_id,
         owner_user_id=owner_user_id,
         new_status="dismissed",
+    )
+
+
+def compute_pure_live_routing_reads(
+    session: Session,
+    *,
+    scan_session: ScanSession,
+    qa_rows: Sequence[ScanQaItemRead] | None = None,
+) -> list[QueueRoutingRecommendationRead]:
+    """Deterministic hypothetical routing recomputation (ignores persisted recommendation rows entirely)."""
+
+    return _session_routing_summary_from_live(
+        session, scan_session=scan_session, persisted_rows={}, qa_rows=qa_rows
     )
 

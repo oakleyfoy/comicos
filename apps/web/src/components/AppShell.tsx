@@ -11,6 +11,7 @@ const navLinks = [
   { label: "Import Order", to: "/orders/import" },
   { label: "Add Order", to: "/orders/new" },
   { label: "Integrations", to: "/settings/integrations" },
+  { label: "Scanner presets", to: "/settings/scanner-profiles" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

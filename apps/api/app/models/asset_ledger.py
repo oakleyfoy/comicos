@@ -1,7 +1,8 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -1064,6 +1065,33 @@ class OpsEvent(SQLModel, table=True):
     )
 
 
+class ScannerProfile(SQLModel, table=True):
+    """Scanner capture preset metadata — no runtime hardware integration."""
+
+    __tablename__ = "scanner_profile"
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    profile_name: str = Field(max_length=200, nullable=False)
+    scanner_type: str = Field(max_length=40, nullable=False, index=True)
+    dpi: int | None = Field(default=None, nullable=True)
+    color_mode: str = Field(max_length=20, nullable=False)
+    file_format: str = Field(max_length=10, nullable=False)
+    duplex_enabled: bool = Field(default=False, nullable=False)
+    feeder_enabled: bool = Field(default=False, nullable=False)
+    recommended_use: str = Field(max_length=40, nullable=False, index=True)
+    is_default: bool = Field(default=False, nullable=False, index=True)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
 class ScanSession(SQLModel, table=True):
     __tablename__ = "scan_session"
 
@@ -1072,6 +1100,14 @@ class ScanSession(SQLModel, table=True):
     session_type: str = Field(max_length=40, nullable=False, index=True)
     status: str = Field(max_length=40, nullable=False, index=True)
     scanner_profile: str | None = Field(default=None, max_length=120, nullable=True)
+    scanner_profile_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("scanner_profile.id", ondelete="SET NULL"), nullable=True, index=True),
+    )
+    scanner_profile_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
     source_device: str | None = Field(default=None, max_length=120, nullable=True)
     started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
@@ -1247,6 +1283,69 @@ class HighResReviewRequest(SQLModel, table=True):
     status: str = Field(max_length=24, nullable=False, index=True)
     priority: str = Field(max_length=12, nullable=False, index=True)
     notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class ScanPipelineReplayRun(SQLModel, table=True):
+    """Recorded scan-ingest pipeline replay/recovery tooling (comparison only — no mutations)."""
+
+    __tablename__ = "scan_pipeline_replay_run"
+
+    id: int | None = Field(default=None, primary_key=True)
+    scan_session_id: int = Field(foreign_key="scan_session.id", nullable=False, index=True)
+    owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    replay_version: str = Field(max_length=80, nullable=False, index=True)
+    scopes_json: list[str] = Field(sa_column=Column(JSON, nullable=False))
+    cancellation_requested: bool = Field(default=False, nullable=False, index=True)
+
+    status: str = Field(max_length=28, nullable=False, index=True)
+    total_items: int = Field(default=0, nullable=False)
+    changed_items: int = Field(default=0, nullable=False)
+    unchanged_items: int = Field(default=0, nullable=False)
+    failed_items: int = Field(default=0, nullable=False)
+    cancelled_items: int = Field(default=0, nullable=False)
+
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class ScanPipelineReplayItem(SQLModel, table=True):
+    __tablename__ = "scan_pipeline_replay_item"
+    __table_args__ = (
+        UniqueConstraint("replay_run_id", "scan_session_item_id", name="uq_scan_pipeline_replay_item_run_item"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    replay_run_id: int = Field(foreign_key="scan_pipeline_replay_run.id", nullable=False, index=True)
+    scan_session_item_id: int = Field(foreign_key="scan_session_item.id", nullable=False, index=True)
+
+    result_state: str = Field(max_length=20, nullable=False, index=True)
+
+    baseline_snapshot_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    replay_snapshot_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    diff_categories_json: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    diff_summary_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(
         default_factory=utc_now,

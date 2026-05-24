@@ -4,12 +4,15 @@ import { Link } from "react-router-dom";
 import {
   ApiError,
   apiClient,
+  scannerRecommendedUseLabel,
+  type ScannerProfileRead,
   type ScanSessionDetail,
   type ScanSessionIngestManifest,
   type ScanSessionItemsListResponse,
   type ScanSessionQaSummaryRead,
   type ScanSessionRoutingRead,
   type ScanSessionSummary,
+  type ScanSessionType,
   type QueueRoutingRecommendationRead,
   type ScanQaClassification,
   type ScanQaItemRead,
@@ -89,14 +92,18 @@ export function ScanSessionsPage() {
 
   const [sessionIdDraft, setSessionIdDraft] = useState("");
   const [sessions, setSessions] = useState<ScanSessionSummary[]>([]);
+  const [listSessionTypeFilter, setListSessionTypeFilter] = useState<ScanSessionType | "">("");
   const [itemsPayload, setItemsPayload] = useState<ScanSessionItemsListResponse | null>(null);
   const [lastDetail, setLastDetail] = useState<ScanSessionDetail | null>(null);
   const [manifestJson, setManifestJson] = useState('{\n  "items": []\n}');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [qaSummary, setQaSummary] = useState<ScanSessionQaSummaryRead | null>(null);
   const [routingSummary, setRoutingSummary] = useState<ScanSessionRoutingRead | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<ScanSessionDetail | null>(null);
   const [qaClassFilter, setQaClassFilter] = useState<ScanQaClassification | "">("");
   const [qaRouteFilter, setQaRouteFilter] = useState<ScanQaRoutingRecommendation | "">("");
+  const [scannerProfiles, setScannerProfiles] = useState<ScannerProfileRead[]>([]);
+  const [selectedScannerProfileId, setSelectedScannerProfileId] = useState<number | "">("");
 
   const numericSessionId = useMemo(() => {
     const n = Number(sessionIdDraft.trim());
@@ -109,6 +116,11 @@ export function ScanSessionsPage() {
       rows.map((row): [number, ScanQaItemRead] => [row.scan_session_item_id, row]),
     );
   }, [qaSummary]);
+
+  const selectedScannerProfile = useMemo(() => {
+    if (selectedScannerProfileId === "") return null;
+    return scannerProfiles.find((p) => p.id === selectedScannerProfileId) ?? null;
+  }, [scannerProfiles, selectedScannerProfileId]);
 
   const routingByItemId = useMemo(() => {
     const rows = routingSummary?.items ?? [];
@@ -136,18 +148,41 @@ export function ScanSessionsPage() {
     setBusyKey("sessions");
     setError(null);
     try {
-      const list = await apiClient.listScanSessions({ limit: 50, offset: 0 });
+      const list = await apiClient.listScanSessions({
+        limit: 50,
+        offset: 0,
+        ...(listSessionTypeFilter ? { session_type: listSessionTypeFilter } : {}),
+      });
       setSessions(list.sessions);
     } catch (loadError) {
       setError(loadError instanceof ApiError ? loadError.message : "Unable to list scan sessions.");
     } finally {
       setBusyKey(null);
     }
-  }, []);
+  }, [listSessionTypeFilter]);
 
   useEffect(() => {
     void reloadSessions();
   }, [reloadSessions]);
+
+  useEffect(() => {
+    let ignore = false;
+    void apiClient
+      .listScannerProfiles()
+      .then((resp) => {
+        if (ignore) return;
+        setScannerProfiles(resp.items);
+        setSelectedScannerProfileId((prev) => {
+          if (prev !== "") return prev;
+          const def = resp.items.find((row) => row.is_default);
+          return def?.id ?? "";
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   async function reloadItems(forId?: number): Promise<void> {
     const sid = forId ?? numericSessionId;
@@ -155,16 +190,19 @@ export function ScanSessionsPage() {
       setItemsPayload(null);
       setQaSummary(null);
       setRoutingSummary(null);
+      setSessionDetail(null);
       return;
     }
     setBusyKey(`items:${sid}`);
     setError(null);
     try {
-      const [rows, qa, routing] = await Promise.all([
+      const [detail, rows, qa, routing] = await Promise.all([
+        apiClient.getScanSession(sid),
         apiClient.getScanSessionItems(sid, { limit: 500, offset: 0 }),
         apiClient.getScanSessionQa(sid),
         apiClient.getScanSessionRouting(sid),
       ]);
+      setSessionDetail(detail);
       setItemsPayload(rows);
       setQaSummary(qa);
       setRoutingSummary(routing);
@@ -172,6 +210,7 @@ export function ScanSessionsPage() {
       setItemsPayload(null);
       setQaSummary(null);
       setRoutingSummary(null);
+      setSessionDetail(null);
       setError(loadError instanceof ApiError ? loadError.message : "Unable to fetch session rows.");
     } finally {
       setBusyKey(null);
@@ -290,7 +329,10 @@ export function ScanSessionsPage() {
     setBusyKey("create");
     setError(null);
     try {
-      const created = await apiClient.createScanSession({ session_type: "bulk_ingest" });
+      const created = await apiClient.createScanSession({
+        session_type: "bulk_ingest",
+        ...(typeof selectedScannerProfileId === "number" ? { scanner_profile_id: selectedScannerProfileId } : {}),
+      });
       setSessionIdDraft(String(created.id));
       await reloadSessions();
       await reloadItems(created.id);
@@ -323,6 +365,7 @@ export function ScanSessionsPage() {
     try {
       const refreshed = await apiClient.ingestScanSessionFiles(numericSessionId, selectedFiles, manifestParsed);
       setLastDetail(refreshed);
+      setSessionDetail(refreshed);
       await reloadSessions();
       await reloadItems(numericSessionId);
     } catch (loadError) {
@@ -346,6 +389,12 @@ export function ScanSessionsPage() {
             >
               Dashboard
             </Link>
+            <Link
+              to="/settings/scanner-profiles"
+              className="inline-flex rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-300/35 hover:bg-white/5"
+            >
+              Scanner presets
+            </Link>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
               Signed in as <span className="font-semibold text-white">{user?.email ?? "unknown"}</span>
             </div>
@@ -366,6 +415,44 @@ export function ScanSessionsPage() {
             Create a deterministic bulk session target, paste its numeric id from exports, refresh rows after each ingest batch.
           </p>
           <div className="mt-4 space-y-2">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Scanner preset
+              <select
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white"
+                value={selectedScannerProfileId === "" ? "" : selectedScannerProfileId}
+                onChange={(event) => {
+                  const v = event.target.value;
+                  setSelectedScannerProfileId(v === "" ? "" : Number(v));
+                }}
+              >
+                <option value="">No pinned preset snapshot</option>
+                {scannerProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.profile_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedScannerProfile ? (
+              <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-300">
+                <span className="font-semibold text-cyan-100">
+                  {scannerRecommendedUseLabel(selectedScannerProfile.recommended_use)}
+                </span>
+                {selectedScannerProfile.dpi !== null ? (
+                  <>
+                    {" "}
+                    · {selectedScannerProfile.dpi} dpi · {selectedScannerProfile.file_format.toUpperCase()}
+                  </>
+                ) : null}
+                {selectedScannerProfile.owner_user_id === null ? (
+                  <span className="mt-2 block text-[10px] uppercase tracking-wide text-slate-500">Suggested ComicOS preset</span>
+                ) : null}
+              </div>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-white/10 px-3 py-2 text-[11px] text-slate-500">
+                Optional: choose a preset to freeze capture metadata onto the ledger (no driver calls).
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void createSessionPressed()}
@@ -382,6 +469,24 @@ export function ScanSessionsPage() {
             >
               Reload recent sessions list
             </button>
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Session type filter
+              <select
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white"
+                value={listSessionTypeFilter}
+                onChange={(event) => {
+                  const v = event.target.value;
+                  setListSessionTypeFilter(v === "" ? "" : (v as ScanSessionType));
+                }}
+              >
+                <option value="">All session types</option>
+                <option value="bulk_ingest">Bulk ingest</option>
+                <option value="intake_receiving">Intake receiving</option>
+                <option value="high_res_review">High res review</option>
+                <option value="rescan">Rescan</option>
+                <option value="manual_upload">Manual upload</option>
+              </select>
+            </label>
           </div>
           <div className="mt-6">
             <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Active sessions</label>
@@ -427,6 +532,35 @@ export function ScanSessionsPage() {
           >
             Fetch deterministic item table + rollups
           </button>
+          {numericSessionId && sessionDetail ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
+              <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">Latest scan pipeline replay</span>
+              {sessionDetail.latest_scan_pipeline_replay ? (
+                <>
+                  <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-mono text-slate-100">
+                      replay #{sessionDetail.latest_scan_pipeline_replay.id}
+                    </span>
+                    <span className="capitalize text-emerald-200/95">
+                      {sessionDetail.latest_scan_pipeline_replay.status.replace(/_/g, " ")}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-slate-400">
+                    Δ changed {sessionDetail.latest_scan_pipeline_replay.changed_items} · unchanged{" "}
+                    {sessionDetail.latest_scan_pipeline_replay.unchanged_items} · failed{" "}
+                    {sessionDetail.latest_scan_pipeline_replay.failed_items} · cancelled{" "}
+                    {sessionDetail.latest_scan_pipeline_replay.cancelled_items} · scanned{" "}
+                    {sessionDetail.latest_scan_pipeline_replay.total_items} rows ·{" "}
+                    {sessionDetail.latest_scan_pipeline_replay.created_at
+                      ? new Date(sessionDetail.latest_scan_pipeline_replay.created_at).toLocaleString()
+                      : "—"}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-slate-500">No replay bookkeeping exists for this session yet.</p>
+              )}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-2">

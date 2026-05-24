@@ -71,6 +71,7 @@ import {
   type RunDetectionListResponse,
   type RunDetectionSeries,
   type RunDetectionSeriesStatus,
+  type ScanPipelineReplayRunRead,
   type ScanSessionDetail,
   type ScanSessionSummary,
   type VariantFamilyClassificationFilter,
@@ -81,6 +82,10 @@ import {
   type CollectionHistoricalTimelineSort,
   type InventoryItem,
   type InventoryOwnershipNormalized,
+  type PhysicalIntakeItemRead,
+  type PhysicalIntakeListResponse,
+  type PhysicalIntakeState,
+  type PhysicalIntakeSummaryResponse,
 } from "../api/client";
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { AppShell } from "../components/AppShell";
@@ -554,6 +559,21 @@ function relationshipReplayStatusTone(status: RelationshipReplayRun["status"]): 
   }
 }
 
+function scanPipelineReplayStatusTone(status: ScanPipelineReplayRunRead["status"]): string {
+  switch (status) {
+    case "completed":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+    case "completed_with_failures":
+      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+    case "cancelled":
+      return "border-rose-400/30 bg-rose-400/10 text-rose-100";
+    case "running":
+      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-200";
+  }
+}
+
 function summarizeAuditSnapshot(snapshot: Record<string, unknown> | null): string {
   if (!snapshot) {
     return "—";
@@ -936,6 +956,15 @@ export function OperationsPage() {
   >("");
   const [opsOrderArrivalError, setOpsOrderArrivalError] = useState<string | null>(null);
 
+  const [opsPhysicalIntakeSummary, setOpsPhysicalIntakeSummary] = useState<PhysicalIntakeSummaryResponse | null>(
+    null,
+  );
+  const [opsPhysicalIntakeList, setOpsPhysicalIntakeList] = useState<PhysicalIntakeListResponse | null>(null);
+  const [opsPhysicalIntakeStateFilter, setOpsPhysicalIntakeStateFilter] = useState<"" | PhysicalIntakeState>(
+    "",
+  );
+  const [opsPhysicalIntakeError, setOpsPhysicalIntakeError] = useState<string | null>(null);
+
   const [opsCollectionSummary, setOpsCollectionSummary] = useState<CollectionAnalyticsSummary | null>(null);
   const [opsCollectionPublishers, setOpsCollectionPublishers] =
     useState<CollectionPublisherAnalyticsResponse | null>(null);
@@ -1029,6 +1058,13 @@ export function OperationsPage() {
   const [opsScanQaFleet, setOpsScanQaFleet] = useState<OpsScanQaFleetSummaryRead | null>(null);
   const [opsScanQaFleetLoading, setOpsScanQaFleetLoading] = useState(true);
   const [opsScanQaFleetError, setOpsScanQaFleetError] = useState<string | null>(null);
+
+  const [opsScanPipelineReplays, setOpsScanPipelineReplays] = useState<ScanPipelineReplayRunRead[]>([]);
+  const [opsScanPipelineReplaysLoading, setOpsScanPipelineReplaysLoading] = useState(true);
+  const [opsScanPipelineReplaysError, setOpsScanPipelineReplaysError] = useState<string | null>(null);
+  const [opsScanPipelineReplaySelectedId, setOpsScanPipelineReplaySelectedId] = useState<number | null>(null);
+  const [opsScanPipelineReplayDetail, setOpsScanPipelineReplayDetail] = useState<ScanPipelineReplayRunRead | null>(null);
+  const [opsScanPipelineReplayDetailLoading, setOpsScanPipelineReplayDetailLoading] = useState(false);
 
   const [opsRouting, setOpsRouting] = useState<QueueRoutingListResponse | null>(null);
   const [opsRoutingLoading, setOpsRoutingLoading] = useState(true);
@@ -1126,6 +1162,62 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsScanPipelineReplaysLoading(true);
+      setOpsScanPipelineReplaysError(null);
+      try {
+        const pack = await apiClient.listOpsScanPipelineReplays({ limit: 75, offset: 0 });
+        if (!ignore) {
+          setOpsScanPipelineReplays(pack.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsScanPipelineReplays([]);
+          setOpsScanPipelineReplaysError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load scan pipeline replays.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanPipelineReplaysLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (opsScanPipelineReplaySelectedId == null) {
+      setOpsScanPipelineReplayDetail(null);
+      return;
+    }
+    let ignore = false;
+    void (async () => {
+      setOpsScanPipelineReplayDetailLoading(true);
+      try {
+        const replay = await apiClient.getOpsScanPipelineReplay(opsScanPipelineReplaySelectedId);
+        if (!ignore) {
+          setOpsScanPipelineReplayDetail(replay);
+        }
+      } catch {
+        if (!ignore) {
+          setOpsScanPipelineReplayDetail(null);
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanPipelineReplayDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsScanPipelineReplaySelectedId]);
 
   useEffect(() => {
     let ignore = false;
@@ -1361,6 +1453,36 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsOrderArrivalClassification]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsPhysicalIntakeError(null);
+      try {
+        const [sum, lst] = await Promise.all([
+          apiClient.getOpsPhysicalIntakeSummary(),
+          apiClient.getOpsPhysicalIntake({ intake_state: opsPhysicalIntakeStateFilter || undefined }),
+        ]);
+        if (!ignore) {
+          setOpsPhysicalIntakeSummary(sum);
+          setOpsPhysicalIntakeList(lst);
+        }
+      } catch (physicalIntakeErr) {
+        if (!ignore) {
+          setOpsPhysicalIntakeSummary(null);
+          setOpsPhysicalIntakeList(null);
+          setOpsPhysicalIntakeError(
+            physicalIntakeErr instanceof ApiError
+              ? physicalIntakeErr.message
+              : "Unable to load global physical intake overlays.",
+          );
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPhysicalIntakeStateFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -2722,6 +2844,176 @@ export function OperationsPage() {
         </div>
       </details>
 
+      <details className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Scan pipeline replays</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Owners create and start deterministic replays outside this panel — here we only read-back booked comparisons (ingest, QA vs
+                persistence, hypothetical routing deltas, OCR job visibility snapshots, high-res review rows). No automatic OCR enqueue,
+                destructive cleanup, or metadata writes from replay itself.
+              </p>
+            </div>
+            <span className="rounded-full border border-fuchsia-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100/90">
+              Ops / recovery visibility
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-fuchsia-200/15 pt-4">
+          {opsScanPipelineReplaysLoading ? (
+            <p className="text-sm text-slate-400">Loading replay ledger…</p>
+          ) : opsScanPipelineReplaysError ? (
+            <StatusBanner tone="error">{opsScanPipelineReplaysError}</StatusBanner>
+          ) : opsScanPipelineReplays.length === 0 ? (
+            <p className="text-sm text-slate-500">No replay runs booked yet.</p>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <StatCard label="Listed replays" value={String(opsScanPipelineReplays.length)} />
+                <StatCard
+                  label="Σ changed rows"
+                  value={String(opsScanPipelineReplays.reduce((acc, r) => acc + r.changed_items, 0))}
+                />
+                <StatCard
+                  label="Σ unchanged rows"
+                  value={String(opsScanPipelineReplays.reduce((acc, r) => acc + r.unchanged_items, 0))}
+                />
+                <StatCard
+                  label="Σ failed rows"
+                  value={String(opsScanPipelineReplays.reduce((acc, r) => acc + r.failed_items, 0))}
+                />
+                <StatCard
+                  label="Σ cancelled stubs"
+                  value={String(opsScanPipelineReplays.reduce((acc, r) => acc + r.cancelled_items, 0))}
+                />
+              </div>
+
+              <div className="mt-5 overflow-auto rounded-2xl border border-white/10">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3"></th>
+                      <th className="p-3">Replay</th>
+                      <th className="p-3">Session</th>
+                      <th className="p-3">Owner</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Changed / unchanged</th>
+                      <th className="p-3">Failed / cancelled</th>
+                      <th className="p-3">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsScanPipelineReplays.map((row) => {
+                      const isOpen = opsScanPipelineReplaySelectedId === row.id;
+                      return (
+                        <tr key={row.id}>
+                          <td className="p-3 align-top">
+                            <button
+                              type="button"
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                isOpen ? "border-fuchsia-300/70 bg-fuchsia-400/20 text-fuchsia-50" : "border-white/15 text-slate-200 hover:border-fuchsia-300/35"
+                              }`}
+                              onClick={() =>
+                                setOpsScanPipelineReplaySelectedId((cur) => (cur === row.id ? null : row.id))
+                              }
+                            >
+                              {isOpen ? "Hide items" : "Diff detail"}
+                            </button>
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-white align-top">#{row.id}</td>
+                          <td className="p-3 font-mono text-[11px] align-top">
+                            #{row.scan_session_id}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] align-top">
+                            #{row.owner_user_id}
+                          </td>
+                          <td className="p-3 align-top">
+                            <span
+                              className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${scanPipelineReplayStatusTone(row.status)}`}
+                            >
+                              {row.status.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td className="p-3 align-top">
+                            {row.changed_items} · {row.unchanged_items}
+                          </td>
+                          <td className="p-3 align-top">
+                            {row.failed_items} · {row.cancelled_items}
+                          </td>
+                          <td className="p-3 text-slate-400 align-top">{formatDateTime(row.created_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsScanPipelineReplaySelectedId == null ? null : opsScanPipelineReplayDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Hydrating replay item ledger…</p>
+              ) : opsScanPipelineReplayDetail ? (
+                <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Item states &amp; diff categories (#{opsScanPipelineReplayDetail.id})
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Scopes:&nbsp;
+                    <span className="font-mono text-slate-200">{opsScanPipelineReplayDetail.scopes_json.join(", ")}</span>
+                  </p>
+                  {(() => {
+                    const tally: Record<string, number> = {};
+                    for (const it of opsScanPipelineReplayDetail.items) {
+                      for (const c of it.diff_categories) tally[c] = (tally[c] ?? 0) + 1;
+                    }
+                    const keys = Object.keys(tally).sort();
+                    if (keys.length === 0)
+                      return <p className="text-xs text-slate-400">No diff categories recorded.</p>;
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        {keys.map((k) => (
+                          <span
+                            key={k}
+                            className="rounded-xl border border-fuchsia-400/25 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-100"
+                          >
+                            {k}: {tally[k]}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="max-h-80 overflow-auto rounded-xl border border-white/10 bg-slate-950/40">
+                    <table className="w-full border-collapse text-left text-[11px]">
+                      <thead className="sticky top-0 bg-slate-950/95 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-2">Item</th>
+                          <th className="p-2">Result</th>
+                          <th className="p-2">Diff categories</th>
+                          <th className="p-2">Last error</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-200">
+                        {opsScanPipelineReplayDetail.items.slice(0, 750).map((it) => (
+                          <tr key={it.id} className="border-t border-white/5 align-top">
+                            <td className="p-2 font-mono">#{it.scan_session_item_id}</td>
+                            <td className="p-2">{it.result_state.replace(/_/g, " ")}</td>
+                            <td className="p-2 font-mono text-[10px] text-slate-300">
+                              {it.diff_categories.length === 0 ? "—" : it.diff_categories.join(", ")}
+                            </td>
+                            <td className="p-2 text-rose-200/95">{it.last_error ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <StatusBanner tone="error">Replay detail unavailable.</StatusBanner>
+              )}
+            </>
+          )}
+        </div>
+      </details>
+
       <details className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3389,6 +3681,90 @@ export function OperationsPage() {
               </>
             ) : opsOrderArrivalError ? null : (
               <p className="mt-4 text-sm text-slate-400">Loading order / arrival overlays…</p>
+            )}
+          </details>
+
+          <details className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/15 p-5 shadow-xl shadow-black/20">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-white">
+              Global physical intake queue
+            </summary>
+            <p className="mt-2 text-sm text-slate-400">
+              Deterministic rollups tying explicit receipt timestamps to intake-only scan placeholders. Filters apply to the
+              list rows only; headline counts reflect all copies until filtered by intake state (global scope).
+            </p>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Intake state filter (list only)
+                <select
+                  className="rounded-2xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsPhysicalIntakeStateFilter}
+                  onChange={(event) =>
+                    setOpsPhysicalIntakeStateFilter(event.target.value as "" | PhysicalIntakeState)
+                  }
+                >
+                  <option value="">All deterministic states</option>
+                  <option value="awaiting_release">Awaiting release</option>
+                  <option value="released_awaiting_receipt">Released / awaiting receipt</option>
+                  <option value="intake_blocked">Intake blocked (late ship expectations)</option>
+                  <option value="received_pending_scan">Received pending scan</option>
+                  <option value="received_scanned">Received scanned (OCR incomplete)</option>
+                  <option value="completed">Completed intake pipeline</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+            </div>
+            {opsPhysicalIntakeError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{opsPhysicalIntakeError}</StatusBanner>
+              </div>
+            ) : null}
+            {opsPhysicalIntakeSummary && opsPhysicalIntakeList ? (
+              <>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                  <StatCard
+                    label="Released / not received facet"
+                    value={String(opsPhysicalIntakeSummary.counts.released_not_received)}
+                  />
+                  <StatCard label="Received pending scan" value={String(opsPhysicalIntakeSummary.counts.received_pending_scan)} />
+                  <StatCard label="Shipment overdue facet" value={String(opsPhysicalIntakeSummary.counts.overdue_expected_ship)} />
+                  <StatCard label="Awaiting release" value={String(opsPhysicalIntakeSummary.counts.awaiting_release)} />
+                  <StatCard label="Released awaiting receipt roll-up" value={String(opsPhysicalIntakeSummary.counts.released_awaiting_receipt)} />
+                  <StatCard label="Intake blocked roll-up" value={String(opsPhysicalIntakeSummary.counts.intake_blocked)} />
+                </div>
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="min-w-full divide-y divide-white/10 text-left text-sm text-slate-200">
+                    <thead className="bg-white/5 text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">Copy</th>
+                        <th className="px-4 py-3">Owner lane</th>
+                        <th className="px-4 py-3">Facet tags</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {opsPhysicalIntakeList.items.slice(0, 40).map((row: PhysicalIntakeItemRead) => (
+                        <tr key={row.inventory_copy_id}>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/inventory/${row.inventory_copy_id}`}
+                              className="font-medium text-white hover:text-emerald-100"
+                            >
+                              {row.publisher} · {row.title} #{row.issue_number}
+                            </Link>
+                            <div className="text-[11px] text-slate-500">{row.retailer}</div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-300">
+                            <p className="font-semibold capitalize text-white">{row.intake_state.replace(/_/g, " ")}</p>
+                            <p className="text-[11px] text-slate-500">Order · {row.order_status}</p>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">{row.dashboard_buckets.join(", ") || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : opsPhysicalIntakeError ? null : (
+              <p className="mt-4 text-sm text-slate-400">Loading physical intake overlays…</p>
             )}
           </details>
 

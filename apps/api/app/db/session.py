@@ -1,9 +1,20 @@
 from collections.abc import Generator
 from functools import lru_cache
 
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlmodel import Session, create_engine
 
 from app.core.config import get_settings
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_enable_foreign_keys(dbapi_connection: object, connection_record: object) -> None:
+    dialect = getattr(connection_record, "dialect", None)
+    if getattr(dialect, "name", None) == "sqlite":
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 @lru_cache

@@ -35,6 +35,7 @@ import {
   type InventoryActionCenterSummary,
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
+  type PhysicalIntakeSummaryResponse,
   type ScanSessionDashboardResponse,
   type ScanSessionSummary,
 } from "../api/client";
@@ -718,6 +719,8 @@ export function DashboardPage() {
   const [collectionHistoricalTimeline, setCollectionHistoricalTimeline] =
     useState<CollectionHistoricalTimelineEventsResponse | null>(null);
   const [scanSessionDash, setScanSessionDash] = useState<ScanSessionDashboardResponse | null>(null);
+  const [physicalIntakeSummary, setPhysicalIntakeSummary] =
+    useState<PhysicalIntakeSummaryResponse | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -800,6 +803,7 @@ export function DashboardPage() {
       caPublishers,
       caQuality,
       scanSessionDashboard,
+      physicalIntakeSummaryResponse,
     ] = await Promise.all([
       apiClient.getInventorySummary(),
       apiClient.getPortfolioPerformance(),
@@ -814,6 +818,7 @@ export function DashboardPage() {
       apiClient.getCollectionAnalyticsPublishers(),
       apiClient.getCollectionAnalyticsQuality(),
       apiClient.getScanSessionDashboard(),
+      apiClient.getPhysicalIntakeSummary(),
     ]);
     setSummary(summaryResponse);
     setPerformance(performanceResponse);
@@ -829,6 +834,7 @@ export function DashboardPage() {
     setCollectionAnalyticsPublishers(caPublishers);
     setCollectionAnalyticsQuality(caQuality);
     setScanSessionDash(scanSessionDashboard);
+    setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
     setSelectedIds((current) =>
       current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
     );
@@ -858,6 +864,7 @@ export function DashboardPage() {
           caPublishers,
           caQuality,
           scanSessionDashboard,
+          physicalIntakeSummaryResponse,
         ] =
           await Promise.all([
             apiClient.getInventorySummary(),
@@ -875,6 +882,7 @@ export function DashboardPage() {
             apiClient.getCollectionAnalyticsPublishers(),
             apiClient.getCollectionAnalyticsQuality(),
             apiClient.getScanSessionDashboard(),
+            apiClient.getPhysicalIntakeSummary(),
           ]);
 
         if (ignore) {
@@ -897,6 +905,7 @@ export function DashboardPage() {
         setCollectionAnalyticsPublishers(caPublishers);
         setCollectionAnalyticsQuality(caQuality);
         setScanSessionDash(scanSessionDashboard);
+        setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
         setSelectedIds((current) =>
           current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
         );
@@ -1119,6 +1128,50 @@ export function DashboardPage() {
           </article>
         ))}
       </section>
+
+      {physicalIntakeSummary ? (
+        <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">Receiving & scan placeholders</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-400">
+                Counts derive from deterministic order / shipment / receipt signals. Mark received explicitly, then
+                stage intake-only scan sessions with pending rows — no OCR or ingest runs automatically.
+              </p>
+            </div>
+            <Link
+              to="/scan-sessions"
+              className="rounded-2xl border border-emerald-400/35 px-4 py-3 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+            >
+              Open scan sessions
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {physicalIntakeSummary.counts.released_not_received}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {physicalIntakeSummary.counts.received_pending_scan}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Shipment overdue (expected ship)</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{physicalIntakeSummary.counts.overdue_expected_ship}</p>
+            </article>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 text-[11px] text-slate-500">
+            <span>Intake blocked: {physicalIntakeSummary.counts.intake_blocked}</span>
+            <span>Released awaiting receipt (state roll-up): {physicalIntakeSummary.counts.released_awaiting_receipt}</span>
+            <span>As of {physicalIntakeSummary.generated_as_of}</span>
+          </div>
+        </section>
+      ) : null}
 
       {scanSessionDash &&
       (scanSessionDash.active_sessions.length > 0 || scanSessionDash.recent_sessions.length > 0) ? (

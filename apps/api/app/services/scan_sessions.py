@@ -12,6 +12,12 @@ from sqlmodel import Session, select
 
 from app.models import CoverImage, InventoryCopy, ScanSession, ScanSessionItem
 from app.models.asset_ledger import utc_now
+from app.schemas.scanner_profiles import ScannerProfileSnapshotRead
+from app.services.scanner_profiles import (
+    ensure_system_scanner_profile_presets,
+    require_profile_usable_for_session,
+    snapshot_dict_from_profile,
+)
 from app.schemas.scan_sessions import (
     InventoryScanSessionOriginRead,
     ScanSessionCreatePayload,
@@ -133,12 +139,23 @@ def _assert_cover_owned(session: Session, *, owner_user_id: int, cover_image_id:
 
 
 def create_scan_session(session: Session, *, owner_user_id: int, payload: ScanSessionCreatePayload) -> ScanSessionSummaryRead:
+    ensure_system_scanner_profile_presets(session)
+    profile_label = payload.scanner_profile
+    pid = payload.scanner_profile_id
+    snap: dict | None = None
+    if pid is not None:
+        prof = require_profile_usable_for_session(session, owner_user_id=owner_user_id, profile_id=pid)
+        profile_label = prof.profile_name
+        snap = snapshot_dict_from_profile(prof)
+
     now = utc_now()
     sess = ScanSession(
         owner_user_id=owner_user_id,
         session_type=payload.session_type,
         status="pending",
-        scanner_profile=payload.scanner_profile,
+        scanner_profile=profile_label,
+        scanner_profile_id=pid,
+        scanner_profile_snapshot=snap,
         source_device=payload.source_device,
         session_notes=payload.session_notes,
         started_at=None,
@@ -222,13 +239,38 @@ def list_scan_sessions(
 
 
 def get_scan_session_detail(session: Session, *, owner_user_id: int | None, session_id: int) -> ScanSessionDetailRead:
+    from app.services.scan_pipeline_replays import latest_replay_summary_for_scan_session
+
     sess = _assert_scan_session_owned(session, owner_user_id=owner_user_id, session_id=session_id)
     stmt = select(ScanSessionItem).where(ScanSessionItem.scan_session_id == session_id)
     rows = _sorted_items(session.exec(stmt).all())
     stats = statistics_from_items(rows)
-    payload = sess.model_dump()
-    payload["statistics"] = stats
-    payload["items"] = [ScanSessionItemRead.model_validate(r, from_attributes=True) for r in rows]
+    snap_obj = ScannerProfileSnapshotRead.model_validate(sess.scanner_profile_snapshot) if sess.scanner_profile_snapshot else None
+
+    latest_rp = latest_replay_summary_for_scan_session(session, scan_session_id=session_id)
+
+    payload: dict[str, object] = {
+        "id": int(sess.id) if sess.id is not None else 0,
+        "owner_user_id": int(sess.owner_user_id),
+        "session_type": str(sess.session_type),
+        "status": str(sess.status),
+        "scanner_profile_id": sess.scanner_profile_id,
+        "scanner_profile": sess.scanner_profile,
+        "scanner_profile_snapshot": snap_obj,
+        "source_device": sess.source_device,
+        "started_at": sess.started_at,
+        "completed_at": sess.completed_at,
+        "created_at": sess.created_at,
+        "updated_at": sess.updated_at,
+        "total_items": int(sess.total_items),
+        "processed_items": int(sess.processed_items),
+        "failed_items": int(sess.failed_items),
+        "skipped_items": int(sess.skipped_items),
+        "session_notes": sess.session_notes,
+        "statistics": stats,
+        "items": [ScanSessionItemRead.model_validate(r, from_attributes=True) for r in rows],
+        "latest_scan_pipeline_replay": latest_rp,
+    }
     return ScanSessionDetailRead.model_validate(payload)
 
 
@@ -425,6 +467,8 @@ def originating_scan_session_for_inventory_copy(
     pairs.sort(key=lambda pair: (pair[1].created_at, pair[1].id, pair[0].sequence_index, pair[0].id))
     chosen_item, chosen_sess = pairs[0]
 
+    snap_obj = ScannerProfileSnapshotRead.model_validate(chosen_sess.scanner_profile_snapshot) if chosen_sess.scanner_profile_snapshot else None
+
     return InventoryScanSessionOriginRead(
         scan_session_id=int(chosen_sess.id),
         session_type=str(chosen_sess.session_type),
@@ -433,5 +477,8 @@ def originating_scan_session_for_inventory_copy(
         sequence_index=int(chosen_item.sequence_index),
         ingest_status=str(chosen_item.ingest_status),
         created_at=chosen_item.created_at,
+        scanner_profile_id=chosen_sess.scanner_profile_id,
+        scanner_profile_label=chosen_sess.scanner_profile,
+        scanner_profile_snapshot=snap_obj,
     )
 
