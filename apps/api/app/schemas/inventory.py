@@ -8,6 +8,7 @@ from app.schemas.cover_images import CoverImageRead
 from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
 from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
 from app.schemas.inventory_risks import InventoryRiskRead
+from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.run_detection import RunDetectionCopyAttachment
 
 ReleaseCalendarPresence = Literal["present", "missing"]
@@ -46,6 +47,7 @@ class InventoryRow(BaseModel):
     duplicate_ownership: DuplicateOwnershipCopyAttachment | None = None
     run_detection: RunDetectionCopyAttachment | None = None
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
+    order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
 
 
 class InventoryListResponse(BaseModel):
@@ -109,6 +111,7 @@ class InventoryDetailResponse(BaseModel):
     duplicate_ownership: DuplicateOwnershipCopyAttachment | None = None
     run_detection: RunDetectionCopyAttachment | None = None
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
+    order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

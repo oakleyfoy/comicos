@@ -122,6 +122,12 @@ from app.schemas.inventory_risks import (
     InventoryRiskSummary,
     InventoryRiskType,
 )
+from app.schemas.order_arrival_intelligence import (
+    OrderArrivalClassification,
+    OrderArrivalIntelCalendarResponse,
+    OrderArrivalIntelListResponse,
+    OrderArrivalIntelSummary,
+)
 from app.schemas.inventory_intelligence import (
     InventoryIntelligenceBreakdown,
     InventoryIntelligenceHealthSummary,
@@ -344,6 +350,11 @@ from app.services.inventory_risks import (
     get_inventory_risk_detail_owner,
     get_inventory_risks_ops,
     get_inventory_risks_owner,
+)
+from app.services.order_arrival_intelligence import (
+    compute_order_arrival_intelligence,
+    get_order_arrival_calendar,
+    order_arrival_summary_only,
 )
 from app.services.collection_analytics import (
     analyze_collection_composition,
@@ -4354,6 +4365,10 @@ def get_inventory(
         Query(description="Filter rows by matching inventory risk type."),
     ] = None,
     needs_attention: bool = False,
+    arrival_classification: Annotated[
+        OrderArrivalClassification | None,
+        Query(description="Filter rows derived order/arrival classification."),
+    ] = None,
     sort_by: str | None = None,
     sort_dir: Literal["asc", "desc"] = "asc",
 ) -> InventoryListResponse:
@@ -4374,6 +4389,7 @@ def get_inventory(
         risk_priority=risk_priority,
         risk_type=risk_type,
         needs_attention=needs_attention,
+        arrival_classification=arrival_classification,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -4569,6 +4585,200 @@ def get_ops_inventory_risk_detail(
         priority=priority,
         risk_type=risk_type,
         open_only=open_only,
+    )
+
+
+OrderArrivalOrderStatusLiteral = Literal["ordered", "preordered", "shipped", "received", "cancelled"]
+
+
+@app.get("/order-arrival-intelligence", response_model=OrderArrivalIntelListResponse)
+def get_order_arrival_intelligence_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelListResponse:
+    resp, _ = compute_order_arrival_intelligence(
+        session,
+        current_user=current_user,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
+    )
+    return resp
+
+
+@app.get("/order-arrival-intelligence/summary", response_model=OrderArrivalIntelSummary)
+def get_order_arrival_intelligence_summary_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelSummary:
+    return order_arrival_summary_only(
+        session,
+        user=current_user,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
+    )
+
+
+@app.get("/order-arrival-intelligence/calendar", response_model=OrderArrivalIntelCalendarResponse)
+def get_order_arrival_calendar_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    calendar_start: date | None = None,
+    calendar_end: date | None = None,
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelCalendarResponse:
+    return get_order_arrival_calendar(
+        session,
+        current_user=current_user,
+        calendar_start=calendar_start,
+        calendar_end=calendar_end,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
+    )
+
+
+@app.get("/ops/order-arrival-intelligence", response_model=OrderArrivalIntelListResponse, include_in_schema=False)
+def get_ops_order_arrival_intelligence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    resp, _ = compute_order_arrival_intelligence(
+        session,
+        current_user=None,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
+    )
+    return resp
+
+
+@app.get("/ops/order-arrival-intelligence/summary", response_model=OrderArrivalIntelSummary, include_in_schema=False)
+def get_ops_order_arrival_intelligence_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelSummary:
+    ensure_ops_admin_access(current_user, settings)
+    response, _ = compute_order_arrival_intelligence(
+        session,
+        current_user=None,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
+    )
+    return response.summary
+
+
+@app.get("/ops/order-arrival-intelligence/calendar", response_model=OrderArrivalIntelCalendarResponse, include_in_schema=False)
+def get_ops_order_arrival_calendar(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    calendar_start: date | None = None,
+    calendar_end: date | None = None,
+    classification: Annotated[OrderArrivalClassification | None, Query(description="Filter by classification.")] = None,
+    retailer: str | None = None,
+    publisher: str | None = None,
+    release_date_from: date | None = None,
+    release_date_to: date | None = None,
+    expected_ship_date_from: date | None = None,
+    expected_ship_date_to: date | None = None,
+    order_status: OrderArrivalOrderStatusLiteral | None = None,
+    in_hand_only: bool = False,
+) -> OrderArrivalIntelCalendarResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_order_arrival_calendar(
+        session,
+        current_user=None,
+        calendar_start=calendar_start,
+        calendar_end=calendar_end,
+        classification=classification,
+        retailer=retailer,
+        publisher=publisher,
+        release_date_from=release_date_from,
+        release_date_to=release_date_to,
+        expected_ship_date_from=expected_ship_date_from,
+        expected_ship_date_to=expected_ship_date_to,
+        order_status=order_status,
+        in_hand_only=in_hand_only,
     )
 
 

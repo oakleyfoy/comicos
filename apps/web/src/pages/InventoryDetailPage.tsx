@@ -17,6 +17,7 @@ import {
   type InventoryRiskRead,
   type InventoryRiskType,
   type InventoryFmvSnapshot,
+  type OrderArrivalClassification,
   type InventoryUpdatePayload,
   type CoverRelationshipGraphEdge,
   type CoverRelationshipGraphRead,
@@ -197,6 +198,52 @@ function inventoryRiskEvidenceSummary(risk: InventoryRiskRead): string {
     .join(" · ");
 }
 
+function orderArrivalClassificationLabel(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "upcoming_preorder":
+      return "Upcoming preorder";
+    case "releases_this_week":
+      return "Release scheduled this week";
+    case "released_not_received":
+      return "Released — not yet received";
+    case "expected_to_ship_soon":
+      return "Expected shipment in the next 14 days";
+    case "overdue_expected_ship":
+      return "Expected shipment date passed";
+    case "received_recently":
+      return "Received within the last 30 days";
+    case "cancelled_order":
+      return "Cancelled order line";
+    case "missing_release_date":
+      return "Preorder / unreleased without release date";
+    case "missing_expected_ship_date":
+      return "Awaiting expected ship date metadata";
+    default:
+      return value;
+  }
+}
+
+function orderArrivalClassificationTone(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "overdue_expected_ship":
+    case "released_not_received":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "missing_release_date":
+    case "missing_expected_ship_date":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "upcoming_preorder":
+    case "releases_this_week":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "expected_to_ship_soon":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-100";
+    case "received_recently":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "cancelled_order":
+      return "border-white/15 bg-white/5 text-slate-300";
+    default:
+      return "border-white/15 bg-white/5 text-slate-300";
+  }
+}
 function duplicateOwnershipClassificationLabel(value: DuplicateOwnershipClassification): string {
   switch (value) {
     case "intentional_multi_copy":
@@ -2178,6 +2225,35 @@ export function InventoryDetailPage() {
                             </span>
                           </div>
                           <p className="mt-3 text-xs text-slate-300">{inventoryRiskEvidenceSummary(risk)}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+                {detail.order_arrival_classifications && detail.order_arrival_classifications.length ? (
+                  <section className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Order / arrival</p>
+                        <h3 className="mt-1 text-base font-semibold text-white">Pipeline classification</h3>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        <p>Release: {detail.release_date ? formatDate(detail.release_date) : "—"}</p>
+                        <p>Expected ship: {detail.expected_ship_date ? formatDate(detail.expected_ship_date) : "—"}</p>
+                        <p>Received: {detail.received_at ? formatDate(detail.received_at) : "—"}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-2">
+                      {detail.order_arrival_classifications.map((c) => (
+                        <article key={c} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${orderArrivalClassificationTone(
+                              c,
+                            )}`}
+                          >
+                            {c.replace(/_/g, " ")}
+                          </span>
+                          <p className="mt-2 text-xs text-slate-300">{orderArrivalClassificationLabel(c)}</p>
                         </article>
                       ))}
                     </div>

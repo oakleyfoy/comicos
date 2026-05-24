@@ -38,6 +38,9 @@ import {
   type OpsMetadataAuditRow,
   type OpsRecentCoverImageRow,
   type OpsCoverDuplicateGroup,
+  type OrderArrivalClassification,
+  type OrderArrivalIntelCalendarResponse,
+  type OrderArrivalIntelListResponse,
   type CoverRelationshipGraphEdge,
   type CoverRelationshipGraphRead,
   type DuplicateScanClassificationFilter,
@@ -157,6 +160,46 @@ function inventoryRiskEvidenceSummary(risk: InventoryRiskRead): string {
     .slice(0, 3)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
     .join(" · ");
+}
+
+function opsOrderArrivalTone(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "overdue_expected_ship":
+    case "released_not_received":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "missing_release_date":
+    case "missing_expected_ship_date":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "expected_to_ship_soon":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-100";
+    default:
+      return "border-white/15 bg-white/5 text-slate-300";
+  }
+}
+
+function opsOrderArrivalShortLabel(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "upcoming_preorder":
+      return "Upcoming preorder";
+    case "releases_this_week":
+      return "Week release";
+    case "released_not_received":
+      return "Released not recv";
+    case "expected_to_ship_soon":
+      return "Shipping soon";
+    case "overdue_expected_ship":
+      return "Shipment overdue";
+    case "received_recently":
+      return "Recently received";
+    case "cancelled_order":
+      return "Cancelled";
+    case "missing_release_date":
+      return "Missing release date";
+    case "missing_expected_ship_date":
+      return "Missing ship date";
+    default:
+      return value;
+  }
 }
 
 function relationshipConflictSeverityTone(severity: RelationshipConflictSeverity): string {
@@ -657,6 +700,15 @@ export function OperationsPage() {
   const [opsInventoryRiskOpenOnly, setOpsInventoryRiskOpenOnly] = useState(true);
   const [opsInventoryRiskError, setOpsInventoryRiskError] = useState<string | null>(null);
 
+  const [opsOrderArrivalReport, setOpsOrderArrivalReport] = useState<OrderArrivalIntelListResponse | null>(null);
+  const [opsOrderArrivalCalendar, setOpsOrderArrivalCalendar] = useState<OrderArrivalIntelCalendarResponse | null>(
+    null,
+  );
+  const [opsOrderArrivalClassification, setOpsOrderArrivalClassification] = useState<
+    "" | OrderArrivalClassification
+  >("");
+  const [opsOrderArrivalError, setOpsOrderArrivalError] = useState<string | null>(null);
+
   const [opsCollectionSummary, setOpsCollectionSummary] = useState<CollectionAnalyticsSummary | null>(null);
   const [opsCollectionPublishers, setOpsCollectionPublishers] =
     useState<CollectionPublisherAnalyticsResponse | null>(null);
@@ -818,6 +870,39 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsInventoryRiskOpenOnly, opsInventoryRiskPriority, opsInventoryRiskType]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsOrderArrivalError(null);
+      try {
+        const params = {
+          classification: opsOrderArrivalClassification || undefined,
+        };
+        const [listResp, calendarResp] = await Promise.all([
+          apiClient.getOpsOrderArrivalIntelligence(params),
+          apiClient.getOpsOrderArrivalCalendar(params),
+        ]);
+        if (!ignore) {
+          setOpsOrderArrivalReport(listResp);
+          setOpsOrderArrivalCalendar(calendarResp);
+        }
+      } catch (orderArrivalLoadError) {
+        if (!ignore) {
+          setOpsOrderArrivalReport(null);
+          setOpsOrderArrivalCalendar(null);
+          setOpsOrderArrivalError(
+            orderArrivalLoadError instanceof ApiError
+              ? orderArrivalLoadError.message
+              : "Unable to load global order / arrival intelligence.",
+          );
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsOrderArrivalClassification]);
 
   useEffect(() => {
     let ignore = false;
@@ -2090,6 +2175,145 @@ export function OperationsPage() {
               </>
             ) : (
               <p className="mt-4 text-sm text-slate-400">Loading global inventory risks…</p>
+            )}
+          </details>
+
+          <details className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-white">
+              Global order &amp; arrival intelligence
+            </summary>
+            <p className="mt-2 text-sm text-slate-400">
+              Operational preorder and shipment overlays derived purely from deterministic dates and statuses. Visibility
+              only (no valuation, speculation, or automatic receipt).
+            </p>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Classification
+                <select
+                  className="rounded-2xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsOrderArrivalClassification}
+                  onChange={(event) =>
+                    setOpsOrderArrivalClassification(event.target.value as "" | OrderArrivalClassification)
+                  }
+                >
+                  <option value="">All</option>
+                  <option value="upcoming_preorder">Upcoming preorder</option>
+                  <option value="releases_this_week">Releases this week</option>
+                  <option value="released_not_received">Released / not received</option>
+                  <option value="expected_to_ship_soon">Shipping soon</option>
+                  <option value="overdue_expected_ship">Shipment overdue</option>
+                  <option value="received_recently">Received recently</option>
+                  <option value="cancelled_order">Cancelled order</option>
+                  <option value="missing_release_date">Missing release date</option>
+                  <option value="missing_expected_ship_date">Missing ship date</option>
+                </select>
+              </label>
+            </div>
+            {opsOrderArrivalError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{opsOrderArrivalError}</StatusBanner>
+              </div>
+            ) : null}
+            {opsOrderArrivalReport && opsOrderArrivalCalendar ? (
+              <>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard
+                    label="Pipeline rows"
+                    value={String(opsOrderArrivalReport.summary.total_intel_items)}
+                  />
+                  <StatCard label="Tagged copies" value={String(opsOrderArrivalReport.summary.copies_tagged)} />
+                  <StatCard
+                    label="Shipment overdue rows"
+                    value={String(
+                      opsOrderArrivalReport.items.filter((item) => item.classification === "overdue_expected_ship")
+                        .length,
+                    )}
+                  />
+                  <StatCard
+                    label="Calendar window"
+                    value={`${opsOrderArrivalCalendar.calendar_start} → ${opsOrderArrivalCalendar.calendar_end}`}
+                  />
+                </div>
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="min-w-full divide-y divide-white/10 text-left text-sm text-slate-200">
+                    <thead className="bg-white/5 text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">Copy</th>
+                        <th className="px-4 py-3">Lane</th>
+                        <th className="px-4 py-3">Evidence</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {opsOrderArrivalReport.items.slice(0, 30).map((row) => (
+                        <tr key={row.intel_key}>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/inventory/${row.inventory_copy_id}`}
+                              className="font-medium text-white hover:text-cyan-200"
+                            >
+                              {row.publisher} · {row.title} #{row.issue_number}
+                            </Link>
+                            <div className="text-[11px] text-slate-500">{row.retailer}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${opsOrderArrivalTone(
+                                row.classification,
+                              )}`}
+                            >
+                              {opsOrderArrivalShortLabel(row.classification)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">{JSON.stringify(row.evidence_json)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-white">Calendar (dense daily grid)</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Each row is a calendar day showing copies keyed on declared release versus expected shipment dates (
+                    filtered set only).
+                  </p>
+                  <div className="mt-4 max-h-[28rem] overflow-auto rounded-2xl border border-white/10">
+                    <table className="min-w-full divide-y divide-white/10 text-left text-xs text-slate-200">
+                      <thead className="sticky top-0 bg-slate-950/95 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">Date</th>
+                          <th className="px-3 py-2">Release-dated picks</th>
+                          <th className="px-3 py-2">Expected ship picks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {opsOrderArrivalCalendar.rows
+                          .filter(
+                            (r) =>
+                              Boolean(r.on_release_date.length) ||
+                              Boolean(r.on_expected_ship_date.length),
+                          )
+                          .map((day) => (
+                            <tr key={day.calendar_date}>
+                              <td className="px-3 py-2 font-medium text-white">{day.calendar_date}</td>
+                              <td className="px-3 py-2 text-slate-400">
+                                {day.on_release_date
+                                  .map((c) => `${c.publisher} · ${c.title} #${c.issue_number}`)
+                                  .join(" · ") || "—"}
+                              </td>
+                              <td className="px-3 py-2 text-slate-400">
+                                {day.on_expected_ship_date
+                                  .map((c) => `${c.publisher} · ${c.title} #${c.issue_number}`)
+                                  .join(" · ") || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : opsOrderArrivalError ? null : (
+              <p className="mt-4 text-sm text-slate-400">Loading order / arrival overlays…</p>
             )}
           </details>
 

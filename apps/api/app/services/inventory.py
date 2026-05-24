@@ -28,6 +28,7 @@ from app.schemas.inventory import (
     PortfolioPerformanceResponse,
     ReleaseCalendarPresence,
 )
+from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.ops import (
     OpsInventoryDuplicateCandidateGroup,
     OpsInventoryDuplicateCopyRow,
@@ -40,6 +41,10 @@ from app.services.cover_images import list_cover_reads_for_inventory
 from app.services.duplicate_ownership_intelligence import duplicate_ownership_inventory_context_for_owner
 from app.services.inventory_intelligence import compute_inventory_intelligence
 from app.services.inventory_risks import compute_inventory_risks
+from app.services.order_arrival_intelligence import (
+    batch_order_arrival_classifications,
+    classifications_for_inventory_copy,
+)
 from app.services.order_states import derive_asset_state
 from app.services.run_detection import run_detection_inventory_context_for_owner
 
@@ -447,6 +452,7 @@ def list_inventory(
     risk_priority: str | None,
     risk_type: str | None,
     needs_attention: bool,
+    arrival_classification: OrderArrivalClassification | None,
     sort_by: str | None,
     sort_dir: str,
 ) -> InventoryListResponse:
@@ -468,6 +474,8 @@ def list_inventory(
         session,
         current_user=current_user,
     )
+
+    arrival_by_inventory = batch_order_arrival_classifications(session, user_id=int(current_user.id))
 
     def inventory_matches_risk_filters(inv_id: int) -> bool:
         if not (risk_priority or risk_type or needs_attention):
@@ -506,6 +514,14 @@ def list_inventory(
     if risk_priority or risk_type or needs_attention:
         risk_allowlist = {inv_id for inv_id in risks_by_inventory if inventory_matches_risk_filters(inv_id)}
         if not risk_allowlist:
+            return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
+
+    arrival_allowlist: set[int] | None = None
+    if arrival_classification:
+        arrival_allowlist = {
+            inv_id for inv_id, entries in arrival_by_inventory.items() if arrival_classification in entries
+        }
+        if not arrival_allowlist:
             return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
 
     filtered_stmt = apply_inventory_filters(
@@ -550,6 +566,11 @@ def list_inventory(
         filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
         total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
 
+    if arrival_allowlist is not None:
+        id_tuple = tuple(sorted(arrival_allowlist))
+        filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
+        total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
+
     paginated_stmt = apply_inventory_sort(filtered_stmt, sort_by, sort_dir).offset(
         (page - 1) * page_size
     ).limit(page_size)
@@ -564,6 +585,7 @@ def list_inventory(
         row_map["duplicate_ownership"] = dup_attachments.get(inv_pk)
         row_map["run_detection"] = run_attachments.get(inv_pk)
         row_map["inventory_risks"] = risks_by_inventory.get(inv_pk, [])
+        row_map["order_arrival_classifications"] = arrival_by_inventory.get(inv_pk, [])
         items.append(InventoryRow.model_validate(row_map))
 
     return InventoryListResponse(
@@ -688,6 +710,11 @@ def get_inventory_copy_detail(
     merged["run_detection"] = run_attachments.get(inventory_copy_id)
     _, _, risk_attach_map = compute_inventory_risks(session, current_user=current_user)
     merged["inventory_risks"] = risk_attach_map.get(inventory_copy_id, [])
+    merged["order_arrival_classifications"] = classifications_for_inventory_copy(
+        session,
+        inventory_copy_id=inventory_copy_id,
+        user_id=int(current_user.id),
+    )
     return InventoryDetailResponse.model_validate(merged)
 
 

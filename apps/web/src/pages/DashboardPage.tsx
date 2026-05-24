@@ -28,6 +28,8 @@ import {
   type InventoryRiskSummary,
   type InventoryRiskType,
   type SortBy,
+  type OrderArrivalClassification,
+  type OrderArrivalIntelSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -377,6 +379,85 @@ function InventoryRiskBadges(props: { risks?: InventoryRiskRead[] | null }): JSX
   );
 }
 
+function orderArrivalTone(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "overdue_expected_ship":
+    case "released_not_received":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "missing_release_date":
+    case "missing_expected_ship_date":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "upcoming_preorder":
+    case "releases_this_week":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "expected_to_ship_soon":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-100";
+    case "received_recently":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "cancelled_order":
+      return "border-white/15 bg-white/5 text-slate-300";
+    default:
+      return "border-white/15 bg-white/5 text-slate-300";
+  }
+}
+
+function orderArrivalLabelShort(value: OrderArrivalClassification): string {
+  switch (value) {
+    case "upcoming_preorder":
+      return "Upcoming preorder";
+    case "releases_this_week":
+      return "Release this week";
+    case "released_not_received":
+      return "Released / not recv";
+    case "expected_to_ship_soon":
+      return "Shipping soon";
+    case "overdue_expected_ship":
+      return "Shipment overdue";
+    case "received_recently":
+      return "Recently received";
+    case "cancelled_order":
+      return "Cancelled";
+    case "missing_release_date":
+      return "Missing release date";
+    case "missing_expected_ship_date":
+      return "Missing ship date";
+    default:
+      return value;
+  }
+}
+
+function OrderArrivalBadges(props: { classifications?: OrderArrivalClassification[] | null }): JSX.Element | null {
+  const list = props.classifications ?? [];
+  if (!list.length) {
+    return null;
+  }
+
+  const top = list.slice(0, 3);
+  const more = list.length - top.length;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {top.map((c) => (
+        <span
+          key={c}
+          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${orderArrivalTone(c)}`}
+        >
+          Ord: {orderArrivalLabelShort(c)}
+        </span>
+      ))}
+      {more > 0 ? (
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+          +{more} more
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function orderArrivalBucketCount(summary: OrderArrivalIntelSummary, key: OrderArrivalClassification): number {
+  const row = summary.by_classification.find((r) => r.key === key);
+  return typeof row?.count === "number" ? row.count : 0;
+}
 function totalInventoryIntelUnresolvedRollup(summary: InventoryIntelligenceRollupSummary): number {
   return (
     summary.unresolved_relationship_conflicts +
@@ -439,6 +520,7 @@ export function DashboardPage() {
   const [riskPriorityFilter, setRiskPriorityFilter] = useState<"" | InventoryRiskPriority>("");
   const [riskTypeFilter, setRiskTypeFilter] = useState<"" | InventoryRiskType>("");
   const [needsAttentionFilter, setNeedsAttentionFilter] = useState(false);
+  const [arrivalClassificationFilter, setArrivalClassificationFilter] = useState<"" | OrderArrivalClassification>("");
   const [sortBy, setSortBy] = useState<SortBy>("purchase_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [isLoading, setIsLoading] = useState(true);
@@ -459,6 +541,7 @@ export function DashboardPage() {
     null,
   );
   const [inventoryRiskSummary, setInventoryRiskSummary] = useState<InventoryRiskSummary | null>(null);
+  const [orderArrivalSummary, setOrderArrivalSummary] = useState<OrderArrivalIntelSummary | null>(null);
   const [duplicateOwnershipReport, setDuplicateOwnershipReport] =
     useState<DuplicateOwnershipListResponse | null>(null);
   const [runDetectionReport, setRunDetectionReport] = useState<RunDetectionListResponse | null>(null);
@@ -493,6 +576,7 @@ export function DashboardPage() {
       risk_priority: riskPriorityFilter || undefined,
       risk_type: riskTypeFilter || undefined,
       needs_attention: needsAttentionFilter || undefined,
+      arrival_classification: arrivalClassificationFilter || undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
@@ -509,6 +593,7 @@ export function DashboardPage() {
       ownershipIntelFilter,
       riskPriorityFilter,
       riskTypeFilter,
+      arrivalClassificationFilter,
       releaseYearFilter,
       search,
       sortBy,
@@ -522,6 +607,7 @@ export function DashboardPage() {
       performanceResponse,
       inventoryResponse,
       riskSummaryResponse,
+      orderArrivalSummaryResponse,
       dupOwnershipInsight,
       runDetectionInsight,
       caSummary,
@@ -532,6 +618,7 @@ export function DashboardPage() {
       apiClient.getPortfolioPerformance(),
       apiClient.getInventory(query),
       apiClient.getInventoryRisksSummary(),
+      apiClient.getOrderArrivalIntelligenceSummary(),
       apiClient.getDuplicateOwnershipList(),
       apiClient.getRunDetectionList(),
       apiClient.getCollectionAnalyticsSummary(),
@@ -543,6 +630,7 @@ export function DashboardPage() {
     setInventory(inventoryResponse.items);
     setTotal(inventoryResponse.total);
     setInventoryRiskSummary(riskSummaryResponse);
+    setOrderArrivalSummary(orderArrivalSummaryResponse);
     setDuplicateOwnershipReport(dupOwnershipInsight);
     setRunDetectionReport(runDetectionInsight);
     setCollectionAnalyticsSummary(caSummary);
@@ -568,6 +656,7 @@ export function DashboardPage() {
           intelSummary,
           intelHealth,
           riskSummary,
+          orderArrivalSummaryResponse,
           dupOwnership,
           runDetection,
           caSummary,
@@ -581,6 +670,7 @@ export function DashboardPage() {
             apiClient.getInventoryIntelligenceSummary(),
             apiClient.getInventoryIntelligenceHealth(),
             apiClient.getInventoryRisksSummary(),
+            apiClient.getOrderArrivalIntelligenceSummary(),
             apiClient.getDuplicateOwnershipList(),
             apiClient.getRunDetectionList(),
             apiClient.getCollectionAnalyticsSummary(),
@@ -599,6 +689,7 @@ export function DashboardPage() {
         setInventoryIntelSummary(intelSummary);
         setInventoryIntelHealth(intelHealth);
         setInventoryRiskSummary(riskSummary);
+        setOrderArrivalSummary(orderArrivalSummaryResponse);
         setDuplicateOwnershipReport(dupOwnership);
         setRunDetectionReport(runDetection);
         setCollectionAnalyticsSummary(caSummary);
@@ -908,6 +999,94 @@ export function DashboardPage() {
                       <td className="py-2 text-slate-400">
                         {item.evidence_preview.join(" · ")}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {orderArrivalSummary ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Order pipeline & arrivals</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Derived from purchase/release/ship timestamps and normalized order statuses. Read-only logistics
+                overlay (no FMV/pricing/speculation/automatic receiving).
+              </p>
+            </div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              As of {orderArrivalSummary.generated_as_of_date}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">
+                Releases this week
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {orderArrivalBucketCount(orderArrivalSummary, "releases_this_week")}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">
+                Released / not received
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {orderArrivalBucketCount(orderArrivalSummary, "released_not_received")}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Shipping soon</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {orderArrivalBucketCount(orderArrivalSummary, "expected_to_ship_soon")}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">Shipment overdue</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {orderArrivalBucketCount(orderArrivalSummary, "overdue_expected_ship")}
+              </p>
+            </article>
+          </div>
+          <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+            <h3 className="text-sm font-semibold text-white">Upcoming preorder / arrivals</h3>
+            <div className="mt-3 overflow-auto">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="pb-2 pr-3 font-medium">Copy</th>
+                    <th className="pb-2 pr-3 font-medium">Lanes</th>
+                    <th className="pb-2 font-medium">Evidence</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-200">
+                  {orderArrivalSummary.top_action_items.slice(0, 6).map((item) => (
+                    <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
+                      <td className="py-2 pr-3 font-medium text-white">
+                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                          {item.publisher} · {item.title} #{item.issue_number}
+                        </Link>
+                        <div className="text-[11px] text-slate-500">{item.retailer}</div>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="flex flex-wrap gap-1">
+                          {item.classifications.map((c) => (
+                            <span
+                              key={c}
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${orderArrivalTone(
+                                c,
+                              )}`}
+                            >
+                              {orderArrivalLabelShort(c)}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-2 text-slate-400">{item.evidence_preview.join(" · ")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1522,7 +1701,7 @@ export function DashboardPage() {
               </select>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <select
                 value={riskPriorityFilter}
                 onChange={(event) =>
@@ -1573,6 +1752,26 @@ export function DashboardPage() {
                 />
                 Needs attention only
               </label>
+              <select
+                value={arrivalClassificationFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setArrivalClassificationFilter(event.target.value as "" | OrderArrivalClassification);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any order/arrival classification</option>
+                <option value="upcoming_preorder">Upcoming preorder</option>
+                <option value="releases_this_week">Releases this week</option>
+                <option value="released_not_received">Released / not received</option>
+                <option value="expected_to_ship_soon">Shipping soon</option>
+                <option value="overdue_expected_ship">Shipment overdue</option>
+                <option value="received_recently">Received recently</option>
+                <option value="cancelled_order">Cancelled order</option>
+                <option value="missing_release_date">Missing release date</option>
+                <option value="missing_expected_ship_date">Missing ship date</option>
+              </select>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -1617,6 +1816,7 @@ export function DashboardPage() {
                   setRiskPriorityFilter("");
                   setRiskTypeFilter("");
                   setNeedsAttentionFilter(false);
+                  setArrivalClassificationFilter("");
                   setSortBy("purchase_date");
                   setSortDir("asc");
                   setPage(1);
@@ -1751,6 +1951,7 @@ export function DashboardPage() {
                       </p>
                       <InventoryIntelBadges item={item} />
                       <InventoryRiskBadges risks={item.inventory_risks} />
+                      <OrderArrivalBadges classifications={item.order_arrival_classifications} />
                     </td>
                     <td className="px-4 py-3.5">#{item.issue_number}</td>
                     <td className="align-top">{inventoryReleaseChronologyCell(item)}</td>
@@ -1919,6 +2120,7 @@ export function DashboardPage() {
                     </p>
                     <InventoryIntelBadges item={item} />
                     <InventoryRiskBadges risks={item.inventory_risks} />
+                    <OrderArrivalBadges classifications={item.order_arrival_classifications} />
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <input

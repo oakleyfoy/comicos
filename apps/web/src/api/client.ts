@@ -1743,6 +1743,117 @@ export interface InventoryRiskListResponse {
   risks: InventoryRiskRead[];
 }
 
+export type OrderArrivalClassification =
+  | "upcoming_preorder"
+  | "releases_this_week"
+  | "released_not_received"
+  | "expected_to_ship_soon"
+  | "overdue_expected_ship"
+  | "received_recently"
+  | "cancelled_order"
+  | "missing_release_date"
+  | "missing_expected_ship_date";
+
+export interface OrderArrivalIntelRead {
+  intel_key: string;
+  inventory_copy_id: number;
+  classification: OrderArrivalClassification;
+  retailer: string;
+  source_type: string | null;
+  publisher: string;
+  title: string;
+  issue_number: string;
+  order_item_quantity: number;
+  order_status: string;
+  release_status: string;
+  asset_state: string;
+  purchase_date?: string | null;
+  release_date?: string | null;
+  expected_ship_date?: string | null;
+  received_at?: string | null;
+  evidence_json: Record<string, unknown>;
+}
+
+export interface OrderArrivalIntelSummaryItem {
+  inventory_copy_id: number;
+  publisher: string;
+  title: string;
+  issue_number: string;
+  retailer: string;
+  classification_count: number;
+  classifications: OrderArrivalClassification[];
+  evidence_preview: string[];
+}
+
+export interface OrderArrivalIntelSummary {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  total_inventory_copies: number;
+  total_intel_items: number;
+  copies_tagged: number;
+  by_classification: KeyedInventoryCountRow[];
+  top_action_items: OrderArrivalIntelSummaryItem[];
+}
+
+export interface OrderArrivalIntelListResponse {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  total_count: number;
+  classification: OrderArrivalClassification | "all";
+  retailer: string | null;
+  publisher: string | null;
+  release_date_from: string | null;
+  release_date_to: string | null;
+  expected_ship_date_from: string | null;
+  expected_ship_date_to: string | null;
+  order_status: string;
+  in_hand_only: boolean;
+  summary: OrderArrivalIntelSummary;
+  items: OrderArrivalIntelRead[];
+}
+
+export interface OrderArrivalCalendarCell {
+  inventory_copy_id: number;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  retailer: string;
+  order_status: string;
+  release_status: string;
+  classifications: OrderArrivalClassification[];
+}
+
+export interface OrderArrivalCalendarRow {
+  calendar_date: string;
+  on_release_date: OrderArrivalCalendarCell[];
+  on_expected_ship_date: OrderArrivalCalendarCell[];
+}
+
+export interface OrderArrivalIntelCalendarResponse {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  calendar_start: string;
+  calendar_end: string;
+  rows: OrderArrivalCalendarRow[];
+}
+
+export type OrderArrivalIntelQueryParams = {
+  classification?: OrderArrivalClassification;
+  retailer?: string;
+  publisher?: string;
+  release_date_from?: string;
+  release_date_to?: string;
+  expected_ship_date_from?: string;
+  expected_ship_date_to?: string;
+  order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled";
+  in_hand_only?: boolean;
+  calendar_start?: string;
+  calendar_end?: string;
+};
+
 export interface InventoryItem {
   inventory_copy_id: number;
   title: string;
@@ -1775,6 +1886,7 @@ export interface InventoryItem {
   duplicate_ownership?: DuplicateOwnershipAttachment | null;
   run_detection?: RunDetectionAttachment | null;
   inventory_risks?: InventoryRiskRead[] | null;
+  order_arrival_classifications?: OrderArrivalClassification[] | null;
 }
 
 export interface InventoryDetail extends InventoryItem {
@@ -2153,6 +2265,7 @@ export interface InventoryQueryParams {
   risk_priority?: InventoryRiskPriority;
   risk_type?: InventoryRiskType;
   needs_attention?: boolean;
+  arrival_classification?: OrderArrivalClassification;
   sort_by?: SortBy;
   sort_dir?: "asc" | "desc";
 }
@@ -2475,6 +2588,66 @@ export const apiClient = {
     const query =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<InventoryRiskListResponse>(`/ops/inventory/${inventoryCopyId}/risks${query}`);
+  },
+
+  getOrderArrivalIntelligence(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelListResponse> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelListResponse>(`/order-arrival-intelligence${query}`);
+  },
+
+  getOrderArrivalIntelligenceSummary(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelSummary> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelSummary>(`/order-arrival-intelligence/summary${query}`);
+  },
+
+  getOrderArrivalCalendar(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelCalendarResponse> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelCalendarResponse>(`/order-arrival-intelligence/calendar${query}`);
+  },
+
+  getOpsOrderArrivalIntelligence(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelListResponse> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelListResponse>(`/ops/order-arrival-intelligence${query}`);
+  },
+
+  getOpsOrderArrivalIntelligenceSummary(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelSummary> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelSummary>(`/ops/order-arrival-intelligence/summary${query}`);
+  },
+
+  getOpsOrderArrivalCalendar(
+    params?: OrderArrivalIntelQueryParams,
+  ): Promise<OrderArrivalIntelCalendarResponse> {
+    const query =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<OrderArrivalIntelCalendarResponse>(`/ops/order-arrival-intelligence/calendar${query}`);
   },
 
   getCollectionAnalyticsSummary(as_of?: string): Promise<CollectionAnalyticsSummary> {
