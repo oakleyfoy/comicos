@@ -1743,6 +1743,97 @@ export interface InventoryRiskListResponse {
   risks: InventoryRiskRead[];
 }
 
+export type InventoryActionCenterCategory =
+  | "review_relationship_conflict"
+  | "review_canonical_suggestion"
+  | "review_duplicate_ownership"
+  | "review_duplicate_scan"
+  | "review_variant_family"
+  | "retry_ocr"
+  | "review_cover_processing"
+  | "scan_missing_cover"
+  | "update_preorder_metadata"
+  | "review_run_gap"
+  | "review_high_confidence_match";
+
+export interface InventoryActionCenterItem {
+  action_key: string;
+  action_category: InventoryActionCenterCategory;
+  priority: InventoryRiskPriority;
+  inventory_copy_id: number;
+  cover_image_id: number | null;
+  publisher: string;
+  title: string;
+  issue_number: string;
+  ownership_state: InventoryOwnershipNormalized;
+  release_status: "released" | "not_released_yet" | "unknown";
+  preorder_release_state_label: string;
+  evidence_summary_lines: string[];
+  evidence_json: Record<string, unknown>;
+  source: "inventory_risk" | "intelligence_duplicate_scan" | "intelligence_variant_family" | "order_arrival";
+}
+
+export interface InventoryActionCenterGrouping {
+  action_keys_by_inventory_copy_id: Record<string, string[]>;
+  action_keys_by_cover_image_id: Record<string, string[]>;
+  action_keys_by_series_key: Record<string, string[]>;
+  action_keys_by_publisher: Record<string, string[]>;
+  action_keys_by_ownership_state: Record<string, string[]>;
+  action_keys_by_preorder_release_state: Record<string, string[]>;
+}
+
+export interface InventoryActionCenterTopItem {
+  inventory_copy_id: number;
+  publisher: string;
+  title: string;
+  issue_number: string;
+  highest_lane_priority: InventoryRiskPriority;
+  ownership_state: InventoryOwnershipNormalized;
+  action_count: number;
+  action_categories: InventoryActionCenterCategory[];
+}
+
+export interface InventoryActionCenterSummary {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  total_inventory_copies: number;
+  total_actions: number;
+  copies_with_actions: number;
+  critical_actions: number;
+  high_actions: number;
+  medium_actions: number;
+  low_actions: number;
+  info_actions: number;
+  by_category: KeyedInventoryCountRow[];
+  by_priority_lane: KeyedInventoryCountRow[];
+  top_unresolved_inventory: InventoryActionCenterTopItem[];
+}
+
+export interface InventoryActionCenterListResponse {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  priority: InventoryRiskPriority | "all";
+  action_category: InventoryActionCenterCategory | "all";
+  ownership_state: InventoryOwnershipNormalized | "all";
+  publisher: string | null;
+  release_status: "released" | "not_released_yet" | "unknown" | "all";
+  unresolved_only: boolean;
+  in_hand_only: boolean;
+  inventory_copy_id_filter: number | null;
+  summary: InventoryActionCenterSummary;
+  grouping: InventoryActionCenterGrouping;
+  actions: InventoryActionCenterItem[];
+}
+
+export interface InventoryActionCenterAttachment {
+  action_keys: string[];
+  action_categories: InventoryActionCenterCategory[];
+  highest_lane_priority: InventoryRiskPriority | null;
+  urgent_lane: boolean;
+}
+
 export type OrderArrivalClassification =
   | "upcoming_preorder"
   | "releases_this_week"
@@ -1887,6 +1978,7 @@ export interface InventoryItem {
   run_detection?: RunDetectionAttachment | null;
   inventory_risks?: InventoryRiskRead[] | null;
   order_arrival_classifications?: OrderArrivalClassification[] | null;
+  inventory_action_center?: InventoryActionCenterAttachment | null;
 }
 
 export interface InventoryDetail extends InventoryItem {
@@ -2085,6 +2177,89 @@ export interface CollectionTimelineResponse {
   timeline: CollectionTimelineAnalytics;
 }
 
+export type CollectionHistoricalTimelineEventKind =
+  | "inventory_added"
+  | "preorder_created"
+  | "release_day"
+  | "expected_ship_window"
+  | "inventory_received"
+  | "scan_completed"
+  | "ocr_completed"
+  | "ocr_failed"
+  | "relationship_reviewed"
+  | "canonical_suggestion_reviewed"
+  | "conflict_detected"
+  | "conflict_resolved"
+  | "duplicate_detected"
+  | "variant_family_detected";
+
+export type CollectionHistoricalTimelineGrouping =
+  | "none"
+  | "day"
+  | "week"
+  | "month"
+  | "publisher"
+  | "series"
+  | "ownership_state"
+  | "preorder_vs_in_hand"
+  | "inventory_item";
+
+export type CollectionHistoricalTimelineSort = "asc" | "desc";
+
+export interface CollectionHistoricalTimelineFiltersEcho {
+  event_type: CollectionHistoricalTimelineEventKind | null;
+  publisher: string | null;
+  ownership_state: InventoryOwnershipNormalized | null;
+  release_status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  preorder_only: boolean;
+  in_hand_only: boolean;
+  inventory_copy_id: number | null;
+  grouping: CollectionHistoricalTimelineGrouping;
+  sort: CollectionHistoricalTimelineSort;
+}
+
+export interface CollectionHistoricalTimelineSummary {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  total_events_present: number;
+  truncated_to: number;
+  earliest_occurrence: string | null;
+  latest_occurrence: string | null;
+  counts_by_event_type: KeyedInventoryCountRow[];
+}
+
+export interface CollectionHistoricalTimelineEventRow {
+  stable_id: string;
+  event_type: CollectionHistoricalTimelineEventKind;
+  occurred_at: string;
+  inventory_copy_id: number;
+  publisher: string;
+  series_title: string;
+  issue_number: string;
+  ownership_state_snapshot: InventoryOwnershipNormalized;
+  release_status_snapshot: string;
+  preorder_track: boolean;
+  evidence_json: Record<string, unknown>;
+}
+
+export interface CollectionHistoricalTimelineEventGroupRow {
+  group_key: string;
+  events: CollectionHistoricalTimelineEventRow[];
+}
+
+export interface CollectionHistoricalTimelineEventsResponse {
+  scope_user_id: number | null;
+  scope: string;
+  generated_as_of_date: string;
+  summary: CollectionHistoricalTimelineSummary;
+  filters: CollectionHistoricalTimelineFiltersEcho;
+  events: CollectionHistoricalTimelineEventRow[];
+  groups: CollectionHistoricalTimelineEventGroupRow[];
+}
+
 export interface CollectionInventoryQuality {
   scope_active_copies_ex_cancelled: number;
   ocr_complete: CollectionAnalyticsPercentRollup;
@@ -2265,6 +2440,8 @@ export interface InventoryQueryParams {
   risk_priority?: InventoryRiskPriority;
   risk_type?: InventoryRiskType;
   needs_attention?: boolean;
+  action_attention?: boolean;
+  action_center_category?: InventoryActionCenterCategory;
   arrival_classification?: OrderArrivalClassification;
   sort_by?: SortBy;
   sort_dir?: "asc" | "desc";
@@ -2590,6 +2767,66 @@ export const apiClient = {
     return request<InventoryRiskListResponse>(`/ops/inventory/${inventoryCopyId}/risks${query}`);
   },
 
+  getInventoryActionCenter(params?: {
+    priority?: InventoryRiskPriority;
+    action_category?: InventoryActionCenterCategory;
+    ownership_state?: InventoryOwnershipNormalized;
+    publisher?: string;
+    release_status?: InventoryItem["release_status"];
+    unresolved_only?: boolean;
+    in_hand_only?: boolean;
+    inventory_copy_id?: number;
+  }): Promise<InventoryActionCenterListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<InventoryActionCenterListResponse>(`/inventory-action-center${query}`);
+  },
+
+  getInventoryActionCenterSummary(params?: {
+    priority?: InventoryRiskPriority;
+    action_category?: InventoryActionCenterCategory;
+    ownership_state?: InventoryOwnershipNormalized;
+    publisher?: string;
+    release_status?: InventoryItem["release_status"];
+    unresolved_only?: boolean;
+    in_hand_only?: boolean;
+    inventory_copy_id?: number;
+  }): Promise<InventoryActionCenterSummary> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<InventoryActionCenterSummary>(`/inventory-action-center/summary${query}`);
+  },
+
+  getOpsInventoryActionCenter(params?: {
+    priority?: InventoryRiskPriority;
+    action_category?: InventoryActionCenterCategory;
+    ownership_state?: InventoryOwnershipNormalized;
+    publisher?: string;
+    release_status?: InventoryItem["release_status"];
+    unresolved_only?: boolean;
+    in_hand_only?: boolean;
+    inventory_copy_id?: number;
+  }): Promise<InventoryActionCenterListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<InventoryActionCenterListResponse>(`/ops/inventory-action-center${query}`);
+  },
+
+  getOpsInventoryActionCenterSummary(params?: {
+    priority?: InventoryRiskPriority;
+    action_category?: InventoryActionCenterCategory;
+    ownership_state?: InventoryOwnershipNormalized;
+    publisher?: string;
+    release_status?: InventoryItem["release_status"];
+    unresolved_only?: boolean;
+    in_hand_only?: boolean;
+    inventory_copy_id?: number;
+  }): Promise<InventoryActionCenterSummary> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<InventoryActionCenterSummary>(`/ops/inventory-action-center/summary${query}`);
+  },
+
   getOrderArrivalIntelligence(
     params?: OrderArrivalIntelQueryParams,
   ): Promise<OrderArrivalIntelListResponse> {
@@ -2648,6 +2885,98 @@ export const apiClient = {
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
     return request<OrderArrivalIntelCalendarResponse>(`/ops/order-arrival-intelligence/calendar${query}`);
+  },
+
+  getCollectionHistoricalTimeline(params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    release_status?: InventoryItem["release_status"];
+    start_date?: string;
+    end_date?: string;
+    preorder_only?: boolean;
+    in_hand_only?: boolean;
+    grouping?: CollectionHistoricalTimelineGrouping;
+    sort?: CollectionHistoricalTimelineSort;
+    limit?: number;
+  }): Promise<CollectionHistoricalTimelineEventsResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineEventsResponse>(`/collection-timeline${query}`);
+  },
+
+  getCollectionHistoricalTimelineSummary(params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    release_status?: InventoryItem["release_status"];
+    start_date?: string;
+    end_date?: string;
+    preorder_only?: boolean;
+    in_hand_only?: boolean;
+  }): Promise<CollectionHistoricalTimelineSummary> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineSummary>(`/collection-timeline/summary${query}`);
+  },
+
+  getInventoryHistoricalTimeline(inventoryCopyId: number, params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    grouping?: CollectionHistoricalTimelineGrouping;
+    sort?: CollectionHistoricalTimelineSort;
+    limit?: number;
+  }): Promise<CollectionHistoricalTimelineEventsResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineEventsResponse>(
+      `/inventory/${inventoryCopyId}/timeline${query}`,
+    );
+  },
+
+  getOpsCollectionHistoricalTimeline(params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    release_status?: InventoryItem["release_status"];
+    start_date?: string;
+    end_date?: string;
+    preorder_only?: boolean;
+    in_hand_only?: boolean;
+    grouping?: CollectionHistoricalTimelineGrouping;
+    sort?: CollectionHistoricalTimelineSort;
+    limit?: number;
+  }): Promise<CollectionHistoricalTimelineEventsResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineEventsResponse>(`/ops/collection-timeline${query}`);
+  },
+
+  getOpsCollectionHistoricalTimelineSummary(params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    release_status?: InventoryItem["release_status"];
+    start_date?: string;
+    end_date?: string;
+    preorder_only?: boolean;
+    in_hand_only?: boolean;
+  }): Promise<CollectionHistoricalTimelineSummary> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineSummary>(`/ops/collection-timeline/summary${query}`);
+  },
+
+  getOpsInventoryHistoricalTimeline(inventoryCopyId: number, params?: {
+    event_type?: CollectionHistoricalTimelineEventKind;
+    grouping?: CollectionHistoricalTimelineGrouping;
+    sort?: CollectionHistoricalTimelineSort;
+    limit?: number;
+  }): Promise<CollectionHistoricalTimelineEventsResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<CollectionHistoricalTimelineEventsResponse>(
+      `/ops/inventory/${inventoryCopyId}/timeline${query}`,
+    );
   },
 
   getCollectionAnalyticsSummary(as_of?: string): Promise<CollectionAnalyticsSummary> {

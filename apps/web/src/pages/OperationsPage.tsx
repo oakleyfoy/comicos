@@ -21,6 +21,9 @@ import {
   type CollectionQualityAnalyticsResponse,
   type CollectionTimelineResponse,
   type InventoryRiskListResponse,
+  type InventoryActionCenterCategory,
+  type InventoryActionCenterItem,
+  type InventoryActionCenterListResponse,
   type InventoryRiskPriority,
   type InventoryRiskRead,
   type InventoryRiskType,
@@ -63,7 +66,14 @@ import {
   type RunDetectionSeriesStatus,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
+  type CollectionHistoricalTimelineEventKind,
+  type CollectionHistoricalTimelineEventsResponse,
+  type CollectionHistoricalTimelineGrouping,
+  type CollectionHistoricalTimelineSort,
+  type InventoryItem,
+  type InventoryOwnershipNormalized,
 } from "../api/client";
+import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { AppShell } from "../components/AppShell";
 import { LoadingState } from "../components/LoadingState";
 import { OcrReviewWorkspace } from "../components/ocr-review/OcrReviewWorkspace";
@@ -106,6 +116,52 @@ function formatDateTime(value: string | null): string {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+type OpsHistoricalTimelineFilters = {
+  event_type: "" | CollectionHistoricalTimelineEventKind;
+  publisher: string;
+  ownership_state: "" | InventoryOwnershipNormalized;
+  release_status: "" | InventoryItem["release_status"];
+  start_date: string;
+  end_date: string;
+  preorder_only: boolean;
+  in_hand_only: boolean;
+  grouping: CollectionHistoricalTimelineGrouping;
+  sort: CollectionHistoricalTimelineSort;
+};
+
+function defaultOpsHistoricalTimelineFilters(): OpsHistoricalTimelineFilters {
+  return {
+    event_type: "",
+    publisher: "",
+    ownership_state: "",
+    release_status: "",
+    start_date: "",
+    end_date: "",
+    preorder_only: false,
+    in_hand_only: false,
+    grouping: "day",
+    sort: "desc",
+  };
+}
+
+/** Deterministic enumeration for timeline filter selects (aligned with backend event kinds). */
+const OPS_COLLECTION_HISTORICAL_EVENT_TYPES: CollectionHistoricalTimelineEventKind[] = [
+  "inventory_added",
+  "preorder_created",
+  "release_day",
+  "expected_ship_window",
+  "inventory_received",
+  "scan_completed",
+  "ocr_completed",
+  "ocr_failed",
+  "relationship_reviewed",
+  "canonical_suggestion_reviewed",
+  "conflict_detected",
+  "conflict_resolved",
+  "duplicate_detected",
+  "variant_family_detected",
+];
 
 function inventoryRiskPriorityTone(priority: InventoryRiskPriority): string {
   switch (priority) {
@@ -158,6 +214,49 @@ function inventoryRiskEvidenceSummary(risk: InventoryRiskRead): string {
   }
   return entries
     .slice(0, 3)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+    .join(" · ");
+}
+
+function inventoryActionCenterCategoryUiLabel(cat: InventoryActionCenterCategory): string {
+  switch (cat) {
+    case "review_relationship_conflict":
+      return "Relationship conflict";
+    case "review_canonical_suggestion":
+      return "Canonical suggestion";
+    case "review_duplicate_ownership":
+      return "Duplicate ownership";
+    case "review_duplicate_scan":
+      return "Duplicate scan cluster";
+    case "review_variant_family":
+      return "Variant family";
+    case "retry_ocr":
+      return "Retry OCR";
+    case "review_cover_processing":
+      return "Cover processing";
+    case "scan_missing_cover":
+      return "Missing cover scan";
+    case "update_preorder_metadata":
+      return "Preorder metadata";
+    case "review_run_gap":
+      return "Run gap";
+    case "review_high_confidence_match":
+      return "High-confidence match";
+    default:
+      return cat;
+  }
+}
+
+function inventoryActionEvidenceSummary(action: InventoryActionCenterItem): string {
+  if (action.evidence_summary_lines.length) {
+    return action.evidence_summary_lines.slice(0, 2).join(" · ");
+  }
+  const entries = Object.entries(action.evidence_json);
+  if (!entries.length) {
+    return "No evidence payload";
+  }
+  return entries
+    .slice(0, 2)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
     .join(" · ");
 }
@@ -700,6 +799,11 @@ export function OperationsPage() {
   const [opsInventoryRiskOpenOnly, setOpsInventoryRiskOpenOnly] = useState(true);
   const [opsInventoryRiskError, setOpsInventoryRiskError] = useState<string | null>(null);
 
+  const [opsIacReport, setOpsIacReport] = useState<InventoryActionCenterListResponse | null>(null);
+  const [opsIacPriority, setOpsIacPriority] = useState<"" | InventoryRiskPriority>("");
+  const [opsIacCategory, setOpsIacCategory] = useState<"" | InventoryActionCenterCategory>("");
+  const [opsIacError, setOpsIacError] = useState<string | null>(null);
+
   const [opsOrderArrivalReport, setOpsOrderArrivalReport] = useState<OrderArrivalIntelListResponse | null>(null);
   const [opsOrderArrivalCalendar, setOpsOrderArrivalCalendar] = useState<OrderArrivalIntelCalendarResponse | null>(
     null,
@@ -717,6 +821,17 @@ export function OperationsPage() {
     useState<CollectionCompositionResponse | null>(null);
   const [opsCollectionTimeline, setOpsCollectionTimeline] = useState<CollectionTimelineResponse | null>(null);
   const [opsCollectionAnalyticsError, setOpsCollectionAnalyticsError] = useState<string | null>(null);
+
+  const [opsHistoricalTimelineDraft, setOpsHistoricalTimelineDraft] = useState<OpsHistoricalTimelineFilters>(() =>
+    defaultOpsHistoricalTimelineFilters(),
+  );
+  const [opsHistoricalTimelineApplied, setOpsHistoricalTimelineApplied] = useState<OpsHistoricalTimelineFilters>(() =>
+    defaultOpsHistoricalTimelineFilters(),
+  );
+  const [opsHistoricalTimelinePayload, setOpsHistoricalTimelinePayload] =
+    useState<CollectionHistoricalTimelineEventsResponse | null>(null);
+  const [opsHistoricalTimelineLoading, setOpsHistoricalTimelineLoading] = useState(false);
+  const [opsHistoricalTimelineError, setOpsHistoricalTimelineError] = useState<string | null>(null);
 
   const [duplicateScanClustersFilter, setDuplicateScanClustersFilter] =
     useState<DuplicateScanClassificationFilter>("all");
@@ -874,6 +989,34 @@ export function OperationsPage() {
   useEffect(() => {
     let ignore = false;
     void (async () => {
+      setOpsIacError(null);
+      try {
+        const response = await apiClient.getOpsInventoryActionCenter({
+          priority: opsIacPriority || undefined,
+          action_category: opsIacCategory || undefined,
+        });
+        if (!ignore) {
+          setOpsIacReport(response);
+        }
+      } catch (loadOpsIacError) {
+        if (!ignore) {
+          setOpsIacReport(null);
+          setOpsIacError(
+            loadOpsIacError instanceof ApiError
+              ? loadOpsIacError.message
+              : "Unable to load global inventory action center.",
+          );
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsIacPriority, opsIacCategory]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
       setOpsOrderArrivalError(null);
       try {
         const params = {
@@ -942,6 +1085,48 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsHistoricalTimelineLoading(true);
+      setOpsHistoricalTimelineError(null);
+      try {
+        const response = await apiClient.getOpsCollectionHistoricalTimeline({
+          event_type: opsHistoricalTimelineApplied.event_type || undefined,
+          publisher: opsHistoricalTimelineApplied.publisher.trim() || undefined,
+          ownership_state: opsHistoricalTimelineApplied.ownership_state || undefined,
+          release_status: opsHistoricalTimelineApplied.release_status || undefined,
+          start_date: opsHistoricalTimelineApplied.start_date || undefined,
+          end_date: opsHistoricalTimelineApplied.end_date || undefined,
+          preorder_only: opsHistoricalTimelineApplied.preorder_only ? true : undefined,
+          in_hand_only: opsHistoricalTimelineApplied.in_hand_only ? true : undefined,
+          grouping: opsHistoricalTimelineApplied.grouping,
+          sort: opsHistoricalTimelineApplied.sort,
+          limit: 150,
+        });
+        if (!ignore) {
+          setOpsHistoricalTimelinePayload(response);
+        }
+      } catch (histErr) {
+        if (!ignore) {
+          setOpsHistoricalTimelinePayload(null);
+          setOpsHistoricalTimelineError(
+            histErr instanceof ApiError
+              ? histErr.message
+              : "Unable to load global historical collection timeline.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsHistoricalTimelineLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsHistoricalTimelineApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -2180,6 +2365,139 @@ export function OperationsPage() {
 
           <details className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
             <summary className="cursor-pointer list-none text-sm font-semibold text-white">
+              Global inventory action center
+            </summary>
+            <p className="mt-2 text-sm text-slate-400">
+              Cross-tenant deterministic workflow rollup (risk lanes, intelligence signals, preorder gaps where
+              distinct, arrivals). Mirrors owner Dashboard semantics at ops scope — visibility only.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Priority lane
+                <select
+                  className="rounded-2xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsIacPriority}
+                  onChange={(event) => setOpsIacPriority(event.target.value as "" | InventoryRiskPriority)}
+                >
+                  <option value="">All</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                  <option value="info">Info</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Action category
+                <select
+                  className="rounded-2xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsIacCategory}
+                  onChange={(event) =>
+                    setOpsIacCategory(event.target.value as "" | InventoryActionCenterCategory)
+                  }
+                >
+                  <option value="">All</option>
+                  <option value="review_relationship_conflict">
+                    {inventoryActionCenterCategoryUiLabel("review_relationship_conflict")}
+                  </option>
+                  <option value="review_canonical_suggestion">
+                    {inventoryActionCenterCategoryUiLabel("review_canonical_suggestion")}
+                  </option>
+                  <option value="review_duplicate_ownership">
+                    {inventoryActionCenterCategoryUiLabel("review_duplicate_ownership")}
+                  </option>
+                  <option value="review_duplicate_scan">
+                    {inventoryActionCenterCategoryUiLabel("review_duplicate_scan")}
+                  </option>
+                  <option value="review_variant_family">
+                    {inventoryActionCenterCategoryUiLabel("review_variant_family")}
+                  </option>
+                  <option value="retry_ocr">{inventoryActionCenterCategoryUiLabel("retry_ocr")}</option>
+                  <option value="review_cover_processing">
+                    {inventoryActionCenterCategoryUiLabel("review_cover_processing")}
+                  </option>
+                  <option value="scan_missing_cover">
+                    {inventoryActionCenterCategoryUiLabel("scan_missing_cover")}
+                  </option>
+                  <option value="update_preorder_metadata">
+                    {inventoryActionCenterCategoryUiLabel("update_preorder_metadata")}
+                  </option>
+                  <option value="review_run_gap">{inventoryActionCenterCategoryUiLabel("review_run_gap")}</option>
+                  <option value="review_high_confidence_match">
+                    {inventoryActionCenterCategoryUiLabel("review_high_confidence_match")}
+                  </option>
+                </select>
+              </label>
+            </div>
+            {opsIacError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{opsIacError}</StatusBanner>
+              </div>
+            ) : null}
+            {opsIacReport ? (
+              <>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                  <StatCard
+                    label="Critical actions"
+                    value={String(opsIacReport.summary.critical_actions)}
+                  />
+                  <StatCard label="High actions" value={String(opsIacReport.summary.high_actions)} />
+                  <StatCard label="Medium actions" value={String(opsIacReport.summary.medium_actions)} />
+                  <StatCard label="Low actions" value={String(opsIacReport.summary.low_actions)} />
+                  <StatCard label="Copies with actions" value={String(opsIacReport.summary.copies_with_actions)} />
+                  <StatCard label="Total actions" value={String(opsIacReport.summary.total_actions)} />
+                </div>
+                <p className="mt-3 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  As of {opsIacReport.generated_as_of_date}
+                </p>
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="min-w-full divide-y divide-white/10 text-left text-sm text-slate-200">
+                    <thead className="bg-white/5 text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">Copy</th>
+                        <th className="px-4 py-3">Category</th>
+                        <th className="px-4 py-3">Lane</th>
+                        <th className="px-4 py-3">Source</th>
+                        <th className="px-4 py-3">Evidence</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {opsIacReport.actions.slice(0, 40).map((action) => (
+                        <tr key={action.action_key}>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/inventory/${action.inventory_copy_id}`}
+                              className="font-medium text-white hover:text-cyan-200"
+                            >
+                              {action.publisher} · {action.title} #{action.issue_number}
+                            </Link>
+                            <p className="mt-1 text-[11px] text-slate-500">Copy #{action.inventory_copy_id}</p>
+                          </td>
+                          <td className="px-4 py-3">{inventoryActionCenterCategoryUiLabel(action.action_category)}</td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${inventoryRiskPriorityTone(
+                                action.priority,
+                              )}`}
+                            >
+                              {action.priority}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">{action.source.replace(/_/g, " ")}</td>
+                          <td className="px-4 py-3 text-slate-400">{inventoryActionEvidenceSummary(action)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="mt-4 text-sm text-slate-400">Loading global inventory action center…</p>
+            )}
+          </details>
+
+          <details className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-white">
               Global order &amp; arrival intelligence
             </summary>
             <p className="mt-2 text-sm text-slate-400">
@@ -2397,6 +2715,396 @@ export function OperationsPage() {
                 No unhealthy sampled inventory IDs (all copies currently classify as healthy, or trackers are idle).
               </p>
             ) : null}
+          </details>
+
+          <details className="mt-6 rounded-3xl border border-cyan-400/25 bg-slate-900/70 p-5 shadow-xl shadow-black/25">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-white">
+              Global historical collection timeline
+            </summary>
+            <p className="mt-2 text-sm text-slate-400">
+              Deterministic event stream across every copy: preorder anchors, release / ship cues, arrivals, scans,
+              OCR (including replays), relationship reviews and replays, canonical suggestion reviews, conflict
+              detection and resolution, duplicate reviews, variant-family clustering — surfaced as factual timestamps
+              only (no valuations, speculative signals, summaries, or write actions from this lane).
+            </p>
+            {opsHistoricalTimelineError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{opsHistoricalTimelineError}</StatusBanner>
+              </div>
+            ) : null}
+            <div className="mt-4 grid gap-4 lg:grid-cols-6">
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500 lg:col-span-2">
+                Event type (optional)
+                <select
+                  value={opsHistoricalTimelineDraft.event_type}
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({
+                      ...prev,
+                      event_type: event.target.value as OpsHistoricalTimelineFilters["event_type"],
+                    }))
+                  }
+                >
+                  <option value="">All types</option>
+                  {OPS_COLLECTION_HISTORICAL_EVENT_TYPES.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500 lg:col-span-2">
+                Publisher contains
+                <input
+                  type="text"
+                  value={opsHistoricalTimelineDraft.publisher}
+                  placeholder="Substring match upstream"
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white placeholder:text-slate-600"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({ ...prev, publisher: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                Ownership snapshot (optional)
+                <select
+                  value={opsHistoricalTimelineDraft.ownership_state}
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({
+                      ...prev,
+                      ownership_state: event.target.value as OpsHistoricalTimelineFilters["ownership_state"],
+                    }))
+                  }
+                >
+                  <option value="">All</option>
+                  <option value="preorder">Preorder</option>
+                  <option value="ordered_not_received">Ordered (not received)</option>
+                  <option value="in_hand">In hand</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="unknown_state">Unknown state</option>
+                </select>
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                Release status (optional)
+                <select
+                  value={opsHistoricalTimelineDraft.release_status}
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({
+                      ...prev,
+                      release_status: event.target.value as OpsHistoricalTimelineFilters["release_status"],
+                    }))
+                  }
+                >
+                  <option value="">All</option>
+                  <option value="released">Released</option>
+                  <option value="not_released_yet">Not released yet</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                Start date
+                <input
+                  type="date"
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsHistoricalTimelineDraft.start_date}
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({ ...prev, start_date: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                End date
+                <input
+                  type="date"
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  value={opsHistoricalTimelineDraft.end_date}
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({ ...prev, end_date: event.target.value }))
+                  }
+                />
+              </label>
+              <fieldset className="flex flex-wrap items-center gap-4 lg:col-span-2">
+                <label className="inline-flex items-center gap-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={opsHistoricalTimelineDraft.preorder_only}
+                    onChange={(event) =>
+                      setOpsHistoricalTimelineDraft((prev) => ({
+                        ...prev,
+                        preorder_only: event.target.checked,
+                        in_hand_only: event.target.checked ? false : prev.in_hand_only,
+                      }))
+                    }
+                  />
+                  Preorder-track only
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={opsHistoricalTimelineDraft.in_hand_only}
+                    onChange={(event) =>
+                      setOpsHistoricalTimelineDraft((prev) => ({
+                        ...prev,
+                        in_hand_only: event.target.checked,
+                        preorder_only: event.target.checked ? false : prev.preorder_only,
+                      }))
+                    }
+                  />
+                  In-hand snapshot only
+                </label>
+              </fieldset>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                Grouping
+                <select
+                  value={opsHistoricalTimelineDraft.grouping}
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({
+                      ...prev,
+                      grouping: event.target.value as CollectionHistoricalTimelineGrouping,
+                    }))
+                  }
+                >
+                  <option value="none">None (flat chronological)</option>
+                  <option value="day">Day</option>
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                  <option value="publisher">Publisher</option>
+                  <option value="series">Series</option>
+                  <option value="ownership_state">Ownership state snapshot</option>
+                  <option value="preorder_vs_in_hand">Preorder vs in-hand</option>
+                  <option value="inventory_item">Inventory item</option>
+                </select>
+              </label>
+              <label className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                Sort
+                <select
+                  value={opsHistoricalTimelineDraft.sort}
+                  className="mt-1 block w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                  onChange={(event) =>
+                    setOpsHistoricalTimelineDraft((prev) => ({
+                      ...prev,
+                      sort: event.target.value as CollectionHistoricalTimelineSort,
+                    }))
+                  }
+                >
+                  <option value="desc">Newest first</option>
+                  <option value="asc">Oldest first</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={opsHistoricalTimelineLoading}
+                className="inline-flex rounded-full bg-cyan-500/90 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setOpsHistoricalTimelineApplied({ ...opsHistoricalTimelineDraft })}
+              >
+                {opsHistoricalTimelineLoading ? "Applying…" : "Apply timeline filters"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/5 disabled:opacity-50"
+                disabled={opsHistoricalTimelineLoading}
+                onClick={() => {
+                  const baseline = defaultOpsHistoricalTimelineFilters();
+                  setOpsHistoricalTimelineDraft(baseline);
+                  setOpsHistoricalTimelineApplied(baseline);
+                }}
+              >
+                Reset filters & reload defaults
+              </button>
+              {opsHistoricalTimelineLoading ? (
+                <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+                  <span className="inline-flex size-2 animate-pulse rounded-full bg-cyan-400/80" />
+                  Fetching deterministic rows…
+                </span>
+              ) : null}
+            </div>
+            {opsHistoricalTimelinePayload ? (
+              <div className="mt-4 space-y-5">
+                <p className="text-xs text-slate-500">
+                  As-of {opsHistoricalTimelinePayload.generated_as_of_date} · Persisted fleet events counted at{" "}
+                  {opsHistoricalTimelinePayload.summary.total_events_present}; response truncated to{" "}
+                  {opsHistoricalTimelinePayload.summary.truncated_to} rows (sorted{" "}
+                  {opsHistoricalTimelinePayload.filters.sort}).
+                  {opsHistoricalTimelinePayload.events.length <
+                  opsHistoricalTimelinePayload.summary.total_events_present ? (
+                    <span className="text-amber-200/90">
+                      {" "}
+                      Expand date windows or tighten filters locally if you need narrower slices instead of widening the cap.
+                    </span>
+                  ) : null}
+                </p>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Reconciliation-focused feed</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Link decisions / replays, canonical reviews, conflict lifecycle moves, duplicates, variant family
+                    detections — same ordering as timeline API within this reconciliation slice.
+                  </p>
+                  <div className="mt-3 max-h-60 overflow-auto rounded-2xl border border-white/10 bg-slate-950/55">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="sticky top-0 bg-slate-950/95 px-3 py-2">When</th>
+                          <th className="sticky top-0 bg-slate-950/95 px-3 py-2">Signal</th>
+                          <th className="sticky top-0 bg-slate-950/95 px-3 py-2">Publisher / series</th>
+                          <th className="sticky top-0 bg-slate-950/95 px-3 py-2">Copy</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-200">
+                        {(() => {
+                          const recon = opsHistoricalTimelinePayload.events.filter((ev) =>
+                            [
+                              "relationship_reviewed",
+                              "canonical_suggestion_reviewed",
+                              "conflict_detected",
+                              "conflict_resolved",
+                              "duplicate_detected",
+                              "variant_family_detected",
+                            ].includes(ev.event_type),
+                          );
+                          const rows = recon.slice(0, 24);
+                          if (!rows.length) {
+                            return (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-4 text-xs text-slate-500">
+                                  No reconciliation-class events in current window ({recon.length} filtered).
+                                </td>
+                              </tr>
+                            );
+                          }
+                          return rows.map((event) => (
+                            <tr key={`ops-recon-${event.stable_id}`} className="border-t border-white/5">
+                              <td className="align-top whitespace-nowrap px-3 py-2 text-[11px] text-slate-400">
+                                {formatDateTime(event.occurred_at)}
+                              </td>
+                              <td className="align-top px-3 py-2">
+                                <p className="font-semibold text-white">{describeHistoricalTimelineEvent(event)}</p>
+                                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                  {event.event_type.replace(/_/g, " ")}
+                                </p>
+                              </td>
+                              <td className="align-top px-3 py-2">
+                                <p>{event.publisher}</p>
+                                <p className="text-[11px] text-slate-400">
+                                  {event.series_title} #{event.issue_number}
+                                </p>
+                              </td>
+                              <td className="align-top px-3 py-2">
+                                <Link
+                                  to={`/inventory/${event.inventory_copy_id}`}
+                                  className="text-cyan-200 hover:text-cyan-50"
+                                >
+                                  #{event.inventory_copy_id}
+                                </Link>
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-baseline gap-3">
+                    <h3 className="text-sm font-semibold text-white">Full timeline lane</h3>
+                    <span className="text-[11px] text-slate-500">
+                      Group mode:{" "}
+                      <span className="font-semibold text-slate-300">
+                        {opsHistoricalTimelinePayload.filters.grouping}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-3 max-h-[28rem] space-y-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                    {opsHistoricalTimelinePayload.filters.grouping !== "none"
+                    && opsHistoricalTimelinePayload.groups.length ? (
+                      opsHistoricalTimelinePayload.groups.map((group) => (
+                        <article key={`ops-grp-${group.group_key}`} className="rounded-xl border border-white/10 p-3">
+                          <header className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {group.group_key.replace(/__/g, " · ") || "Grouped window"}
+                          </header>
+                          <ul className="mt-3 space-y-2">
+                            {group.events.map((event) => (
+                              <li
+                                key={`ops-grp-ev-${event.stable_id}`}
+                                className="flex gap-2 rounded-lg border border-white/5 bg-slate-950/55 px-2 py-2 text-xs text-slate-200"
+                              >
+                                <span
+                                  className={`mt-1 inline-block size-2 shrink-0 rounded-full ${timelineDotClass(event)}`}
+                                  aria-hidden
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap gap-2 font-semibold text-white">
+                                    <span>{describeHistoricalTimelineEvent(event)}</span>
+                                    <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-slate-500">
+                                      {event.event_type.replace(/_/g, " ")}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500">{formatDateTime(event.occurred_at)}</p>
+                                  <p className="text-[11px] text-slate-400">{event.publisher}</p>
+                                  <p className="text-[11px] text-slate-400">
+                                    {event.series_title} #{event.issue_number} · preorder track{" "}
+                                    {event.preorder_track ? "yes" : "no"}
+                                  </p>
+                                  <Link
+                                    to={`/inventory/${event.inventory_copy_id}`}
+                                    className="inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-50"
+                                  >
+                                    Open #{event.inventory_copy_id}
+                                  </Link>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))
+                    ) : opsHistoricalTimelinePayload.events.length ? (
+                      <ul className="space-y-2">
+                        {opsHistoricalTimelinePayload.events.map((event) => (
+                          <li
+                            key={`ops-all-${event.stable_id}`}
+                            className="flex gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-2 py-2 text-xs text-slate-200"
+                          >
+                            <span
+                              className={`mt-1 inline-block size-2 shrink-0 rounded-full ${timelineDotClass(event)}`}
+                              aria-hidden
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap gap-2 font-semibold text-white">
+                                <span>{describeHistoricalTimelineEvent(event)}</span>
+                                <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-slate-500">
+                                  {event.event_type.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500">{formatDateTime(event.occurred_at)}</p>
+                              <p className="text-[11px] text-slate-400">{event.publisher}</p>
+                              <p className="text-[11px] text-slate-400">{event.series_title} #{event.issue_number}</p>
+                              <Link
+                                to={`/inventory/${event.inventory_copy_id}`}
+                                className="inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-50"
+                              >
+                                Open #{event.inventory_copy_id}
+                              </Link>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="py-10 text-center text-xs text-slate-500">
+                        No deterministic events returned for filters (narrow range or widen window).
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : !opsHistoricalTimelineLoading ? (
+              <p className="mt-6 text-xs text-slate-500">Timeline unavailable — reload after resolving error.</p>
+            ) : (
+              <p className="mt-6 text-sm text-slate-400">Initializing historical timeline lane…</p>
+            )}
           </details>
 
           <details className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">

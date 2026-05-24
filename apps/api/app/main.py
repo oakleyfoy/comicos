@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -12,7 +12,7 @@ from app.api.deps import get_current_user
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_session
-from app.models import User
+from app.models import InventoryCopy, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
 
@@ -22,6 +22,14 @@ from app.schemas.collection_analytics import (
     CollectionPublisherAnalyticsResponse,
     CollectionQualityAnalyticsResponse,
     CollectionTimelineResponse,
+)
+from app.schemas.collection_timeline import (
+    CollectionTimelineEventType,
+    CollectionTimelineEventsResponse,
+    CollectionTimelineGrouping,
+    CollectionTimelineSort,
+    CollectionTimelineSummary,
+    OwnershipStateFilter as CollectionTimelineOwnershipStateFilter,
 )
 from app.schemas.canonical_issue_link_suggestions import (
     CanonicalIssueLinkSuggestionRead,
@@ -363,6 +371,7 @@ from app.services.collection_analytics import (
     analyze_collection_summary,
     analyze_collection_timeline,
 )
+from app.services.collection_timeline import timeline_events_for_scope
 from app.services.inventory_intelligence import compute_inventory_intelligence
 from app.services.metadata_aliases import (
     create_metadata_alias,
@@ -726,6 +735,138 @@ def ops_collection_analytics_composition(
         projection_user_filter=None,
         intel_user=None,
         as_of_date=as_of,
+    )
+
+
+@app.get(
+    "/ops/collection-timeline",
+    response_model=CollectionTimelineEventsResponse,
+    include_in_schema=False,
+)
+def ops_collection_timeline_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    publisher: Annotated[str | None, Query(description="Case-insensitive substring match on publisher label.")] = None,
+    ownership_state: Annotated[
+        CollectionTimelineOwnershipStateFilter | None,
+        Query(description="Filter rows to copies whose current normalized ownership matches."),
+    ] = None,
+    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
+    preorder_only: bool = False,
+    in_hand_only: bool = False,
+    grouping: Annotated[CollectionTimelineGrouping, Query()] = "none",
+    sort: Annotated[CollectionTimelineSort, Query()] = "desc",
+    limit: Annotated[int, Query(ge=1, le=500)] = 280,
+) -> CollectionTimelineEventsResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=None,
+        event_type_filter=event_type,
+        publisher=publisher,
+        ownership_filter=ownership_state,
+        release_status=release_status,
+        start_date=start_date,
+        end_date=end_date,
+        preorder_only=preorder_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id=None,
+        grouping=grouping,
+        sort=sort,
+        limit=limit,
+        return_events=True,
+    )
+
+
+@app.get(
+    "/ops/collection-timeline/summary",
+    response_model=CollectionTimelineSummary,
+    include_in_schema=False,
+)
+def ops_collection_timeline_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    publisher: Annotated[str | None, Query(description="Case-insensitive substring match on publisher label.")] = None,
+    ownership_state: Annotated[
+        CollectionTimelineOwnershipStateFilter | None,
+        Query(description="Filter rows to copies whose current normalized ownership matches."),
+    ] = None,
+    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
+    preorder_only: bool = False,
+    in_hand_only: bool = False,
+) -> CollectionTimelineSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=None,
+        event_type_filter=event_type,
+        publisher=publisher,
+        ownership_filter=ownership_state,
+        release_status=release_status,
+        start_date=start_date,
+        end_date=end_date,
+        preorder_only=preorder_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id=None,
+        grouping="none",
+        sort="desc",
+        limit=1,
+        return_events=False,
+    ).summary
+
+
+@app.get(
+    "/ops/inventory/{inventory_copy_id}/timeline",
+    response_model=CollectionTimelineEventsResponse,
+    include_in_schema=False,
+)
+def ops_inventory_copy_timeline(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    grouping: Annotated[CollectionTimelineGrouping, Query()] = "none",
+    sort: Annotated[CollectionTimelineSort, Query()] = "desc",
+    limit: Annotated[int, Query(ge=1, le=500)] = 280,
+) -> CollectionTimelineEventsResponse:
+    ensure_ops_admin_access(current_user, settings)
+    row = session.exec(select(InventoryCopy.id).where(InventoryCopy.id == inventory_copy_id)).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Inventory copy not found")
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=None,
+        event_type_filter=event_type,
+        publisher=None,
+        ownership_filter=None,
+        release_status=None,
+        start_date=None,
+        end_date=None,
+        preorder_only=False,
+        in_hand_only=False,
+        inventory_copy_id=inventory_copy_id,
+        grouping=grouping,
+        sort=sort,
+        limit=limit,
+        return_events=True,
     )
 
 
@@ -4857,6 +4998,87 @@ def get_collection_analytics_composition(
     )
 
 
+@app.get("/collection-timeline", response_model=CollectionTimelineEventsResponse)
+def get_collection_timeline_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    publisher: Annotated[str | None, Query(description="Case-insensitive substring match on publisher label.")] = None,
+    ownership_state: Annotated[
+        CollectionTimelineOwnershipStateFilter | None,
+        Query(description="Filter rows to copies whose current normalized ownership matches."),
+    ] = None,
+    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
+    preorder_only: bool = False,
+    in_hand_only: bool = False,
+    grouping: Annotated[CollectionTimelineGrouping, Query()] = "none",
+    sort: Annotated[CollectionTimelineSort, Query()] = "desc",
+    limit: Annotated[int, Query(ge=1, le=500)] = 280,
+) -> CollectionTimelineEventsResponse:
+    assert current_user.id is not None
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=int(current_user.id),
+        event_type_filter=event_type,
+        publisher=publisher,
+        ownership_filter=ownership_state,
+        release_status=release_status,
+        start_date=start_date,
+        end_date=end_date,
+        preorder_only=preorder_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id=None,
+        grouping=grouping,
+        sort=sort,
+        limit=limit,
+        return_events=True,
+    )
+
+
+@app.get("/collection-timeline/summary", response_model=CollectionTimelineSummary)
+def get_collection_timeline_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    publisher: Annotated[str | None, Query(description="Case-insensitive substring match on publisher label.")] = None,
+    ownership_state: Annotated[
+        CollectionTimelineOwnershipStateFilter | None,
+        Query(description="Filter rows to copies whose current normalized ownership matches."),
+    ] = None,
+    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
+    preorder_only: bool = False,
+    in_hand_only: bool = False,
+) -> CollectionTimelineSummary:
+    assert current_user.id is not None
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=int(current_user.id),
+        event_type_filter=event_type,
+        publisher=publisher,
+        ownership_filter=ownership_state,
+        release_status=release_status,
+        start_date=start_date,
+        end_date=end_date,
+        preorder_only=preorder_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id=None,
+        grouping="none",
+        sort="desc",
+        limit=1,
+        return_events=False,
+    ).summary
+
+
 @app.get("/duplicate-ownership", response_model=DuplicateOwnershipListRead)
 def list_duplicate_ownership_endpoint(
     session: Session = Depends(get_session),
@@ -4930,6 +5152,47 @@ def get_inventory_copy(
         session=session,
         current_user=current_user,
         inventory_copy_id=inventory_copy_id,
+    )
+
+
+@app.get("/inventory/{inventory_copy_id}/timeline", response_model=CollectionTimelineEventsResponse)
+def get_inventory_copy_timeline(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: Annotated[
+        CollectionTimelineEventType | None,
+        Query(description="Filter by deterministic timeline event kind."),
+    ] = None,
+    grouping: Annotated[CollectionTimelineGrouping, Query()] = "none",
+    sort: Annotated[CollectionTimelineSort, Query()] = "desc",
+    limit: Annotated[int, Query(ge=1, le=500)] = 280,
+) -> CollectionTimelineEventsResponse:
+    assert current_user.id is not None
+    row = session.exec(
+        select(InventoryCopy.id).where(
+            InventoryCopy.id == inventory_copy_id,
+            InventoryCopy.user_id == current_user.id,
+        ),
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Inventory copy not found")
+    return timeline_events_for_scope(
+        session,
+        scope_user_id=int(current_user.id),
+        event_type_filter=event_type,
+        publisher=None,
+        ownership_filter=None,
+        release_status=None,
+        start_date=None,
+        end_date=None,
+        preorder_only=False,
+        in_hand_only=False,
+        inventory_copy_id=inventory_copy_id,
+        grouping=grouping,
+        sort=sort,
+        limit=limit,
+        return_events=True,
     )
 
 

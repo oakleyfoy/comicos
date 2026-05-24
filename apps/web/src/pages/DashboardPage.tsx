@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import {
   ApiError,
   apiClient,
@@ -23,11 +24,15 @@ import {
   type CollectionAnalyticsSummary,
   type CollectionPublisherAnalyticsResponse,
   type CollectionQualityAnalyticsResponse,
+  type CollectionHistoricalTimelineEventsResponse,
   type InventoryRiskPriority,
   type InventoryRiskRead,
   type InventoryRiskSummary,
   type InventoryRiskType,
   type SortBy,
+  type InventoryActionCenterAttachment,
+  type InventoryActionCenterCategory,
+  type InventoryActionCenterSummary,
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
 } from "../api/client";
@@ -379,6 +384,97 @@ function InventoryRiskBadges(props: { risks?: InventoryRiskRead[] | null }): JSX
   );
 }
 
+function inventoryActionCenterCategoryUiLabel(cat: InventoryActionCenterCategory): string {
+  switch (cat) {
+    case "review_relationship_conflict":
+      return "Relationship conflict";
+    case "review_canonical_suggestion":
+      return "Canonical suggestion";
+    case "review_duplicate_ownership":
+      return "Duplicate ownership";
+    case "review_duplicate_scan":
+      return "Duplicate scan cluster";
+    case "review_variant_family":
+      return "Variant family";
+    case "retry_ocr":
+      return "Retry OCR";
+    case "review_cover_processing":
+      return "Cover processing";
+    case "scan_missing_cover":
+      return "Missing cover scan";
+    case "update_preorder_metadata":
+      return "Preorder metadata";
+    case "review_run_gap":
+      return "Run gap";
+    case "review_high_confidence_match":
+      return "High-confidence match";
+    default:
+      return cat;
+  }
+}
+
+function InventoryActionCenterBadges(props: {
+  attachment?: InventoryActionCenterAttachment | null;
+}): JSX.Element | null {
+  const list = props.attachment?.action_categories ?? [];
+  if (!list.length) {
+    return null;
+  }
+  const top = list.slice(0, 3);
+  const more = list.length - top.length;
+
+  function short(cat: InventoryActionCenterCategory): string {
+    switch (cat) {
+      case "review_relationship_conflict":
+        return "Conflict";
+      case "review_canonical_suggestion":
+        return "Canon";
+      case "review_duplicate_ownership":
+        return "Dup own";
+      case "review_duplicate_scan":
+        return "Dup scan";
+      case "review_variant_family":
+        return "Variant fam";
+      case "retry_ocr":
+        return "Retry OCR";
+      case "review_cover_processing":
+        return "Cover proc";
+      case "scan_missing_cover":
+        return "No scan";
+      case "update_preorder_metadata":
+        return "Preorder meta";
+      case "review_run_gap":
+        return "Run gap";
+      case "review_high_confidence_match":
+        return "Match review";
+      default:
+        return inventoryActionCenterCategoryUiLabel(cat);
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {top.map((cat) => (
+        <span
+          key={cat}
+          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+            props.attachment?.urgent_lane
+              ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
+              : "border-teal-400/30 bg-teal-400/10 text-teal-100"
+          }`}
+        >
+          {short(cat)}
+        </span>
+      ))}
+      {more > 0 ? (
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+          +{more} actions
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function orderArrivalTone(value: OrderArrivalClassification): string {
   switch (value) {
     case "overdue_expected_ship":
@@ -520,6 +616,8 @@ export function DashboardPage() {
   const [riskPriorityFilter, setRiskPriorityFilter] = useState<"" | InventoryRiskPriority>("");
   const [riskTypeFilter, setRiskTypeFilter] = useState<"" | InventoryRiskType>("");
   const [needsAttentionFilter, setNeedsAttentionFilter] = useState(false);
+  const [actionAttentionFilter, setActionAttentionFilter] = useState(false);
+  const [actionCategoryFilter, setActionCategoryFilter] = useState<"" | InventoryActionCenterCategory>("");
   const [arrivalClassificationFilter, setArrivalClassificationFilter] = useState<"" | OrderArrivalClassification>("");
   const [sortBy, setSortBy] = useState<SortBy>("purchase_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -541,6 +639,7 @@ export function DashboardPage() {
     null,
   );
   const [inventoryRiskSummary, setInventoryRiskSummary] = useState<InventoryRiskSummary | null>(null);
+  const [inventoryActionSummary, setInventoryActionSummary] = useState<InventoryActionCenterSummary | null>(null);
   const [orderArrivalSummary, setOrderArrivalSummary] = useState<OrderArrivalIntelSummary | null>(null);
   const [duplicateOwnershipReport, setDuplicateOwnershipReport] =
     useState<DuplicateOwnershipListResponse | null>(null);
@@ -552,6 +651,9 @@ export function DashboardPage() {
   const [collectionAnalyticsQuality, setCollectionAnalyticsQuality] = useState<CollectionQualityAnalyticsResponse | null>(
       null,
     );
+
+  const [collectionHistoricalTimeline, setCollectionHistoricalTimeline] =
+    useState<CollectionHistoricalTimelineEventsResponse | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -576,6 +678,8 @@ export function DashboardPage() {
       risk_priority: riskPriorityFilter || undefined,
       risk_type: riskTypeFilter || undefined,
       needs_attention: needsAttentionFilter || undefined,
+      action_attention: actionAttentionFilter || undefined,
+      action_center_category: actionCategoryFilter || undefined,
       arrival_classification: arrivalClassificationFilter || undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
@@ -590,6 +694,8 @@ export function DashboardPage() {
       assetStateFilter,
       intelHealthFilter,
       needsAttentionFilter,
+      actionAttentionFilter,
+      actionCategoryFilter,
       ownershipIntelFilter,
       riskPriorityFilter,
       riskTypeFilter,
@@ -607,7 +713,9 @@ export function DashboardPage() {
       performanceResponse,
       inventoryResponse,
       riskSummaryResponse,
+      workflowSummaryResponse,
       orderArrivalSummaryResponse,
+      historicalTimelineResp,
       dupOwnershipInsight,
       runDetectionInsight,
       caSummary,
@@ -618,7 +726,9 @@ export function DashboardPage() {
       apiClient.getPortfolioPerformance(),
       apiClient.getInventory(query),
       apiClient.getInventoryRisksSummary(),
+      apiClient.getInventoryActionCenterSummary(),
       apiClient.getOrderArrivalIntelligenceSummary(),
+      apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
       apiClient.getDuplicateOwnershipList(),
       apiClient.getRunDetectionList(),
       apiClient.getCollectionAnalyticsSummary(),
@@ -630,7 +740,9 @@ export function DashboardPage() {
     setInventory(inventoryResponse.items);
     setTotal(inventoryResponse.total);
     setInventoryRiskSummary(riskSummaryResponse);
+    setInventoryActionSummary(workflowSummaryResponse);
     setOrderArrivalSummary(orderArrivalSummaryResponse);
+    setCollectionHistoricalTimeline(historicalTimelineResp);
     setDuplicateOwnershipReport(dupOwnershipInsight);
     setRunDetectionReport(runDetectionInsight);
     setCollectionAnalyticsSummary(caSummary);
@@ -656,7 +768,9 @@ export function DashboardPage() {
           intelSummary,
           intelHealth,
           riskSummary,
+          workflowSummary,
           orderArrivalSummaryResponse,
+          historicalTimelineResp,
           dupOwnership,
           runDetection,
           caSummary,
@@ -670,7 +784,9 @@ export function DashboardPage() {
             apiClient.getInventoryIntelligenceSummary(),
             apiClient.getInventoryIntelligenceHealth(),
             apiClient.getInventoryRisksSummary(),
+            apiClient.getInventoryActionCenterSummary(),
             apiClient.getOrderArrivalIntelligenceSummary(),
+            apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
             apiClient.getDuplicateOwnershipList(),
             apiClient.getRunDetectionList(),
             apiClient.getCollectionAnalyticsSummary(),
@@ -689,7 +805,9 @@ export function DashboardPage() {
         setInventoryIntelSummary(intelSummary);
         setInventoryIntelHealth(intelHealth);
         setInventoryRiskSummary(riskSummary);
+        setInventoryActionSummary(workflowSummary);
         setOrderArrivalSummary(orderArrivalSummaryResponse);
+        setCollectionHistoricalTimeline(historicalTimelineResp);
         setDuplicateOwnershipReport(dupOwnership);
         setRunDetectionReport(runDetection);
         setCollectionAnalyticsSummary(caSummary);
@@ -1003,6 +1121,279 @@ export function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {inventoryActionSummary ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Inventory action center</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Workflow-facing rollup of deterministic inventory attention items (risk lanes, duplicate and variant
+                intelligence, preorder gaps where not already covered elsewhere, and arrivals). Same priority scale as
+                inventory risk — read-only, no mutations.
+              </p>
+            </div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              As of {inventoryActionSummary.generated_as_of_date}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <article className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">
+                Critical actions
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.critical_actions}</p>
+            </article>
+            <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">High actions</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.high_actions}</p>
+            </article>
+            <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Medium actions</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.medium_actions}</p>
+            </article>
+            <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Low actions</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.low_actions}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Copies with actions</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.copies_with_actions}</p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Total actions</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.total_actions}</p>
+            </article>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <h3 className="text-sm font-semibold text-white">Actions by category</h3>
+              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                {inventoryActionSummary.by_category
+                  .filter((row) => row.count > 0)
+                  .sort((a, b) => b.count - a.count)
+                  .slice(0, 8)
+                  .map((row) => (
+                    <li key={row.key ?? "null"} className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                      <span className="text-slate-400">
+                        {row.key ? inventoryActionCenterCategoryUiLabel(row.key as InventoryActionCenterCategory) : "—"}
+                      </span>
+                      <span className="font-semibold text-white">{row.count}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <h3 className="text-sm font-semibold text-white">Copies needing the most workflows</h3>
+              <div className="mt-3 overflow-auto">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="pb-2 pr-3 font-medium">Copy</th>
+                      <th className="pb-2 pr-3 font-medium">Lane</th>
+                      <th className="pb-2 pr-3 font-medium">Workflows</th>
+                      <th className="pb-2 font-medium">Categories</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {inventoryActionSummary.top_unresolved_inventory.slice(0, 6).map((item) => (
+                      <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
+                        <td className="py-2 pr-3 font-medium text-white">
+                          <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                            {item.publisher} · {item.title} #{item.issue_number}
+                          </Link>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${inventoryRiskPriorityTone(
+                              item.highest_lane_priority,
+                            )}`}
+                          >
+                            {item.highest_lane_priority}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-slate-400">{item.action_count}</td>
+                        <td className="py-2 text-slate-400">
+                          {item.action_categories
+                            .map((c) => inventoryActionCenterCategoryUiLabel(c))
+                            .join(" · ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {collectionHistoricalTimeline && collectionHistoricalTimeline.events.length > 0 ? (
+        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Collection timeline & activity</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Deterministic timestamps from purchases, arrivals, scans, OCR, link decisions, replays, duplicate
+                reviews, conflicts, and variant-family signals — no valuations, summaries, or hidden inference.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+                <p className="w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Release / preorder markers
+                </p>
+                {collectionHistoricalTimeline.events
+                  .filter((event) =>
+                    ["preorder_created", "release_day", "expected_ship_window"].includes(event.event_type),
+                  )
+                  .slice(0, 8)
+                  .map((event) => (
+                    <article
+                      key={`strip-${event.stable_id}`}
+                      className="flex min-w-[10rem] flex-1 gap-3 rounded-2xl border border-cyan-400/25 bg-slate-950/50 p-3"
+                    >
+                      <span className={`mt-1 inline-block size-2.5 shrink-0 rounded-full ${timelineDotClass(event)}`} />
+                      <div className="text-xs">
+                        <p className="font-semibold text-cyan-100">{describeHistoricalTimelineEvent(event)}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {new Intl.DateTimeFormat("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }).format(new Date(event.occurred_at))}
+                        </p>
+                        <p className="mt-1 font-medium text-white">
+                          {event.publisher} · {event.series_title} #{event.issue_number}
+                        </p>
+                        <Link
+                          to={`/inventory/${event.inventory_copy_id}`}
+                          className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                        >
+                          Open copy #{event.inventory_copy_id}
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                As of {collectionHistoricalTimeline.generated_as_of_date}
+              </p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                {collectionHistoricalTimeline.summary.total_events_present} persisted events tracked (showing newest{" "}
+                {collectionHistoricalTimeline.events.length}).
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Recent reconciliation & reviews</h3>
+              <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2">When</th>
+                      <th className="px-4 py-2">Signal</th>
+                      <th className="px-4 py-2">Issue</th>
+                      <th className="px-4 py-2">Copy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {collectionHistoricalTimeline.events
+                      .filter((event) =>
+                        [
+                          "relationship_reviewed",
+                          "canonical_suggestion_reviewed",
+                          "conflict_detected",
+                          "conflict_resolved",
+                          "duplicate_detected",
+                          "variant_family_detected",
+                        ].includes(event.event_type),
+                      )
+                      .slice(0, 10)
+                      .map((event) => (
+                        <tr key={`review-${event.stable_id}`} className="border-t border-white/5">
+                          <td className="px-4 py-2 text-[11px] text-slate-400">
+                            {new Intl.DateTimeFormat("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            }).format(new Date(event.occurred_at))}
+                          </td>
+                          <td className="px-4 py-2 font-semibold text-white">
+                            {describeHistoricalTimelineEvent(event)}
+                          </td>
+                          <td className="px-4 py-2">
+                            {event.publisher} · {event.series_title} #{event.issue_number}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Link
+                              className="text-cyan-200 hover:text-cyan-50"
+                              to={`/inventory/${event.inventory_copy_id}`}
+                            >
+                              #{event.inventory_copy_id}
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-white">Latest collection activity</h3>
+              <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/40">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2">When</th>
+                      <th className="px-4 py-2">Type</th>
+                      <th className="px-4 py-2">Issue</th>
+                      <th className="px-4 py-2">Copy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {collectionHistoricalTimeline.events.slice(0, 14).map((event) => (
+                      <tr key={`all-${event.stable_id}`} className="border-t border-white/5 align-top">
+                        <td className="px-4 py-2 text-[11px] text-slate-400 whitespace-nowrap">
+                          {new Intl.DateTimeFormat("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }).format(new Date(event.occurred_at))}
+                        </td>
+                        <td className="px-4 py-2">
+                          <p className="font-semibold text-white">{describeHistoricalTimelineEvent(event)}</p>
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{event.event_type}</p>
+                        </td>
+                        <td className="px-4 py-2">
+                          <p>{event.publisher}</p>
+                          <p className="text-[11px] text-slate-400">
+                            {event.series_title} #{event.issue_number}
+                          </p>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Link
+                            className="text-cyan-200 hover:text-cyan-50"
+                            to={`/inventory/${event.inventory_copy_id}`}
+                          >
+                            #{event.inventory_copy_id}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -1774,6 +2165,62 @@ export function DashboardPage() {
               </select>
             </div>
 
+            <div className="grid gap-3 md:grid-cols-4">
+              <select
+                value={actionCategoryFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setActionCategoryFilter(event.target.value as "" | InventoryActionCenterCategory);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any action center category</option>
+                <option value="review_relationship_conflict">{inventoryActionCenterCategoryUiLabel(
+                  "review_relationship_conflict",
+                )}</option>
+                <option value="review_canonical_suggestion">
+                  {inventoryActionCenterCategoryUiLabel("review_canonical_suggestion")}
+                </option>
+                <option value="review_duplicate_ownership">
+                  {inventoryActionCenterCategoryUiLabel("review_duplicate_ownership")}
+                </option>
+                <option value="review_duplicate_scan">{inventoryActionCenterCategoryUiLabel(
+                  "review_duplicate_scan",
+                )}</option>
+                <option value="review_variant_family">{inventoryActionCenterCategoryUiLabel(
+                  "review_variant_family",
+                )}</option>
+                <option value="retry_ocr">{inventoryActionCenterCategoryUiLabel("retry_ocr")}</option>
+                <option value="review_cover_processing">{inventoryActionCenterCategoryUiLabel(
+                  "review_cover_processing",
+                )}</option>
+                <option value="scan_missing_cover">{inventoryActionCenterCategoryUiLabel(
+                  "scan_missing_cover",
+                )}</option>
+                <option value="update_preorder_metadata">{inventoryActionCenterCategoryUiLabel(
+                  "update_preorder_metadata",
+                )}</option>
+                <option value="review_run_gap">{inventoryActionCenterCategoryUiLabel("review_run_gap")}</option>
+                <option value="review_high_confidence_match">{inventoryActionCenterCategoryUiLabel(
+                  "review_high_confidence_match",
+                )}</option>
+              </select>
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={actionAttentionFilter}
+                  onChange={(event) =>
+                    resetPageAndUpdate(() => {
+                      setActionAttentionFilter(event.target.checked);
+                    })
+                  }
+                />
+                Critical / high action lane only
+              </label>
+              <div className="hidden md:block" aria-hidden />
+            </div>
+
             <div className="grid gap-3 md:grid-cols-3">
               <select
                 value={sortBy}
@@ -1951,6 +2398,7 @@ export function DashboardPage() {
                       </p>
                       <InventoryIntelBadges item={item} />
                       <InventoryRiskBadges risks={item.inventory_risks} />
+                      <InventoryActionCenterBadges attachment={item.inventory_action_center} />
                       <OrderArrivalBadges classifications={item.order_arrival_classifications} />
                     </td>
                     <td className="px-4 py-3.5">#{item.issue_number}</td>
@@ -2120,6 +2568,7 @@ export function DashboardPage() {
                     </p>
                     <InventoryIntelBadges item={item} />
                     <InventoryRiskBadges risks={item.inventory_risks} />
+                    <InventoryActionCenterBadges attachment={item.inventory_action_center} />
                     <OrderArrivalBadges classifications={item.order_arrival_classifications} />
                   </div>
                   <div className="flex flex-col items-end gap-2">
