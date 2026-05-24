@@ -56,6 +56,11 @@ import {
   type CanonicalIssueSuggestionOpsListResponse,
   type CanonicalIssueSuggestionReviewState,
   type CanonicalIssueSuggestionType,
+  type HighResReviewRequestPriority,
+  type HighResReviewRequestReason,
+  type HighResReviewRequestStatsRead,
+  type HighResReviewRequestStatus,
+  type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
   type RelationshipConflictListResponse,
   type RelationshipConflictSeverity,
@@ -64,6 +69,8 @@ import {
   type RunDetectionListResponse,
   type RunDetectionSeries,
   type RunDetectionSeriesStatus,
+  type ScanSessionDetail,
+  type ScanSessionSummary,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
   type CollectionHistoricalTimelineEventKind,
@@ -116,6 +123,25 @@ function formatDateTime(value: string | null): string {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+const OPS_HIGH_RES_STATUSES: HighResReviewRequestStatus[] = [
+  "pending",
+  "scanned",
+  "linked",
+  "review_complete",
+  "cancelled",
+];
+
+const OPS_HIGH_RES_PRIORITIES: HighResReviewRequestPriority[] = ["high", "medium", "low"];
+
+const OPS_HIGH_RES_REASONS: HighResReviewRequestReason[] = [
+  "low_quality_scan",
+  "failed_ocr",
+  "poor_match_confidence",
+  "valuable_review_candidate",
+  "manual_review",
+  "rescan_required",
+];
 
 type OpsHistoricalTimelineFilters = {
   event_type: "" | CollectionHistoricalTimelineEventKind;
@@ -592,6 +618,101 @@ function runDetectionStatusLabel(value: RunDetectionSeriesStatus): string {
   }
 }
 
+function OpsScanSessionInspectionPanel(props: {
+  selectedId: number | null;
+  loading: boolean;
+  detail: ScanSessionDetail | null;
+}): JSX.Element | null {
+  const { selectedId, loading, detail } = props;
+  if (selectedId == null) {
+    return null;
+  }
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Session #{selectedId}{" "}
+          {loading ? "(loading)" : detail ? "" : "(unavailable)"}
+        </p>
+      </div>
+      {detail ? (
+        <>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <article className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Lifecycle</p>
+              <p className="mt-1 text-sm text-white">
+                {detail.status.replace(/_/g, " ")} · Started{" "}
+                {detail.started_at ? formatDateTime(detail.started_at) : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Completed {detail.completed_at ? formatDateTime(detail.completed_at) : "—"}
+              </p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">OCR / review rollups</p>
+              <p className="mt-2 text-xs text-slate-300">
+                OCR complete: {detail.statistics.ocr_completed} · OCR pending:{" "}
+                {detail.statistics.ocr_pending}
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                Review required: {detail.statistics.review_required} · Failures: {detail.statistics.failures} · Skipped
+                : {detail.statistics.skipped}
+              </p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Duplicates</p>
+              <p className="mt-2 text-xs text-slate-300">
+                Filename dup groups (+ excess rows): {detail.statistics.duplicate_filename_groups} (+
+                {detail.statistics.duplicate_filename_excess_rows})
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                Hash dup groups (+ excess rows): {detail.statistics.duplicate_image_hash_groups} (+
+                {detail.statistics.duplicate_image_hash_excess_rows})
+              </p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Averages</p>
+              <p className="mt-2 text-xs text-slate-300">
+                Avg dimensions:{" "}
+                {detail.statistics.average_image_width != null && detail.statistics.average_image_height != null
+                  ? `${Math.round(detail.statistics.average_image_width)}×${Math.round(
+                      detail.statistics.average_image_height,
+                    )}`
+                  : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Ordering is deterministic across items (sequence index, identifier).
+              </p>
+            </article>
+          </div>
+          {detail.items.some((item) => ["failed", "review_required"].includes(item.ingest_status)) ? (
+            <div className="mt-4 overflow-auto rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                Rows needing attention (failed / review required)
+              </p>
+              <ul className="mt-2 space-y-1 text-xs text-amber-50/95">
+                {detail.items
+                  .filter((item) => ["failed", "review_required"].includes(item.ingest_status))
+                  .map((item) => (
+                    <li key={item.id}>
+                      Seq {item.sequence_index} · {item.ingest_status.replace(/_/g, " ")}
+                      {item.source_filename ? ` · ${item.source_filename}` : ""}
+                      {item.ingest_error ? ` — ${item.ingest_error}` : ""}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : loading ? (
+        <p className="mt-3 text-sm text-slate-400">Hydrating deterministic rollups...</p>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">Unable to load session detail.</p>
+      )}
+    </div>
+  );
+}
+
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
@@ -887,6 +1008,22 @@ export function OperationsPage() {
   const [relationshipConflictsDetectBusy, setRelationshipConflictsDetectBusy] = useState(false);
   const [relationshipConflictsDetectMessage, setRelationshipConflictsDetectMessage] = useState<string | null>(null);
 
+  const [opsScanSessions, setOpsScanSessions] = useState<ScanSessionSummary[]>([]);
+  const [opsScanSessionsLoading, setOpsScanSessionsLoading] = useState(true);
+  const [opsScanSessionsError, setOpsScanSessionsError] = useState<string | null>(null);
+  const [opsScanSessionSelectedId, setOpsScanSessionSelectedId] = useState<number | null>(null);
+  const [opsScanSessionDetail, setOpsScanSessionDetail] = useState<ScanSessionDetail | null>(null);
+  const [opsScanSessionDetailLoading, setOpsScanSessionDetailLoading] = useState(false);
+
+  const [opsHrStats, setOpsHrStats] = useState<HighResReviewRequestStatsRead | null>(null);
+  const [opsHrList, setOpsHrList] = useState<HighResReviewRequestSummary[]>([]);
+  const [opsHrLoading, setOpsHrLoading] = useState(true);
+  const [opsHrError, setOpsHrError] = useState<string | null>(null);
+  const [opsHrStatusFilter, setOpsHrStatusFilter] = useState("");
+  const [opsHrPriorityFilter, setOpsHrPriorityFilter] = useState("");
+  const [opsHrReasonFilter, setOpsHrReasonFilter] = useState("");
+  const [opsHrOwnerUserIdDraft, setOpsHrOwnerUserIdDraft] = useState("");
+
   useEffect(() => {
     let ignore = false;
 
@@ -923,6 +1060,118 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsScanSessionsLoading(true);
+      setOpsScanSessionsError(null);
+      try {
+        const list = await apiClient.listOpsScanSessions({ limit: 250 });
+        if (!ignore) {
+          setOpsScanSessions(list.sessions);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsScanSessions([]);
+          setOpsScanSessionsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load ops scan sessions.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanSessionsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (opsScanSessionSelectedId == null) {
+      setOpsScanSessionDetail(null);
+      return;
+    }
+    let ignore = false;
+    void (async () => {
+      setOpsScanSessionDetailLoading(true);
+      try {
+        const detail = await apiClient.getOpsScanSession(opsScanSessionSelectedId);
+        if (!ignore) {
+          setOpsScanSessionDetail(detail);
+        }
+      } catch {
+        if (!ignore) {
+          setOpsScanSessionDetail(null);
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanSessionDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsScanSessionSelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsHrLoading(true);
+      setOpsHrError(null);
+      const trimmedOwner = opsHrOwnerUserIdDraft.trim();
+      let ownerUserId: number | undefined;
+      if (trimmedOwner) {
+        const parsed = Number(trimmedOwner);
+        if (!Number.isInteger(parsed) || parsed <= 0) {
+          if (!ignore) {
+            setOpsHrStats(null);
+            setOpsHrList([]);
+            setOpsHrError("Owner user id must be a positive integer.");
+            setOpsHrLoading(false);
+          }
+          return;
+        }
+        ownerUserId = parsed;
+      }
+      try {
+        const [st, lst] = await Promise.all([
+          apiClient.getOpsHighResReviewRequestStats(),
+          apiClient.listOpsHighResReviewRequests({
+            limit: 250,
+            ...(ownerUserId !== undefined ? { owner_user_id: ownerUserId } : {}),
+            ...(opsHrStatusFilter ? { status: opsHrStatusFilter as HighResReviewRequestStatus } : {}),
+            ...(opsHrPriorityFilter ? { priority: opsHrPriorityFilter as HighResReviewRequestPriority } : {}),
+            ...(opsHrReasonFilter ? { reason: opsHrReasonFilter as HighResReviewRequestReason } : {}),
+          }),
+        ]);
+        if (!ignore) {
+          setOpsHrStats(st);
+          setOpsHrList(lst.requests);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsHrStats(null);
+          setOpsHrList([]);
+          setOpsHrError(
+            loadErr instanceof ApiError
+              ? loadErr.message
+              : "Unable to load high-resolution review queue.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsHrLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsHrStatusFilter, opsHrPriorityFilter, opsHrReasonFilter, opsHrOwnerUserIdDraft]);
 
   useEffect(() => {
     let ignore = false;
@@ -2272,6 +2521,240 @@ export function OperationsPage() {
           <StatusBanner tone="error">{error}</StatusBanner>
         </div>
       ) : null}
+
+      <details className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/15 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Scan sessions (fleet)</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic ingest session ledger across owners. Inspect a session for OCR/review/skipped counters and
+                duplicate filename/hash rollups — read-only scaffolding with no scanner drivers or automatic metadata edits.
+              </p>
+            </div>
+            <span className="rounded-full border border-teal-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-100/90">
+              Ops / read-only stats
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-teal-200/15 pt-4">
+          {opsScanSessionsLoading ? (
+            <p className="text-sm text-slate-400">Loading scan sessions...</p>
+          ) : opsScanSessionsError ? (
+            <StatusBanner tone="error">{opsScanSessionsError}</StatusBanner>
+          ) : opsScanSessions.length === 0 ? (
+            <p className="text-sm text-slate-500">No scan sessions recorded yet.</p>
+          ) : (
+            <>
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/50">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Session</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Kind</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Totals</th>
+                      <th className="p-3 font-medium">Failed</th>
+                      <th className="p-3 font-medium">Skipped</th>
+                      <th className="p-3 font-medium">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {opsScanSessions.map((row) => (
+                      <tr key={row.id} className="border-t border-white/10">
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                              opsScanSessionSelectedId === row.id
+                                ? "border-teal-300/70 bg-teal-400/20 text-teal-50"
+                                : "border-white/15 text-slate-200 hover:border-teal-300/35"
+                            }`}
+                            onClick={() =>
+                              setOpsScanSessionSelectedId((cur) => (cur === row.id ? null : row.id))
+                            }
+                          >
+                            {opsScanSessionSelectedId === row.id ? "Hide" : "View"}
+                          </button>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-white">#{row.id}</td>
+                        <td className="p-3 font-mono text-[11px]">#{row.owner_user_id}</td>
+                        <td className="p-3 capitalize">{row.session_type.replace(/_/g, " ")}</td>
+                        <td className="p-3 capitalize">{row.status.replace(/_/g, " ")}</td>
+                        <td className="p-3">
+                          {row.processed_items}/{row.total_items}
+                        </td>
+                        <td className="p-3">{row.failed_items}</td>
+                        <td className="p-3">{row.skipped_items}</td>
+                        <td className="p-3 text-slate-400">{formatDateTime(row.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <OpsScanSessionInspectionPanel
+                selectedId={opsScanSessionSelectedId}
+                loading={opsScanSessionDetailLoading}
+                detail={opsScanSessionDetail}
+              />
+            </>
+          )}
+        </div>
+      </details>
+
+      <details className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">High-resolution review queue</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Ledger of owner-escalated cover rescans scoped to inventory copies (no primary-cover replacement; attach path
+                is owner-only ingestion). Operators can inspect counts across the fleet or filter rows for triage —
+                escalation creation remains owner-scoped inventory UI.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+              Ops visibility
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-amber-200/15 pt-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[7rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Status</span>
+              <select
+                value={opsHrStatusFilter}
+                onChange={(e) => setOpsHrStatusFilter(e.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                {OPS_HIGH_RES_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[7rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Priority</span>
+              <select
+                value={opsHrPriorityFilter}
+                onChange={(e) => setOpsHrPriorityFilter(e.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                {OPS_HIGH_RES_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Reason</span>
+              <select
+                value={opsHrReasonFilter}
+                onChange={(e) => setOpsHrReasonFilter(e.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                {OPS_HIGH_RES_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[10rem] flex-1 flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Owner user id</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Fleet-wide when empty"
+                value={opsHrOwnerUserIdDraft}
+                onChange={(e) => setOpsHrOwnerUserIdDraft(e.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none placeholder:text-slate-500 focus:border-amber-300/40"
+              />
+            </label>
+          </div>
+
+          {opsHrStats ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {OPS_HIGH_RES_STATUSES.map((status) => (
+                <StatCard
+                  key={status}
+                  label={status.replace(/_/g, " ")}
+                  value={String(opsHrStats.by_status[status] ?? 0)}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {opsHrLoading ? (
+            <p className="mt-4 text-sm text-slate-400">Loading high-resolution review requests…</p>
+          ) : opsHrError ? (
+            <div className="mt-4">
+              <StatusBanner tone="error">{opsHrError}</StatusBanner>
+            </div>
+          ) : opsHrList.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No requests matched the active filters.</p>
+          ) : (
+            <>
+              <p className="mt-4 text-xs text-slate-400">
+                Showing{" "}
+                <span className="font-semibold text-slate-200">{opsHrList.length}</span> request
+                {opsHrList.length === 1 ? "" : "s"} for the current filters.
+              </p>
+              <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Request</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Inventory copy</th>
+                      <th className="p-3 font-medium">Reason</th>
+                      <th className="p-3 font-medium">Pri</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">HR cover</th>
+                      <th className="p-3 font-medium">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {opsHrList.map((row) => (
+                      <tr key={row.id} className="border-t border-white/10">
+                        <td className="p-3 font-mono text-[11px] text-white">#{row.id}</td>
+                        <td className="p-3 font-mono text-[11px]">#{row.owner_user_id}</td>
+                        <td className="p-3">
+                          <Link
+                            to={`/inventory/${row.inventory_copy_id}`}
+                            className="font-mono font-semibold text-cyan-200 underline-offset-4 hover:underline"
+                          >
+                            #{row.inventory_copy_id}
+                          </Link>
+                          {typeof row.attach_scan_session_id === "number" ? (
+                            <p className="mt-1 text-[10px] text-slate-500">
+                              attach session #{row.attach_scan_session_id}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="p-3 capitalize">{row.request_reason.replace(/_/g, " ")}</td>
+                        <td className="p-3 uppercase">{row.priority}</td>
+                        <td className="p-3 capitalize">{row.status.replace(/_/g, " ")}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">
+                          {row.high_res_cover_image_id != null ? `#${row.high_res_cover_image_id}` : "—"}
+                        </td>
+                        <td className="p-3 text-slate-400">{formatDateTime(row.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </details>
 
       {dashboard ? (
         <>

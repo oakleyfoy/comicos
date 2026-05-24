@@ -48,6 +48,7 @@ import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collec
 
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
+import { HighResReviewInventorySection } from "../components/HighResReviewInventorySection";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -2237,6 +2238,25 @@ export function InventoryDetailPage() {
           </section>
         ) : null}
 
+        {detail.originating_scan_session ? (
+          <section className="mt-4 rounded-2xl border border-white/15 bg-slate-950/50 px-4 py-3 text-sm shadow-inner shadow-black/10">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Originating scan session
+            </p>
+            <p className="mt-2 text-slate-200">
+              Session{" "}
+              <span className="font-mono text-xs font-semibold text-white">
+                #{detail.originating_scan_session.scan_session_id}
+              </span>{" "}
+              · Item seq {detail.originating_scan_session.sequence_index} · Status{" "}
+              <span className="capitalize">{detail.originating_scan_session.ingest_status.replace(/_/g, " ")}</span>
+              {" · "}
+              Session kind{" "}
+              <span className="capitalize">{detail.originating_scan_session.session_type.replace(/_/g, " ")}</span>
+            </p>
+          </section>
+        ) : null}
+
         <section className="mt-4 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950/70 p-6 shadow-2xl shadow-cyan-950/20">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-4">
@@ -2710,6 +2730,8 @@ export function InventoryDetailPage() {
               </>
             ) : null}
           </section>
+
+          {detail ? <HighResReviewInventorySection inventoryCopyId={detail.inventory_copy_id} /> : null}
 
           <div className="mt-8 border-t border-white/10 pt-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
