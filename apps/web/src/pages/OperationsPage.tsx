@@ -1586,6 +1586,20 @@ export function OperationsPage() {
     }
   }, [dupCoverLimit, dupCoverMinCount, dupCoverSource, dupCoverLinkage]);
 
+  async function opsFleetExport(download: () => Promise<void>): Promise<void> {
+    try {
+      setError(null);
+      await download();
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Export failed.";
+      setError(`Ops export: ${message}`);
+    }
+  }
+
+  const opsExportChipClass =
+    "rounded-xl border border-amber-200/35 px-3 py-2 text-xs font-semibold text-amber-50 transition hover:border-amber-200/65 hover:bg-amber-400/10";
+
   async function handleOpsAssignCoverToInventory(coverImageId: number): Promise<void> {
     const invRaw = (coverOpsAssignInvDraft[coverImageId] ?? "").trim();
     const invNum = Number(invRaw);
@@ -2184,6 +2198,73 @@ export function OperationsPage() {
         title="Ingestion Monitoring"
         description="Lightweight operational visibility for Gmail ingestion, parser activity, queue health, and import lifecycle state."
       />
+
+      <section className="mt-6 rounded-3xl border border-amber-400/40 bg-amber-400/10 p-4 shadow-xl shadow-black/25">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-amber-50">Fleet exports (operations only)</h2>
+            <p className="mt-1 max-w-3xl text-[11px] text-amber-100/85">
+              These downloads aggregate every ComicOS collector account visible to Ops. Rows include deterministic{" "}
+              <span className="font-semibold">owner identifiers</span> where required by the underlying inventory export.
+              No metadata mutation occurs while generating attachments.
+            </p>
+          </div>
+          <span className="rounded-full border border-amber-200/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100">
+            Ops / multi-tenant
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsInventoryCsvAll())}
+          >
+            Ops inventory CSV
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsInventoryJsonAll())}
+          >
+            Ops inventory JSON
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsActionCenterCsv())}
+          >
+            Ops action center CSV
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsOrderArrivalCsv())}
+          >
+            Ops order / arrival CSV
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsRunDetectionCsv())}
+          >
+            Ops missing issues CSV
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsTimelineCsv())}
+          >
+            Ops timeline CSV
+          </button>
+          <button
+            type="button"
+            className={opsExportChipClass}
+            onClick={() => void opsFleetExport(() => apiClient.downloadOpsReportsCollectionSummaryJson())}
+          >
+            Ops collection summary JSON
+          </button>
+        </div>
+      </section>
 
       {error ? (
         <div className="mt-6">

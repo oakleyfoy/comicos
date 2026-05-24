@@ -1,14 +1,22 @@
-﻿from datetime import date, datetime
+from datetime import date, datetime
+import json
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from app.api.deps import get_current_user
+from app.api.report_params import (
+    OrderArrivalExportParams,
+    TimelineExportParams,
+    parse_inventory_export_filters,
+    parse_order_arrival_export_params,
+    parse_timeline_export_params,
+)
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_session
@@ -129,6 +137,12 @@ from app.schemas.inventory_risks import (
     InventoryRiskPriority,
     InventoryRiskSummary,
     InventoryRiskType,
+)
+from app.schemas.inventory_action_center import (
+    InventoryActionCenterCategory,
+    InventoryActionCenterListResponse,
+    InventoryActionCenterSummary,
+    InventoryReleaseStatusFilter,
 )
 from app.schemas.order_arrival_intelligence import (
     OrderArrivalClassification,
@@ -359,6 +373,7 @@ from app.services.inventory_risks import (
     get_inventory_risks_ops,
     get_inventory_risks_owner,
 )
+from app.services.inventory_action_center import get_inventory_action_center_response
 from app.services.order_arrival_intelligence import (
     compute_order_arrival_intelligence,
     get_order_arrival_calendar,
@@ -421,6 +436,26 @@ from app.services.ocr_review_queue import (
     list_ocr_review_queue,
 )
 from app.services.ops_admin import build_ops_dashboard, ensure_ops_admin_access
+from app.services.reports_export import (
+    ACTION_CENTER_CSV_COLUMNS,
+    INVENTORY_OPS_CSV_COLUMNS,
+    INVENTORY_OWNER_CSV_COLUMNS,
+    ORDER_ARRIVAL_CSV_COLUMNS,
+    RUN_DETECTION_SERIES_CSV_COLUMNS,
+    TIMELINE_CSV_COLUMNS,
+    InventoryExportFilters,
+    action_center_export_rows,
+    collection_summary_payload,
+    dumps_report_json,
+    inventory_export_json_document,
+    inventory_export_rows_ops,
+    inventory_export_rows_owner,
+    order_arrival_export_rows,
+    render_csv,
+    run_detection_series_rows,
+    sanitize_report_filename,
+    timeline_export_rows,
+)
 from app.services.orders import (
     create_order_for_user,
     get_order_detail_for_user,
@@ -471,6 +506,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
+    iso = date.today().isoformat()
+    base = sanitize_report_filename(f"{stem}-{iso}")
+    filename = f"{base}.{extension}"
+    blob = body.encode("utf-8") if isinstance(body, str) else body
+    return Response(
+        content=blob,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 @app.get("/health")
@@ -756,7 +804,7 @@ def ops_collection_timeline_events(
         CollectionTimelineOwnershipStateFilter | None,
         Query(description="Filter rows to copies whose current normalized ownership matches."),
     ] = None,
-    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query()] = None,
     start_date: Annotated[date | None, Query()] = None,
     end_date: Annotated[date | None, Query()] = None,
     preorder_only: bool = False,
@@ -803,7 +851,7 @@ def ops_collection_timeline_summary(
         CollectionTimelineOwnershipStateFilter | None,
         Query(description="Filter rows to copies whose current normalized ownership matches."),
     ] = None,
-    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query()] = None,
     start_date: Annotated[date | None, Query()] = None,
     end_date: Annotated[date | None, Query()] = None,
     preorder_only: bool = False,
@@ -4535,6 +4583,725 @@ def get_inventory(
         sort_dir=sort_dir,
     )
 
+@app.get("/reports/inventory.csv")
+def export_owner_inventory_csv_report(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    filt: Annotated[InventoryExportFilters, Depends(parse_inventory_export_filters)],
+) -> Response:
+    assert current_user.id is not None
+    rows, _as_of = inventory_export_rows_owner(session, owner=current_user, filt=filt)
+    return _reports_attachment_response(
+        render_csv(INVENTORY_OWNER_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="inventory",
+        extension="csv",
+    )
+
+
+@app.get("/reports/inventory.json")
+def export_owner_inventory_json_report(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    filt: Annotated[InventoryExportFilters, Depends(parse_inventory_export_filters)],
+) -> Response:
+    assert current_user.id is not None
+    rows, as_of = inventory_export_rows_owner(session, owner=current_user, filt=filt)
+    return _reports_attachment_response(
+        inventory_export_json_document(rows, filt, INVENTORY_OWNER_CSV_COLUMNS, as_of),
+        media_type="application/json; charset=utf-8",
+        stem="inventory",
+        extension="json",
+    )
+
+
+@app.get("/reports/action-center.csv")
+def export_reports_action_center_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[
+        InventoryRiskPriority | None,
+        Query(description="Filter by deterministic workflow lane"),
+    ] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[
+        InventoryReleaseStatusFilter | None,
+        Query(description="Filter by raw release_status"),
+    ] = None,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[
+        int | None,
+        Query(description="Restrict exported actions to a single inventory row."),
+    ] = None,
+) -> Response:
+    rows, _as_of = action_center_export_rows(
+        session,
+        current_user=current_user,
+        priority=priority,
+        category=action_category,
+        ownership_state_filter=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    )
+    return _reports_attachment_response(
+        render_csv(ACTION_CENTER_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="inventory-action-center",
+        extension="csv",
+    )
+
+
+@app.get("/reports/order-arrival.csv")
+def export_reports_order_arrival_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    params: Annotated[OrderArrivalExportParams, Depends(parse_order_arrival_export_params)],
+) -> Response:
+    rows, _as_of = order_arrival_export_rows(
+        session,
+        current_user=current_user,
+        classification=params.classification,
+        retailer=params.retailer,
+        publisher=params.publisher,
+        release_date_from=params.release_date_from,
+        release_date_to=params.release_date_to,
+        expected_ship_date_from=params.expected_ship_date_from,
+        expected_ship_date_to=params.expected_ship_date_to,
+        order_status=params.order_status,
+        in_hand_only=params.in_hand_only,
+    )
+    return _reports_attachment_response(
+        render_csv(ORDER_ARRIVAL_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="order-arrival-intelligence",
+        extension="csv",
+    )
+
+
+@app.get("/reports/run-detection.csv")
+def export_reports_run_detection_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter series groups by deterministic run-detection status."),
+    ] = None,
+) -> Response:
+    rows, _as_of = run_detection_series_rows(
+        session,
+        current_user=current_user,
+        ops_scope=False,
+        series_status=series_status,
+    )
+    return _reports_attachment_response(
+        render_csv(RUN_DETECTION_SERIES_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="run-detection-series",
+        extension="csv",
+    )
+
+
+@app.get("/reports/timeline.csv")
+def export_reports_timeline_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    tl: Annotated[TimelineExportParams, Depends(parse_timeline_export_params)],
+) -> Response:
+    assert current_user.id is not None
+    rows, _as_of = timeline_export_rows(
+        session,
+        ops_scope=False,
+        scoped_user_id=int(current_user.id),
+        event_type_filter=tl.event_type,
+        publisher=tl.publisher,
+        ownership_filter=tl.ownership_state,
+        release_status_tl=tl.release_status,
+        start_date_tl=tl.start_date,
+        end_date_tl=tl.end_date,
+        preorder_only=tl.preorder_only,
+        in_hand_only=tl.in_hand_only,
+    )
+    return _reports_attachment_response(
+        render_csv(TIMELINE_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="collection-timeline",
+        extension="csv",
+    )
+
+
+@app.get("/reports/collection-summary.json")
+def export_reports_collection_summary_json_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    payload = collection_summary_payload(
+        session,
+        projection_user_filter=int(current_user.id),
+        intel_user=current_user,
+        include_reconciliation=False,
+    )
+    return _reports_attachment_response(
+        dumps_report_json(payload),
+        media_type="application/json; charset=utf-8",
+        stem="collection-summary",
+        extension="json",
+    )
+
+
+@app.get("/inventory/summary", response_model=InventorySummaryResponse)
+def get_inventory_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventorySummaryResponse:
+    return inventory_summary(session=session, current_user=current_user)
+
+
+@app.get("/inventory-intelligence/summary", response_model=InventoryIntelligenceSummary)
+def get_inventory_intelligence_summary_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceSummary:
+    summary, _, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return summary
+
+
+@app.get("/inventory-intelligence/health", response_model=InventoryIntelligenceHealthSummary)
+def get_inventory_intelligence_health_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceHealthSummary:
+    _, health, _, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return health
+
+
+@app.get("/inventory-intelligence/breakdown", response_model=InventoryIntelligenceBreakdown)
+def get_inventory_intelligence_breakdown_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryIntelligenceBreakdown:
+    _, _, breakdown, _ = compute_inventory_intelligence(
+        session,
+        current_user=current_user,
+        include_signals=False,
+    )
+    return breakdown
+
+
+@app.get("/inventory-risks", response_model=InventoryRiskListResponse)
+def get_inventory_risks_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    return get_inventory_risks_owner(
+        session,
+        user=current_user,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    )
+
+
+@app.get("/inventory-risks/summary", response_model=InventoryRiskSummary)
+def get_inventory_risk_summary_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskSummary:
+    summary = get_inventory_risks_owner(
+        session,
+        user=current_user,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    ).summary
+    return summary
+
+
+@app.get("/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse)
+def get_inventory_risk_detail_for_owner(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    return get_inventory_risk_detail_owner(
+        session,
+        user=current_user,
+        inventory_copy_id=inventory_copy_id,
+        priority=priority,
+        risk_type=risk_type,
+        open_only=open_only,
+    )
+
+
+@app.get("/ops/inventory-risks", response_model=InventoryRiskListResponse, include_in_schema=False)
+def get_ops_inventory_risks(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risks_ops(
+        session,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    )
+
+
+@app.get("/ops/inventory-risks/summary", response_model=InventoryRiskSummary, include_in_schema=False)
+def get_ops_inventory_risk_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    in_hand_only: bool = False,
+    open_only: bool = True,
+) -> InventoryRiskSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risks_ops(
+        session,
+        priority=priority,
+        risk_type=risk_type,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        in_hand_only=in_hand_only,
+        open_only=open_only,
+    ).summary
+
+
+@app.get("/ops/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse, include_in_schema=False)
+def get_ops_inventory_risk_detail(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
+    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
+    open_only: bool = True,
+) -> InventoryRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_risk_detail_ops(
+        session,
+        inventory_copy_id=inventory_copy_id,
+        priority=priority,
+        risk_type=risk_type,
+        open_only=open_only,
+    )
+
+
+@app.get("/inventory-action-center", response_model=InventoryActionCenterListResponse)
+def get_inventory_action_center_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by deterministic workflow lane")] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query(description="Filter by raw release_status")] = None,
+    unresolved_only: bool = True,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[
+        int | None,
+        Query(description="Restrict aggregated actions to a single inventory row (detail prefetch)."),
+    ] = None,
+) -> InventoryActionCenterListResponse:
+    return get_inventory_action_center_response(
+        session,
+        current_user=current_user,
+        priority=priority,
+        action_category_str=action_category,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        unresolved_only=unresolved_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    )
+
+
+@app.get("/inventory-action-center/summary", response_model=InventoryActionCenterSummary)
+def get_inventory_action_center_summary_for_owner(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by deterministic workflow lane")] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query(description="Filter by raw release_status")] = None,
+    unresolved_only: bool = True,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[int | None, Query(description="Restrict summary to one inventory row.")] = None,
+) -> InventoryActionCenterSummary:
+    body = get_inventory_action_center_response(
+        session,
+        current_user=current_user,
+        priority=priority,
+        action_category_str=action_category,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        unresolved_only=unresolved_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    )
+    return body.summary
+
+
+@app.get("/ops/inventory-action-center", response_model=InventoryActionCenterListResponse, include_in_schema=False)
+def get_ops_inventory_action_center(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by deterministic workflow lane")] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query(description="Filter by raw release_status")] = None,
+    unresolved_only: bool = True,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[int | None, Query(description="Restrict aggregated actions to a single inventory row.")] = None,
+) -> InventoryActionCenterListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_action_center_response(
+        session,
+        current_user=None,
+        priority=priority,
+        action_category_str=action_category,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        unresolved_only=unresolved_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    )
+
+
+@app.get(
+    "/ops/inventory-action-center/summary",
+    response_model=InventoryActionCenterSummary,
+    include_in_schema=False,
+)
+def get_ops_inventory_action_center_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by deterministic workflow lane")] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query(description="Filter by raw release_status")] = None,
+    unresolved_only: bool = True,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[int | None, Query(description="Restrict summary to one inventory row.")] = None,
+) -> InventoryActionCenterSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return get_inventory_action_center_response(
+        session,
+        current_user=None,
+        priority=priority,
+        action_category_str=action_category,
+        ownership_state=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        unresolved_only=unresolved_only,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    ).summary
+
+
+@app.get("/ops/reports/inventory.csv", include_in_schema=False)
+def export_ops_inventory_csv_report(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    filt: Annotated[InventoryExportFilters, Depends(parse_inventory_export_filters)],
+    run_detection_series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter global run-detection overlay columns by deterministic series status."),
+    ] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, _ = inventory_export_rows_ops(session, filt=filt, series_status=run_detection_series_status)
+    return _reports_attachment_response(
+        render_csv(INVENTORY_OPS_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="ops-inventory-all-accounts",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/inventory.json", include_in_schema=False)
+def export_ops_inventory_json_report(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    filt: Annotated[InventoryExportFilters, Depends(parse_inventory_export_filters)],
+    run_detection_series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter global run-detection overlay columns by deterministic series status."),
+    ] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, as_of = inventory_export_rows_ops(session, filt=filt, series_status=run_detection_series_status)
+    return _reports_attachment_response(
+        inventory_export_json_document(rows, filt, INVENTORY_OPS_CSV_COLUMNS, as_of),
+        media_type="application/json; charset=utf-8",
+        stem="ops-inventory-all-accounts",
+        extension="json",
+    )
+
+
+@app.get("/ops/reports/action-center.csv", include_in_schema=False)
+def export_ops_action_center_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    priority: Annotated[
+        InventoryRiskPriority | None,
+        Query(description="Filter by deterministic workflow lane"),
+    ] = None,
+    action_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter by deterministic action-center category."),
+    ] = None,
+    ownership_state: Annotated[
+        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
+        Query(description="Filter by normalized ownership state."),
+    ] = None,
+    publisher: str | None = None,
+    release_status: Annotated[
+        InventoryReleaseStatusFilter | None,
+        Query(description="Filter by raw release_status"),
+    ] = None,
+    in_hand_only: bool = False,
+    inventory_copy_id: Annotated[
+        int | None,
+        Query(description="Restrict exported actions to a single inventory row."),
+    ] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, _ = action_center_export_rows(
+        session,
+        current_user=None,
+        priority=priority,
+        category=action_category,
+        ownership_state_filter=ownership_state,
+        publisher=publisher,
+        release_status_filter=release_status,
+        in_hand_only=in_hand_only,
+        inventory_copy_id_filter=inventory_copy_id,
+    )
+    return _reports_attachment_response(
+        render_csv(ACTION_CENTER_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="ops-inventory-action-center",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/order-arrival.csv", include_in_schema=False)
+def export_ops_order_arrival_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    params: Annotated[OrderArrivalExportParams, Depends(parse_order_arrival_export_params)],
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, _ = order_arrival_export_rows(
+        session,
+        current_user=None,
+        classification=params.classification,
+        retailer=params.retailer,
+        publisher=params.publisher,
+        release_date_from=params.release_date_from,
+        release_date_to=params.release_date_to,
+        expected_ship_date_from=params.expected_ship_date_from,
+        expected_ship_date_to=params.expected_ship_date_to,
+        order_status=params.order_status,
+        in_hand_only=params.in_hand_only,
+    )
+    return _reports_attachment_response(
+        render_csv(ORDER_ARRIVAL_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="ops-order-arrival-intelligence",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/run-detection.csv", include_in_schema=False)
+def export_ops_run_detection_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    series_status: Annotated[
+        RunDetectionSeriesStatus | None,
+        Query(description="Filter series groups by deterministic run-detection status."),
+    ] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, _ = run_detection_series_rows(
+        session,
+        current_user=None,
+        ops_scope=True,
+        series_status=series_status,
+    )
+    return _reports_attachment_response(
+        render_csv(RUN_DETECTION_SERIES_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="ops-run-detection-series",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/timeline.csv", include_in_schema=False)
+def export_ops_timeline_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    tl: Annotated[TimelineExportParams, Depends(parse_timeline_export_params)],
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    rows, _ = timeline_export_rows(
+        session,
+        ops_scope=True,
+        scoped_user_id=None,
+        event_type_filter=tl.event_type,
+        publisher=tl.publisher,
+        ownership_filter=tl.ownership_state,
+        release_status_tl=tl.release_status,
+        start_date_tl=tl.start_date,
+        end_date_tl=tl.end_date,
+        preorder_only=tl.preorder_only,
+        in_hand_only=tl.in_hand_only,
+    )
+    return _reports_attachment_response(
+        render_csv(TIMELINE_CSV_COLUMNS, rows),
+        media_type="text/csv; charset=utf-8",
+        stem="ops-collection-timeline",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/collection-summary.json", include_in_schema=False)
+def export_ops_collection_summary_json_report(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    payload = collection_summary_payload(
+        session,
+        projection_user_filter=None,
+        intel_user=None,
+        include_reconciliation=True,
+    )
+    return _reports_attachment_response(
+        dumps_report_json(payload),
+        media_type="application/json; charset=utf-8",
+        stem="ops-collection-summary",
+        extension="json",
+    )
 
 @app.get("/inventory/summary", response_model=InventorySummaryResponse)
 def get_inventory_summary(
@@ -5011,7 +5778,7 @@ def get_collection_timeline_events(
         CollectionTimelineOwnershipStateFilter | None,
         Query(description="Filter rows to copies whose current normalized ownership matches."),
     ] = None,
-    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query()] = None,
     start_date: Annotated[date | None, Query()] = None,
     end_date: Annotated[date | None, Query()] = None,
     preorder_only: bool = False,
@@ -5053,7 +5820,7 @@ def get_collection_timeline_summary(
         CollectionTimelineOwnershipStateFilter | None,
         Query(description="Filter rows to copies whose current normalized ownership matches."),
     ] = None,
-    release_status: Annotated[Literal["released", "not_released_yet", "unknown"] | None, Query()] = None,
+    release_status: Annotated[InventoryReleaseStatusFilter | None, Query()] = None,
     start_date: Annotated[date | None, Query()] = None,
     end_date: Annotated[date | None, Query()] = None,
     preorder_only: bool = False,

@@ -2447,6 +2447,17 @@ export interface InventoryQueryParams {
   sort_dir?: "asc" | "desc";
 }
 
+export type InventoryReportExportParams = Omit<InventoryQueryParams, "page" | "page_size"> & {
+  ownership_state?: InventoryOwnershipNormalized;
+  release_status?: InventoryItem["release_status"];
+  order_status?: InventoryItem["order_status"];
+  preorder_only?: boolean;
+  in_hand_only?: boolean;
+  start_date?: string;
+  end_date?: string;
+};
+
+
 export interface OrderQueryParams {
   page: number;
   page_size: number;
@@ -2553,6 +2564,60 @@ async function fetchBinary(path: string): Promise<Blob> {
   return response.blob();
 }
 
+function parseAttachmentFilename(contentDispositionHeader: string | null | undefined, fallback: string): string {
+  if (!contentDispositionHeader) {
+    return fallback;
+  }
+  const match = contentDispositionHeader.match(/filename\s*=\s*"([^"]+)"/i);
+  const candidate = match?.[1]?.trim();
+  return candidate?.length ? candidate : fallback;
+}
+
+function browserDownloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadAuthenticatedReport(pathFromRoot: string, fallbackFilename: string): Promise<void> {
+  const token = getStoredToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${pathFromRoot}`, { headers });
+
+  if (response.status === 401) {
+    clearStoredToken();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new ApiError("Authentication required", 401);
+  }
+
+  if (!response.ok) {
+    let message = "Request failed";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === "string") {
+        message = data.detail;
+      }
+    } catch {
+      //
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const filename = parseAttachmentFilename(response.headers.get("Content-Disposition"), fallbackFilename);
+  const blob = await response.blob();
+  browserDownloadBlob(blob, filename);
+}
+
 function buildOcrReviewQueueQueryString(params: OcrReviewQueueQueryParams): string {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -2578,6 +2643,7 @@ function buildQueryString(
   params:
     | Record<string, string | number | boolean | undefined>
     | InventoryQueryParams
+    | InventoryReportExportParams
     | OrderQueryParams
     | ImportQueryParams,
 ): string {
@@ -2591,6 +2657,12 @@ function buildQueryString(
 
   const query = searchParams.toString();
   return query ? `?${query}` : "";
+}
+
+
+export function inventoryListingQueryToReportQueryString(filters: InventoryQueryParams): string {
+  const { page: _page, page_size: _pageSize, ...rest } = filters;
+  return buildQueryString(rest as Record<string, string | number | boolean | undefined>);
 }
 
 export const apiClient = {
@@ -4098,6 +4170,76 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  /** Deterministic CSV/JSON exports (`GET /reports/...`): uses server ``Content-Disposition`` filename when provided. */
+
+  downloadOwnerReportsInventoryCsvAll(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory.csv", "inventory.csv");
+  },
+
+  downloadOwnerReportsInventoryCsvFiltered(listingFilters: InventoryQueryParams): Promise<void> {
+    const query = inventoryListingQueryToReportQueryString(listingFilters);
+    return downloadAuthenticatedReport(`/reports/inventory.csv${query}`, "inventory.csv");
+  },
+
+  downloadOwnerReportsInventoryJsonAll(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory.json", "inventory.json");
+  },
+
+  downloadOwnerReportsInventoryJsonFiltered(listingFilters: InventoryQueryParams): Promise<void> {
+    const query = inventoryListingQueryToReportQueryString(listingFilters);
+    return downloadAuthenticatedReport(`/reports/inventory.json${query}`, "inventory.json");
+  },
+
+  downloadOwnerReportsActionCenterCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/action-center.csv", "inventory-action-center.csv");
+  },
+
+  downloadOwnerReportsOrderArrivalCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/order-arrival.csv", "order-arrival-intelligence.csv");
+  },
+
+  downloadOwnerReportsRunDetectionCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/run-detection.csv", "run-detection-series.csv");
+  },
+
+  downloadOwnerReportsTimelineCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/timeline.csv", "collection-timeline.csv");
+  },
+
+  downloadOwnerReportsCollectionSummaryJson(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/collection-summary.json", "collection-summary.json");
+  },
+
+  /** Fleet-scoped deterministic exports (`GET /ops/reports/...`, ops admins only). */
+
+  downloadOpsReportsInventoryCsvAll(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory.csv", "ops-inventory-all-accounts.csv");
+  },
+
+  downloadOpsReportsInventoryJsonAll(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory.json", "ops-inventory-all-accounts.json");
+  },
+
+  downloadOpsReportsActionCenterCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/action-center.csv", "ops-inventory-action-center.csv");
+  },
+
+  downloadOpsReportsOrderArrivalCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/order-arrival.csv", "ops-order-arrival-intelligence.csv");
+  },
+
+  downloadOpsReportsRunDetectionCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/run-detection.csv", "ops-run-detection-series.csv");
+  },
+
+  downloadOpsReportsTimelineCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/timeline.csv", "ops-collection-timeline.csv");
+  },
+
+  downloadOpsReportsCollectionSummaryJson(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/collection-summary.json", "ops-collection-summary.json");
   },
 
   fetchCoverImageBlob(path: string): Promise<Blob> {
