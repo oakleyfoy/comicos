@@ -1032,33 +1032,31 @@ export function DashboardPage() {
         }
       />
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {cards.map((card) => (
-            <article
-              key={card.label}
-              className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-lg shadow-black/20"
-            >
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-                {card.label}
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{card.value}</p>
-            </article>
-          ))}
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <article
+            key={card.label}
+            className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15"
+          >
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">{card.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{card.value}</p>
+          </article>
+        ))}
       </section>
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">
           <div>
-            <h2 className="text-sm font-semibold text-white">Deterministic exports</h2>
+            <h2 className="text-sm font-semibold text-white">Deterministic exports (CSV / JSON)</h2>
             <p className="mt-1 max-w-xl text-[11px] text-slate-400">
-              Read-only CSV/JSON snapshots aligned with Intelligence surfaces. Outputs omit FMV/speculation paths and reflect
-              the same filters applied to inventory reports when exporting the filtered workbook.
+              Read-only snapshots aligned with risk, action center, order/arrival, run gaps, timeline, and collection
+              summary. Omit FMV; filtered exports mirror the workbook controls below when you export from here.
             </p>
           </div>
           <span className="rounded-full border border-cyan-400/25 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/80">
             Owner scope
           </span>
-        </div>
+        </summary>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -1126,17 +1124,16 @@ export function DashboardPage() {
             Collection summary JSON
           </button>
         </div>
-      </section>
+      </details>
 
       {inventoryRiskSummary ? (
         <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Inventory risk</h2>
+              <h2 className="text-lg font-semibold text-white">Inventory risk lanes</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Deterministic attention surface derived from existing conflicts, canonical review, scan/OCR quality,
-                preorder gaps, duplicate uncertainty, and run-detection signals. No pricing, speculation, or automated
-                fixes.
+                Attention surface derived deterministically from conflicts, canonical reviews, scans/OCR, preorder gaps,
+                duplicate uncertainty, and run gaps — no pricing or automated fixes.
               </p>
             </div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -1226,11 +1223,10 @@ export function DashboardPage() {
         <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Inventory action center</h2>
+              <h2 className="text-lg font-semibold text-white">Workflow action center</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Workflow-facing rollup of deterministic inventory attention items (risk lanes, duplicate and variant
-                intelligence, preorder gaps where not already covered elsewhere, and arrivals). Same priority scale as
-                inventory risk — read-only, no mutations.
+                Same priority ladder as risk lanes: conflicts, canon, duplication, scans/OCR, preorder-arrival overlaps.
+                Read-only — no mutations.
               </p>
             </div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -1271,7 +1267,6 @@ export function DashboardPage() {
               <ul className="mt-3 space-y-2 text-xs text-slate-300">
                 {inventoryActionSummary.by_category
                   .filter((row) => row.count > 0)
-                  .sort((a, b) => b.count - a.count)
                   .slice(0, 8)
                   .map((row) => (
                     <li key={row.key ?? "null"} className="flex justify-between gap-3 border-b border-white/5 pb-2">
@@ -1332,10 +1327,10 @@ export function DashboardPage() {
         <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Collection timeline & activity</h2>
+              <h2 className="text-lg font-semibold text-white">Collection timeline (activity history)</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Deterministic timestamps from purchases, arrivals, scans, OCR, link decisions, replays, duplicate
-                reviews, conflicts, and variant-family signals — no valuations, summaries, or hidden inference.
+                Persisted timestamps for purchases, arrivals, scans/OCR (and replays), link decisions, duplicate reviews,
+                conflicts, variants — valuations never appear here.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-3">
                 <p className="w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -1499,10 +1494,10 @@ export function DashboardPage() {
         <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Order pipeline & arrivals</h2>
+              <h2 className="text-lg font-semibold text-white">Order / arrival lanes</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Derived from purchase/release/ship timestamps and normalized order statuses. Read-only logistics
-                overlay (no FMV/pricing/speculation/automatic receiving).
+                Derived from persisted purchase, release, expected-ship, and receipt fields plus order status — logistics
+                only (no FMV, pricing, speculation, or auto-receiving).
               </p>
             </div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -1583,18 +1578,28 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      {inventoryIntelSummary && inventoryIntelHealth ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      {((inventoryIntelSummary && inventoryIntelHealth) ||
+        (collectionAnalyticsSummary && collectionAnalyticsQuality)) ? (
+        <details className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/45 p-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Inventory intelligence</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Read-only deterministic signals derived from scans, preorder calendar coverage, OCR and cover
-                processing state, unresolved conflicts/suggestions/duplicate-groups, plus probable clustering for
-                dedupe and variant surfaces. Nothing here modifies records.
+              <h2 className="text-lg font-semibold text-white">Coverage rollup & publishers</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-400">
+                Collapsed by default — ownership mix, health buckets, preorder exposure, OCR/canon coverage and
+                deterministic publisher totals (mirrors Ops collection analytics wording).
               </p>
             </div>
-          </div>
+          </summary>
+          <div className="mt-8 space-y-12 border-t border-white/5 pt-8">
+            {inventoryIntelSummary && inventoryIntelHealth ? (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-white">Inventory intelligence rollup</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Scans/OCR backlog, unresolved review workloads, deterministic duplicate/variant clustering touch —
+                    read-only projections.
+                  </p>
+                </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
             <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">In hand</p>
@@ -1665,21 +1670,20 @@ export function DashboardPage() {
               </p>
             </article>
           </div>
-        </section>
-      ) : null}
-
-      {collectionAnalyticsSummary && collectionAnalyticsQuality ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Collection analytics</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Deterministic portfolio rollups across publishers, fulfillment, scans, OCR, canonical linkage, preorder
-              calendar exposure, and duplicate-ownership clustering. Reporting only (no mutations, pricing, or AI scoring).
-              As-of anchor:{" "}
-              <span className="font-semibold text-slate-200">{collectionAnalyticsSummary.generated_as_of_date}</span>
-            </p>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              </div>
+            ) : null}
+            {collectionAnalyticsSummary && collectionAnalyticsQuality ? (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-white">Publisher & quality rollups</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    As-of anchor:{" "}
+                    <span className="font-semibold text-slate-200">
+                      {collectionAnalyticsSummary.generated_as_of_date}
+                    </span>
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preorder exposure</p>
               <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.preorder_copies}</p>
@@ -1809,20 +1813,32 @@ export function DashboardPage() {
               </div>
             </div>
           ) : null}
-        </section>
+              </div>
+            ) : null}
+          </div>
+        </details>
       ) : null}
 
       {duplicateOwnershipReport ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Duplicate ownership intelligence</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Read-only rollup that clusters copies you personally own using metadata identity overlap, deterministic
-              duplicate-scan intelligence, canonical edges, duplicate reviews, preorder + in-hand overlaps, graded vs raw
-              pairings, and approved human duplicate/same-cover links. There is never automatic dedupe, deletion, or
-              silent metadata rewriting from this lane.
-            </p>
-          </div>
+        <details
+          className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+          open={
+            duplicateOwnershipReport.summary.probable_accidental_duplicate_groups > 0 ||
+            duplicateOwnershipReport.summary.unresolved_duplicate_groups > 0
+          }
+        >
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Duplicate ownership clustering</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Read-only owner overlap buckets (deterministic clustering — never auto-dedupe or silent metadata edits).
+                  <span className="ml-1 text-[11px] text-slate-500"> Tap header to collapse.</span>
+                </p>
+              </div>
+            </div>
+          </summary>
+          <div className="mt-4 border-t border-white/5 pt-4">
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
             <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Overlap groups</p>
@@ -1890,19 +1906,22 @@ export function DashboardPage() {
               </p>
             </article>
           </div>
-        </section>
+          </div>
+        </details>
       ) : null}
 
       {runDetectionReport ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Run detection</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Read-only series progress computed from canonical series identity, deterministic issue ordering,
-              registry-backed known issues, ownership state, and future release visibility. This lane never creates a
-              wantlist or mutates metadata.
-            </p>
-          </div>
+        <details className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Series progress & missing-issue rows</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Canonical series grouping, deterministic issue ordering, gaps by ownership / release visibility — tap to
+                expand metrics.
+              </p>
+            </div>
+          </summary>
+          <div className="mt-4 border-t border-white/5 pt-4">
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
             <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Tracked series</p>
@@ -1933,7 +1952,7 @@ export function DashboardPage() {
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Probable ongoing</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Likely ongoing series</p>
               <p className="mt-2 text-2xl font-semibold text-white">
                 {runDetectionReport.summary.probable_ongoing_series_groups}
               </p>
@@ -1962,7 +1981,8 @@ export function DashboardPage() {
               </p>
             </article>
           </div>
-        </section>
+          </div>
+        </details>
       ) : null}
 
       {!hasPerformanceData ? (
@@ -1989,7 +2009,14 @@ export function DashboardPage() {
           />
         </div>
       ) : (
-        <section className="mt-6 grid gap-4 xl:grid-cols-3">
+        <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-4 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none">
+            <h2 className="text-lg font-semibold text-white">Portfolio performance (FMV)</h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-400">
+              Separate from deterministic intelligence lanes. Expand for gain / loss boards after FMV assignments.
+            </p>
+          </summary>
+          <div className="mt-6 grid gap-4 border-t border-white/5 pt-6 xl:grid-cols-3">
           {analyticsSections.map((section) => (
             <article
               key={section.title}
@@ -2045,7 +2072,8 @@ export function DashboardPage() {
               </div>
             </article>
           ))}
-        </section>
+          </div>
+        </details>
       )}
 
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">

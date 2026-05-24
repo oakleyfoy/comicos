@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from datetime import date, datetime
 import json
 from typing import Annotated, Literal
@@ -507,16 +509,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
     iso = date.today().isoformat()
     base = sanitize_report_filename(f"{stem}-{iso}")
     filename = f"{base}.{extension}"
     blob = body.encode("utf-8") if isinstance(body, str) else body
+    disp = (
+        'attachment; filename="{fn}"; filename*=UTF-8\'\'{fn_star}'
+    ).format(fn=filename, fn_star=quote(filename, safe=""))
     return Response(
         content=blob,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": disp,
         },
     )
 
@@ -698,12 +704,13 @@ def ops_collection_analytics_summary(
     as_of: Annotated[date | None, Query(alias="as_of")] = None,
 ) -> CollectionAnalyticsSummary:
     ensure_ops_admin_access(current_user, settings)
-    return analyze_collection_summary(
+    summary_bundle, _ = analyze_collection_summary(
         session,
         projection_user_filter=None,
         intel_user=None,
         as_of_date=as_of,
     )
+    return summary_bundle
 
 
 @app.get(
@@ -4554,6 +4561,14 @@ def get_inventory(
         Query(description="Filter rows by matching inventory risk type."),
     ] = None,
     needs_attention: bool = False,
+    action_attention: Annotated[
+        bool,
+        Query(description="When true, only copies that have workflow actions in critical/high lanes."),
+    ] = False,
+    action_center_category: Annotated[
+        InventoryActionCenterCategory | None,
+        Query(description="Filter rows requiring the given deterministic action-center category."),
+    ] = None,
     arrival_classification: Annotated[
         OrderArrivalClassification | None,
         Query(description="Filter rows derived order/arrival classification."),
@@ -4578,10 +4593,13 @@ def get_inventory(
         risk_priority=risk_priority,
         risk_type=risk_type,
         needs_attention=needs_attention,
+        action_attention=action_attention,
+        action_center_category=action_center_category,
         arrival_classification=arrival_classification,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
+
 
 @app.get("/reports/inventory.csv")
 def export_owner_inventory_csv_report(
@@ -5303,198 +5321,6 @@ def export_ops_collection_summary_json_report(
         extension="json",
     )
 
-@app.get("/inventory/summary", response_model=InventorySummaryResponse)
-def get_inventory_summary(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-) -> InventorySummaryResponse:
-    return inventory_summary(session=session, current_user=current_user)
-
-
-@app.get("/inventory-intelligence/summary", response_model=InventoryIntelligenceSummary)
-def get_inventory_intelligence_summary_for_owner(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-) -> InventoryIntelligenceSummary:
-    summary, _, _, _ = compute_inventory_intelligence(
-        session,
-        current_user=current_user,
-        include_signals=False,
-    )
-    return summary
-
-
-@app.get("/inventory-intelligence/health", response_model=InventoryIntelligenceHealthSummary)
-def get_inventory_intelligence_health_for_owner(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-) -> InventoryIntelligenceHealthSummary:
-    _, health, _, _ = compute_inventory_intelligence(
-        session,
-        current_user=current_user,
-        include_signals=False,
-    )
-    return health
-
-
-@app.get("/inventory-intelligence/breakdown", response_model=InventoryIntelligenceBreakdown)
-def get_inventory_intelligence_breakdown_for_owner(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-) -> InventoryIntelligenceBreakdown:
-    _, _, breakdown, _ = compute_inventory_intelligence(
-        session,
-        current_user=current_user,
-        include_signals=False,
-    )
-    return breakdown
-
-
-@app.get("/inventory-risks", response_model=InventoryRiskListResponse)
-def get_inventory_risks_for_owner(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    ownership_state: Annotated[
-        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
-        Query(description="Filter by normalized ownership state."),
-    ] = None,
-    publisher: str | None = None,
-    in_hand_only: bool = False,
-    open_only: bool = True,
-) -> InventoryRiskListResponse:
-    return get_inventory_risks_owner(
-        session,
-        user=current_user,
-        priority=priority,
-        risk_type=risk_type,
-        ownership_state=ownership_state,
-        publisher=publisher,
-        in_hand_only=in_hand_only,
-        open_only=open_only,
-    )
-
-
-@app.get("/inventory-risks/summary", response_model=InventoryRiskSummary)
-def get_inventory_risk_summary_for_owner(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    ownership_state: Annotated[
-        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
-        Query(description="Filter by normalized ownership state."),
-    ] = None,
-    publisher: str | None = None,
-    in_hand_only: bool = False,
-    open_only: bool = True,
-) -> InventoryRiskSummary:
-    summary = get_inventory_risks_owner(
-        session,
-        user=current_user,
-        priority=priority,
-        risk_type=risk_type,
-        ownership_state=ownership_state,
-        publisher=publisher,
-        in_hand_only=in_hand_only,
-        open_only=open_only,
-    ).summary
-    return summary
-
-
-@app.get("/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse)
-def get_inventory_risk_detail_for_owner(
-    inventory_copy_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    open_only: bool = True,
-) -> InventoryRiskListResponse:
-    return get_inventory_risk_detail_owner(
-        session,
-        user=current_user,
-        inventory_copy_id=inventory_copy_id,
-        priority=priority,
-        risk_type=risk_type,
-        open_only=open_only,
-    )
-
-
-@app.get("/ops/inventory-risks", response_model=InventoryRiskListResponse, include_in_schema=False)
-def get_ops_inventory_risks(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    settings: Settings = Depends(get_settings),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    ownership_state: Annotated[
-        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
-        Query(description="Filter by normalized ownership state."),
-    ] = None,
-    publisher: str | None = None,
-    in_hand_only: bool = False,
-    open_only: bool = True,
-) -> InventoryRiskListResponse:
-    ensure_ops_admin_access(current_user, settings)
-    return get_inventory_risks_ops(
-        session,
-        priority=priority,
-        risk_type=risk_type,
-        ownership_state=ownership_state,
-        publisher=publisher,
-        in_hand_only=in_hand_only,
-        open_only=open_only,
-    )
-
-
-@app.get("/ops/inventory-risks/summary", response_model=InventoryRiskSummary, include_in_schema=False)
-def get_ops_inventory_risk_summary(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    settings: Settings = Depends(get_settings),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    ownership_state: Annotated[
-        Literal["in_hand", "preorder", "ordered_not_received", "cancelled", "unknown_state"] | None,
-        Query(description="Filter by normalized ownership state."),
-    ] = None,
-    publisher: str | None = None,
-    in_hand_only: bool = False,
-    open_only: bool = True,
-) -> InventoryRiskSummary:
-    ensure_ops_admin_access(current_user, settings)
-    return get_inventory_risks_ops(
-        session,
-        priority=priority,
-        risk_type=risk_type,
-        ownership_state=ownership_state,
-        publisher=publisher,
-        in_hand_only=in_hand_only,
-        open_only=open_only,
-    ).summary
-
-
-@app.get("/ops/inventory/{inventory_copy_id}/risks", response_model=InventoryRiskListResponse, include_in_schema=False)
-def get_ops_inventory_risk_detail(
-    inventory_copy_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    settings: Settings = Depends(get_settings),
-    priority: Annotated[InventoryRiskPriority | None, Query(description="Filter by priority.")] = None,
-    risk_type: Annotated[InventoryRiskType | None, Query(description="Filter by risk type.")] = None,
-    open_only: bool = True,
-) -> InventoryRiskListResponse:
-    ensure_ops_admin_access(current_user, settings)
-    return get_inventory_risk_detail_ops(
-        session,
-        inventory_copy_id=inventory_copy_id,
-        priority=priority,
-        risk_type=risk_type,
-        open_only=open_only,
-    )
-
 
 OrderArrivalOrderStatusLiteral = Literal["ordered", "preordered", "shipped", "received", "cancelled"]
 
@@ -5697,12 +5523,13 @@ def get_collection_analytics_summary(
     as_of: Annotated[date | None, Query(alias="as_of")] = None,
 ) -> CollectionAnalyticsSummary:
     assert current_user.id is not None
-    return analyze_collection_summary(
+    summary_bundle, _ = analyze_collection_summary(
         session,
         projection_user_filter=int(current_user.id),
         intel_user=current_user,
         as_of_date=as_of,
     )
+    return summary_bundle
 
 
 @app.get("/collection-analytics/publishers", response_model=CollectionPublisherAnalyticsResponse)

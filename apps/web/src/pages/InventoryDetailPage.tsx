@@ -2183,18 +2183,6 @@ export function InventoryDetailPage() {
           }
         />
 
-        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            to="/dashboard"
-            className="inline-flex rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-cyan-300/40 hover:bg-white/5"
-          >
-            Back to Dashboard
-          </Link>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-            Inventory Copy #{detail.inventory_copy_id}
-          </p>
-        </div>
-
         {collectionPulseError ? (
           <div className="mt-4">
             <StatusBanner tone="error">{collectionPulseError}</StatusBanner>
@@ -2281,16 +2269,19 @@ export function InventoryDetailPage() {
                 {detail.duplicate_ownership ? (
                   <InventoryDuplicateOwnershipCallout attachment={detail.duplicate_ownership} />
                 ) : null}
-                {detail.inventory_risks && detail.inventory_risks.length ? (
+                {detail.inventory_risks &&
+                detail.inventory_risks.length > 0 &&
+                detail.inventory_action_center &&
+                detail.inventory_action_center.action_categories.length > 0 ? (
                   <section className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Risk / action</p>
-                        <h3 className="mt-1 text-base font-semibold text-white">Deterministic attention items</h3>
+                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Attention lanes</p>
+                        <h3 className="mt-1 text-base font-semibold text-white">Risk lanes & workflow action center</h3>
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          Same deterministic priority ladder as the Dashboard — read-only, no mutations.
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500">
-                        {detail.inventory_risks.length} active risk{detail.inventory_risks.length === 1 ? "" : "s"}
-                      </p>
                     </div>
                     <div className="mt-4 grid gap-3">
                       {detail.inventory_risks.slice(0, 6).map((risk) => (
@@ -2303,25 +2294,17 @@ export function InventoryDetailPage() {
                             >
                               {inventoryRiskLabel(risk.risk_type)}
                             </span>
-                            <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
-                              {risk.priority}
-                            </span>
+                            <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{risk.priority}</span>
                           </div>
                           <p className="mt-3 text-xs text-slate-300">{inventoryRiskEvidenceSummary(risk)}</p>
                         </article>
                       ))}
                     </div>
-                  </section>
-                ) : null}
-                {detail.inventory_action_center &&
-                detail.inventory_action_center.action_categories.length > 0 ? (
-                  <section className="mt-4 rounded-2xl border border-teal-400/20 bg-slate-950/60 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Workflow</p>
-                        <h3 className="mt-1 text-base font-semibold text-white">Inventory action center</h3>
-                      </div>
+                    <div className="mt-5 rounded-2xl border border-teal-400/20 bg-slate-950/40 p-4">
                       <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-200/90">
+                          Workflow buckets
+                        </p>
                         {detail.inventory_action_center.highest_lane_priority ? (
                           <span
                             className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${inventoryRiskPriorityTone(
@@ -2337,33 +2320,122 @@ export function InventoryDetailPage() {
                           </span>
                         ) : null}
                       </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {detail.inventory_action_center.action_categories.map((cat) => (
-                        <span
-                          key={cat}
-                          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                            detail.inventory_action_center?.urgent_lane
-                              ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
-                              : "border-teal-400/30 bg-teal-400/10 text-teal-100"
-                          }`}
-                        >
-                          {inventoryActionCenterCategoryUiLabel(cat)}
-                        </span>
-                      ))}
-                    </div>
-                    {detail.inventory_action_center.action_keys.length ? (
-                      <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Stable action keys</p>
-                        <ul className="mt-2 list-disc pl-4">
-                          {detail.inventory_action_center.action_keys.slice(0, 12).map((key) => (
-                            <li key={key}>{key}</li>
-                          ))}
-                        </ul>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {detail.inventory_action_center.action_categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                              detail.inventory_action_center?.urgent_lane
+                                ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
+                                : "border-teal-400/30 bg-teal-400/10 text-teal-100"
+                            }`}
+                          >
+                            {inventoryActionCenterCategoryUiLabel(cat)}
+                          </span>
+                        ))}
                       </div>
-                    ) : null}
+                      {detail.inventory_action_center.action_keys.length ? (
+                        <details className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
+                          <summary className="cursor-pointer text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                            Stable action keys ({detail.inventory_action_center.action_keys.length})
+                          </summary>
+                          <ul className="mt-2 list-disc pl-4">
+                            {detail.inventory_action_center.action_keys.slice(0, 12).map((key) => (
+                              <li key={key}>{key}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                    </div>
                   </section>
-                ) : null}
+                ) : (
+                  <>
+                    {detail.inventory_risks && detail.inventory_risks.length ? (
+                      <section className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Attention lanes</p>
+                            <h3 className="mt-1 text-base font-semibold text-white">Risk lanes</h3>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {detail.inventory_risks.length} active risk{detail.inventory_risks.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="mt-4 grid gap-3">
+                          {detail.inventory_risks.slice(0, 6).map((risk) => (
+                            <article key={risk.risk_key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <span
+                                  className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${inventoryRiskPriorityTone(
+                                    risk.priority,
+                                  )}`}
+                                >
+                                  {inventoryRiskLabel(risk.risk_type)}
+                                </span>
+                                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                                  {risk.priority}
+                                </span>
+                              </div>
+                              <p className="mt-3 text-xs text-slate-300">{inventoryRiskEvidenceSummary(risk)}</p>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                    {detail.inventory_action_center && detail.inventory_action_center.action_categories.length > 0 ? (
+                      <section className="mt-4 rounded-2xl border border-teal-400/20 bg-slate-950/60 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Attention lanes</p>
+                            <h3 className="mt-1 text-base font-semibold text-white">Workflow action center</h3>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {detail.inventory_action_center.highest_lane_priority ? (
+                              <span
+                                className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${inventoryRiskPriorityTone(
+                                  detail.inventory_action_center.highest_lane_priority,
+                                )}`}
+                              >
+                                Top lane: {detail.inventory_action_center.highest_lane_priority}
+                              </span>
+                            ) : null}
+                            {detail.inventory_action_center.urgent_lane ? (
+                              <span className="inline-flex rounded-full border border-rose-400/35 bg-rose-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-100">
+                                Critical / high lane
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {detail.inventory_action_center.action_categories.map((cat) => (
+                            <span
+                              key={cat}
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                                detail.inventory_action_center?.urgent_lane
+                                  ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
+                                  : "border-teal-400/30 bg-teal-400/10 text-teal-100"
+                              }`}
+                            >
+                              {inventoryActionCenterCategoryUiLabel(cat)}
+                            </span>
+                          ))}
+                        </div>
+                        {detail.inventory_action_center.action_keys.length ? (
+                          <details className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
+                            <summary className="cursor-pointer text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                              Stable action keys
+                            </summary>
+                            <ul className="mt-2 list-disc pl-4">
+                              {detail.inventory_action_center.action_keys.slice(0, 12).map((key) => (
+                                <li key={key}>{key}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+                      </section>
+                    ) : null}
+                  </>
+                )}
                 {detail.order_arrival_classifications && detail.order_arrival_classifications.length ? (
                   <section className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2450,12 +2522,12 @@ export function InventoryDetailPage() {
           <section className="mt-8 rounded-3xl border border-cyan-400/20 bg-slate-950/45 p-5 shadow-xl shadow-black/15">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Inventory timeline</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Inventory timeline — activity history</p>
                 <h2 className="mt-1 text-lg font-semibold text-white">Preorder → fulfillment → reconciliation</h2>
                 <p className="mt-2 max-w-prose text-sm text-slate-400">
                   Read-only audit trail from persisted fields and pipeline rows: dates, arrivals, scans, OCR (including
-                  replays), link decisions / relationship replay, canonical reviews, conflicts, duplicates, and
-                  variant-family detection. Ordering matches the API (deterministic, no speculative filling).
+                  replays), link decisions / relationship replay, canonical reviews, conflicts, duplicates, and variant-family
+                  detection. Ordering matches the API (deterministic, no speculative filling).
                 </p>
               </div>
               <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center">

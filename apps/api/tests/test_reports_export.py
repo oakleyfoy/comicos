@@ -5,7 +5,11 @@ import json
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
-from app.services.reports_export import INVENTORY_OPS_CSV_COLUMNS, INVENTORY_OWNER_CSV_COLUMNS
+from app.services.reports_export import INVENTORY_OPS_CSV_COLUMNS, INVENTORY_OWNER_CSV_COLUMNS, sanitize_report_filename
+
+
+def test_sanitize_report_filename_strips_controls() -> None:
+    assert sanitize_report_filename("  hello\nWORLD\t") == "hello-world"
 
 
 def register_and_login(client: TestClient, email: str) -> str:
@@ -102,7 +106,9 @@ def test_owner_inventory_export_csv_columns_order_and_no_fmv_headers(client: Tes
     assert header == expected
     ctype = res.headers.get("content-type", "")
     assert "text/csv" in ctype
-    assert res.headers.get("content-disposition", "").startswith("attachment;")
+    cd = res.headers.get("content-disposition", "")
+    assert cd.startswith("attachment;")
+    assert "filename*=" in cd.lower()
 
 
 def test_owner_inventory_export_scopes_other_users(client: TestClient) -> None:
@@ -160,6 +166,7 @@ def test_owner_inventory_json_sorted_keys_and_lists_rows(client: TestClient) -> 
     assert cols == list(INVENTORY_OWNER_CSV_COLUMNS)
 
     filt_keys = decoded["filters"]
+    assert isinstance(filt_keys, dict)
     assert sorted(filt_keys.keys()) == list(filt_keys.keys())
 
     inventory_blob = decoded["rows"][0]
@@ -167,6 +174,9 @@ def test_owner_inventory_json_sorted_keys_and_lists_rows(client: TestClient) -> 
     assert "gain_loss" not in inventory_blob
     ctype = res.headers.get("content-type", "")
     assert "application/json" in ctype
+    cd = res.headers.get("content-disposition", "")
+    assert cd.startswith("attachment;")
+    assert "filename*=" in cd.lower()
 
 
 def test_reports_export_repeat_download_stable(client: TestClient) -> None:

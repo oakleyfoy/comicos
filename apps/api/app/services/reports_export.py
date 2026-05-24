@@ -138,7 +138,8 @@ TIMELINE_CSV_COLUMNS: tuple[str, ...] = (
 
 
 def sanitize_report_filename(fragment: str) -> str:
-    cleaned = re.sub(r"[^\w\-]+", "-", fragment, flags=re.ASCII)
+    stripped = fragment.strip().replace("\x00", "").replace("\r", "-").replace("\n", "-").replace("\t", "-")
+    cleaned = re.sub(r"[^\w\-]+", "-", stripped, flags=re.ASCII)
     cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-").lower()
     return cleaned[:120] if cleaned else "report"
 
@@ -707,13 +708,12 @@ def collection_summary_payload(
     intel_user: User | None,
     include_reconciliation: bool,
 ) -> dict[str, Any]:
-    analytics = analyze_collection_summary(
+    analytics, intelligence_summary = analyze_collection_summary(
         session,
         projection_user_filter=projection_user_filter,
         intel_user=intel_user,
         as_of_date=None,
     )
-    intelligence_summary = compute_inventory_intelligence(session, current_user=intel_user, include_signals=False)[0]
     risks_summary = compute_inventory_risks(session, current_user=intel_user, open_only=True)[0]
 
     duplicate_payload: dict[str, Any]
@@ -761,7 +761,7 @@ def inventory_export_json_document(
         "schema": "comic-os.reports.inventory.v1",
         "generated_as_of_date": as_of_date.isoformat(),
         "columns": list(columns),
-        "filters": json.loads(json.dumps(filt.echo(), default=str)),
+        "filters": json.loads(json.dumps(filt.echo(), default=str, sort_keys=True)),
         "rows": rows,
     }
     return dumps_report_json(payload)

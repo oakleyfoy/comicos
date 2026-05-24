@@ -2199,21 +2199,22 @@ export function OperationsPage() {
         description="Lightweight operational visibility for Gmail ingestion, parser activity, queue health, and import lifecycle state."
       />
 
-      <section className="mt-6 rounded-3xl border border-amber-400/40 bg-amber-400/10 p-4 shadow-xl shadow-black/25">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-amber-50">Fleet exports (operations only)</h2>
-            <p className="mt-1 max-w-3xl text-[11px] text-amber-100/85">
-              These downloads aggregate every ComicOS collector account visible to Ops. Rows include deterministic{" "}
-              <span className="font-semibold">owner identifiers</span> where required by the underlying inventory export.
-              No metadata mutation occurs while generating attachments.
-            </p>
+      <details className="mt-6 rounded-3xl border border-amber-400/40 bg-amber-400/10 p-4 shadow-xl shadow-black/25 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-50">Fleet exports (deterministic snapshots)</h2>
+              <p className="mt-1 max-w-3xl text-[11px] text-amber-100/85">
+                Ops-only CSV/JSON. Rows include deterministic{" "}
+                <span className="font-semibold">owner identifiers</span> where the schema requires multi-tenant context.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-200/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100">
+              Ops / multi-tenant
+            </span>
           </div>
-          <span className="rounded-full border border-amber-200/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100">
-            Ops / multi-tenant
-          </span>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        </summary>
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-amber-200/20 pt-4">
           <button
             type="button"
             className={opsExportChipClass}
@@ -2264,7 +2265,7 @@ export function OperationsPage() {
             Ops collection summary JSON
           </button>
         </div>
-      </section>
+      </details>
 
       {error ? (
         <div className="mt-6">
