@@ -8,7 +8,9 @@ import {
   type ScanSessionIngestManifest,
   type ScanSessionItemsListResponse,
   type ScanSessionQaSummaryRead,
+  type ScanSessionRoutingRead,
   type ScanSessionSummary,
+  type QueueRoutingRecommendationRead,
   type ScanQaClassification,
   type ScanQaItemRead,
   type ScanQaRoutingRecommendation,
@@ -92,6 +94,7 @@ export function ScanSessionsPage() {
   const [manifestJson, setManifestJson] = useState('{\n  "items": []\n}');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [qaSummary, setQaSummary] = useState<ScanSessionQaSummaryRead | null>(null);
+  const [routingSummary, setRoutingSummary] = useState<ScanSessionRoutingRead | null>(null);
   const [qaClassFilter, setQaClassFilter] = useState<ScanQaClassification | "">("");
   const [qaRouteFilter, setQaRouteFilter] = useState<ScanQaRoutingRecommendation | "">("");
 
@@ -106,6 +109,17 @@ export function ScanSessionsPage() {
       rows.map((row): [number, ScanQaItemRead] => [row.scan_session_item_id, row]),
     );
   }, [qaSummary]);
+
+  const routingByItemId = useMemo(() => {
+    const rows = routingSummary?.items ?? [];
+    return new Map<number, QueueRoutingRecommendationRead>(
+      rows
+        .filter((row): row is QueueRoutingRecommendationRead & { scan_session_item_id: number } =>
+          typeof row.scan_session_item_id === "number",
+        )
+        .map((row) => [row.scan_session_item_id, row]),
+    );
+  }, [routingSummary]);
 
   const filteredSessionItems = useMemo(() => {
     if (!itemsPayload) return [];
@@ -140,18 +154,24 @@ export function ScanSessionsPage() {
     if (!sid) {
       setItemsPayload(null);
       setQaSummary(null);
+      setRoutingSummary(null);
       return;
     }
     setBusyKey(`items:${sid}`);
     setError(null);
     try {
-      const rows = await apiClient.getScanSessionItems(sid, { limit: 500, offset: 0 });
+      const [rows, qa, routing] = await Promise.all([
+        apiClient.getScanSessionItems(sid, { limit: 500, offset: 0 }),
+        apiClient.getScanSessionQa(sid),
+        apiClient.getScanSessionRouting(sid),
+      ]);
       setItemsPayload(rows);
-      const qa = await apiClient.getScanSessionQa(sid);
       setQaSummary(qa);
+      setRoutingSummary(routing);
     } catch (loadError) {
       setItemsPayload(null);
       setQaSummary(null);
+      setRoutingSummary(null);
       setError(loadError instanceof ApiError ? loadError.message : "Unable to fetch session rows.");
     } finally {
       setBusyKey(null);
@@ -173,6 +193,97 @@ export function ScanSessionsPage() {
     } finally {
       setBusyKey(null);
     }
+  }
+
+  async function generateRoutingSnapshot(): Promise<void> {
+    if (!numericSessionId) {
+      setError("Enter a numeric session id before generating routing.");
+      return;
+    }
+    setBusyKey("routing-run");
+    setError(null);
+    try {
+      const routing = await apiClient.generateScanSessionRouting(numericSessionId);
+      setRoutingSummary(routing);
+    } catch (loadError) {
+      setError(loadError instanceof ApiError ? loadError.message : "Unable to generate routing snapshot.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function acknowledgeRoutingRecommendation(recommendationId: number | null | undefined): Promise<void> {
+    if (!recommendationId) return;
+    setBusyKey(`routing-ack:${recommendationId}`);
+    setError(null);
+    try {
+      await apiClient.acknowledgeScanRoutingRecommendation(recommendationId);
+      await reloadItems();
+    } catch (loadError) {
+      setError(loadError instanceof ApiError ? loadError.message : "Unable to acknowledge routing recommendation.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function queueOcrForRouting(
+    recommendationId: number | null | undefined,
+    coverImageId: number | null | undefined,
+  ): Promise<void> {
+    if (!coverImageId) {
+      setError("This row does not have a linked cover image to queue OCR against.");
+      return;
+    }
+    setBusyKey(`routing-ocr:${coverImageId}`);
+    setError(null);
+    try {
+      await apiClient.runCoverImageOcr(coverImageId);
+      await acknowledgeRoutingRecommendation(recommendationId);
+      await reloadItems();
+    } catch (loadError) {
+      setError(loadError instanceof ApiError ? loadError.message : "Unable to queue OCR.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function requestHighResForRouting(
+    recommendationId: number | null | undefined,
+    scanSessionItemId: number,
+    scanSessionId: number | null | undefined,
+    coverImageId: number | null | undefined,
+    reasons: string[],
+  ): Promise<void> {
+    if (!scanSessionItemId || !scanSessionId) {
+      setError("Routing row is missing the session context required for high-res review.");
+      return;
+    }
+    setBusyKey(`routing-highres:${scanSessionItemId}`);
+    setError(null);
+    try {
+      const requestReason = reasons.includes("failed_ocr") || reasons.includes("unreadable_text")
+        ? "failed_ocr"
+        : reasons.includes("needs_rescan")
+          ? "rescan_required"
+          : "low_quality_scan";
+      await apiClient.createHighResReviewRequest({
+        inventory_copy_id: undefined,
+        source_cover_image_id: coverImageId ?? undefined,
+        source_scan_session_item_id: scanSessionItemId,
+        request_reason: requestReason,
+        priority: "high",
+      });
+      await acknowledgeRoutingRecommendation(recommendationId);
+      await reloadItems();
+    } catch (loadError) {
+      setError(loadError instanceof ApiError ? loadError.message : "Unable to request high-res review.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function holdRoutingRecommendation(recommendationId: number | null | undefined): Promise<void> {
+    await acknowledgeRoutingRecommendation(recommendationId);
   }
 
   async function createSessionPressed(): Promise<void> {
@@ -450,6 +561,14 @@ export function ScanSessionsPage() {
                 >
                   {busyKey === "qa-run" ? "Running QA…" : "Run QA snapshot"}
                 </button>
+                <button
+                  type="button"
+                  disabled={busyKey === "routing-run" || !numericSessionId}
+                  onClick={() => void generateRoutingSnapshot()}
+                  className="rounded-2xl border border-cyan-300/35 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-400/20 disabled:opacity-50"
+                >
+                  {busyKey === "routing-run" ? "Generating routing…" : "Generate routing snapshot"}
+                </button>
               </div>
 
               <div className="mt-4 overflow-auto rounded-2xl border border-white/10">
@@ -460,17 +579,20 @@ export function ScanSessionsPage() {
                       <th className="p-3">Status</th>
                       <th className="p-3">QA class</th>
                       <th className="p-3">Routing</th>
+                      <th className="p-3">Routing status</th>
                       <th className="p-3">Filename</th>
                       <th className="p-3">Dims</th>
                       <th className="p-3">SHA (short)</th>
                       <th className="p-3">Inventory</th>
                       <th className="p-3">Cover</th>
+                      <th className="p-3">Actions</th>
                       <th className="p-3">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10 text-slate-200">
                     {filteredSessionItems.map((item) => {
                       const qa = qaByItemId.get(item.id);
+                      const routing = routingByItemId.get(item.id);
                       return (
                         <tr key={item.id} className="align-top hover:bg-white/5">
                           <td className="p-3 font-mono">{item.sequence_index}</td>
@@ -497,6 +619,15 @@ export function ScanSessionsPage() {
                               "—"
                             )}
                           </td>
+                          <td className="p-3">
+                            {routing ? (
+                              <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+                                {routing.routing_status.replace(/_/g, " ")}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                           <td className="p-3">{item.source_filename ?? "—"}</td>
                           <td className="p-3 font-mono text-[11px]">
                             {item.image_width && item.image_height ? `${item.image_width}×${item.image_height}` : "—"}
@@ -517,6 +648,59 @@ export function ScanSessionsPage() {
                             )}
                           </td>
                           <td className="p-3 font-mono text-[11px]">{item.cover_image_id ? `#${item.cover_image_id}` : "—"}</td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  !routing ||
+                                  !routing.id ||
+                                  routing.routing_status !== "open" ||
+                                  busyKey === `routing-ocr:${item.cover_image_id ?? ""}` ||
+                                  !item.cover_image_id ||
+                                  routing.recommendation_type === "recommend_no_action"
+                                }
+                                onClick={() => void queueOcrForRouting(routing?.id, item.cover_image_id)}
+                                className="rounded-xl border border-cyan-300/35 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-100 transition hover:bg-cyan-400/20 disabled:opacity-40"
+                              >
+                                Queue OCR
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  !routing ||
+                                  !routing.id ||
+                                  routing.routing_status !== "open" ||
+                                  busyKey === `routing-highres:${item.id}` ||
+                                  routing.recommendation_type === "recommend_no_action"
+                                }
+                                onClick={() =>
+                                  void requestHighResForRouting(
+                                    routing?.id,
+                                    item.id,
+                                    routing?.scan_session_id ?? null,
+                                    item.cover_image_id,
+                                    Array.isArray(routing?.evidence_json?.reasons)
+                                      ? (routing?.evidence_json?.reasons as string[])
+                                      : [],
+                                  )
+                                }
+                                className="rounded-xl border border-amber-300/35 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-100 transition hover:bg-amber-400/20 disabled:opacity-40"
+                              >
+                                Request High-Res Review
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  !routing || !routing.id || routing.routing_status !== "open" || busyKey === `routing-ack:${routing?.id ?? ""}`
+                                }
+                                onClick={() => void holdRoutingRecommendation(routing?.id)}
+                                className="rounded-xl border border-slate-300/35 bg-slate-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-100 transition hover:bg-slate-400/20 disabled:opacity-40"
+                              >
+                                Hold for Review
+                              </button>
+                            </div>
+                          </td>
                           <td className="max-w-[16rem] p-3 text-[11px] text-rose-200/95">{item.ingest_error ?? "—"}</td>
                         </tr>
                       );

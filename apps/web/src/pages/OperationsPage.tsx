@@ -38,6 +38,7 @@ import {
   type OpsCanonicalCreatorRow,
   type OpsCanonicalSeriesRow,
   type OpsDashboardResponse,
+  type QueueRoutingListResponse,
   type OpsInventoryDuplicateCandidateGroup,
   type OpsMetadataAuditRow,
   type OpsRecentCoverImageRow,
@@ -1029,6 +1030,10 @@ export function OperationsPage() {
   const [opsScanQaFleetLoading, setOpsScanQaFleetLoading] = useState(true);
   const [opsScanQaFleetError, setOpsScanQaFleetError] = useState<string | null>(null);
 
+  const [opsRouting, setOpsRouting] = useState<QueueRoutingListResponse | null>(null);
+  const [opsRoutingLoading, setOpsRoutingLoading] = useState(true);
+  const [opsRoutingError, setOpsRoutingError] = useState<string | null>(null);
+
   useEffect(() => {
     let ignore = false;
 
@@ -1114,6 +1119,34 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsScanQaFleetLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsRoutingLoading(true);
+      setOpsRoutingError(null);
+      try {
+        const routing = await apiClient.getOpsScanRoutingRecommendations();
+        if (!ignore) {
+          setOpsRouting(routing);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsRouting(null);
+          setOpsRoutingError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load scan routing recommendations.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsRoutingLoading(false);
         }
       }
     })();
@@ -2685,6 +2718,80 @@ export function OperationsPage() {
             </>
           ) : (
             <p className="text-sm text-slate-500">No scan QA fleet data.</p>
+          )}
+        </div>
+      </details>
+
+      <details className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Queue routing dashboard</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic recommendations only. The dashboard shows unresolved rows and the stored routing mix across
+                scan sessions and linked covers.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / routing ledger
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/15 pt-4">
+          {opsRoutingLoading ? (
+            <p className="text-sm text-slate-400">Loading routing recommendations…</p>
+          ) : opsRoutingError ? (
+            <StatusBanner tone="error">{opsRoutingError}</StatusBanner>
+          ) : opsRouting ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(opsRouting.totals_by_recommendation).map(([k, v]) => (
+                  <StatCard key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(opsRouting.totals_by_status).map(([k, v]) => (
+                  <StatCard key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+                <StatCard label="Unresolved" value={String(opsRouting.unresolved_count)} />
+              </div>
+              <div className="mt-5 overflow-auto rounded-2xl border border-white/10">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3">Rec id</th>
+                      <th className="p-3">Recommendation</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Session item</th>
+                      <th className="p-3">Cover</th>
+                      <th className="p-3">Reasons</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsRouting.items.filter((row) => row.routing_status === "open").slice(0, 25).map((row) => {
+                      const reasons = Array.isArray(row.evidence_json?.reasons)
+                        ? (row.evidence_json.reasons as string[])
+                        : [];
+                      return (
+                        <tr key={row.id ?? `${row.scan_session_item_id}-${row.cover_image_id}`} className="align-top">
+                          <td className="p-3 font-mono">{row.id ?? "—"}</td>
+                          <td className="p-3 capitalize">{row.recommendation_type.replace(/_/g, " ")}</td>
+                          <td className="p-3 capitalize">{row.routing_status.replace(/_/g, " ")}</td>
+                          <td className="p-3 font-mono">{row.scan_session_item_id ?? "—"}</td>
+                          <td className="p-3 font-mono">{row.cover_image_id ? `#${row.cover_image_id}` : "—"}</td>
+                          <td className="max-w-[18rem] p-3 text-slate-400">{reasons.slice(0, 4).join(" · ") || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {opsRouting.unresolved_count === 0 ? (
+                <p className="mt-3 text-xs text-slate-500">No unresolved routing recommendations.</p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No routing recommendations loaded.</p>
           )}
         </div>
       </details>

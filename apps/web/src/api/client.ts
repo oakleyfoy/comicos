@@ -2184,6 +2184,47 @@ export interface InventoryScanQaPanelRead {
   covers: InventoryCoverScanQaRow[];
 }
 
+export type QueueRoutingRecommendationType =
+  | "recommend_ocr"
+  | "recommend_high_res_review"
+  | "recommend_manual_review"
+  | "recommend_rescan"
+  | "recommend_hold"
+  | "recommend_no_action";
+
+export type QueueRoutingPriority = "high" | "medium" | "low";
+export type QueueRoutingStatus = "open" | "acknowledged" | "dismissed" | "resolved";
+
+export interface QueueRoutingRecommendationRead {
+  id?: number | null;
+  scan_session_item_id?: number | null;
+  cover_image_id?: number | null;
+  scan_session_id?: number | null;
+  recommendation_type: QueueRoutingRecommendationType;
+  priority: QueueRoutingPriority;
+  routing_status: QueueRoutingStatus;
+  evidence_json?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface QueueRoutingListResponse {
+  items: QueueRoutingRecommendationRead[];
+  totals_by_recommendation: Record<string, number>;
+  totals_by_status: Record<string, number>;
+  unresolved_count: number;
+}
+
+export interface ScanSessionRoutingRead {
+  scan_session_id: number;
+  owner_user_id: number;
+  persisted_run: boolean;
+  items: QueueRoutingRecommendationRead[];
+  totals_by_recommendation: Record<string, number>;
+  totals_by_status: Record<string, number>;
+  unresolved_count: number;
+}
+
 export type HighResReviewRequestReason =
   | "low_quality_scan"
   | "failed_ocr"
@@ -3459,6 +3500,32 @@ export const apiClient = {
     return request<ScanSessionQaSummaryRead>(`/scan-sessions/${sessionId}/qa`);
   },
 
+  getScanSessionRouting(sessionId: number): Promise<ScanSessionRoutingRead> {
+    return request<ScanSessionRoutingRead>(`/scan-sessions/${sessionId}/routing`);
+  },
+
+  generateScanSessionRouting(sessionId: number): Promise<ScanSessionRoutingRead> {
+    return request<ScanSessionRoutingRead>(`/scan-sessions/${sessionId}/generate-routing`, {
+      method: "POST",
+    });
+  },
+
+  listScanRoutingRecommendations(): Promise<QueueRoutingListResponse> {
+    return request<QueueRoutingListResponse>("/scan-routing-recommendations");
+  },
+
+  acknowledgeScanRoutingRecommendation(recommendationId: number): Promise<QueueRoutingRecommendationRead> {
+    return request<QueueRoutingRecommendationRead>(`/scan-routing-recommendations/${recommendationId}/acknowledge`, {
+      method: "POST",
+    });
+  },
+
+  dismissScanRoutingRecommendation(recommendationId: number): Promise<QueueRoutingRecommendationRead> {
+    return request<QueueRoutingRecommendationRead>(`/scan-routing-recommendations/${recommendationId}/dismiss`, {
+      method: "POST",
+    });
+  },
+
   getScanSessionItemQa(sessionId: number, itemId: number): Promise<ScanQaItemRead> {
     return request<ScanQaItemRead>(`/scan-sessions/${sessionId}/items/${itemId}/qa`);
   },
@@ -3646,6 +3713,14 @@ export const apiClient = {
 
   getOpsScanQaFleetSummary(): Promise<OpsScanQaFleetSummaryRead> {
     return request<OpsScanQaFleetSummaryRead>("/ops/scan-qa/summary");
+  },
+
+  getOpsScanRoutingRecommendations(): Promise<QueueRoutingListResponse> {
+    return request<QueueRoutingListResponse>("/ops/scan-routing-recommendations");
+  },
+
+  getOpsScanSessionRouting(sessionId: number): Promise<ScanSessionRoutingRead> {
+    return request<ScanSessionRoutingRead>(`/ops/scan-sessions/${sessionId}/routing`);
   },
 
   getPortfolioPerformance(): Promise<PortfolioPerformance> {

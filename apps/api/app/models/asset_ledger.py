@@ -1158,6 +1158,41 @@ class ScanQaResult(SQLModel, table=True):
     )
 
 
+class QueueRoutingRecommendation(SQLModel, table=True):
+    """Deterministic queue-routing snapshot (manual actions only)."""
+
+    __tablename__ = "queue_routing_recommendation"
+    __table_args__ = (
+        UniqueConstraint("scan_session_item_id", name="uq_queue_routing_recommendation_session_item"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scan_session_item_id: int | None = Field(
+        default=None,
+        foreign_key="scan_session_item.id",
+        nullable=True,
+        index=True,
+    )
+    cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    recommendation_type: str = Field(max_length=48, nullable=False, index=True)
+    priority: str = Field(max_length=16, nullable=False, index=True)
+    routing_status: str = Field(default="open", max_length=20, nullable=False, index=True)
+    evidence_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
 class HighResReviewRequest(SQLModel, table=True):
     """Deterministic Epson / flatbed high-resolution review workflow request (no auto-OCR enqueue)."""
 

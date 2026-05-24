@@ -227,6 +227,11 @@ from app.schemas.scan_qa import (
     ScanQaItemRead,
     ScanSessionQaSummaryRead,
 )
+from app.schemas.queue_routing import (
+    QueueRoutingListResponse,
+    QueueRoutingRecommendationRead,
+    ScanSessionRoutingRead,
+)
 from app.schemas.high_res_review_requests import (
     HighResReviewRequestCreatePayload,
     HighResReviewRequestListResponse,
@@ -383,6 +388,14 @@ from app.services.scan_qa import (
     get_scan_session_qa,
     inventory_cover_scan_qa,
     run_scan_session_qa,
+)
+from app.services.queue_routing import (
+    acknowledge_queue_routing_recommendation,
+    dismiss_queue_routing_recommendation,
+    generate_scan_session_routing,
+    get_scan_session_routing,
+    list_queue_routing_recommendations_ops,
+    list_queue_routing_recommendations_owner,
 )
 from app.services.scan_sessions import (
     append_scan_session_items,
@@ -5884,6 +5897,63 @@ def owner_run_scan_session_qa_endpoint(
     return run_scan_session_qa(session, owner_user_id=int(current_user.id), scan_session_id=session_id)
 
 
+@app.get("/scan-routing-recommendations", response_model=QueueRoutingListResponse)
+def owner_list_queue_routing_recommendations_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> QueueRoutingListResponse:
+    assert current_user.id is not None
+    return list_queue_routing_recommendations_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/scan-sessions/{session_id}/routing", response_model=ScanSessionRoutingRead)
+def owner_get_scan_session_routing_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionRoutingRead:
+    assert current_user.id is not None
+    return get_scan_session_routing(session, owner_user_id=int(current_user.id), scan_session_id=session_id)
+
+
+@app.post("/scan-sessions/{session_id}/generate-routing", response_model=ScanSessionRoutingRead)
+def owner_generate_scan_session_routing_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionRoutingRead:
+    assert current_user.id is not None
+    return generate_scan_session_routing(session, owner_user_id=int(current_user.id), scan_session_id=session_id)
+
+
+@app.post("/scan-routing-recommendations/{recommendation_id}/acknowledge", response_model=QueueRoutingRecommendationRead)
+def owner_acknowledge_queue_routing_recommendation_endpoint(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> QueueRoutingRecommendationRead:
+    assert current_user.id is not None
+    return acknowledge_queue_routing_recommendation(
+        session,
+        recommendation_id=recommendation_id,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@app.post("/scan-routing-recommendations/{recommendation_id}/dismiss", response_model=QueueRoutingRecommendationRead)
+def owner_dismiss_queue_routing_recommendation_endpoint(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> QueueRoutingRecommendationRead:
+    assert current_user.id is not None
+    return dismiss_queue_routing_recommendation(
+        session,
+        recommendation_id=recommendation_id,
+        owner_user_id=int(current_user.id),
+    )
+
+
 @app.post("/scan-sessions/{session_id}/ingest-files", response_model=ScanSessionDetailRead)
 async def owner_ingest_scan_session_files_endpoint(
     session_id: int,
@@ -6176,6 +6246,27 @@ def ops_scan_qa_fleet_summary_endpoint(
 ) -> OpsScanQaFleetSummaryRead:
     ensure_ops_admin_access(current_user, settings)
     return fleet_scan_qa_summary(session)
+
+
+@app.get("/ops/scan-routing-recommendations", response_model=QueueRoutingListResponse, include_in_schema=False)
+def ops_list_queue_routing_recommendations_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> QueueRoutingListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_queue_routing_recommendations_ops(session)
+
+
+@app.get("/ops/scan-sessions/{session_id}/routing", response_model=ScanSessionRoutingRead, include_in_schema=False)
+def ops_get_scan_session_routing_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanSessionRoutingRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_scan_session_routing(session, owner_user_id=None, scan_session_id=session_id)
 
 
 @app.get("/ops/high-res-review-requests/stats", response_model=HighResReviewRequestStatsRead, include_in_schema=False)

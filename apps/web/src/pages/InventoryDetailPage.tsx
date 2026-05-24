@@ -43,6 +43,7 @@ import {
   type CollectionHistoricalTimelineEventsResponse,
   type CollectionHistoricalTimelineGrouping,
   type InventoryScanQaPanelRead,
+  type ScanSessionRoutingRead,
 } from "../api/client";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -949,6 +950,9 @@ export function InventoryDetailPage() {
   const [inventoryScanQaPanel, setInventoryScanQaPanel] = useState<InventoryScanQaPanelRead | null>(null);
   const [inventoryScanQaError, setInventoryScanQaError] = useState<string | null>(null);
   const [inventoryScanQaBusy, setInventoryScanQaBusy] = useState(false);
+  const [inventoryRoutingPanel, setInventoryRoutingPanel] = useState<ScanSessionRoutingRead | null>(null);
+  const [inventoryRoutingError, setInventoryRoutingError] = useState<string | null>(null);
+  const [inventoryRoutingBusy, setInventoryRoutingBusy] = useState(false);
 
   async function loadDetail(): Promise<void> {
     if (!Number.isInteger(parsedInventoryCopyId) || parsedInventoryCopyId <= 0) {
@@ -1097,6 +1101,41 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [detail?.inventory_copy_id]);
+
+  useEffect(() => {
+    const originatingSessionId = detail?.originating_scan_session?.scan_session_id;
+    if (!originatingSessionId) {
+      setInventoryRoutingPanel(null);
+      setInventoryRoutingError(null);
+      setInventoryRoutingBusy(false);
+      return;
+    }
+    let ignore = false;
+    void (async () => {
+      setInventoryRoutingBusy(true);
+      setInventoryRoutingError(null);
+      try {
+        const routing = await apiClient.getScanSessionRouting(originatingSessionId);
+        if (!ignore) {
+          setInventoryRoutingPanel(routing);
+        }
+      } catch (routingErr) {
+        if (!ignore) {
+          setInventoryRoutingPanel(null);
+          setInventoryRoutingError(
+            routingErr instanceof ApiError ? routingErr.message : "Unable to load queue routing recommendations.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setInventoryRoutingBusy(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.originating_scan_session?.scan_session_id]);
 
   useEffect(() => {
     let ignore = false;
@@ -2770,6 +2809,82 @@ export function InventoryDetailPage() {
           </section>
 
           {detail ? <HighResReviewInventorySection inventoryCopyId={detail.inventory_copy_id} /> : null}
+
+          {detail ? (
+            (() => {
+              const coverIds = new Set(detail.cover_images.map((cov) => cov.id));
+              const routingRows = (inventoryRoutingPanel?.items ?? []).filter((row) =>
+                row.cover_image_id ? coverIds.has(row.cover_image_id) : false,
+              );
+              return (
+                <section className="mt-8 rounded-3xl border border-cyan-400/25 bg-cyan-950/10 p-6 shadow-inner shadow-black/10">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200/80">Queue routing recommendations</p>
+                      <p className="mt-2 max-w-3xl text-sm text-slate-300">
+                        Deterministic routing guidance for the linked scan images on this copy. Recommendations are read-only
+                        until a user explicitly queues OCR, opens a high-res review request, or acknowledges the recommendation.
+                      </p>
+                    </div>
+                    {inventoryRoutingBusy ? (
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Loading…</span>
+                    ) : null}
+                  </div>
+                  {inventoryRoutingError ? (
+                    <div className="mt-4">
+                      <StatusBanner tone="error">{inventoryRoutingError}</StatusBanner>
+                    </div>
+                  ) : null}
+                  {!inventoryRoutingBusy && routingRows.length === 0 ? (
+                    <p className="mt-4 text-sm text-slate-500">No routing recommendations for this copy yet.</p>
+                  ) : null}
+                  {routingRows.length > 0 ? (
+                    <ul className="mt-5 space-y-3">
+                      {routingRows.map((row) => {
+                        const reasons = Array.isArray(row.evidence_json?.reasons)
+                          ? (row.evidence_json.reasons as string[])
+                          : [];
+                        const signals = Array.isArray(row.evidence_json?.signals)
+                          ? (row.evidence_json.signals as { kind?: string }[])
+                          : [];
+                        const reasonLine = reasons.slice(0, 4).join(" · ");
+                        const signalLine = signals
+                          .slice(0, 4)
+                          .map((sig) => sig.kind ?? "signal")
+                          .join(" · ");
+                        return (
+                          <li key={row.id ?? `${row.scan_session_item_id}-${row.cover_image_id}`} className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-mono text-xs text-white">
+                                Cover #{row.cover_image_id ?? row.scan_session_item_id ?? "—"}
+                              </span>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="inline-flex rounded-full border border-cyan-400/35 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+                                  {row.recommendation_type.replace(/_/g, " ")}
+                                </span>
+                                <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+                                  {row.priority}
+                                </span>
+                                <span className="inline-flex rounded-full border border-amber-400/35 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-50">
+                                  {row.routing_status.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-400">
+                              Reasons: <span className="text-slate-200">{reasonLine || "—"}</span>
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Signals: <span className="text-slate-200">{signalLine || "—"}</span>
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </section>
+              );
+            })()
+          ) : null}
 
           {detail ? (
             <section className="mt-8 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-6 shadow-inner shadow-black/10">
