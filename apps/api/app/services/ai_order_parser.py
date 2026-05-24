@@ -77,6 +77,18 @@ def build_json_schema() -> dict:
                             "ratio": {"type": ["string", "null"]},
                             "variant_type": {"type": ["string", "null"]},
                             "cover_artist": {"type": ["string", "null"]},
+                            "writers": {
+                                "type": ["array", "null"],
+                                "items": {"type": "string"},
+                            },
+                            "artists": {
+                                "type": ["array", "null"],
+                                "items": {"type": "string"},
+                            },
+                            "cover_artists": {
+                                "type": ["array", "null"],
+                                "items": {"type": "string"},
+                            },
                             "quantity": {"type": ["integer", "null"], "minimum": 1},
                             "raw_item_price": {"type": ["number", "null"], "minimum": 0},
                         },
@@ -89,6 +101,9 @@ def build_json_schema() -> dict:
                             "ratio",
                             "variant_type",
                             "cover_artist",
+                            "writers",
+                            "artists",
+                            "cover_artists",
                             "quantity",
                             "raw_item_price",
                         ],
@@ -142,6 +157,14 @@ def _clean_optional_text(value: str | None) -> str | None:
     return trimmed
 
 
+def _clean_optional_text_list(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    cleaned = [_clean_optional_text(item) for item in value]
+    filtered = [item for item in cleaned if item]
+    return filtered or None
+
+
 def _normalize_item(item: AiDraftOrderItem) -> AiDraftOrderItem:
     return item.model_copy(
         update={
@@ -153,6 +176,9 @@ def _normalize_item(item: AiDraftOrderItem) -> AiDraftOrderItem:
             "ratio": _clean_optional_text(item.ratio),
             "variant_type": _clean_optional_text(item.variant_type),
             "cover_artist": _clean_optional_text(item.cover_artist),
+            "writers": _clean_optional_text_list(item.writers),
+            "artists": _clean_optional_text_list(item.artists),
+            "cover_artists": _clean_optional_text_list(item.cover_artists),
             "quantity": item.quantity if item.quantity and item.quantity >= 1 else None,
             "raw_item_price": item.raw_item_price if item.raw_item_price is not None else None,
         }

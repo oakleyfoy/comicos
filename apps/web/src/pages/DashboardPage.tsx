@@ -35,6 +35,8 @@ import {
   type InventoryActionCenterSummary,
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
+  type ScanSessionDashboardResponse,
+  type ScanSessionSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -588,6 +590,67 @@ function performanceLabel(item: PortfolioPerformanceItem): string {
   return `${item.title} #${item.issue_number}`;
 }
 
+function formatScanSessionType(value: ScanSessionSummary["session_type"]): string {
+  return value.replace(/_/g, " ");
+}
+
+function ScanSessionMiniTable(props: {
+  caption: string;
+  rows: ScanSessionSummary[];
+}): JSX.Element {
+  const { caption, rows } = props;
+
+  const processedSum = rows.reduce((acc, r) => acc + r.processed_items, 0);
+  const itemsSum = rows.reduce((acc, r) => acc + r.total_items, 0);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{caption}</p>
+        <p className="text-[11px] text-slate-500">
+          Row progress rollup:{" "}
+          <span className="font-semibold text-slate-300">
+            {processedSum}/{itemsSum}
+          </span>{" "}
+          processed / total scans
+        </p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">No sessions yet.</p>
+      ) : (
+        <div className="mt-3 overflow-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              <tr>
+                <th className="pb-2 pr-3 font-medium">Session</th>
+                <th className="pb-2 pr-3 font-medium">Kind</th>
+                <th className="pb-2 pr-3 font-medium">Status</th>
+                <th className="pb-2 pr-3 font-medium">Processed</th>
+                <th className="pb-2 pr-3 font-medium">Failed</th>
+                <th className="pb-2 font-medium">Skipped</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-200">
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t border-white/10">
+                  <td className="py-2 pr-3 font-mono text-[11px] text-white">#{row.id}</td>
+                  <td className="py-2 pr-3 capitalize text-slate-300">{formatScanSessionType(row.session_type)}</td>
+                  <td className="py-2 pr-3 capitalize text-slate-300">{row.status.replace(/_/g, " ")}</td>
+                  <td className="py-2 pr-3 text-slate-300">
+                    {row.processed_items}/{row.total_items}
+                  </td>
+                  <td className="py-2 pr-3">{row.failed_items}</td>
+                  <td className="py-2">{row.skipped_items}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
 
@@ -654,6 +717,7 @@ export function DashboardPage() {
 
   const [collectionHistoricalTimeline, setCollectionHistoricalTimeline] =
     useState<CollectionHistoricalTimelineEventsResponse | null>(null);
+  const [scanSessionDash, setScanSessionDash] = useState<ScanSessionDashboardResponse | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -735,6 +799,7 @@ export function DashboardPage() {
       caSummary,
       caPublishers,
       caQuality,
+      scanSessionDashboard,
     ] = await Promise.all([
       apiClient.getInventorySummary(),
       apiClient.getPortfolioPerformance(),
@@ -748,6 +813,7 @@ export function DashboardPage() {
       apiClient.getCollectionAnalyticsSummary(),
       apiClient.getCollectionAnalyticsPublishers(),
       apiClient.getCollectionAnalyticsQuality(),
+      apiClient.getScanSessionDashboard(),
     ]);
     setSummary(summaryResponse);
     setPerformance(performanceResponse);
@@ -762,6 +828,7 @@ export function DashboardPage() {
     setCollectionAnalyticsSummary(caSummary);
     setCollectionAnalyticsPublishers(caPublishers);
     setCollectionAnalyticsQuality(caQuality);
+    setScanSessionDash(scanSessionDashboard);
     setSelectedIds((current) =>
       current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
     );
@@ -790,6 +857,7 @@ export function DashboardPage() {
           caSummary,
           caPublishers,
           caQuality,
+          scanSessionDashboard,
         ] =
           await Promise.all([
             apiClient.getInventorySummary(),
@@ -806,6 +874,7 @@ export function DashboardPage() {
             apiClient.getCollectionAnalyticsSummary(),
             apiClient.getCollectionAnalyticsPublishers(),
             apiClient.getCollectionAnalyticsQuality(),
+            apiClient.getScanSessionDashboard(),
           ]);
 
         if (ignore) {
@@ -827,6 +896,7 @@ export function DashboardPage() {
         setCollectionAnalyticsSummary(caSummary);
         setCollectionAnalyticsPublishers(caPublishers);
         setCollectionAnalyticsQuality(caQuality);
+        setScanSessionDash(scanSessionDashboard);
         setSelectedIds((current) =>
           current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
         );
@@ -1023,6 +1093,12 @@ export function DashboardPage() {
               Import Order
             </Link>
             <Link
+              to="/scan-sessions"
+              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/5"
+            >
+              Bulk scan ingest
+            </Link>
+            <Link
               to="/orders/new"
               className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
@@ -1043,6 +1119,29 @@ export function DashboardPage() {
           </article>
         ))}
       </section>
+
+      {scanSessionDash &&
+      (scanSessionDash.active_sessions.length > 0 || scanSessionDash.recent_sessions.length > 0) ? (
+        <section className="mt-6 rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Scan ingest sessions</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Deterministic orchestration scaffolding only — lifecycle and queue-state visibility without automatic
+                metadata changes.
+              </p>
+            </div>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">
+              Active {scanSessionDash.active_sessions.length} · Recent{" "}
+              {scanSessionDash.recent_sessions.length}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <ScanSessionMiniTable caption="Active / paused" rows={scanSessionDash.active_sessions} />
+            <ScanSessionMiniTable caption="Recently completed / cancelled" rows={scanSessionDash.recent_sessions} />
+          </div>
+        </section>
+      ) : null}
 
       <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">

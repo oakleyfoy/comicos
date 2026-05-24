@@ -1,14 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
   ApiError,
   apiClient,
+  CREATOR_METADATA_WARNING_FRAGMENT,
+  RELEASE_DATE_METADATA_WARNING_FRAGMENT,
+  resolveCoverImageOcrHeadline,
+  type AiDraftOrderItem,
   type AiParseOrderResponse,
+  type CoverImageOcrHeadlineStatus,
+  type CoverOcrCandidateReviewStatus,
   type DraftImport,
   type DraftSourceType,
   type ImportParseJobStatus,
+  type InventoryCoverImage,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -16,12 +24,18 @@ import { StatusBanner } from "../components/StatusBanner";
 interface OrderItemDraft {
   publisher: string;
   title: string;
+  releaseDate: string;
+  releaseStatus: "" | "released" | "not_released_yet" | "unknown";
+  orderStatus: "" | "ordered" | "preordered" | "shipped" | "received" | "cancelled";
   issueNumber: string;
   coverName: string;
   printing: string;
   ratio: string;
   variantType: string;
   coverArtist: string;
+  writers: string[];
+  artists: string[];
+  coverArtists: string[];
   quantity: string;
   rawItemPrice: string;
 }
@@ -45,12 +59,18 @@ interface FormErrors {
 const emptyItem = (): OrderItemDraft => ({
   publisher: "",
   title: "",
+  releaseDate: "",
+  releaseStatus: "",
+  orderStatus: "",
   issueNumber: "",
   coverName: "",
   printing: "",
   ratio: "",
   variantType: "",
   coverArtist: "",
+  writers: [],
+  artists: [],
+  coverArtists: [],
   quantity: "1",
   rawItemPrice: "0.00",
 });
@@ -66,9 +86,148 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatImportCoverDimensions(width: number | null, height: number | null): string {
+  if (width != null && height != null) {
+    return `${width} × ${height} px`;
+  }
+  return "—";
+}
+
+function formatImportCoverFileSize(bytes: number | null): string {
+  if (bytes === null || bytes === undefined) {
+    return "—";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatImportCoverTimestamp(value: string | null): string {
+  if (!value) {
+    return "Not yet";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function ocrCandidateReviewCardClassImport(status: CoverOcrCandidateReviewStatus): string {
+  switch (status) {
+    case "approved":
+      return "border-emerald-400/35 bg-emerald-500/5";
+    case "rejected":
+      return "border-rose-400/35 bg-rose-500/5";
+    default:
+      return "border-white/10 bg-slate-900/80";
+  }
+}
+
+function barcodeCandidateReviewCardClassImport(
+  status: InventoryCoverImage["barcode_candidates"][number]["review_state"],
+): string {
+  switch (status) {
+    case "approved":
+      return "border-emerald-400/35 bg-emerald-500/5";
+    case "rejected":
+      return "border-rose-400/35 bg-rose-500/5";
+    default:
+      return "border-white/10 bg-slate-900/80";
+  }
+}
+
+function importOcrReconciliationSeverityClass(
+  severity: InventoryCoverImage["ocr_reconciliation_warnings"][number]["severity"],
+): string {
+  switch (severity) {
+    case "critical":
+      return "border-rose-400/35 bg-rose-500/10 text-rose-100";
+    case "warning":
+      return "border-amber-400/35 bg-amber-500/10 text-amber-100";
+    default:
+      return "border-cyan-400/30 bg-cyan-500/10 text-cyan-100";
+  }
+}
+
+function importOcrReconciliationStatusClass(
+  status: InventoryCoverImage["ocr_reconciliation_warnings"][number]["status"],
+): string {
+  switch (status) {
+    case "acknowledged":
+      return "border-cyan-400/30 text-cyan-100";
+    case "dismissed":
+      return "border-slate-500/40 text-slate-300";
+    default:
+      return "border-white/15 text-slate-100";
+  }
+}
+
+function importCoverProcessingTone(
+  status: InventoryCoverImage["processing_status"],
+): string {
+  switch (status) {
+    case "processed":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+    case "processing":
+      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200";
+    case "failed":
+      return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function importCoverMatchingTone(status: InventoryCoverImage["matching_status"]): string {
+  switch (status) {
+    case "ready":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+    case "needs_review":
+      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+    case "failed":
+      return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function importCoverOcrHeadlineTone(headline: CoverImageOcrHeadlineStatus): string {
+  switch (headline) {
+    case "processed":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+    case "processing":
+      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200";
+    case "failed":
+      return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+    case "queued":
+      return "border-violet-400/30 bg-violet-400/10 text-violet-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+
 function normalizeOptional(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeReleaseStatus(
+  value: OrderItemDraft["releaseStatus"],
+): AiDraftOrderItem["release_status"] {
+  return value || null;
+}
+
+function normalizeOrderStatus(
+  value: OrderItemDraft["orderStatus"],
+): AiDraftOrderItem["order_status"] {
+  return value || null;
 }
 
 function mapAiDraftToForm(draft: AiParseOrderResponse) {
@@ -83,17 +242,196 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
         ? draft.items.map<OrderItemDraft>((item) => ({
             publisher: item.publisher ?? "",
             title: item.title ?? "",
+            releaseDate: item.release_date ?? item.raw_release_date ?? "",
+            releaseStatus: item.release_status ?? "",
+            orderStatus: item.order_status ?? "",
             issueNumber: item.issue_number ?? "",
             coverName: item.cover_name ?? "",
             printing: item.printing ?? "",
             ratio: item.ratio ?? "",
             variantType: item.variant_type ?? "",
             coverArtist: item.cover_artist ?? "",
+            writers: item.writers ?? item.canonical_writers ?? [],
+            artists: item.artists ?? item.canonical_artists ?? [],
+            coverArtists:
+              item.cover_artists ?? item.canonical_cover_artists ?? (item.cover_artist ? [item.cover_artist] : []),
             quantity: item.quantity === null ? "" : String(item.quantity),
             rawItemPrice: item.raw_item_price ?? "",
           }))
         : [emptyItem()],
   };
+}
+
+function displayValue(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "Not provided";
+}
+
+function itemPreorderLabel(item: OrderItemDraft): string | null {
+  const trimmedReleaseDate = item.releaseDate.trim();
+  const exactDateMatch = /^\d{4}-\d{2}-\d{2}$/.test(trimmedReleaseDate);
+  const inferredFutureRelease =
+    exactDateMatch && new Date(`${trimmedReleaseDate}T00:00:00`).getTime() > Date.now();
+  if (item.orderStatus === "cancelled") {
+    return "Cancelled";
+  }
+  if (item.orderStatus === "received") {
+    return "Owned / In Hand";
+  }
+  if (
+    item.releaseStatus === "not_released_yet" ||
+    item.orderStatus === "preordered" ||
+    inferredFutureRelease
+  ) {
+    return "Preorder / Not Released Yet";
+  }
+  if (item.orderStatus === "ordered" || item.orderStatus === "shipped") {
+    return "Ordered / Not Received";
+  }
+  return null;
+}
+
+function metadataReviewItemsFromDraft(
+  draft: AiParseOrderResponse | null,
+): Array<{ index: number; item: AiDraftOrderItem }> {
+  if (!draft) {
+    return [];
+  }
+
+  return draft.items.flatMap((item, index) =>
+    item.metadata_review_required ? [{ index, item }] : [],
+  );
+}
+
+function needsPublisherAliasHelp(item: AiDraftOrderItem): boolean {
+  const rawPublisher = item.raw_publisher?.trim();
+  if (!rawPublisher) {
+    return false;
+  }
+
+  return (
+    item.metadata_review_notes?.some((note) =>
+      note.includes("Review canonical publisher"),
+    ) ?? false
+  );
+}
+
+function needsSeriesAliasHelp(item: AiDraftOrderItem): boolean {
+  return Boolean(item.raw_title?.trim());
+}
+
+function hasMalformedReleaseDateNote(item: AiDraftOrderItem): boolean {
+  return (
+    item.metadata_review_notes?.some((note) =>
+      note.includes(RELEASE_DATE_METADATA_WARNING_FRAGMENT),
+    ) ?? false
+  );
+}
+
+type CreatorRoleId = "writers" | "artists" | "cover_artists";
+
+const CREATOR_ROLE_LABELS: Record<CreatorRoleId, string> = {
+  writers: "Writers",
+  artists: "Artists",
+  cover_artists: "Cover artists",
+};
+
+function zipCreatorSlots(
+  item: AiDraftOrderItem,
+  role: CreatorRoleId,
+): Array<{ slot: number; raw: string; canonical: string }> {
+  const rawMap = {
+    writers: item.raw_writers,
+    artists: item.raw_artists,
+    cover_artists: item.raw_cover_artists,
+  } as const;
+  const canonMap = {
+    writers: item.canonical_writers,
+    artists: item.canonical_artists,
+    cover_artists: item.canonical_cover_artists,
+  } as const;
+  const displayMap = {
+    writers: item.writers,
+    artists: item.artists,
+    cover_artists: item.cover_artists,
+  } as const;
+
+  const fb = displayMap[role] ?? [];
+  const rawSource = rawMap[role];
+  const canonSource = canonMap[role];
+
+  const rawVals =
+    rawSource !== undefined && rawSource !== null && rawSource.length > 0
+      ? rawSource.map((segment) => (segment ?? "").trim())
+      : fb.map((segment) => (segment ?? "").trim());
+
+  const canonVals =
+    canonSource !== undefined && canonSource !== null && canonSource.length > 0
+      ? canonSource.map((segment) => (segment ?? "").trim())
+      : fb.map((segment) => (segment ?? "").trim());
+
+  const count = Math.max(rawVals.length, canonVals.length);
+  const pairs: Array<{ slot: number; raw: string; canonical: string }> = [];
+  for (let slot = 0; slot < count; slot += 1) {
+    const raw = rawVals[slot] ?? "";
+    const canonical = canonVals[slot] ?? raw;
+    if (!raw.trim() && !canonical.trim()) {
+      continue;
+    }
+    pairs.push({ slot, raw, canonical });
+  }
+  return pairs;
+}
+
+function creatorAliasRowKey(
+  itemLineIndex: number,
+  role: CreatorRoleId,
+  slot: number,
+): string {
+  return `${itemLineIndex}|${role}|${slot}`;
+}
+
+function buildCreatorAliasInputSeeds(draft: AiParseOrderResponse): Record<string, string> {
+  const seeds: Record<string, string> = {};
+  draft.items.forEach((item, index) => {
+    (["writers", "artists", "cover_artists"] as const).forEach((role) => {
+      zipCreatorSlots(item, role).forEach(({ slot, raw, canonical }) => {
+        if (!raw.trim() && !canonical.trim()) {
+          return;
+        }
+        seeds[creatorAliasRowKey(index, role, slot)] = canonical;
+      });
+    });
+  });
+  return seeds;
+}
+
+function hasCreatorMetadataWarningNotes(item: AiDraftOrderItem): boolean {
+  return (
+    item.metadata_review_notes?.some((note) =>
+      note.includes(CREATOR_METADATA_WARNING_FRAGMENT),
+    ) ?? false
+  );
+}
+
+function formatCreatorBullets(rows: Array<{ raw: string; canonical: string }>): string {
+  if (!rows.length) {
+    return "Not provided";
+  }
+  return rows.map(({ raw, canonical }) => `${raw} → ${canonical}`).join("; ");
+}
+
+function metadataReviewPassesFilters(
+  item: AiDraftOrderItem,
+  filters: { releaseOnly: boolean; creatorOnly: boolean },
+): boolean {
+  if (filters.releaseOnly && !hasMalformedReleaseDateNote(item)) {
+    return false;
+  }
+  if (filters.creatorOnly && !hasCreatorMetadataWarningNotes(item)) {
+    return false;
+  }
+  return true;
 }
 
 function buildMissingPublisherErrors(
@@ -165,7 +503,93 @@ function parseJobStatusMessage(status: ParseJobUiStatus, error: string | null): 
   }
 }
 
+const MANUAL_COVER_ASSIGN_INFO =
+  "Manual assignment links the existing image record. It does not duplicate or analyze the image.";
+const MANUAL_COVER_ASSIGN_MULTI_COPY =
+  "Use this when an import created multiple inventory copies and the cover scan needs to be attached to the correct copy.";
+
+function ImportCoverManualAssignPanel({
+  coverImageId,
+  disabled,
+  onAssigned,
+}: {
+  coverImageId: number;
+  disabled: boolean;
+  onAssigned: () => Promise<void>;
+}) {
+  const [invIdDraft, setInvIdDraft] = useState("");
+  const [assignPrimary, setAssignPrimary] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [localOk, setLocalOk] = useState<string | null>(null);
+
+  async function submitAssign(): Promise<void> {
+    const parsed = Number(invIdDraft.trim());
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      setLocalError("Enter a valid inventory copy id.");
+      setLocalOk(null);
+      return;
+    }
+    setBusy(true);
+    setLocalError(null);
+    setLocalOk(null);
+    try {
+      await apiClient.assignExistingCoverToInventory(parsed, {
+        cover_image_id: coverImageId,
+        set_primary: assignPrimary,
+      });
+      setLocalOk(`Cover linked to inventory copy #${parsed}.`);
+      await onAssigned();
+    } catch (err) {
+      setLocalError(err instanceof ApiError ? err.message : "Assignment failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+      <p className="text-[11px] leading-relaxed text-slate-400">
+        Assign this scan to one inventory copy from this confirmed order when multiple copies exist.
+      </p>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Inventory copy id</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={invIdDraft}
+          disabled={disabled || busy}
+          onChange={(event) => setInvIdDraft(event.target.value)}
+          className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40"
+          placeholder="e.g. 12345"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+        <input
+          type="checkbox"
+          checked={assignPrimary}
+          disabled={disabled || busy}
+          onChange={(event) => setAssignPrimary(event.target.checked)}
+          className="rounded border-white/30 bg-slate-950 accent-cyan-400"
+        />
+        Set as primary for that copy
+      </label>
+      <button
+        type="button"
+        disabled={disabled || busy}
+        onClick={() => void submitAssign()}
+        className="inline-flex w-full justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? "Linking…" : "Assign to inventory copy"}
+      </button>
+      {localError ? <p className="text-[11px] text-rose-300">{localError}</p> : null}
+      {localOk ? <p className="text-[11px] text-emerald-200/90">{localOk}</p> : null}
+    </div>
+  );
+}
+
 export function OrderImportPage() {
+  const { isOpsAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editorMode, setEditorMode] = useState<DraftEditorMode>("ai");
   const [rawText, setRawText] = useState("");
@@ -179,6 +603,13 @@ export function OrderImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [confidenceScore, setConfidenceScore] = useState<number | null>(null);
+  const [draftPayload, setDraftPayload] = useState<AiParseOrderResponse | null>(null);
+  const [publisherAliasInputs, setPublisherAliasInputs] = useState<Record<number, string>>({});
+  const [seriesAliasInputs, setSeriesAliasInputs] = useState<Record<number, string>>({});
+  const [creatorAliasInputs, setCreatorAliasInputs] = useState<Record<string, string>>({});
+  const [metadataAliasError, setMetadataAliasError] = useState<string | null>(null);
+  const [metadataAliasSuccess, setMetadataAliasSuccess] = useState<string | null>(null);
+  const [activeAliasKey, setActiveAliasKey] = useState<string | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
   const [savedImportId, setSavedImportId] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<"draft" | "confirmed" | "discarded" | null>(null);
@@ -191,9 +622,35 @@ export function OrderImportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState<{
     orderId: number;
+    importId: number;
     totalCopiesCreated: number;
     allInTotal: string;
+    notices: string[];
   } | null>(null);
+
+  const importCoverInputRef = useRef<HTMLInputElement>(null);
+  const [importCoverImages, setImportCoverImages] = useState<InventoryCoverImage[]>([]);
+  const [importCoverThumbUrls, setImportCoverThumbUrls] = useState<string[]>([]);
+  const [importCoverRegionPreviewUrls, setImportCoverRegionPreviewUrls] = useState<Record<string, string>>({});
+  const [importCoverUploadBusy, setImportCoverUploadBusy] = useState(false);
+  const [importCoverUploadError, setImportCoverUploadError] = useState<string | null>(null);
+  const [importCoverActionMessage, setImportCoverActionMessage] = useState<string | null>(null);
+  const [importCoverPrimaryBusyId, setImportCoverPrimaryBusyId] = useState<number | null>(null);
+  const [importCoverProcessBusyId, setImportCoverProcessBusyId] = useState<number | null>(null);
+  const [importCoverEvaluateBusyId, setImportCoverEvaluateBusyId] = useState<number | null>(null);
+  const [importCoverOcrBusyId, setImportCoverOcrBusyId] = useState<number | null>(null);
+  const [importCoverOcrCandidateReviewBusyId, setImportCoverOcrCandidateReviewBusyId] =
+    useState<number | null>(null);
+  const [importCoverBarcodeExtractBusyId, setImportCoverBarcodeExtractBusyId] =
+    useState<number | null>(null);
+  const [importCoverBarcodeReviewBusyId, setImportCoverBarcodeReviewBusyId] =
+    useState<number | null>(null);
+  const [importCoverOcrReconcileBusyId, setImportCoverOcrReconcileBusyId] =
+    useState<number | null>(null);
+  const [importCoverOcrWarningBusyId, setImportCoverOcrWarningBusyId] = useState<number | null>(null);
+  const [importCoverOcrCandidateNoteDrafts, setImportCoverOcrCandidateNoteDrafts] = useState<
+    Record<number, string>
+  >({});
 
   const subtotal = useMemo(
     () =>
@@ -224,7 +681,29 @@ export function OrderImportPage() {
       ),
     [items],
   );
+  const metadataReviewItems = useMemo(
+    () => metadataReviewItemsFromDraft(draftPayload),
+    [draftPayload],
+  );
+  const [releaseDateReviewOnlyFilter, setReleaseDateReviewOnlyFilter] = useState(false);
+  const [creatorReviewOnlyFilter, setCreatorReviewOnlyFilter] = useState(false);
+  const displayedMetadataReviewItems = useMemo(() => {
+    const filters = {
+      releaseOnly: releaseDateReviewOnlyFilter,
+      creatorOnly: creatorReviewOnlyFilter,
+    };
 
+    const needsFiltering =
+      filters.releaseOnly || filters.creatorOnly;
+
+    return needsFiltering
+      ? metadataReviewItems.filter(({ item }) => metadataReviewPassesFilters(item, filters))
+      : metadataReviewItems;
+  }, [
+    metadataReviewItems,
+    releaseDateReviewOnlyFilter,
+    creatorReviewOnlyFilter,
+  ]);
   function applyImportToForm(savedImport: DraftImport): void {
     const mapped = mapAiDraftToForm(savedImport.parsed_payload_json);
     setEditorMode(mapped.sourceType === "manual_draft" ? "manual" : "ai");
@@ -236,11 +715,54 @@ export function OrderImportPage() {
     setTaxAmount(mapped.taxAmount);
     setItems(mapped.items);
     setParseWarnings(savedImport.parsed_payload_json.warnings);
+    setDraftPayload(savedImport.parsed_payload_json);
+    setPublisherAliasInputs(
+      Object.fromEntries(
+        savedImport.parsed_payload_json.items.map((item, index) => [
+          index,
+          item.canonical_publisher ?? item.publisher ?? "",
+        ]),
+      ),
+    );
+    setSeriesAliasInputs(
+      Object.fromEntries(
+        savedImport.parsed_payload_json.items.map((item, index) => [
+          index,
+          item.canonical_title ?? item.title ?? "",
+        ]),
+      ),
+    );
+    setCreatorAliasInputs(buildCreatorAliasInputSeeds(savedImport.parsed_payload_json));
     setConfidenceScore(Number(savedImport.confidence_score));
     setHasDraft(true);
     setSavedImportId(savedImport.id);
     setImportStatus(savedImport.status);
+    setImportCoverImages(savedImport.cover_images ?? []);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
   }
+
+  async function refreshLoadedImportFromServer(): Promise<void> {
+    if (savedImportId == null) {
+      return;
+    }
+    const updated = await apiClient.getImport(savedImportId);
+    applyImportToForm(updated);
+  }
+
+  useEffect(() => {
+    setImportCoverOcrCandidateNoteDrafts((prev) => {
+      const next = { ...prev };
+      for (const img of importCoverImages) {
+        for (const c of img.ocr_candidates) {
+          if (next[c.id] === undefined) {
+            next[c.id] = c.review_notes ?? "";
+          }
+        }
+      }
+      return next;
+    });
+  }, [importCoverImages]);
 
   function clearLoadedDraftState(): void {
     setRetailer("");
@@ -251,11 +773,25 @@ export function OrderImportPage() {
     setItems([emptyItem()]);
     setFormErrors(emptyFormErrors());
     setParseWarnings([]);
+    setDraftPayload(null);
+    setPublisherAliasInputs({});
+    setSeriesAliasInputs({});
+    setCreatorAliasInputs({});
+    setMetadataAliasError(null);
+    setMetadataAliasSuccess(null);
+    setActiveAliasKey(null);
     setConfidenceScore(null);
     setHasDraft(false);
     setSavedImportId(null);
+    setReleaseDateReviewOnlyFilter(false);
+    setCreatorReviewOnlyFilter(false);
     setImportStatus(null);
     setSuccess(null);
+    setImportCoverImages([]);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    setImportCoverPrimaryBusyId(null);
+    setImportCoverProcessBusyId(null);
   }
 
   function buildParsedPayload(): AiParseOrderResponse {
@@ -268,12 +804,18 @@ export function OrderImportPage() {
       items: items.map((item) => ({
         publisher: item.publisher.trim() || null,
         title: item.title.trim() || null,
+        release_date: normalizeOptional(item.releaseDate),
+        release_status: normalizeReleaseStatus(item.releaseStatus),
+        order_status: normalizeOrderStatus(item.orderStatus),
         issue_number: item.issueNumber.trim() || null,
         cover_name: normalizeOptional(item.coverName),
         printing: normalizeOptional(item.printing),
         ratio: normalizeOptional(item.ratio),
         variant_type: normalizeOptional(item.variantType),
         cover_artist: normalizeOptional(item.coverArtist),
+        writers: item.writers.length ? item.writers : null,
+        artists: item.artists.length ? item.artists : null,
+        cover_artists: item.coverArtists.length ? item.coverArtists : null,
         quantity: item.quantity.trim() ? Number(item.quantity) : null,
         raw_item_price: item.rawItemPrice.trim() ? item.rawItemPrice : null,
       })),
@@ -531,6 +1073,412 @@ export function OrderImportPage() {
     };
   }, [parseJobId, setSearchParams]);
 
+  useEffect(() => {
+    if (!importCoverImages.length) {
+      setImportCoverThumbUrls([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const objectUrls: string[] = [];
+
+    async function loadThumbs(): Promise<void> {
+      const next: string[] = [];
+      for (const meta of importCoverImages) {
+        try {
+          const blob = await apiClient.fetchCoverImageBlob(
+            meta.thumbnail_fetch_path ?? meta.fetch_path,
+          );
+          if (cancelled) {
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          objectUrls.push(url);
+          next.push(url);
+        } catch {
+          /* skip thumbnails that failed to decode */
+        }
+      }
+      if (!cancelled) {
+        setImportCoverThumbUrls(next);
+      }
+    }
+
+    void loadThumbs();
+
+    return () => {
+      cancelled = true;
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [savedImportId, JSON.stringify(importCoverImages.map((c) => [c.id, c.is_primary]))]);
+
+  useEffect(() => {
+    if (!importCoverImages.length) {
+      setImportCoverRegionPreviewUrls({});
+      return undefined;
+    }
+
+    let cancelled = false;
+    const objectUrls: string[] = [];
+
+    async function loadRegionPreviews(): Promise<void> {
+      const next: Record<string, string> = {};
+      for (const meta of importCoverImages) {
+        for (const region of meta.ocr_regions ?? []) {
+          try {
+            const blob = await apiClient.fetchCoverImageBlob(region.fetch_path);
+            if (cancelled) {
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            objectUrls.push(url);
+            next[`${meta.id}:${region.region_type}`] = url;
+          } catch {
+            /* skip OCR region previews that failed */
+          }
+        }
+      }
+      if (!cancelled) {
+        setImportCoverRegionPreviewUrls(next);
+      }
+    }
+
+    void loadRegionPreviews();
+    return () => {
+      cancelled = true;
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [
+    savedImportId,
+    JSON.stringify(
+      importCoverImages.map((c) => [c.id, ...(c.ocr_regions ?? []).map((r) => [r.id, r.sha256_hash])]),
+    ),
+  ]);
+
+  async function handleImportCoverUpload(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const picked = event.target.files?.[0];
+    event.target.value = "";
+    if (!picked || savedImportId === null) {
+      return;
+    }
+
+    if (importStatus !== "draft") {
+      setImportCoverUploadError("Cover uploads stay open only while this import is a draft.");
+      return;
+    }
+
+    const matchesName = /\.(jpe?g|png|gif|webp)$/i.test(picked.name);
+    const matchesType =
+      picked.type.trim() !== "" &&
+      /^image\/(jpeg|png|gif|webp)$/i.test(picked.type.trim());
+    if (!(matchesName || matchesType)) {
+      setImportCoverUploadError("Use JPG, PNG, WebP, or GIF files.");
+      return;
+    }
+
+    setImportCoverUploadBusy(true);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.uploadImportCoverImage(savedImportId, picked);
+      const refreshed = await apiClient.getImport(savedImportId);
+      applyImportToForm(refreshed);
+    } catch (coverError) {
+      if (coverError instanceof ApiError) {
+        setImportCoverUploadError(coverError.message);
+      } else {
+        setImportCoverUploadError("Cover upload failed. Try another file.");
+      }
+    } finally {
+      setImportCoverUploadBusy(false);
+    }
+  }
+
+  async function handleImportCoverPrimary(coverImageId: number): Promise<void> {
+    if (savedImportId === null || importStatus !== "draft") {
+      return;
+    }
+    setImportCoverPrimaryBusyId(coverImageId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.setImportCoverPrimary(savedImportId, coverImageId);
+      const refreshed = await apiClient.getImport(savedImportId);
+      applyImportToForm(refreshed);
+    } catch (primaryError) {
+      if (primaryError instanceof ApiError) {
+        setImportCoverUploadError(primaryError.message);
+      } else {
+        setImportCoverUploadError("Unable to set primary cover.");
+      }
+    } finally {
+      setImportCoverPrimaryBusyId(null);
+    }
+  }
+
+  async function handleImportCoverProcess(coverImageId: number): Promise<void> {
+    setImportCoverProcessBusyId(coverImageId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      const response = await apiClient.processCoverImage(coverImageId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage(
+        response.status === "already_queued"
+          ? "Cover image processing is already queued."
+          : "Cover image metadata reprocessing queued.",
+      );
+    } catch (processError) {
+      if (processError instanceof ApiError) {
+        setImportCoverUploadError(processError.message);
+      } else {
+        setImportCoverUploadError("Unable to queue cover image processing.");
+      }
+    } finally {
+      setImportCoverProcessBusyId(null);
+    }
+  }
+
+  async function handleImportCoverEvaluate(coverImageId: number): Promise<void> {
+    setImportCoverEvaluateBusyId(coverImageId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.evaluateCoverImageMatchingReadiness(coverImageId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("Cover matching readiness evaluated.");
+    } catch (evaluateError) {
+      if (evaluateError instanceof ApiError) {
+        setImportCoverUploadError(evaluateError.message);
+      } else {
+        setImportCoverUploadError("Unable to evaluate cover readiness.");
+      }
+    } finally {
+      setImportCoverEvaluateBusyId(null);
+    }
+  }
+
+  async function handleImportCoverOcr(meta: InventoryCoverImage): Promise<void> {
+    setImportCoverOcrBusyId(meta.id);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    const headline = resolveCoverImageOcrHeadline({
+      ocr_visibility: meta.ocr_visibility,
+      latest_ocr_result: meta.latest_ocr_result,
+    });
+    const hasPriorResult = meta.latest_ocr_result !== null;
+    const replayReason = headline === "failed" ? "retry-after-failure" : "manual-replay";
+    try {
+      const response = hasPriorResult
+        ? await apiClient.replayCoverImageOcr(meta.id, { replay_reason: replayReason })
+        : await apiClient.runCoverImageOcr(meta.id);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage(
+        response.status === "already_queued"
+          ? "Cover OCR is already queued."
+          : headline === "failed"
+            ? "Cover OCR retry queued."
+            : hasPriorResult
+              ? "Cover OCR replay queued."
+              : "Cover OCR queued.",
+      );
+    } catch (ocrError) {
+      if (ocrError instanceof ApiError) {
+        setImportCoverUploadError(ocrError.message);
+      } else {
+        setImportCoverUploadError(
+          headline === "failed"
+            ? "Unable to retry cover OCR."
+            : hasPriorResult
+              ? "Unable to replay cover OCR."
+              : "Unable to queue cover OCR.",
+        );
+      }
+    } finally {
+      setImportCoverOcrBusyId(null);
+    }
+  }
+
+  async function handleImportOcrCandidateApprove(candidateId: number): Promise<void> {
+    setImportCoverOcrCandidateReviewBusyId(candidateId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.approveOcrCandidate(candidateId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("OCR candidate approved.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to approve OCR candidate.");
+      }
+    } finally {
+      setImportCoverOcrCandidateReviewBusyId(null);
+    }
+  }
+
+  async function handleImportOcrCandidateReject(candidateId: number): Promise<void> {
+    setImportCoverOcrCandidateReviewBusyId(candidateId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.rejectOcrCandidate(candidateId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("OCR candidate rejected.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to reject OCR candidate.");
+      }
+    } finally {
+      setImportCoverOcrCandidateReviewBusyId(null);
+    }
+  }
+
+  async function handleImportOcrCandidateSaveNotes(candidateId: number): Promise<void> {
+    setImportCoverOcrCandidateReviewBusyId(candidateId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    const raw = importCoverOcrCandidateNoteDrafts[candidateId];
+    try {
+      await apiClient.patchOcrCandidateReviewNotes(candidateId, { review_notes: raw ?? "" });
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("Review notes saved.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to save review notes.");
+      }
+    } finally {
+      setImportCoverOcrCandidateReviewBusyId(null);
+    }
+  }
+
+  async function handleImportCoverBarcodeExtract(coverImageId: number): Promise<void> {
+    setImportCoverBarcodeExtractBusyId(coverImageId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      const response = await apiClient.extractCoverImageBarcodes(coverImageId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage(
+        response.candidate_count > 0
+          ? `Barcode extraction refreshed (${response.candidate_count} candidates).`
+          : "Barcode extraction refreshed with no candidates.",
+      );
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to extract barcode candidates.");
+      }
+    } finally {
+      setImportCoverBarcodeExtractBusyId(null);
+    }
+  }
+
+  async function handleImportBarcodeApprove(barcodeCandidateId: number): Promise<void> {
+    setImportCoverBarcodeReviewBusyId(barcodeCandidateId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.approveBarcodeCandidate(barcodeCandidateId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("Barcode candidate approved.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to approve barcode candidate.");
+      }
+    } finally {
+      setImportCoverBarcodeReviewBusyId(null);
+    }
+  }
+
+  async function handleImportBarcodeReject(barcodeCandidateId: number): Promise<void> {
+    setImportCoverBarcodeReviewBusyId(barcodeCandidateId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.rejectBarcodeCandidate(barcodeCandidateId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("Barcode candidate rejected.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to reject barcode candidate.");
+      }
+    } finally {
+      setImportCoverBarcodeReviewBusyId(null);
+    }
+  }
+
+  async function handleImportCoverReconcile(coverImageId: number): Promise<void> {
+    setImportCoverOcrReconcileBusyId(coverImageId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      const response = await apiClient.reconcileCoverImageOcrMetadata(coverImageId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage(
+        response.warning_count > 0
+          ? `OCR reconciliation refreshed (${response.warning_count} warnings).`
+          : "OCR reconciliation refreshed with no warnings.",
+      );
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to reconcile OCR metadata.");
+      }
+    } finally {
+      setImportCoverOcrReconcileBusyId(null);
+    }
+  }
+
+  async function handleImportOcrWarningAcknowledge(warningId: number): Promise<void> {
+    setImportCoverOcrWarningBusyId(warningId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.acknowledgeOcrReconciliationWarning(warningId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("OCR reconciliation warning acknowledged.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to acknowledge OCR reconciliation warning.");
+      }
+    } finally {
+      setImportCoverOcrWarningBusyId(null);
+    }
+  }
+
+  async function handleImportOcrWarningDismiss(warningId: number): Promise<void> {
+    setImportCoverOcrWarningBusyId(warningId);
+    setImportCoverUploadError(null);
+    setImportCoverActionMessage(null);
+    try {
+      await apiClient.dismissOcrReconciliationWarning(warningId);
+      await refreshLoadedImportFromServer();
+      setImportCoverActionMessage("OCR reconciliation warning dismissed.");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setImportCoverUploadError(e.message);
+      } else {
+        setImportCoverUploadError("Unable to dismiss OCR reconciliation warning.");
+      }
+    } finally {
+      setImportCoverOcrWarningBusyId(null);
+    }
+  }
+
   async function handleParse(): Promise<void> {
     if (isEnqueueingParseJob || isParseJobActive) {
       return;
@@ -608,6 +1556,101 @@ export function OrderImportPage() {
     }
   }
 
+  async function handleCreateMetadataAlias(
+    index: number,
+    item: AiDraftOrderItem,
+    aliasType: "publisher" | "series",
+  ): Promise<void> {
+    const aliasKey = `${aliasType}-${index}`;
+    const aliasValue =
+      aliasType === "publisher" ? item.raw_publisher?.trim() : item.raw_title?.trim();
+    const canonicalValue =
+      aliasType === "publisher"
+        ? publisherAliasInputs[index]?.trim()
+        : seriesAliasInputs[index]?.trim();
+
+    if (!aliasValue || !canonicalValue) {
+      setMetadataAliasError(
+        aliasType === "publisher"
+          ? "Both the raw publisher and canonical publisher are required."
+          : "Both the raw title and canonical series title are required.",
+      );
+      return;
+    }
+
+    setActiveAliasKey(aliasKey);
+    setMetadataAliasError(null);
+    setMetadataAliasSuccess(null);
+    try {
+      await apiClient.createMetadataAlias({
+        alias_type: aliasType,
+        alias_value: aliasValue,
+        canonical_value: canonicalValue,
+      });
+      if (savedImportId) {
+        const refreshed = await apiClient.getImport(savedImportId);
+        applyImportToForm(refreshed);
+      }
+      setMetadataAliasSuccess(
+        `Saved ${aliasType} alias "${aliasValue}" -> "${canonicalValue}" and refreshed draft metadata.`,
+      );
+    } catch (aliasError) {
+      if (aliasError instanceof ApiError) {
+        setMetadataAliasError(aliasError.message);
+      } else {
+        setMetadataAliasError(
+          aliasType === "publisher"
+            ? "Unable to save publisher alias."
+            : "Unable to save series alias.",
+        );
+      }
+    } finally {
+      setActiveAliasKey(null);
+    }
+  }
+
+  async function handleCreateCreatorAlias(
+    aliasRowKey: string,
+    aliasValue: string,
+    canonicalValue: string,
+  ): Promise<void> {
+    const trimmedAlias = aliasValue.trim();
+    const trimmedCanonical = canonicalValue.trim();
+
+    if (!trimmedAlias || !trimmedCanonical) {
+      setMetadataAliasError(
+        "Both the raw creator name and canonical creator name are required for a creator alias.",
+      );
+      return;
+    }
+
+    setActiveAliasKey(`creator:${aliasRowKey}`);
+    setMetadataAliasError(null);
+    setMetadataAliasSuccess(null);
+    try {
+      await apiClient.createMetadataAlias({
+        alias_type: "creator",
+        alias_value: trimmedAlias,
+        canonical_value: trimmedCanonical,
+      });
+      if (savedImportId) {
+        const refreshed = await apiClient.getImport(savedImportId);
+        applyImportToForm(refreshed);
+      }
+      setMetadataAliasSuccess(
+        `Saved creator alias "${trimmedAlias}" → "${trimmedCanonical}" and refreshed draft metadata. Creator aliases affect future normalization only; Comic OS does not perform automatic fuzzy merges.`,
+      );
+    } catch (aliasError) {
+      if (aliasError instanceof ApiError) {
+        setMetadataAliasError(aliasError.message);
+      } else {
+        setMetadataAliasError("Unable to save creator alias.");
+      }
+    } finally {
+      setActiveAliasKey(null);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmitting) {
@@ -658,8 +1701,10 @@ export function OrderImportPage() {
       setImportStatus(response.status);
       setSuccess({
         orderId: response.order_id,
+        importId: savedImportId,
         totalCopiesCreated: response.total_copies_created,
         allInTotal: response.all_in_total,
+        notices: response.notices ?? [],
       });
     } catch (submissionError) {
       if (submissionError instanceof ApiError) {
@@ -688,7 +1733,35 @@ export function OrderImportPage() {
               all-in total of {formatCurrency(Number(success.allInTotal))}.
             </p>
 
+            {success.notices.length > 0 ? (
+              <div className="mt-6 rounded-2xl border border-cyan-400/25 bg-slate-950/50 p-4 text-sm text-cyan-100/90">
+                <p className="font-semibold text-cyan-50">Heads-up</p>
+                <ul className="mt-2 list-disc space-y-2 pl-5 text-slate-300">
+                  {success.notices.map((note, index) => (
+                    <li key={`${index}-${note.slice(0, 48)}`}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {success.totalCopiesCreated > 1 ||
+            success.notices.some((note) =>
+              note.toLowerCase().includes("multiple inventory copies"),
+            ) ? (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
+                <p className="font-medium text-white">Cover scans on this import</p>
+                <p className="mt-2 text-slate-400">{MANUAL_COVER_ASSIGN_INFO}</p>
+                <p className="mt-2 text-slate-400">{MANUAL_COVER_ASSIGN_MULTI_COPY}</p>
+              </div>
+            ) : null}
+
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                to={`/orders/import?importId=${success.importId}`}
+                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-center text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+              >
+                Open import to attach cover scans
+              </Link>
               <Link
                 to={`/orders/${success.orderId}`}
                 className="rounded-2xl bg-cyan-400 px-5 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
@@ -882,6 +1955,598 @@ export function OrderImportPage() {
           </div>
         ) : null}
 
+        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Cover images</p>
+              <p className="mt-2 text-sm text-slate-400">
+                Optional reference scans for this import only. Saves do not remap covers to catalog
+                issues or change confirm semantics.
+              </p>
+              {!savedImportId ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  Save a draft first so uploads can attach to that import record.
+                </p>
+              ) : null}
+              {savedImportId && importStatus !== "draft" ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  This import is {importStatus}. Earlier uploads remain visible below; uploads are
+                  paused.
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <input
+                ref={importCoverInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                className="hidden"
+                onChange={(event) => void handleImportCoverUpload(event)}
+              />
+              <button
+                type="button"
+                disabled={
+                  !savedImportId || importStatus !== "draft" || importCoverUploadBusy || isSubmitting
+                }
+                onClick={() => importCoverInputRef.current?.click()}
+                className="inline-flex items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-5 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {importCoverUploadBusy ? "Uploading…" : "Upload cover scan"}
+              </button>
+            </div>
+          </div>
+
+          {importCoverUploadError ? (
+            <div className="mt-4">
+              <StatusBanner tone="error">{importCoverUploadError}</StatusBanner>
+            </div>
+          ) : null}
+
+          {importCoverActionMessage ? (
+            <div className="mt-4">
+              <StatusBanner tone="success">{importCoverActionMessage}</StatusBanner>
+            </div>
+          ) : null}
+
+          {importStatus === "confirmed" &&
+          importCoverImages.some((c) => c.draft_import_id != null) ? (
+            <div className="mt-4 space-y-2 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-4 text-sm text-amber-100/90">
+              <p className="font-medium text-white">Manual cover assignment</p>
+              <p className="text-slate-300">{MANUAL_COVER_ASSIGN_INFO}</p>
+              <p className="text-slate-300">{MANUAL_COVER_ASSIGN_MULTI_COPY}</p>
+            </div>
+          ) : null}
+
+          {importCoverImages.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No scans attached to this import yet.</p>
+          ) : (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {importCoverImages.map((meta, index) => {
+                const thumb = importCoverThumbUrls[index];
+                const label = meta.original_filename ?? `Cover ${meta.id}`;
+                const busy = importCoverPrimaryBusyId === meta.id;
+                const canSetPrimary = savedImportId !== null && importStatus === "draft";
+                const ocrHeadline = resolveCoverImageOcrHeadline({
+                  ocr_visibility: meta.ocr_visibility,
+                  latest_ocr_result: meta.latest_ocr_result,
+                });
+                const ocrRunCount = meta.ocr_visibility?.ocr_run_count ?? 0;
+                const priorRuns = meta.ocr_visibility?.prior_run_created_ats ?? [];
+                return (
+                  <div
+                    key={meta.id}
+                    className={`rounded-2xl border bg-slate-950/60 p-4 text-sm text-slate-300 ${
+                      meta.is_primary
+                        ? "border-amber-400/40 shadow-lg shadow-amber-500/10"
+                        : "border-white/10"
+                    }`}
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      {meta.is_primary ? (
+                        <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+                          Primary
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                          Alternate
+                        </span>
+                      )}
+                    </div>
+                    {thumb ? (
+                      <button
+                        type="button"
+                        className="mb-3 block w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+                        title="Open full image"
+                        onClick={() => window.open(thumb, "_blank", "noopener,noreferrer")}
+                      >
+                        <img
+                          src={thumb}
+                          alt={`Cover thumbnail for ${label}`}
+                          className="h-40 w-full object-cover"
+                        />
+                      </button>
+                    ) : (
+                      <div className="mb-3 flex h-40 items-center justify-center rounded-xl border border-dashed border-white/15 bg-slate-950/50 text-xs text-slate-500">
+                        Loading preview…
+                      </div>
+                    )}
+                    <p className="font-medium text-white">{label}</p>
+                    <dl className="mt-3 space-y-1 text-xs text-slate-400">
+                      <div className="flex justify-between gap-2">
+                        <dt>MIME</dt>
+                        <dd className="text-right">{meta.mime_type}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt>Dimensions</dt>
+                        <dd className="text-right">
+                          {formatImportCoverDimensions(meta.image_width, meta.image_height)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt>Size</dt>
+                        <dd className="text-right">
+                          {formatImportCoverFileSize(meta.file_size ?? null)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 space-y-2 text-xs">
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverProcessingTone(meta.processing_status)}`}
+                        >
+                          {meta.processing_status}
+                        </span>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverMatchingTone(meta.matching_status)}`}
+                        >
+                          matching {meta.matching_status}
+                        </span>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverOcrHeadlineTone(ocrHeadline)}`}
+                        >
+                          ocr {ocrHeadline}
+                        </span>
+                      </div>
+                      <p className="text-slate-400">
+                        Latest OCR processed:{" "}
+                        {formatImportCoverTimestamp(meta.latest_ocr_result?.processed_at ?? null)}
+                        {meta.latest_ocr_result?.confidence_score != null ? (
+                          <span className="text-slate-500">
+                            {" "}
+                            · confidence {meta.latest_ocr_result.confidence_score}
+                          </span>
+                        ) : null}
+                        {typeof meta.ocr_visibility?.retry_available === "boolean" ? (
+                          <span className="text-slate-500">
+                            {" "}
+                            · retry {meta.ocr_visibility.retry_available ? "available" : "blocked"}
+                          </span>
+                        ) : null}
+                      </p>
+                      {ocrRunCount > 0 ? (
+                        <p className="text-slate-500">
+                          OCR runs recorded: {ocrRunCount}
+                          {priorRuns.length > 0
+                            ? ` · prior timestamps (newest-first): ${priorRuns
+                                .slice(0, 3)
+                                .map((ts: string) => formatImportCoverTimestamp(ts))
+                                .join(", ")}${priorRuns.length > 3 ? "…" : ""}`
+                            : ""}
+                        </p>
+                      ) : null}
+                      {meta.latest_ocr_result?.replay_of_ocr_result_id != null ? (
+                        <p className="text-slate-500">
+                          Latest OCR replayed from #{meta.latest_ocr_result.replay_of_ocr_result_id}
+                          {meta.latest_ocr_result.replay_reason
+                            ? ` · reason: ${meta.latest_ocr_result.replay_reason}`
+                            : ""}
+                        </p>
+                      ) : null}
+                      {meta.latest_ocr_result?.source_cover_image_sha256 ? (
+                        <p className="text-slate-500">
+                          OCR snapshot img {meta.latest_ocr_result.source_cover_image_sha256.slice(0, 12)}...
+                          {meta.latest_ocr_result.source_processing_version
+                            ? ` · ${meta.latest_ocr_result.source_processing_version}`
+                            : ""}
+                          {meta.latest_ocr_result.normalization_version
+                            ? ` · ${meta.latest_ocr_result.normalization_version}`
+                            : ""}
+                        </p>
+                      ) : null}
+                      <p className="text-slate-400">
+                        Metadata refreshed: {formatImportCoverTimestamp(meta.metadata_refreshed_at)}
+                      </p>
+                      <p className="text-slate-400">
+                        Ready for matching: {formatImportCoverTimestamp(meta.ready_for_matching_at)}
+                      </p>
+                      {meta.processing_error ? (
+                        <p className="text-rose-300">{meta.processing_error}</p>
+                      ) : null}
+                      {meta.matching_notes ? <p className="text-amber-100/90">{meta.matching_notes}</p> : null}
+                      {meta.latest_ocr_result?.processing_error ? (
+                        <p className="text-rose-300">{meta.latest_ocr_result.processing_error}</p>
+                      ) : null}
+                    </div>
+                    {meta.latest_ocr_result?.raw_text ? (
+                      <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/80 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">OCR raw text</p>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-300">
+                          {meta.latest_ocr_result.raw_text}
+                        </pre>
+                      </div>
+                    ) : null}
+                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        OCR Regions ({meta.ocr_regions.length})
+                      </summary>
+                      {meta.ocr_regions.length === 0 ? (
+                        <p className="mt-3 text-xs text-slate-500">No OCR regions extracted yet.</p>
+                      ) : (
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          {meta.ocr_regions.map((region) => {
+                            const previewUrl = importCoverRegionPreviewUrls[`${meta.id}:${region.region_type}`];
+                            return (
+                              <a
+                                key={region.id}
+                                href={previewUrl ?? region.fetch_path}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-white/10 bg-slate-900/80 p-2"
+                              >
+                                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                  {region.region_type}
+                                </p>
+                                {previewUrl ? (
+                                  <img
+                                    src={previewUrl}
+                                    alt={`${region.region_type} OCR region`}
+                                    className="mt-2 h-20 w-full rounded object-cover"
+                                  />
+                                ) : (
+                                  <div className="mt-2 flex h-20 items-center justify-center rounded bg-slate-950 text-[11px] text-slate-500">
+                                    Loading…
+                                  </div>
+                                )}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </details>
+                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Barcode Candidates ({meta.barcode_candidates.length})
+                      </summary>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={importCoverBarcodeExtractBusyId === meta.id}
+                          onClick={() => void handleImportCoverBarcodeExtract(meta.id)}
+                          className="inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100"
+                        >
+                          {importCoverBarcodeExtractBusyId === meta.id ? "Refreshing…" : "Refresh barcodes"}
+                        </button>
+                        <span className="text-[11px] text-slate-500">
+                          Pending{" "}
+                          {meta.barcode_candidates.filter((candidate) => candidate.review_state === "pending").length}
+                        </span>
+                      </div>
+                      {meta.barcode_candidates.length === 0 ? (
+                        <p className="mt-3 text-xs text-slate-500">
+                          No persisted barcode candidates yet. Refresh to normalize barcode OCR values safely.
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {meta.barcode_candidates.map((candidate) => {
+                            const reviewBusy = importCoverBarcodeReviewBusyId === candidate.id;
+                            const sourceLabel =
+                              candidate.source_ocr_candidate_id != null
+                                ? `OCR candidate #${candidate.source_ocr_candidate_id}`
+                                : candidate.source_ocr_result_id != null
+                                  ? `OCR result #${candidate.source_ocr_result_id}`
+                                  : "derived";
+                            return (
+                              <div
+                                key={candidate.id}
+                                className={`rounded-lg border p-3 text-xs ${barcodeCandidateReviewCardClassImport(candidate.review_state)}`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-100">
+                                      {candidate.barcode_type}
+                                    </span>
+                                    <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-100">
+                                      {candidate.review_state}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-500">
+                                    Updated {formatImportCoverTimestamp(candidate.updated_at)}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-slate-100">Raw value: {candidate.raw_barcode_value}</p>
+                                <p className="mt-1 text-slate-300">
+                                  Normalized UPC: {candidate.normalized_upc_value}
+                                </p>
+                                <p className="mt-1 text-slate-500">
+                                  Source {sourceLabel}
+                                  {candidate.confidence != null ? ` · confidence ${candidate.confidence}` : ""}
+                                  {candidate.reviewed_at
+                                    ? ` · reviewed ${formatImportCoverTimestamp(candidate.reviewed_at)}`
+                                    : ""}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={reviewBusy}
+                                    onClick={() => void handleImportBarcodeApprove(candidate.id)}
+                                    className="inline-flex rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100 disabled:opacity-50"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={reviewBusy}
+                                    onClick={() => void handleImportBarcodeReject(candidate.id)}
+                                    className="inline-flex rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-100 disabled:opacity-50"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </details>
+                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        OCR Candidates ({meta.ocr_candidates.length})
+                      </summary>
+                      {meta.ocr_candidates.length === 0 ? (
+                        <p className="mt-3 text-xs text-slate-500">No OCR candidates extracted yet.</p>
+                      ) : (
+                        <div className="mt-3 space-y-4">
+                          {Array.from(
+                            meta.ocr_candidates.reduce((acc, c) => {
+                              const arr = acc.get(c.candidate_type) ?? [];
+                              arr.push(c);
+                              acc.set(c.candidate_type, arr);
+                              return acc;
+                            }, new Map<string, typeof meta.ocr_candidates>()),
+                          )
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([candidateType, candidatesOfType]) => (
+                              <div key={candidateType}>
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                  {candidateType}
+                                </p>
+                                <div className="space-y-2">
+                                  {[...candidatesOfType]
+                                    .sort((x, y) => x.id - y.id)
+                                    .map((candidate) => {
+                                      const reviewBusy = importCoverOcrCandidateReviewBusyId === candidate.id;
+                                      return (
+                                        <div
+                                          key={candidate.id}
+                                          className={`rounded-lg border p-2 text-xs ${ocrCandidateReviewCardClassImport(candidate.review_status)}`}
+                                        >
+                                          <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <span
+                                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                                candidate.review_status === "approved"
+                                                  ? "border-emerald-400/40 text-emerald-200"
+                                                  : candidate.review_status === "rejected"
+                                                    ? "border-rose-400/40 text-rose-200"
+                                                    : "border-white/15 text-slate-300"
+                                              }`}
+                                            >
+                                              {candidate.review_status}
+                                            </span>
+                                            {candidate.reviewed_at ? (
+                                              <span className="text-[10px] text-slate-500">
+                                                Reviewed {formatImportCoverTimestamp(candidate.reviewed_at)}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                          <p className="mt-2 text-slate-200">{candidate.raw_candidate_text}</p>
+                                          <p className="mt-1 text-slate-500">
+                                            normalized {candidate.normalized_candidate_text ?? "—"} · source{" "}
+                                            {candidate.extraction_source}
+                                            {candidate.confidence_score != null
+                                              ? ` · confidence ${candidate.confidence_score}`
+                                              : ""}
+                                          </p>
+                                          <label className="mt-2 block text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                            Review notes
+                                          </label>
+                                          <textarea
+                                            className="mt-1 w-full rounded border border-white/10 bg-slate-950/80 px-2 py-1 text-[11px] text-slate-200"
+                                            rows={2}
+                                            disabled={reviewBusy}
+                                            value={
+                                              importCoverOcrCandidateNoteDrafts[candidate.id] ??
+                                              candidate.review_notes ??
+                                              ""
+                                            }
+                                            onChange={(event) =>
+                                              setImportCoverOcrCandidateNoteDrafts((prev) => ({
+                                                ...prev,
+                                                [candidate.id]: event.target.value,
+                                              }))
+                                            }
+                                          />
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            <button
+                                              type="button"
+                                              disabled={reviewBusy}
+                                              onClick={() => void handleImportOcrCandidateApprove(candidate.id)}
+                                              className="inline-flex rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100"
+                                            >
+                                              Approve
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={reviewBusy}
+                                              onClick={() => void handleImportOcrCandidateReject(candidate.id)}
+                                              className="inline-flex rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-100"
+                                            >
+                                              Reject
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={reviewBusy}
+                                              onClick={() => void handleImportOcrCandidateSaveNotes(candidate.id)}
+                                              className="inline-flex rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-200"
+                                            >
+                                              Save notes
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </details>
+                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        OCR Reconciliation Warnings ({meta.ocr_reconciliation_warnings.length})
+                      </summary>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={importCoverOcrReconcileBusyId === meta.id}
+                          onClick={() => void handleImportCoverReconcile(meta.id)}
+                          className="inline-flex rounded-lg border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100"
+                        >
+                          {importCoverOcrReconcileBusyId === meta.id ? "Refreshing…" : "Refresh warnings"}
+                        </button>
+                        <span className="text-[11px] text-slate-500">
+                          Open{" "}
+                          {meta.ocr_reconciliation_warnings.filter((warning) => warning.status === "open").length}
+                        </span>
+                      </div>
+                      {meta.ocr_reconciliation_warnings.length === 0 ? (
+                        <p className="mt-3 text-xs text-slate-500">
+                          No reconciliation warnings recorded yet. Refresh to compare OCR candidates against the
+                          current draft metadata snapshot when available.
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {meta.ocr_reconciliation_warnings.map((warning) => {
+                            const warningBusy = importCoverOcrWarningBusyId === warning.id;
+                            return (
+                              <div
+                                key={warning.id}
+                                className={`rounded-lg border p-3 text-xs ${importOcrReconciliationSeverityClass(warning.severity)}`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-current/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                                      {warning.severity}
+                                    </span>
+                                    <span
+                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${importOcrReconciliationStatusClass(warning.status)}`}
+                                    >
+                                      {warning.status}
+                                    </span>
+                                    <span className="text-[10px] uppercase tracking-[0.14em] text-slate-300">
+                                      {warning.warning_type.replace(/_/g, " ")}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400">
+                                    {warning.resolved_at
+                                      ? `Resolved ${formatImportCoverTimestamp(warning.resolved_at)}`
+                                      : `Created ${formatImportCoverTimestamp(warning.created_at)}`}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-slate-100">{warning.message}</p>
+                                <p className="mt-2 text-slate-300">
+                                  Current metadata: {warning.current_metadata_value ?? "—"}
+                                </p>
+                                <p className="mt-1 text-slate-300">OCR candidate: {warning.candidate_value ?? "—"}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={warningBusy || warning.status === "acknowledged"}
+                                    onClick={() => void handleImportOcrWarningAcknowledge(warning.id)}
+                                    className="inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100 disabled:opacity-50"
+                                  >
+                                    Acknowledge
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={warningBusy || warning.status === "dismissed"}
+                                    onClick={() => void handleImportOcrWarningDismiss(warning.id)}
+                                    className="inline-flex rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-200 disabled:opacity-50"
+                                  >
+                                    Dismiss
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </details>
+                    {meta.is_primary ? (
+                      <p className="mt-3 text-xs text-amber-200/90">Primary display image for this draft.</p>
+                    ) : canSetPrimary ? (
+                      <button
+                        type="button"
+                        disabled={busy || importCoverUploadBusy || isSubmitting}
+                        onClick={() => void handleImportCoverPrimary(meta.id)}
+                        className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {busy ? "Updating…" : "Set primary"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={importCoverProcessBusyId === meta.id}
+                      onClick={() => void handleImportCoverProcess(meta.id)}
+                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {importCoverProcessBusyId === meta.id ? "Queueing…" : "Reprocess metadata"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={importCoverEvaluateBusyId === meta.id}
+                      onClick={() => void handleImportCoverEvaluate(meta.id)}
+                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {importCoverEvaluateBusyId === meta.id ? "Evaluating…" : "Evaluate readiness"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={importCoverOcrBusyId === meta.id}
+                      onClick={() => void handleImportCoverOcr(meta)}
+                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {importCoverOcrBusyId === meta.id
+                        ? "Queueing…"
+                        : ocrHeadline === "failed"
+                          ? "Retry OCR"
+                          : meta.latest_ocr_result
+                            ? "Replay OCR"
+                            : "Run OCR"}
+                    </button>
+                    {importStatus === "confirmed" && meta.draft_import_id != null ? (
+                      <ImportCoverManualAssignPanel
+                        coverImageId={meta.id}
+                        disabled={isSubmitting || importCoverUploadBusy}
+                        onAssigned={refreshLoadedImportFromServer}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         {shouldShowDraftEditor && missingPublisherItems.length ? (
           <div className="mt-6">
             <StatusBanner tone="info">
@@ -901,6 +2566,417 @@ export function OrderImportPage() {
               </div>
             </StatusBanner>
           </div>
+        ) : null}
+
+        {shouldShowDraftEditor && metadataReviewItems.length ? (
+          <section className="mt-6 rounded-3xl border border-amber-400/20 bg-amber-400/10 p-5 shadow-xl shadow-black/20">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Needs Metadata Review</h2>
+                <p className="mt-2 text-sm text-amber-100/80">
+                  These items were preserved or normalized deterministically but still deserve human
+                  review. Writer, artist, and cover-artist raw strings are paired with deterministic
+                  canonical outputs for troubleshooting. Creator aliases you save from Ops apply only
+                  to future drafts (no automatic merges or rewinds). Save draft changes to refresh this
+                  section after edits.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:flex-wrap">
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-rose-400/25 bg-slate-950/60 px-4 py-2.5 text-xs font-medium text-rose-100">
+                  <input
+                    type="checkbox"
+                    checked={releaseDateReviewOnlyFilter}
+                    onChange={(event) => setReleaseDateReviewOnlyFilter(event.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-rose-400 focus:ring-rose-300/40"
+                  />
+                  Show release date warnings only
+                </label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-fuchsia-400/25 bg-slate-950/60 px-4 py-2.5 text-xs font-medium text-fuchsia-50">
+                  <input
+                    type="checkbox"
+                    checked={creatorReviewOnlyFilter}
+                    onChange={(event) => setCreatorReviewOnlyFilter(event.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-fuchsia-300 focus:ring-fuchsia-300/40"
+                  />
+                  Show creator warnings only
+                </label>
+                <span className="inline-flex whitespace-nowrap rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
+                  {releaseDateReviewOnlyFilter || creatorReviewOnlyFilter
+                    ? `${displayedMetadataReviewItems.length} of ${metadataReviewItems.length} shown`
+                    : `${metadataReviewItems.length} flagged`}
+                </span>
+              </div>
+            </div>
+
+            {isOpsAdmin ? (
+              <div className="mt-4">
+                <StatusBanner tone="info">
+                  Creator aliases mapped here steer future deterministic normalization only. Comic OS never
+                  auto-merges similar creator strings or rewires existing inventory identities from this
+                  panel.
+                </StatusBanner>
+              </div>
+            ) : null}
+
+            {metadataAliasError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{metadataAliasError}</StatusBanner>
+              </div>
+            ) : null}
+
+            {metadataAliasSuccess ? (
+              <div className="mt-4">
+                <StatusBanner tone="success">{metadataAliasSuccess}</StatusBanner>
+              </div>
+            ) : null}
+
+            {(releaseDateReviewOnlyFilter || creatorReviewOnlyFilter) &&
+            displayedMetadataReviewItems.length === 0 ? (
+              <div className="mt-4">
+                <StatusBanner tone="info">
+                  No flagged items match the active review filters right now — clear filters to restore
+                  the full metadata review list.
+                </StatusBanner>
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-4">
+              {displayedMetadataReviewItems.map(({ index, item }) => {
+                const releaseWarn = hasMalformedReleaseDateNote(item);
+                const creatorWarn = hasCreatorMetadataWarningNotes(item);
+                const creatorWarnOnlyAccent = creatorWarn && !releaseWarn;
+                return (
+                  <article
+                    key={`metadata-review-${index}`}
+                    className={`rounded-2xl bg-slate-950/70 p-4 ${
+                      releaseWarn
+                        ? "border-2 border-rose-400/40 shadow-lg shadow-rose-950/20"
+                        : creatorWarnOnlyAccent
+                          ? "border-2 border-fuchsia-400/35 shadow-lg shadow-fuchsia-950/20"
+                          : "border border-white/10"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Item {index + 1}</p>
+                        <p className="text-sm text-slate-400">
+                          {displayValue(item.title)} #{displayValue(item.issue_number)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {releaseWarn ? (
+                          <span className="inline-flex rounded-full border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-100">
+                            Release date warning
+                          </span>
+                        ) : null}
+                        {creatorWarn ? (
+                          <span className="inline-flex rounded-full border border-fuchsia-400/35 bg-fuchsia-500/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-fuchsia-100">
+                            Creator metadata warning
+                          </span>
+                        ) : null}
+                        {!releaseWarn && !creatorWarn ? (
+                          <span className="text-xs uppercase tracking-[0.16em] text-amber-200">
+                            Review flagged
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Raw Parsed Metadata
+                      </p>
+                      <dl className="mt-3 space-y-2 text-sm text-slate-300">
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-slate-500">Publisher</dt>
+                          <dd className="text-right">{displayValue(item.raw_publisher)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-slate-500">Title</dt>
+                          <dd className="text-right">{displayValue(item.raw_title)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-slate-500">Release</dt>
+                          <dd className="text-right">{displayValue(item.raw_release_date)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-slate-500">Issue</dt>
+                          <dd className="text-right">{displayValue(item.raw_issue_number)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-slate-500">Variant</dt>
+                          <dd className="text-right">{displayValue(item.raw_variant_text)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100">
+                        Canonical Metadata
+                      </p>
+                      <dl className="mt-3 space-y-2 text-sm text-slate-200">
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Publisher</dt>
+                          <dd className="text-right">{displayValue(item.canonical_publisher)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Title</dt>
+                          <dd className="text-right">{displayValue(item.canonical_title)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Release Year</dt>
+                          <dd className="text-right">
+                            {item.parsed_release_year ? String(item.parsed_release_year) : "Not parsed"}
+                          </dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Exact Release Date</dt>
+                          <dd className="text-right">
+                            {displayValue(item.parsed_release_date)}
+                          </dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Issue</dt>
+                          <dd className="text-right">{displayValue(item.canonical_issue_number)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <dt className="text-cyan-100/70">Variant</dt>
+                          <dd className="text-right">
+                            {displayValue(item.canonical_variant_text)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/20 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
+                      Creators · raw → canonical slots
+                    </p>
+                    <dl className="mt-3 space-y-3 text-sm text-slate-200">
+                      {(["writers", "artists", "cover_artists"] as const).map((role) => (
+                        <div key={role} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                          <dt className="shrink-0 text-fuchsia-100/75">{CREATOR_ROLE_LABELS[role]}</dt>
+                          <dd className="text-right font-mono text-xs text-fuchsia-50/95 sm:text-right">
+                            {formatCreatorBullets(
+                              zipCreatorSlots(item, role).map(({ raw, canonical }) => ({
+                                raw,
+                                canonical,
+                              })),
+                            )}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Metadata Identity Key
+                    </p>
+                    <p className="mt-2 break-all font-mono text-xs text-slate-200">
+                      {item.metadata_identity_key ?? "Unavailable"}
+                    </p>
+                  </div>
+
+                  {item.metadata_review_notes?.length ? (
+                    <div
+                      className={`mt-4 rounded-2xl border p-4 ${
+                        releaseWarn && creatorWarn
+                          ? "border-rose-400/35 bg-gradient-to-br from-rose-950/40 to-fuchsia-950/20"
+                          : releaseWarn
+                            ? "border-rose-400/35 bg-rose-950/30"
+                            : creatorWarn
+                              ? "border-fuchsia-400/35 bg-fuchsia-950/25"
+                              : "border-white/10 bg-slate-900/60"
+                      }`}
+                    >
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                          releaseWarn && creatorWarn
+                            ? "text-rose-100"
+                            : releaseWarn
+                              ? "text-rose-200"
+                              : creatorWarn
+                                ? "text-fuchsia-100"
+                                : "text-amber-200"
+                        }`}
+                      >
+                        Metadata Warnings
+                      </p>
+                      <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
+                        {item.metadata_review_notes.map((note, noteIndex) => {
+                          const mentionsRelease =
+                            note.includes(RELEASE_DATE_METADATA_WARNING_FRAGMENT);
+                          const mentionsCreator =
+                            note.includes(CREATOR_METADATA_WARNING_FRAGMENT);
+
+                          let liClass = "text-amber-50 marker:text-amber-200";
+                          if (mentionsRelease && mentionsCreator) {
+                            liClass =
+                              "font-semibold text-fuchsia-50 marker:text-fuchsia-200 underline decoration-fuchsia-400/35 underline-offset-2";
+                          } else if (mentionsRelease) {
+                            liClass = "font-semibold text-rose-50 marker:text-rose-300";
+                          } else if (mentionsCreator) {
+                            liClass = "font-semibold text-fuchsia-50 marker:text-fuchsia-300";
+                          }
+
+                          return (
+                            <li
+                              key={`mrn-${index}-${noteIndex}-${note.slice(0, 48)}`}
+                              className={liClass}
+                            >
+                              {note}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {isOpsAdmin && needsPublisherAliasHelp(item) ? (
+                    <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100">
+                        Create Publisher Alias
+                      </p>
+                      <p className="mt-2 text-sm text-emerald-100/80">
+                        Save a manual alias for future imports, then refresh this draft with the new
+                        canonical publisher.
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                        <input
+                          value={item.raw_publisher ?? ""}
+                          readOnly
+                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
+                        />
+                        <input
+                          value={publisherAliasInputs[index] ?? ""}
+                          onChange={(event) =>
+                            setPublisherAliasInputs((current) => ({
+                              ...current,
+                              [index]: event.target.value,
+                            }))
+                          }
+                          placeholder="Canonical publisher"
+                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300/40"
+                        />
+                        <button
+                          type="button"
+                          disabled={activeAliasKey === `publisher-${index}`}
+                          onClick={() => void handleCreateMetadataAlias(index, item, "publisher")}
+                          className="rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {activeAliasKey === `publisher-${index}` ? "Saving..." : "Save Alias"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {isOpsAdmin && needsSeriesAliasHelp(item) ? (
+                    <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-100">
+                        Create Series Alias
+                      </p>
+                      <p className="mt-2 text-sm text-violet-100/80">
+                        Save a manual series alias for future imports when this title should collapse
+                        into a more canonical series name.
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                        <input
+                          value={item.raw_title ?? ""}
+                          readOnly
+                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
+                        />
+                        <input
+                          value={seriesAliasInputs[index] ?? ""}
+                          onChange={(event) =>
+                            setSeriesAliasInputs((current) => ({
+                              ...current,
+                              [index]: event.target.value,
+                            }))
+                          }
+                          placeholder="Canonical series title"
+                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-violet-300/40"
+                        />
+                        <button
+                          type="button"
+                          disabled={activeAliasKey === `series-${index}`}
+                          onClick={() => void handleCreateMetadataAlias(index, item, "series")}
+                          className="rounded-2xl bg-violet-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {activeAliasKey === `series-${index}` ? "Saving..." : "Save Alias"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {isOpsAdmin
+                    ? (["writers", "artists", "cover_artists"] as const)
+                        .map((role) => {
+                          const aliasRows = zipCreatorSlots(item, role).filter((row) => row.raw.trim());
+                          return aliasRows.length ? (
+                            <div
+                              key={`${index}-${role}-aliases`}
+                              className="mt-4 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-950/25 p-4"
+                            >
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
+                                Create Creator Alias · {CREATOR_ROLE_LABELS[role]}
+                              </p>
+                              <p className="mt-2 text-sm text-fuchsia-50/85">
+                                Map a raw OCR name to the canonical spelling you want future imports to
+                                use. Applies on the next deterministic enrichment pass only.
+                              </p>
+                              <div className="mt-4 space-y-5">
+                                {aliasRows.map((row) => {
+                                  const rowKey = creatorAliasRowKey(index, role, row.slot);
+                                  const activeKey = activeAliasKey === `creator:${rowKey}`;
+                                  return (
+                                    <div key={rowKey} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                                      <input
+                                        value={row.raw}
+                                        readOnly
+                                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
+                                      />
+                                      <input
+                                        value={creatorAliasInputs[rowKey] ?? ""}
+                                        onChange={(event) =>
+                                          setCreatorAliasInputs((current) => ({
+                                            ...current,
+                                            [rowKey]: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Canonical creator name"
+                                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-fuchsia-300/40"
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={activeKey}
+                                        onClick={() =>
+                                          void handleCreateCreatorAlias(
+                                            rowKey,
+                                            row.raw,
+                                            creatorAliasInputs[rowKey] ?? row.canonical,
+                                          )
+                                        }
+                                        className="rounded-2xl bg-fuchsia-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {activeKey ? "Saving..." : "Save Alias"}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null;
+                        })
+                    : null}
+
+                </article>
+                );
+              })}
+            </div>
+          </section>
         ) : null}
 
         {shouldShowDraftEditor ? (
@@ -1051,6 +3127,54 @@ export function OrderImportPage() {
                       {formErrors.items[index]?.title ? (
                         <p className="text-sm text-rose-300">{formErrors.items[index]?.title}</p>
                       ) : null}
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-300">Release Date</span>
+                      <input
+                        value={item.releaseDate}
+                        onChange={(event) => updateItem(index, "releaseDate", event.target.value)}
+                        placeholder="2024, 2024-05, or 2024-05-15"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                      <p className="text-sm text-slate-400">
+                        Optional. Exact dates are preserved when provided; year-only values stay year-only.
+                      </p>
+                      {itemPreorderLabel(item) ? (
+                        <p className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-100">
+                          {itemPreorderLabel(item)}
+                        </p>
+                      ) : null}
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-300">Release Status</span>
+                      <select
+                        value={item.releaseStatus}
+                        onChange={(event) => updateItem(index, "releaseStatus", event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      >
+                        <option value="">Auto from release date</option>
+                        <option value="released">Released</option>
+                        <option value="not_released_yet">Not released yet</option>
+                        <option value="unknown">Unknown</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-300">Order Status</span>
+                      <select
+                        value={item.orderStatus}
+                        onChange={(event) => updateItem(index, "orderStatus", event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      >
+                        <option value="">Auto from release / receipt</option>
+                        <option value="ordered">Ordered</option>
+                        <option value="preordered">Preordered</option>
+                        <option value="shipped">Shipped</option>
+                        <option value="received">Received</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
                     </label>
 
                     <label className="space-y-2">

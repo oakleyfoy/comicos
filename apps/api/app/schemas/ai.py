@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -17,17 +17,87 @@ class ParseOrderRequest(BaseModel):
         return trimmed
 
 
+class MetadataIdentityComponents(BaseModel):
+    publisher: str = ""
+    series_title: str = ""
+    issue_number: str = ""
+    variant: str = ""
+
+
+def _normalize_optional_creator_list(
+    value: list[str] | str | None,
+) -> list[str] | None:
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return [trimmed] if trimmed else None
+
+    cleaned = [str(item).strip() for item in value if str(item).strip()]
+    return cleaned or None
+
+
 class AiDraftOrderItem(BaseModel):
     publisher: str | None = None
+    raw_publisher: str | None = None
+    canonical_publisher: str | None = None
     title: str | None = None
+    raw_title: str | None = None
+    canonical_title: str | None = None
+    release_date: str | None = None
+    raw_release_date: str | None = None
+    parsed_release_date: date | None = None
+    parsed_release_year: int | None = None
+    release_status: Literal["released", "not_released_yet", "unknown"] | None = None
+    order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
+    purchase_date: date | None = None
+    expected_ship_date: date | None = None
+    received_at: datetime | None = None
     issue_number: str | None = None
+    raw_issue_number: str | None = None
+    canonical_issue_number: str | None = None
     cover_name: str | None = None
     printing: str | None = None
     ratio: str | None = None
     variant_type: str | None = None
     cover_artist: str | None = None
+    writers: list[str] | None = None
+    raw_writers: list[str] | None = None
+    canonical_writers: list[str] | None = None
+    artists: list[str] | None = None
+    raw_artists: list[str] | None = None
+    canonical_artists: list[str] | None = None
+    cover_artists: list[str] | None = None
+    raw_cover_artists: list[str] | None = None
+    canonical_cover_artists: list[str] | None = None
+    raw_variant_text: str | None = None
+    canonical_variant_text: str | None = None
+    metadata_identity_key: str | None = None
+    metadata_identity_components: MetadataIdentityComponents | None = None
+    metadata_review_required: bool = False
+    metadata_review_notes: list[str] = Field(default_factory=list)
     quantity: int | None = Field(default=None, ge=1)
     raw_item_price: Decimal | None = Field(default=None, ge=0)
+
+    @field_validator(
+        "writers",
+        "raw_writers",
+        "canonical_writers",
+        "artists",
+        "raw_artists",
+        "canonical_artists",
+        "cover_artists",
+        "raw_cover_artists",
+        "canonical_cover_artists",
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_creator_lists(
+        cls,
+        value: list[str] | str | None,
+    ) -> list[str] | None:
+        return _normalize_optional_creator_list(value)
 
 
 DraftSourceType = Literal["ai_draft", "manual_draft", "gmail_draft"]

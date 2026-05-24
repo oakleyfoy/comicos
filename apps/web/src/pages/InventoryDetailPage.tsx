@@ -42,6 +42,7 @@ import {
   type RelationshipConflictRead,
   type CollectionHistoricalTimelineEventsResponse,
   type CollectionHistoricalTimelineGrouping,
+  type InventoryScanQaPanelRead,
 } from "../api/client";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -945,6 +946,9 @@ export function InventoryDetailPage() {
     useState<CollectionHistoricalTimelineGrouping>("day");
   const [inventoryHistoricalTimelineBusy, setInventoryHistoricalTimelineBusy] = useState(false);
   const [inventoryHistoricalTimelineError, setInventoryHistoricalTimelineError] = useState<string | null>(null);
+  const [inventoryScanQaPanel, setInventoryScanQaPanel] = useState<InventoryScanQaPanelRead | null>(null);
+  const [inventoryScanQaError, setInventoryScanQaError] = useState<string | null>(null);
+  const [inventoryScanQaBusy, setInventoryScanQaBusy] = useState(false);
 
   async function loadDetail(): Promise<void> {
     if (!Number.isInteger(parsedInventoryCopyId) || parsedInventoryCopyId <= 0) {
@@ -1059,6 +1063,40 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [parsedInventoryCopyId]);
+
+  useEffect(() => {
+    if (!detail?.inventory_copy_id) {
+      setInventoryScanQaPanel(null);
+      setInventoryScanQaError(null);
+      setInventoryScanQaBusy(false);
+      return;
+    }
+    let ignore = false;
+    void (async () => {
+      setInventoryScanQaBusy(true);
+      setInventoryScanQaError(null);
+      try {
+        const panel = await apiClient.getInventoryCoverScanQa(detail.inventory_copy_id);
+        if (!ignore) {
+          setInventoryScanQaPanel(panel);
+        }
+      } catch (qaErr) {
+        if (!ignore) {
+          setInventoryScanQaPanel(null);
+          setInventoryScanQaError(
+            qaErr instanceof ApiError ? qaErr.message : "Unable to load cover scan QA routing.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setInventoryScanQaBusy(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.inventory_copy_id]);
 
   useEffect(() => {
     let ignore = false;
@@ -2732,6 +2770,68 @@ export function InventoryDetailPage() {
           </section>
 
           {detail ? <HighResReviewInventorySection inventoryCopyId={detail.inventory_copy_id} /> : null}
+
+          {detail ? (
+            <section className="mt-8 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-6 shadow-inner shadow-black/10">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/80">Cover scan QA (routing)</p>
+                  <p className="mt-2 max-w-3xl text-sm text-slate-300">
+                    Deterministic read of format, dimensions, ingest-style signals, and OCR quality analysis when present.
+                    Recommendations are visibility only — they do not queue OCR or change metadata.
+                  </p>
+                </div>
+                {inventoryScanQaBusy ? (
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Loading…</span>
+                ) : null}
+              </div>
+              {inventoryScanQaError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{inventoryScanQaError}</StatusBanner>
+                </div>
+              ) : null}
+              {!inventoryScanQaBusy && inventoryScanQaPanel && inventoryScanQaPanel.covers.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">No cover images on this copy yet.</p>
+              ) : null}
+              {inventoryScanQaPanel && inventoryScanQaPanel.covers.length > 0 ? (
+                <ul className="mt-5 space-y-3">
+                  {inventoryScanQaPanel.covers.map((row) => {
+                    const signals = Array.isArray(row.evidence_json?.signals)
+                      ? (row.evidence_json?.signals as { kind?: string }[])
+                      : [];
+                    const headline = signals
+                      .slice(0, 4)
+                      .map((s) => s.kind ?? "signal")
+                      .join(" · ");
+                    return (
+                      <li
+                        key={row.cover_image_id}
+                        className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-200"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-mono text-xs text-white">Cover #{row.cover_image_id}</span>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="inline-flex rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100">
+                              {row.qa_classification.replace(/_/g, " ")}
+                            </span>
+                            <span className="inline-flex rounded-full border border-cyan-400/35 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+                              {row.routing_recommendation.replace(/_/g, " ")}
+                            </span>
+                            <span className="inline-flex rounded-full border border-amber-400/35 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-50">
+                              {row.severity}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-400">
+                          Signals (first 4): <span className="text-slate-200">{headline || "—"}</span>
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </section>
+          ) : null}
 
           <div className="mt-8 border-t border-white/10 pt-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

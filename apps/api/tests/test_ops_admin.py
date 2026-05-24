@@ -1,15 +1,30 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from rq import Queue
 from sqlmodel import Session, select
 
 from app.core.config import get_settings
-from app.models import DraftImport, GmailAccount, GmailImportRecord, User
+from app.main import app
+from app.models import (
+    CanonicalIssueLinkSuggestion,
+    CoverImageLinkDecision,
+    CoverImageMatchCandidate,
+    CoverRelationshipConflict,
+    DraftImport,
+    GmailAccount,
+    GmailImportRecord,
+    RelationshipReplayItem,
+    RelationshipReplayRun,
+    User,
+)
 from app.schemas.ai import ParseOrderResponse
+from app.services.cover_link_decisions import cover_link_pair_key
 from app.services.ops_events import record_ops_event
-from app.tasks.queue import get_redis_connection
+from app.tasks import queue as rq_queue_module
+import test_relationship_conflicts as relationship_conflicts
 
 
 def register_and_login(client: TestClient, email: str) -> str:
@@ -156,7 +171,7 @@ def test_ops_dashboard_returns_recent_visibility_data(
         details={"all_in_total": "6.49"},
     )
 
-    queue = Queue("ai_parse", connection=get_redis_connection())
+    queue = Queue("ai_parse", connection=rq_queue_module.get_redis_connection())
     job = queue.enqueue("app.tasks.jobs.run_worker_heartbeat", result_ttl=300)
     job.meta["job_type"] = "ai_parse_import"
     job.meta["user_id"] = owner.id
@@ -176,3 +191,180 @@ def test_ops_dashboard_returns_recent_visibility_data(
     assert data["parser_failures"][0]["details"]["failure_type"] == "openai_quota_failure"
     assert data["confirm_events"][0]["order_id"] == 7
     assert any(job_row["job_id"] == job.id for job_row in data["recent_ai_parse_jobs"])
+
+    pipeline_health = data["pipeline_health"]
+    assert isinstance(pipeline_health.get("window_hours"), int)
+    assert pipeline_health["failed_ocr_results"] >= 0
+    assert isinstance(data["recent_cover_pipeline_jobs"], list)
+
+
+def test_ops_ocr_pipeline_recover_requires_admin(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("OPS_ADMIN_EMAILS", "ops@example.com")
+    get_settings.cache_clear()
+    token = register_and_login(client, "user@example.com")
+
+    response = client.post("/ops/ocr-pipeline/recover", headers=auth_headers(token))
+
+    assert response.status_code == 403
+
+
+def test_ops_ocr_pipeline_recover_returns_counts_for_admin(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("OPS_ADMIN_EMAILS", "ops@example.com")
+    get_settings.cache_clear()
+    token = register_and_login(client, "ops@example.com")
+
+    response = client.post("/ops/ocr-pipeline/recover", headers=auth_headers(token))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {
+        "ocr_results_recovered": 0,
+        "batch_items_recovered": 0,
+        "replay_items_recovered": 0,
+    }
+
+
+def test_main_route_registrations_remain_unique_for_reconciliation_paths() -> None:
+    route_counts: dict[tuple[str, str], int] = {}
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        for method in route.methods or set():
+            if method in {"HEAD", "OPTIONS"}:
+                continue
+            key = (method, route.path)
+            route_counts[key] = route_counts.get(key, 0) + 1
+
+    assert route_counts[("POST", "/cover-images/{cover_image_id}/regenerate-match-confidence")] == 1
+    assert route_counts[("POST", "/ops/cover-images/{cover_image_id}/regenerate-match-confidence")] == 1
+    assert route_counts[("GET", "/ops/cover-images/{cover_image_id}/relationship-graph")] == 1
+    assert route_counts[("GET", "/ops/cover-relationship-graph")] == 1
+
+
+def test_ops_dashboard_returns_reconciliation_summary_counts(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPS_ADMIN_EMAILS", "ops@example.com")
+    get_settings.cache_clear()
+    token = register_and_login(client, "ops@example.com")
+    owner = session.exec(select(User).where(User.email == "ops@example.com")).one()
+
+    _, source_cover_id = relationship_conflicts._create_cover(
+        client,
+        token,
+        title="Saga",
+        issue_number="1",
+        color=(25, 90, 180),
+    )
+    _, candidate_cover_id = relationship_conflicts._create_cover(
+        client,
+        token,
+        title="Saga",
+        issue_number="1",
+        color=(45, 110, 200),
+    )
+
+    match_candidate = CoverImageMatchCandidate(
+        source_cover_image_id=source_cover_id,
+        candidate_cover_image_id=candidate_cover_id,
+        candidate_type="combined_similarity",
+        confidence_bucket="very_high",
+        deterministic_score=0.97,
+        normalized_confidence_score=0.97,
+        confidence_version="ops-summary-v1",
+        extraction_version="ops-summary-v1",
+        ranking_score=0.91,
+        ranking_version="ops-summary-v1",
+        grouping_type="probable_variant_family",
+        grouping_key="vf-summary-1",
+        matched_signals={"phash_similarity": 0.97},
+        hard_match_flags_json={},
+        weak_signal_flags_json={},
+        ranking_reason_json={},
+    )
+    session.add(match_candidate)
+    session.commit()
+    session.refresh(match_candidate)
+
+    link_decision = CoverImageLinkDecision(
+        source_cover_image_id=source_cover_id,
+        candidate_cover_image_id=candidate_cover_id,
+        pair_key=cover_link_pair_key(source_cover_id, candidate_cover_id),
+        source_match_candidate_id=match_candidate.id,
+        decision_type="approved_link",
+        relationship_type="duplicate_scan",
+        decision_state="active",
+        reviewer_user_id=owner.id,
+        decision_reason="ops summary fixture",
+        decision_source="human",
+    )
+    session.add(link_decision)
+
+    suggestion = CanonicalIssueLinkSuggestion(
+        cover_image_id=source_cover_id,
+        suggested_metadata_identity_key="image|saga|1|cover-a",
+        suggestion_type="relationship_context",
+        confidence_bucket="medium",
+        deterministic_score=0.7,
+        confidence_version="ops-summary-v1",
+        evidence_json={"seed": "ops-summary"},
+        review_state="pending",
+    )
+    session.add(suggestion)
+    session.commit()
+    session.refresh(suggestion)
+
+    conflict = CoverRelationshipConflict(
+        conflict_type="canonical_suggestion_mismatch",
+        severity="warning",
+        source_cover_image_id=source_cover_id,
+        related_cover_image_id=candidate_cover_id,
+        link_decision_id=link_decision.id,
+        match_candidate_id=match_candidate.id,
+        canonical_issue_suggestion_id=suggestion.id,
+        conflict_key="ops-summary-conflict",
+        status="open",
+        evidence_json={"signals": [{"kind": "canonical_identity"}]},
+    )
+    session.add(conflict)
+
+    replay_run = RelationshipReplayRun(
+        replay_type="relationship_graph",
+        status="completed_with_changes",
+        total_items=1,
+        changed_items=1,
+        unchanged_items=0,
+        failed_items=0,
+        created_by=owner.id,
+        replay_version="ops-summary-v1",
+    )
+    session.add(replay_run)
+    session.commit()
+    session.refresh(replay_run)
+
+    replay_item = RelationshipReplayItem(
+        replay_run_id=replay_run.id,
+        cover_image_id=source_cover_id,
+        relationship_key=f"cover:{source_cover_id}",
+        status="changed",
+        previous_snapshot_json={"nodes": 1},
+        replay_snapshot_json={"nodes": 2},
+        diff_summary_json={"status": "changed", "added": 1},
+    )
+    session.add(replay_item)
+    session.commit()
+
+    response = client.get("/ops/dashboard", headers=auth_headers(token))
+
+    assert response.status_code == 200
+    summary = response.json()["reconciliation_summary"]
+    assert summary == {
+        "open_conflicts": 1,
+        "pending_canonical_suggestions": 1,
+        "high_confidence_unreviewed_match_candidates": 1,
+        "confirmed_duplicate_scans": 1,
+        "probable_variant_families": 1,
+        "recent_relationship_replay_changes": 1,
+    }

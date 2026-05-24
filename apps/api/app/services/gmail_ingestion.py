@@ -734,7 +734,7 @@ def serialize_gmail_import_drafts(
         GmailImportedDraftRead(
             external_message_id=record.external_message_id,
             imported_at=record.imported_at,
-            draft_import=serialize_import(draft_import),
+            draft_import=serialize_import(session, draft_import),
         )
         for record, draft_import in records
     ]

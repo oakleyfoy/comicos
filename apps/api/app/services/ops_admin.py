@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from rq.job import Job
@@ -10,9 +10,11 @@ from rq.registry import (
     ScheduledJobRegistry,
     StartedJobRegistry,
 )
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.core.config import Settings
+from app.services.ops_access import is_ops_admin_user
 from app.models import DraftImport, GmailAccount, OpsEvent, User
 from app.schemas.ops import (
     OpsDashboardResponse,
@@ -21,10 +23,21 @@ from app.schemas.ops import (
     OpsGmailSyncRow,
     OpsJobRow,
     OpsQueueSnapshot,
+    OpsReconciliationSummary,
+)
+from app.models import (
+    CanonicalIssueLinkSuggestion,
+    CoverImageLinkDecision,
+    CoverImageMatchCandidate,
+    CoverRelationshipConflict,
+    RelationshipReplayItem,
 )
 from app.services.background_jobs import _extract_job_error
+from app.services.ocr_pipeline_health import build_pipeline_health_snapshot
 from app.tasks.queue import (
     AI_PARSE_IMPORT_JOB_TYPE,
+    COVER_IMAGE_OCR_JOB_TYPE,
+    COVER_IMAGE_PROCESS_JOB_TYPE,
     GMAIL_SYNC_JOB_TYPE,
     fetch_job_by_id,
     get_queue,
@@ -35,16 +48,8 @@ RECENT_LIMIT = 12
 
 
 def ensure_ops_admin_access(current_user: User, settings: Settings) -> None:
-    configured_emails = settings.ops_admin_emails
-    if configured_emails:
-        if current_user.email.lower() in configured_emails:
-            return
+    if not is_ops_admin_user(current_user, settings):
         raise HTTPException(status_code=403, detail="Operations dashboard access denied")
-
-    if settings.app_env.lower() != "production":
-        return
-
-    raise HTTPException(status_code=403, detail="Operations dashboard access denied")
 
 
 def _job_sort_key(job: Job) -> datetime | None:
@@ -52,18 +57,74 @@ def _job_sort_key(job: Job) -> datetime | None:
 
 
 def _stringify_result(job: Job) -> str | None:
-    if isinstance(job.result, dict):
-        if {"processed_messages", "created_draft_imports", "skipped_duplicates"} <= set(job.result):
+    result_value = job.return_value()
+    if isinstance(result_value, dict):
+        if {"processed_messages", "created_draft_imports", "skipped_duplicates"} <= set(result_value):
             return (
                 "processed={processed_messages}, created={created_draft_imports}, "
                 "duplicates={skipped_duplicates}"
-            ).format(**job.result)
-        if "import_id" in job.result:
-            return f"import_id={job.result['import_id']}"
-        return ", ".join(f"{key}={value}" for key, value in sorted(job.result.items()))
-    if job.result is None:
+            ).format(**result_value)
+        if "import_id" in result_value:
+            return f"import_id={result_value['import_id']}"
+        return ", ".join(f"{key}={value}" for key, value in sorted(result_value.items()))
+    if result_value is None:
         return None
-    return str(job.result)
+    return str(result_value)
+
+
+def _build_reconciliation_summary(session: Session) -> OpsReconciliationSummary:
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    open_conflicts = session.exec(
+        select(func.count()).select_from(CoverRelationshipConflict).where(CoverRelationshipConflict.status == "open")
+    ).one()
+    pending_canonical_suggestions = session.exec(
+        select(func.count())
+        .select_from(CanonicalIssueLinkSuggestion)
+        .where(CanonicalIssueLinkSuggestion.review_state == "pending")
+    ).one()
+    high_confidence_unreviewed_match_candidates = session.exec(
+        select(func.count())
+        .select_from(CoverImageMatchCandidate)
+        .where(
+            CoverImageMatchCandidate.dismissed_at.is_(None),  # type: ignore[union-attr]
+            CoverImageMatchCandidate.acknowledged_at.is_(None),  # type: ignore[union-attr]
+            CoverImageMatchCandidate.confidence_bucket.in_(("high", "very_high")),
+        )
+    ).one()
+    confirmed_duplicate_scans = session.exec(
+        select(func.count())
+        .select_from(CoverImageLinkDecision)
+        .where(
+            CoverImageLinkDecision.decision_state == "active",
+            CoverImageLinkDecision.decision_type == "approved_link",
+            CoverImageLinkDecision.relationship_type == "duplicate_scan",
+        )
+    ).one()
+    probable_variant_families = session.exec(
+        select(func.count(func.distinct(CoverImageMatchCandidate.grouping_key)))
+        .select_from(CoverImageMatchCandidate)
+        .where(
+            CoverImageMatchCandidate.dismissed_at.is_(None),  # type: ignore[union-attr]
+            CoverImageMatchCandidate.grouping_type == "probable_variant_family",
+            CoverImageMatchCandidate.grouping_key.is_not(None),
+        )
+    ).one()
+    recent_relationship_replay_changes = session.exec(
+        select(func.count())
+        .select_from(RelationshipReplayItem)
+        .where(
+            RelationshipReplayItem.status == "changed",
+            RelationshipReplayItem.updated_at >= recent_cutoff,
+        )
+    ).one()
+    return OpsReconciliationSummary(
+        open_conflicts=int(open_conflicts or 0),
+        pending_canonical_suggestions=int(pending_canonical_suggestions or 0),
+        high_confidence_unreviewed_match_candidates=int(high_confidence_unreviewed_match_candidates or 0),
+        confirmed_duplicate_scans=int(confirmed_duplicate_scans or 0),
+        probable_variant_families=int(probable_variant_families or 0),
+        recent_relationship_replay_changes=int(recent_relationship_replay_changes or 0),
+    )
 
 
 def _user_email_map(session: Session, user_ids: Iterable[int | None]) -> dict[int, str]:
@@ -90,6 +151,32 @@ def _collect_recent_jobs(job_type: str, limit: int = RECENT_LIMIT) -> list[Job]:
                 continue
             job = fetch_job_by_id(job_id)
             if job is None or job.meta.get("job_type") != job_type:
+                continue
+            jobs_by_id[job.id] = job
+
+    return sorted(
+        jobs_by_id.values(),
+        key=lambda job: _job_sort_key(job) or datetime.min,
+        reverse=True,
+    )[:limit]
+
+
+def _collect_recent_jobs_for_types(job_types: set[str], *, limit: int = RECENT_LIMIT) -> list[Job]:
+    queue_names = get_worker_queue_names()
+    jobs_by_id: dict[str, Job] = {}
+    for queue_name in queue_names:
+        queue = get_queue(queue_name)
+        candidate_ids = list(queue.job_ids)
+        candidate_ids.extend(StartedJobRegistry(queue=queue).get_job_ids())
+        candidate_ids.extend(FailedJobRegistry(queue=queue).get_job_ids())
+        candidate_ids.extend(FinishedJobRegistry(queue=queue).get_job_ids())
+        candidate_ids.extend(DeferredJobRegistry(queue=queue).get_job_ids())
+        candidate_ids.extend(ScheduledJobRegistry(queue=queue).get_job_ids())
+        for job_id in candidate_ids:
+            if job_id in jobs_by_id:
+                continue
+            job = fetch_job_by_id(job_id)
+            if job is None or job.meta.get("job_type") not in job_types:
                 continue
             jobs_by_id[job.id] = job
 
@@ -200,7 +287,7 @@ def _derived_confirm_success_events(
     return derived_rows
 
 
-def build_ops_dashboard(session: Session) -> OpsDashboardResponse:
+def build_ops_dashboard(session: Session, settings: Settings) -> OpsDashboardResponse:
     recent_gmail_sync_jobs = _serialize_jobs(session, _collect_recent_jobs(GMAIL_SYNC_JOB_TYPE))
     recent_ai_parse_jobs = _serialize_jobs(
         session, _collect_recent_jobs(AI_PARSE_IMPORT_JOB_TYPE)
@@ -304,4 +391,13 @@ def build_ops_dashboard(session: Session) -> OpsDashboardResponse:
         duplicate_skip_events=_serialize_events(session, duplicate_skip_events),
         confirm_events=serialized_confirm_events,
         queue_health=[_queue_snapshot(queue_name) for queue_name in get_worker_queue_names()],
+        pipeline_health=build_pipeline_health_snapshot(session, settings),
+        recent_cover_pipeline_jobs=_serialize_jobs(
+            session,
+            _collect_recent_jobs_for_types(
+                {COVER_IMAGE_PROCESS_JOB_TYPE, COVER_IMAGE_OCR_JOB_TYPE},
+                limit=RECENT_LIMIT,
+            ),
+        ),
+        reconciliation_summary=_build_reconciliation_summary(session),
     )

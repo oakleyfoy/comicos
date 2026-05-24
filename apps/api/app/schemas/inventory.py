@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 from app.schemas.cover_images import CoverImageRead
 from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
+from app.schemas.inventory_action_center import InventoryActionCenterAttachment
 from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
+from app.schemas.scan_sessions import InventoryScanSessionOriginRead
 from app.schemas.inventory_risks import InventoryRiskRead
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.run_detection import RunDetectionCopyAttachment
@@ -48,6 +50,7 @@ class InventoryRow(BaseModel):
     run_detection: RunDetectionCopyAttachment | None = None
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
     order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
+    inventory_action_center: InventoryActionCenterAttachment | None = None
 
 
 class InventoryListResponse(BaseModel):
@@ -112,6 +115,8 @@ class InventoryDetailResponse(BaseModel):
     run_detection: RunDetectionCopyAttachment | None = None
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
     order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
+    inventory_action_center: InventoryActionCenterAttachment | None = None
+    originating_scan_session: InventoryScanSessionOriginRead | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

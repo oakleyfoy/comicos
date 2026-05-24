@@ -5,6 +5,7 @@ from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.models import (
+    CanonicalSeries,
     ComicIssue,
     ComicTitle,
     InventoryCopy,
@@ -22,6 +23,27 @@ from app.schemas.orders import (
     OrderItemCreate,
     OrderListResponse,
     OrderListRow,
+)
+from app.services.canonical_creators import get_or_create_canonical_creator
+from app.services.canonical_series import (
+    get_or_create_canonical_series,
+    update_canonical_series_release_window,
+)
+from app.services.metadata_enrichment import (
+    build_metadata_identity_components,
+    build_metadata_identity_key,
+    compose_variant_source_text,
+    normalize_creator_name,
+    normalize_issue_number,
+    normalize_publisher_name,
+    normalize_series_title_with_aliases,
+    normalize_variant_text,
+)
+from app.services.order_states import (
+    default_expected_ship_date,
+    default_order_status,
+    default_release_status,
+    derive_asset_state,
 )
 
 CENT = Decimal("0.01")
@@ -118,6 +140,9 @@ def get_or_create_issue(session: Session, comic_title_id: int, issue_number: str
 
 
 def get_or_create_variant(session: Session, comic_issue_id: int, item: OrderItemCreate) -> Variant:
+    resolved_cover_artist = item.cover_artist or (
+        ", ".join(item.cover_artists) if item.cover_artists else None
+    )
     variant = session.exec(
         select(Variant).where(
             Variant.comic_issue_id == comic_issue_id,
@@ -125,7 +150,7 @@ def get_or_create_variant(session: Session, comic_issue_id: int, item: OrderItem
             Variant.printing == item.printing,
             Variant.ratio == item.ratio,
             Variant.variant_type == item.variant_type,
-            Variant.cover_artist == item.cover_artist,
+            Variant.cover_artist == resolved_cover_artist,
         )
     ).first()
     if variant is not None:
@@ -137,11 +162,82 @@ def get_or_create_variant(session: Session, comic_issue_id: int, item: OrderItem
         printing=item.printing,
         ratio=item.ratio,
         variant_type=item.variant_type,
-        cover_artist=item.cover_artist,
+        cover_artist=resolved_cover_artist,
     )
     session.add(variant)
     session.flush()
     return variant
+
+
+def resolve_order_item_canonical_series(
+    session: Session,
+    item: OrderItemCreate,
+    *,
+    actor_user_id: int | None = None,
+    audit_reason: str | None = None,
+) -> CanonicalSeries:
+    canonical_publisher = normalize_publisher_name(
+        item.publisher,
+        session=session,
+    ).canonical_value or item.publisher
+    canonical_title = normalize_series_title_with_aliases(
+        item.title,
+        session=session,
+    ).canonical_value or item.title
+    return get_or_create_canonical_series(
+        session,
+        publisher=canonical_publisher,
+        canonical_title=canonical_title,
+        actor_user_id=actor_user_id,
+        audit_reason=audit_reason,
+    )
+
+
+def build_order_item_metadata_identity_key(item: OrderItemCreate) -> str:
+    canonical_publisher = normalize_publisher_name(item.publisher).canonical_value
+    canonical_title = normalize_series_title_with_aliases(item.title).canonical_value
+    canonical_issue = normalize_issue_number(item.issue_number).canonical_value
+    canonical_variant = normalize_variant_text(
+        compose_variant_source_text(
+            item.cover_name,
+            item.printing,
+            item.ratio,
+            item.variant_type,
+        )
+    ).canonical_value
+    components = build_metadata_identity_components(
+        publisher=canonical_publisher,
+        series_title=canonical_title,
+        issue_number=canonical_issue,
+        variant=canonical_variant,
+    )
+    return build_metadata_identity_key(components)
+
+
+def sync_canonical_creators_for_order_item(
+    session: Session,
+    item: OrderItemCreate,
+    *,
+    actor_user_id: int | None = None,
+    audit_reason: str | None = None,
+) -> None:
+    creator_names: list[str] = []
+    for creator_list in [item.writers, item.artists, item.cover_artists]:
+        for creator_name in creator_list or []:
+            if creator_name not in creator_names:
+                creator_names.append(creator_name)
+
+    for creator_name in creator_names:
+        normalized = normalize_creator_name(creator_name, session=session)
+        if normalized.canonical_value is None or normalized.normalized_value is None:
+            continue
+        get_or_create_canonical_creator(
+            session,
+            canonical_name=normalized.canonical_value,
+            normalized_name=normalized.normalized_value,
+            actor_user_id=actor_user_id,
+            audit_reason=audit_reason,
+        )
 
 
 def build_orders_base_query(current_user: User):
@@ -290,15 +386,34 @@ def get_order_detail_for_user(
 
     order_item_ids = [row.order_item_id for row in item_rows]
     inventory_rows = session.exec(
-        select(InventoryCopy.order_item_id, InventoryCopy.id)
+        select(
+            InventoryCopy.order_item_id,
+            InventoryCopy.id,
+            InventoryCopy.release_date,
+            InventoryCopy.release_status,
+            InventoryCopy.order_status,
+            InventoryCopy.expected_ship_date,
+            InventoryCopy.received_at,
+        )
         .where(InventoryCopy.order_item_id.in_(order_item_ids))
         .order_by(InventoryCopy.order_item_id.asc(), InventoryCopy.copy_number.asc())
     ).all()
     inventory_by_item_id: dict[int, list[int]] = {
         order_item_id: [] for order_item_id in order_item_ids
     }
+    state_by_item_id: dict[int, dict[str, object]] = {}
     for inventory_row in inventory_rows:
         inventory_by_item_id[inventory_row.order_item_id].append(inventory_row.id)
+        state_by_item_id.setdefault(
+            inventory_row.order_item_id,
+            {
+                "release_date": inventory_row.release_date,
+                "release_status": inventory_row.release_status,
+                "order_status": inventory_row.order_status,
+                "expected_ship_date": inventory_row.expected_ship_date,
+                "received_at": inventory_row.received_at,
+            },
+        )
 
     return OrderDetailResponse(
         order_id=order.id,
@@ -312,6 +427,20 @@ def get_order_detail_for_user(
         items=[
             OrderDetailItem(
                 **row._mapping,
+                release_date=state_by_item_id.get(row.order_item_id, {}).get("release_date"),
+                release_status=state_by_item_id.get(row.order_item_id, {}).get("release_status", "unknown"),
+                order_status=state_by_item_id.get(row.order_item_id, {}).get("order_status", "ordered"),
+                purchase_date=order.order_date,
+                expected_ship_date=state_by_item_id.get(row.order_item_id, {}).get("expected_ship_date"),
+                received_at=state_by_item_id.get(row.order_item_id, {}).get("received_at"),
+                asset_state=derive_asset_state(
+                    release_status=str(
+                        state_by_item_id.get(row.order_item_id, {}).get("release_status", "unknown")
+                    ),
+                    order_status=str(
+                        state_by_item_id.get(row.order_item_id, {}).get("order_status", "ordered")
+                    ),
+                ),
                 inventory_copy_ids=inventory_by_item_id.get(row.order_item_id, []),
             )
             for row in item_rows
@@ -364,16 +493,44 @@ def create_order_for_user_in_transaction(
 
     total_copies_created = 0
     for index, item in enumerate(payload.items):
+        sync_canonical_creators_for_order_item(
+            session,
+            item,
+            actor_user_id=current_user.id,
+            audit_reason="Canonical creator registry sync during order creation.",
+        )
         publisher = get_or_create_publisher(session, item.publisher)
         title = get_or_create_title(session, publisher.id, item.title)
         issue = get_or_create_issue(session, title.id, item.issue_number)
         variant = get_or_create_variant(session, issue.id, item)
+        canonical_series = resolve_order_item_canonical_series(
+            session,
+            item,
+            actor_user_id=current_user.id,
+            audit_reason="Canonical series registry sync during order creation.",
+        )
+        update_canonical_series_release_window(
+            canonical_series,
+            release_date=item.release_date,
+        )
+        session.add(canonical_series)
 
         allocated_shipping = quantize_money(shipping_allocations[index])
         allocated_tax = quantize_money(tax_allocations[index])
         shipping_per_unit = allocated_shipping / item.quantity
         tax_per_unit = allocated_tax / item.quantity
         all_in_unit_cost = quantize_money(item.raw_item_price + shipping_per_unit + tax_per_unit)
+        release_status = item.release_status or default_release_status(release_date=item.release_date)
+        order_status = default_order_status(
+            release_status=release_status,
+            received_at=item.received_at,
+            explicit_order_status=item.order_status,
+        )
+        expected_ship_date = default_expected_ship_date(
+            release_date=item.release_date,
+            release_status=release_status,
+            explicit_expected_ship_date=item.expected_ship_date,
+        )
 
         order_item = OrderItem(
             order_id=order.id,
@@ -394,6 +551,16 @@ def create_order_for_user_in_transaction(
                 variant_id=variant.id,
                 copy_number=copy_number,
                 acquisition_cost=all_in_unit_cost,
+                metadata_identity_key=(
+                    item.metadata_identity_key or build_order_item_metadata_identity_key(item)
+                ),
+                canonical_series_id=canonical_series.id,
+                release_date=item.release_date,
+                release_year=item.release_year,
+                release_status=release_status,
+                order_status=order_status,
+                expected_ship_date=expected_ship_date,
+                received_at=item.received_at,
             )
             session.add(inventory_copy)
             total_copies_created += 1

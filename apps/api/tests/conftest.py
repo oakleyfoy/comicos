@@ -1,3 +1,4 @@
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
@@ -5,6 +6,23 @@ from sqlmodel import Session, SQLModel
 from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
+from app.tasks import queue as rq_queue_module
+
+
+@pytest.fixture(autouse=True)
+def fake_rq_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeStrictRedis:
+    """Route all default Redis/RQ traffic to one in-memory broker per test."""
+
+    fake = fakeredis.FakeStrictRedis()
+    cached_get_redis_connection = rq_queue_module.get_redis_connection
+    cache_clear = getattr(cached_get_redis_connection, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
+    monkeypatch.setattr(rq_queue_module.Redis, "from_url", lambda *args, **kwargs: fake)
+    yield fake
+    cache_clear = getattr(cached_get_redis_connection, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
 
 
 @pytest.fixture
@@ -19,6 +37,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPS_ADMIN_EMAILS", "")
+    monkeypatch.setenv("COVER_IMAGES_STORAGE_ROOT", str(tmp_path / "cover-images"))
 
     get_settings.cache_clear()
     get_engine.cache_clear()

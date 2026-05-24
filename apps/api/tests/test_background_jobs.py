@@ -94,6 +94,16 @@ class FakeJob:
         del refresh
         return self._status
 
+    def return_value(self, refresh: bool = False) -> dict | None:
+        del refresh
+        return self.result
+
+    def latest_result(self, timeout: int = 0):
+        del timeout
+        if self.exc_info is None:
+            return None
+        return type("FakeResult", (), {"exc_string": self.exc_info})()
+
 
 def test_enqueue_import_parse_job_returns_202(
     client: TestClient,

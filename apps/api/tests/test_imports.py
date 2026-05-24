@@ -488,6 +488,136 @@ def test_confirm_import_still_rejects_items_with_unresolved_publishers(
     assert "items[1]: publisher" in confirm_response.json()["detail"]
 
 
+def test_get_imports_can_filter_for_metadata_review_items(client: TestClient) -> None:
+    token = register_and_login(client, email="review-filter@example.com")
+
+    flagged_response = client.post(
+        "/imports/manual",
+        json={
+            "raw_text": "Indie House Babylon Cove #01",
+            "retailer": "Midtown",
+            "order_date": "2026-05-21",
+            "source_type": "manual_draft",
+            "shipping_amount": "0.00",
+            "tax_amount": "0.00",
+            "items": [
+                {
+                    "publisher": "Indie House",
+                    "title": "Babylon Cove",
+                    "issue_number": "01",
+                    "cover_name": None,
+                    "printing": None,
+                    "ratio": None,
+                    "variant_type": None,
+                    "cover_artist": None,
+                    "quantity": 1,
+                    "raw_item_price": "4.99",
+                }
+            ],
+            "warnings": [],
+            "confidence_score": 1.0,
+        },
+        headers=auth_headers(token),
+    )
+    assert flagged_response.status_code == 201
+    flagged_id = flagged_response.json()["id"]
+
+    clean_response = client.post(
+        "/imports/manual",
+        json={
+            "raw_text": "Marvel Comics Ultimate Spider-Man #001",
+            "retailer": "Midtown",
+            "order_date": "2026-05-21",
+            "source_type": "manual_draft",
+            "shipping_amount": "0.00",
+            "tax_amount": "0.00",
+            "items": [
+                {
+                    "publisher": "Marvel Comics",
+                    "title": "Ultimate Spider-Man",
+                    "issue_number": "001",
+                    "cover_name": None,
+                    "printing": None,
+                    "ratio": None,
+                    "variant_type": None,
+                    "cover_artist": None,
+                    "quantity": 1,
+                    "raw_item_price": "5.99",
+                }
+            ],
+            "warnings": [],
+            "confidence_score": 1.0,
+        },
+        headers=auth_headers(token),
+    )
+    assert clean_response.status_code == 201
+    clean_id = clean_response.json()["id"]
+
+    review_only = client.get("/imports?needs_metadata_review=true", headers=auth_headers(token))
+    assert review_only.status_code == 200
+    review_items = review_only.json()["items"]
+    assert [item["id"] for item in review_items] == [flagged_id]
+    assert review_items[0]["needs_metadata_review"] is True
+    assert review_items[0]["metadata_review_item_count"] == 1
+
+    no_review = client.get("/imports?needs_metadata_review=false", headers=auth_headers(token))
+    assert no_review.status_code == 200
+    assert [item["id"] for item in no_review.json()["items"]] == [clean_id]
+    assert no_review.json()["items"][0]["needs_metadata_review"] is False
+
+
+def test_import_response_payload_includes_metadata_review_fields(client: TestClient) -> None:
+    token = register_and_login(client, email="review-payload@example.com")
+
+    response = client.post(
+        "/imports/manual",
+        json={
+            "raw_text": "Indie House Babylon Cove #01",
+            "retailer": "Midtown",
+            "order_date": "2026-05-21",
+            "source_type": "manual_draft",
+            "shipping_amount": "0.00",
+            "tax_amount": "0.00",
+            "items": [
+                {
+                    "publisher": "Indie House",
+                    "title": "Babylon Cove",
+                    "issue_number": "01",
+                    "cover_name": "  foil edition ",
+                    "printing": None,
+                    "ratio": None,
+                    "variant_type": "  cover a ",
+                    "cover_artist": None,
+                    "quantity": 1,
+                    "raw_item_price": "4.99",
+                }
+            ],
+            "warnings": [],
+            "confidence_score": 1.0,
+        },
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    item = data["parsed_payload_json"]["items"][0]
+
+    assert data["needs_metadata_review"] is True
+    assert data["metadata_review_item_count"] == 1
+    assert item["raw_publisher"] == "Indie House"
+    assert item["canonical_publisher"] == "Indie House"
+    assert item["raw_title"] == "Babylon Cove"
+    assert item["canonical_title"] == "Babylon Cove"
+    assert item["raw_issue_number"] == "01"
+    assert item["canonical_issue_number"] == "1"
+    assert item["raw_variant_text"] == "foil edition / cover a"
+    assert item["canonical_variant_text"] == "Foil Edition / Cover A"
+    assert item["metadata_review_required"] is True
+    assert item["metadata_review_notes"] == [
+        "Publisher preserved from raw parse. Review canonical publisher if needed."
+    ]
+
+
 def test_confirm_import_is_only_path_that_creates_order_and_inventory(
     client: TestClient,
     session: Session,

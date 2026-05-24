@@ -32,6 +32,7 @@ import {
   type OcrBatch,
   type OcrReplayRun,
   type OcrReplayType,
+  type OpsScanQaFleetSummaryRead,
   type RelationshipReplayRun,
   type RelationshipReplayType,
   type OpsCanonicalCreatorRow,
@@ -1024,6 +1025,10 @@ export function OperationsPage() {
   const [opsHrReasonFilter, setOpsHrReasonFilter] = useState("");
   const [opsHrOwnerUserIdDraft, setOpsHrOwnerUserIdDraft] = useState("");
 
+  const [opsScanQaFleet, setOpsScanQaFleet] = useState<OpsScanQaFleetSummaryRead | null>(null);
+  const [opsScanQaFleetLoading, setOpsScanQaFleetLoading] = useState(true);
+  const [opsScanQaFleetError, setOpsScanQaFleetError] = useState<string | null>(null);
+
   useEffect(() => {
     let ignore = false;
 
@@ -1081,6 +1086,34 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsScanSessionsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsScanQaFleetLoading(true);
+      setOpsScanQaFleetError(null);
+      try {
+        const row = await apiClient.getOpsScanQaFleetSummary();
+        if (!ignore) {
+          setOpsScanQaFleet(row);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsScanQaFleet(null);
+          setOpsScanQaFleetError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load scan QA fleet summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanQaFleetLoading(false);
         }
       }
     })();
@@ -2600,6 +2633,58 @@ export function OperationsPage() {
                 detail={opsScanSessionDetail}
               />
             </>
+          )}
+        </div>
+      </details>
+
+      <details className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Scan QA (fleet)</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Persists only after owners run &quot;Run QA snapshot&quot; on a session. Counts are routing and classification
+                visibility — no automatic OCR enqueue or metadata mutation from QA alone.
+              </p>
+            </div>
+            <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+              Ops / persisted ledger
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          {opsScanQaFleetLoading ? (
+            <p className="text-sm text-slate-400">Loading scan QA aggregates…</p>
+          ) : opsScanQaFleetError ? (
+            <StatusBanner tone="error">{opsScanQaFleetError}</StatusBanner>
+          ) : opsScanQaFleet ? (
+            <>
+              <p className="text-xs text-slate-400">
+                Totals reflect stored <span className="font-mono text-slate-200">scan_qa_result</span> rows (empty until sessions
+                run QA).
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(opsScanQaFleet.totals_by_classification).map(([k, v]) => (
+                  <StatCard key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+              <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Routing recommendations</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(opsScanQaFleet.totals_by_routing).map(([k, v]) => (
+                  <StatCard key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+              <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Failure &amp; rescan visibility
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(opsScanQaFleet.failure_and_rescan).map(([k, v]) => (
+                  <StatCard key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No scan QA fleet data.</p>
           )}
         </div>
       </details>

@@ -1981,6 +1981,272 @@ export interface InventoryItem {
   inventory_action_center?: InventoryActionCenterAttachment | null;
 }
 
+export type ScanSessionType =
+  | "bulk_ingest"
+  | "high_res_review"
+  | "intake_receiving"
+  | "rescan"
+  | "manual_upload";
+
+export type ScanSessionStatus =
+  | "pending"
+  | "active"
+  | "paused"
+  | "completed"
+  | "completed_with_errors"
+  | "cancelled";
+
+export type ScanIngestStatus =
+  | "pending"
+  | "imported"
+  | "queued_for_ocr"
+  | "ocr_complete"
+  | "review_required"
+  | "failed"
+  | "skipped";
+
+export interface InventoryScanSessionOrigin {
+  scan_session_id: number;
+  session_type: ScanSessionType;
+  status: ScanSessionStatus;
+  scan_session_item_id: number;
+  sequence_index: number;
+  ingest_status: ScanIngestStatus;
+  created_at: string;
+}
+
+export interface ScanSessionStatistics {
+  total_scans: number;
+  ocr_completed: number;
+  ocr_pending: number;
+  review_required: number;
+  failures: number;
+  skipped: number;
+  average_image_width: number | null;
+  average_image_height: number | null;
+  duplicate_filename_groups: number;
+  duplicate_filename_excess_rows: number;
+  duplicate_image_hash_groups: number;
+  duplicate_image_hash_excess_rows: number;
+}
+
+export interface ScanSessionSummary {
+  id: number;
+  owner_user_id: number;
+  session_type: ScanSessionType;
+  status: ScanSessionStatus;
+  total_items: number;
+  processed_items: number;
+  failed_items: number;
+  skipped_items: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScanSessionItem {
+  id: number;
+  scan_session_id: number;
+  inventory_copy_id?: number | null;
+  cover_image_id?: number | null;
+  source_filename?: string | null;
+  sequence_index: number;
+  ingest_status: ScanIngestStatus;
+  ingest_error?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+  image_sha256?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScanSessionDetail extends ScanSessionSummary {
+  scanner_profile?: string | null;
+  source_device?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  session_notes?: string | null;
+  statistics: ScanSessionStatistics;
+  items: ScanSessionItem[];
+}
+
+export interface ScanSessionDashboardResponse {
+  active_sessions: ScanSessionSummary[];
+  recent_sessions: ScanSessionSummary[];
+}
+
+export interface ScanSessionListResponse {
+  sessions: ScanSessionSummary[];
+}
+
+export interface ScanSessionCreatePayload {
+  session_type?: ScanSessionType;
+  scanner_profile?: string | null;
+  source_device?: string | null;
+  session_notes?: string | null;
+}
+
+export interface ScanSessionItemAppendPayload {
+  inventory_copy_id?: number | null;
+  cover_image_id?: number | null;
+  source_filename?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+  image_sha256?: string | null;
+}
+
+export interface ScanSessionItemsAppendPayload {
+  items: ScanSessionItemAppendPayload[];
+}
+
+export interface ScanSessionItemUpdatePayload {
+  ingest_status: ScanIngestStatus;
+  ingest_error?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+  image_sha256?: string | null;
+}
+
+export interface ScanSessionIngestManifestRow {
+  inventory_copy_id?: number | null;
+  source_filename?: string | null;
+  sequence_index?: number | null;
+}
+
+export interface ScanSessionIngestManifest {
+  items?: ScanSessionIngestManifestRow[];
+}
+
+export interface ScanSessionItemsListResponse {
+  scan_session_id: number;
+  owner_user_id: number;
+  session_type: ScanSessionType;
+  session_status: ScanSessionStatus;
+  statistics: ScanSessionStatistics;
+  items: ScanSessionItem[];
+}
+
+export type ScanQaClassification =
+  | "ready_for_ocr"
+  | "needs_high_res_review"
+  | "needs_rescan"
+  | "corrupt_or_unreadable"
+  | "duplicate_scan"
+  | "low_resolution"
+  | "low_contrast"
+  | "blurry"
+  | "already_processed"
+  | "review_required";
+
+export type ScanQaRoutingRecommendation =
+  | "queue_for_ocr"
+  | "send_to_high_res_review"
+  | "request_rescan"
+  | "hold_for_manual_review"
+  | "no_action_needed";
+
+export type ScanQaSeverity = "info" | "warning" | "critical";
+
+export interface ScanQaItemRead {
+  scan_session_item_id: number;
+  cover_image_id?: number | null;
+  qa_classification: ScanQaClassification;
+  routing_recommendation: ScanQaRoutingRecommendation;
+  severity: ScanQaSeverity;
+  evidence_json?: Record<string, unknown>;
+}
+
+export interface ScanSessionQaSummaryRead {
+  scan_session_id: number;
+  owner_user_id: number;
+  scanner_profile?: string | null;
+  persisted_run: boolean;
+  items: ScanQaItemRead[];
+  totals_by_classification: Record<string, number>;
+  totals_by_routing: Record<string, number>;
+}
+
+export interface OpsScanQaFleetSummaryRead {
+  totals_by_classification: Record<string, number>;
+  totals_by_routing: Record<string, number>;
+  failure_and_rescan: Record<string, number>;
+}
+
+export interface InventoryCoverScanQaRow {
+  cover_image_id: number;
+  qa_classification: ScanQaClassification;
+  routing_recommendation: ScanQaRoutingRecommendation;
+  severity: ScanQaSeverity;
+  evidence_json?: Record<string, unknown>;
+}
+
+export interface InventoryScanQaPanelRead {
+  inventory_copy_id: number;
+  covers: InventoryCoverScanQaRow[];
+}
+
+export type HighResReviewRequestReason =
+  | "low_quality_scan"
+  | "failed_ocr"
+  | "poor_match_confidence"
+  | "valuable_review_candidate"
+  | "manual_review"
+  | "rescan_required";
+
+export type HighResReviewRequestStatus =
+  | "pending"
+  | "scanned"
+  | "linked"
+  | "review_complete"
+  | "cancelled";
+
+export type HighResReviewRequestPriority = "high" | "medium" | "low";
+
+export interface HighResReviewRequestCreatePayload {
+  inventory_copy_id?: number | null;
+  source_cover_image_id?: number | null;
+  source_scan_session_item_id?: number | null;
+  source_ocr_quality_analysis_id?: number | null;
+  source_inventory_risk_type?: string | null;
+  source_action_center_category?: string | null;
+  request_reason: HighResReviewRequestReason;
+  priority?: HighResReviewRequestPriority;
+  notes?: string | null;
+}
+
+export interface HighResReviewRequestSummary {
+  id: number;
+  owner_user_id: number;
+  inventory_copy_id: number;
+  source_cover_image_id?: number | null;
+  high_res_cover_image_id?: number | null;
+  attach_scan_session_id?: number | null;
+  request_reason: HighResReviewRequestReason;
+  status: HighResReviewRequestStatus;
+  priority: HighResReviewRequestPriority;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface HighResReviewRequestDetail extends HighResReviewRequestSummary {
+  source_scan_session_item_id?: number | null;
+  source_ocr_quality_analysis_id?: number | null;
+  source_inventory_risk_type?: string | null;
+  source_action_center_category?: string | null;
+  attach_scan_session_item_id?: number | null;
+  source_cover_scan: CoverImageRead | null;
+  review_high_res_scan: CoverImageRead | null;
+}
+
+export interface HighResReviewRequestListResponse {
+  requests: HighResReviewRequestSummary[];
+}
+
+export interface HighResReviewRequestStatsRead {
+  by_status: Record<string, number>;
+}
+
 export interface InventoryDetail extends InventoryItem {
   copy_number: number;
   source_type: string | null;
@@ -1989,6 +2255,7 @@ export interface InventoryDetail extends InventoryItem {
   variant_id: number;
   created_at: string;
   cover_images: InventoryCoverImage[];
+  originating_scan_session?: InventoryScanSessionOrigin | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -2492,7 +2759,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(init?.headers);
 
-  if (!headers.has("Content-Type") && init?.body) {
+  const isFormBody = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  if (!isFormBody && !headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -3150,6 +3418,176 @@ export const apiClient = {
     return request<MissingIssueListResponse>(`/missing-issues${query}`);
   },
 
+  getScanSessionDashboard(): Promise<ScanSessionDashboardResponse> {
+    return request<ScanSessionDashboardResponse>("/scan-sessions/dashboard");
+  },
+
+  createScanSession(payload?: ScanSessionCreatePayload): Promise<ScanSessionSummary> {
+    return request<ScanSessionSummary>("/scan-sessions", {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  listScanSessions(params?: {
+    status?: ScanSessionStatus;
+    session_type?: ScanSessionType;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSessionListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<ScanSessionListResponse>(`/scan-sessions${query}`);
+  },
+
+  getScanSession(sessionId: number): Promise<ScanSessionDetail> {
+    return request<ScanSessionDetail>(`/scan-sessions/${sessionId}`);
+  },
+
+  getScanSessionItems(
+    sessionId: number,
+    params?: {
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<ScanSessionItemsListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<ScanSessionItemsListResponse>(`/scan-sessions/${sessionId}/items${query}`);
+  },
+
+  getScanSessionQa(sessionId: number): Promise<ScanSessionQaSummaryRead> {
+    return request<ScanSessionQaSummaryRead>(`/scan-sessions/${sessionId}/qa`);
+  },
+
+  getScanSessionItemQa(sessionId: number, itemId: number): Promise<ScanQaItemRead> {
+    return request<ScanQaItemRead>(`/scan-sessions/${sessionId}/items/${itemId}/qa`);
+  },
+
+  runScanSessionQa(sessionId: number): Promise<ScanSessionQaSummaryRead> {
+    return request<ScanSessionQaSummaryRead>(`/scan-sessions/${sessionId}/run-qa`, { method: "POST" });
+  },
+
+  ingestScanSessionFiles(
+    sessionId: number,
+    files: File[],
+    manifest?: ScanSessionIngestManifest,
+  ): Promise<ScanSessionDetail> {
+    const fd = new FormData();
+    const payload: ScanSessionIngestManifest = manifest ?? { items: [] };
+    fd.append("manifest", JSON.stringify(payload));
+    for (const f of files) {
+      fd.append("files", f);
+    }
+    return request<ScanSessionDetail>(`/scan-sessions/${sessionId}/ingest-files`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+
+  appendScanSessionItems(sessionId: number, payload: ScanSessionItemsAppendPayload): Promise<ScanSessionDetail> {
+    return request<ScanSessionDetail>(`/scan-sessions/${sessionId}/items`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  patchScanSessionItem(
+    sessionId: number,
+    itemId: number,
+    payload: ScanSessionItemUpdatePayload,
+  ): Promise<ScanSessionDetail> {
+    return request<ScanSessionDetail>(`/scan-sessions/${sessionId}/items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  startScanSession(sessionId: number): Promise<ScanSessionSummary> {
+    return request<ScanSessionSummary>(`/scan-sessions/${sessionId}/start`, { method: "POST" });
+  },
+
+  pauseScanSession(sessionId: number): Promise<ScanSessionSummary> {
+    return request<ScanSessionSummary>(`/scan-sessions/${sessionId}/pause`, { method: "POST" });
+  },
+
+  cancelScanSession(sessionId: number): Promise<ScanSessionSummary> {
+    return request<ScanSessionSummary>(`/scan-sessions/${sessionId}/cancel`, { method: "POST" });
+  },
+
+  completeScanSession(sessionId: number): Promise<ScanSessionSummary> {
+    return request<ScanSessionSummary>(`/scan-sessions/${sessionId}/complete`, { method: "POST" });
+  },
+
+  createHighResReviewRequest(payload: HighResReviewRequestCreatePayload): Promise<HighResReviewRequestDetail> {
+    return request<HighResReviewRequestDetail>("/high-res-review-requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getHighResReviewRequestsStats(): Promise<HighResReviewRequestStatsRead> {
+    return request<HighResReviewRequestStatsRead>("/high-res-review-requests/stats");
+  },
+
+  listHighResReviewRequests(params?: {
+    inventory_copy_id?: number;
+    status?: HighResReviewRequestStatus;
+    priority?: HighResReviewRequestPriority;
+    reason?: HighResReviewRequestReason;
+    limit?: number;
+    offset?: number;
+  }): Promise<HighResReviewRequestListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<HighResReviewRequestListResponse>(`/high-res-review-requests${query}`);
+  },
+
+  getHighResReviewRequest(requestId: number): Promise<HighResReviewRequestDetail> {
+    return request<HighResReviewRequestDetail>(`/high-res-review-requests/${requestId}`);
+  },
+
+  attachHighResReviewScan(requestId: number, file: File, sourceFilename?: string | null): Promise<HighResReviewRequestDetail> {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (sourceFilename != null && sourceFilename !== "") {
+      fd.append("source_filename", sourceFilename);
+    }
+    return request<HighResReviewRequestDetail>(`/high-res-review-requests/${requestId}/attach-scan`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+
+  cancelHighResReviewRequest(requestId: number): Promise<HighResReviewRequestDetail> {
+    return request<HighResReviewRequestDetail>(`/high-res-review-requests/${requestId}/cancel`, { method: "POST" });
+  },
+
+  completeHighResReviewRequest(requestId: number): Promise<HighResReviewRequestDetail> {
+    return request<HighResReviewRequestDetail>(`/high-res-review-requests/${requestId}/complete`, { method: "POST" });
+  },
+
+  listOpsHighResReviewRequests(params?: {
+    owner_user_id?: number;
+    inventory_copy_id?: number;
+    status?: HighResReviewRequestStatus;
+    priority?: HighResReviewRequestPriority;
+    reason?: HighResReviewRequestReason;
+    limit?: number;
+    offset?: number;
+  }): Promise<HighResReviewRequestListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<HighResReviewRequestListResponse>(`/ops/high-res-review-requests${query}`);
+  },
+
+  getOpsHighResReviewRequestStats(): Promise<HighResReviewRequestStatsRead> {
+    return request<HighResReviewRequestStatsRead>("/ops/high-res-review-requests/stats");
+  },
+
+  getOpsHighResReviewRequest(requestId: number): Promise<HighResReviewRequestDetail> {
+    return request<HighResReviewRequestDetail>(`/ops/high-res-review-requests/${requestId}`);
+  },
+
   getOpsRunDetectionList(params?: {
     series_status?: RunDetectionSeriesStatus;
   }): Promise<RunDetectionListResponse> {
@@ -3171,6 +3609,45 @@ export const apiClient = {
     return request<MissingIssueListResponse>(`/ops/missing-issues${query}`);
   },
 
+  listOpsScanSessions(params?: {
+    owner_user_id?: number;
+    status?: ScanSessionStatus;
+    session_type?: ScanSessionType;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSessionListResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<ScanSessionListResponse>(`/ops/scan-sessions${query}`);
+  },
+
+  getOpsScanSession(sessionId: number): Promise<ScanSessionDetail> {
+    return request<ScanSessionDetail>(`/ops/scan-sessions/${sessionId}`);
+  },
+
+  getOpsScanSessionItems(
+    sessionId: number,
+    params?: {
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<ScanSessionItemsListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<ScanSessionItemsListResponse>(`/ops/scan-sessions/${sessionId}/items${query}`);
+  },
+
+  getOpsScanSessionQa(sessionId: number): Promise<ScanSessionQaSummaryRead> {
+    return request<ScanSessionQaSummaryRead>(`/ops/scan-sessions/${sessionId}/qa`);
+  },
+
+  getOpsScanSessionItemQa(sessionId: number, itemId: number): Promise<ScanQaItemRead> {
+    return request<ScanQaItemRead>(`/ops/scan-sessions/${sessionId}/items/${itemId}/qa`);
+  },
+
+  getOpsScanQaFleetSummary(): Promise<OpsScanQaFleetSummaryRead> {
+    return request<OpsScanQaFleetSummaryRead>("/ops/scan-qa/summary");
+  },
+
   getPortfolioPerformance(): Promise<PortfolioPerformance> {
     return request<PortfolioPerformance>("/portfolio/performance");
   },
@@ -3181,6 +3658,10 @@ export const apiClient = {
 
   getInventoryFmvHistory(inventoryCopyId: number): Promise<InventoryFmvSnapshot[]> {
     return request<InventoryFmvSnapshot[]>(`/inventory/${inventoryCopyId}/fmv-history`);
+  },
+
+  getInventoryCoverScanQa(inventoryCopyId: number): Promise<InventoryScanQaPanelRead> {
+    return request<InventoryScanQaPanelRead>(`/inventory/${inventoryCopyId}/scan-qa`);
   },
 
   updateInventoryCopy(

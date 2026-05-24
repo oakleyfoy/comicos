@@ -1,4 +1,5 @@
 from decimal import Decimal
+from collections import defaultdict
 
 from fastapi import HTTPException
 from sqlalchemy import case, func, or_
@@ -39,6 +40,7 @@ from app.services.duplicate_candidate_reviews import (
 )
 from app.services.cover_images import list_cover_reads_for_inventory
 from app.services.duplicate_ownership_intelligence import duplicate_ownership_inventory_context_for_owner
+from app.services.inventory_action_center import attachment_from_items, build_inventory_action_items
 from app.services.inventory_intelligence import compute_inventory_intelligence
 from app.services.inventory_risks import compute_inventory_risks
 from app.services.order_arrival_intelligence import (
@@ -47,6 +49,7 @@ from app.services.order_arrival_intelligence import (
 )
 from app.services.order_states import derive_asset_state
 from app.services.run_detection import run_detection_inventory_context_for_owner
+from app.services.scan_sessions import originating_scan_session_for_inventory_copy
 
 SORTABLE_FIELDS = {
     "title",
@@ -452,6 +455,8 @@ def list_inventory(
     risk_priority: str | None,
     risk_type: str | None,
     needs_attention: bool,
+    action_attention: bool,
+    action_center_category: str | None,
     arrival_classification: OrderArrivalClassification | None,
     sort_by: str | None,
     sort_dir: str,
@@ -476,6 +481,33 @@ def list_inventory(
     )
 
     arrival_by_inventory = batch_order_arrival_classifications(session, user_id=int(current_user.id))
+
+    actions_by_inventory: defaultdict[int, list] = defaultdict(list)
+    for act in build_inventory_action_items(
+        session,
+        risk_rows=_all_risks,
+        signals_map=intel_signals,
+        arrival_map=arrival_by_inventory,
+        user_id_scope=int(current_user.id),
+    ):
+        actions_by_inventory[act.inventory_copy_id].append(act)
+
+    action_attention_allowlist: set[int] | None = None
+    if action_attention:
+        action_attention_allowlist = {
+            inv_id for inv_id, grp in actions_by_inventory.items() if attachment_from_items(grp).urgent_lane
+        }
+        if not action_attention_allowlist:
+            return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
+
+    action_category_allowlist: set[int] | None = None
+    if action_center_category:
+        action_category_allowlist = {
+            inv_id for inv_id, grp in actions_by_inventory.items()
+            if any(str(a.action_category) == action_center_category for a in grp)
+        }
+        if not action_category_allowlist:
+            return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
 
     def inventory_matches_risk_filters(inv_id: int) -> bool:
         if not (risk_priority or risk_type or needs_attention):
@@ -571,6 +603,16 @@ def list_inventory(
         filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
         total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
 
+    if action_attention_allowlist is not None:
+        id_tuple = tuple(sorted(action_attention_allowlist))
+        filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
+        total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
+
+    if action_category_allowlist is not None:
+        id_tuple = tuple(sorted(action_category_allowlist))
+        filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
+        total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
+
     paginated_stmt = apply_inventory_sort(filtered_stmt, sort_by, sort_dir).offset(
         (page - 1) * page_size
     ).limit(page_size)
@@ -586,6 +628,7 @@ def list_inventory(
         row_map["run_detection"] = run_attachments.get(inv_pk)
         row_map["inventory_risks"] = risks_by_inventory.get(inv_pk, [])
         row_map["order_arrival_classifications"] = arrival_by_inventory.get(inv_pk, [])
+        row_map["inventory_action_center"] = attachment_from_items(actions_by_inventory.get(inv_pk, []))
         items.append(InventoryRow.model_validate(row_map))
 
     return InventoryListResponse(
@@ -708,12 +751,27 @@ def get_inventory_copy_detail(
         user=current_user,
     )
     merged["run_detection"] = run_attachments.get(inventory_copy_id)
-    _, _, risk_attach_map = compute_inventory_risks(session, current_user=current_user)
+    arrival_map = batch_order_arrival_classifications(session, user_id=int(current_user.id))
+    _, risks_flat, risk_attach_map = compute_inventory_risks(session, current_user=current_user)
     merged["inventory_risks"] = risk_attach_map.get(inventory_copy_id, [])
+    ledger = build_inventory_action_items(
+        session,
+        risk_rows=risks_flat,
+        signals_map=intelligence_signals,
+        arrival_map=arrival_map,
+        user_id_scope=int(current_user.id),
+    )
+    scoped_actions = [a for a in ledger if a.inventory_copy_id == inventory_copy_id]
+    merged["inventory_action_center"] = attachment_from_items(scoped_actions)
     merged["order_arrival_classifications"] = classifications_for_inventory_copy(
         session,
         inventory_copy_id=inventory_copy_id,
         user_id=int(current_user.id),
+    )
+    merged["originating_scan_session"] = originating_scan_session_for_inventory_copy(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_copy_id=inventory_copy_id,
     )
     return InventoryDetailResponse.model_validate(merged)
 

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import JSON, Column, DateTime, Numeric, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Numeric, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -18,6 +18,101 @@ class Publisher(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+class MetadataAlias(SQLModel, table=True):
+    __tablename__ = "metadata_alias"
+    __table_args__ = (
+        UniqueConstraint("alias_type", "alias_value", name="uq_metadata_alias_alias_type_value"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    alias_value: str = Field(max_length=255, nullable=False)
+    canonical_value: str = Field(max_length=255, nullable=False)
+    alias_type: str = Field(default="publisher", max_length=50, nullable=False, index=True)
+    source: str = Field(default="manual", max_length=50, nullable=False)
+    is_active: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MetadataAudit(SQLModel, table=True):
+    __tablename__ = "metadata_audit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    entity_type: str = Field(max_length=50, nullable=False, index=True)
+    entity_id: int = Field(nullable=False, index=True)
+    action: str = Field(max_length=50, nullable=False, index=True)
+    before_snapshot: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    after_snapshot: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    actor_user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CanonicalSeries(SQLModel, table=True):
+    __tablename__ = "canonical_series"
+    __table_args__ = (UniqueConstraint("series_key", name="uq_canonical_series_series_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    canonical_title: str = Field(max_length=255, nullable=False, index=True)
+    canonical_publisher: str = Field(max_length=255, nullable=False, index=True)
+    series_key: str = Field(max_length=1024, nullable=False)
+    first_seen_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    last_seen_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    earliest_known_release_date: date | None = Field(default=None, nullable=True)
+    latest_known_release_date: date | None = Field(default=None, nullable=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    is_active: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+
+
+class CanonicalCreator(SQLModel, table=True):
+    __tablename__ = "canonical_creator"
+    __table_args__ = (UniqueConstraint("creator_key", name="uq_canonical_creator_creator_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    canonical_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    creator_key: str = Field(max_length=1024, nullable=False)
+    first_seen_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    last_seen_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    is_active: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
 
 
 class ComicTitle(SQLModel, table=True):
@@ -120,6 +215,21 @@ class InventoryCopy(SQLModel, table=True):
     variant_id: int = Field(foreign_key="variant.id", nullable=False, index=True)
     copy_number: int = Field(nullable=False)
     acquisition_cost: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    metadata_identity_key: str | None = Field(
+        default=None,
+        sa_column=Column(String(length=1024), nullable=True),
+    )
+    canonical_series_id: int | None = Field(
+        default=None,
+        foreign_key="canonical_series.id",
+        index=True,
+    )
+    release_date: date | None = Field(default=None, nullable=True)
+    release_year: int | None = Field(default=None, nullable=True)
+    release_status: str = Field(default="unknown", max_length=30, nullable=False, index=True)
+    order_status: str = Field(default="ordered", max_length=20, nullable=False, index=True)
+    expected_ship_date: date | None = Field(default=None, nullable=True)
+    received_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     condition_notes: str | None = Field(
         default=None,
         sa_column=Column(String, nullable=True),
@@ -131,6 +241,12 @@ class InventoryCopy(SQLModel, table=True):
         sa_column=Column(Numeric(12, 2), nullable=True),
     )
     star_rating: int | None = Field(default=None, nullable=True)
+    primary_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -158,6 +274,511 @@ class InventoryFmvSnapshot(SQLModel, table=True):
     source: str = Field(default="manual", max_length=50, nullable=False)
 
 
+class CoverImage(SQLModel, table=True):
+    __tablename__ = "cover_image"
+
+    id: int | None = Field(default=None, primary_key=True)
+    inventory_copy_id: int | None = Field(default=None, foreign_key="inventory_copy.id", index=True)
+    canonical_series_id: int | None = Field(
+        default=None,
+        foreign_key="canonical_series.id",
+        index=True,
+    )
+    draft_import_id: int | None = Field(default=None, foreign_key="draft_import.id", index=True)
+    source_type: str = Field(max_length=50, nullable=False)
+    original_filename: str | None = Field(default=None, max_length=510, nullable=True)
+    storage_path: str = Field(max_length=512, nullable=False)
+    mime_type: str = Field(max_length=255, nullable=False)
+    image_width: int | None = Field(default=None, nullable=True)
+    image_height: int | None = Field(default=None, nullable=True)
+    file_size: int | None = Field(default=None, nullable=True)
+    sha256_hash: str = Field(max_length=64, nullable=False, index=True)
+    processing_status: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    processing_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    processed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    metadata_refreshed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    matching_status: str = Field(default="not_ready", max_length=20, nullable=False, index=True)
+    matching_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    ready_for_matching_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageDerivative(SQLModel, table=True):
+    __tablename__ = "cover_image_derivative"
+    __table_args__ = (
+        UniqueConstraint(
+            "cover_image_id",
+            "derivative_type",
+            name="uq_cover_image_derivative_cover_type",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    derivative_type: str = Field(max_length=20, nullable=False, index=True)
+    storage_path: str = Field(max_length=512, nullable=False)
+    mime_type: str = Field(max_length=255, nullable=False)
+    image_width: int | None = Field(default=None, nullable=True)
+    image_height: int | None = Field(default=None, nullable=True)
+    file_size: int | None = Field(default=None, nullable=True)
+    sha256_hash: str = Field(max_length=64, nullable=False, index=True)
+    generated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageOcrRegion(SQLModel, table=True):
+    __tablename__ = "cover_image_ocr_region"
+    __table_args__ = (
+        UniqueConstraint(
+            "cover_image_id",
+            "region_type",
+            name="uq_cover_image_ocr_region_cover_type",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    derivative_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_derivative.id",
+        nullable=True,
+        index=True,
+    )
+    region_type: str = Field(max_length=50, nullable=False, index=True)
+    storage_path: str = Field(max_length=512, nullable=False)
+    mime_type: str = Field(max_length=255, nullable=False)
+    image_width: int | None = Field(default=None, nullable=True)
+    image_height: int | None = Field(default=None, nullable=True)
+    file_size: int | None = Field(default=None, nullable=True)
+    sha256_hash: str = Field(max_length=64, nullable=False, index=True)
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageOcrResult(SQLModel, table=True):
+    __tablename__ = "cover_image_ocr_result"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    source_cover_image_sha256: str | None = Field(default=None, max_length=64, nullable=True)
+    source_thumb_derivative_sha256: str | None = Field(default=None, max_length=64, nullable=True)
+    source_medium_derivative_sha256: str | None = Field(default=None, max_length=64, nullable=True)
+    source_processing_version: str | None = Field(default=None, max_length=100, nullable=True)
+    normalization_version: str | None = Field(default=None, max_length=100, nullable=True)
+    replay_of_ocr_result_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_result.id",
+        nullable=True,
+        index=True,
+    )
+    replay_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    ocr_engine: str = Field(max_length=50, nullable=False)
+    ocr_engine_version: str | None = Field(default=None, max_length=255, nullable=True)
+    processing_status: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    raw_text: str = Field(default="", sa_column=Column(Text, nullable=False, default=""))
+    normalized_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    confidence_score: float | None = Field(
+        default=None,
+        sa_column=Column(Float, nullable=True),
+    )
+    processing_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    processed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    processing_started_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageOcrCandidate(SQLModel, table=True):
+    __tablename__ = "cover_image_ocr_candidate"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    ocr_result_id: int = Field(foreign_key="cover_image_ocr_result.id", nullable=False, index=True)
+    candidate_type: str = Field(max_length=50, nullable=False, index=True)
+    raw_candidate_text: str = Field(sa_column=Column(Text, nullable=False))
+    normalized_candidate_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    confidence_score: float | None = Field(
+        default=None,
+        sa_column=Column(Float, nullable=True),
+    )
+    extraction_source: str = Field(max_length=50, nullable=False, index=True)
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    review_status: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    reviewed_by_user_id: int | None = Field(
+        default=None,
+        foreign_key="user.id",
+        nullable=True,
+        index=True,
+    )
+    review_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageOcrReconciliationWarning(SQLModel, table=True):
+    __tablename__ = "cover_image_ocr_reconciliation_warning"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    inventory_copy_id: int | None = Field(
+        default=None,
+        foreign_key="inventory_copy.id",
+        nullable=True,
+        index=True,
+    )
+    ocr_candidate_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_candidate.id",
+        nullable=True,
+        index=True,
+    )
+    warning_type: str = Field(max_length=50, nullable=False, index=True)
+    severity: str = Field(max_length=20, nullable=False, index=True)
+    current_metadata_value: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    candidate_value: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    message: str = Field(sa_column=Column(Text, nullable=False))
+    status: str = Field(default="open", max_length=20, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    resolved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    resolved_by_user_id: int | None = Field(
+        default=None,
+        foreign_key="user.id",
+        nullable=True,
+        index=True,
+    )
+
+
+class CoverImageBarcodeCandidate(SQLModel, table=True):
+    __tablename__ = "cover_image_barcode_candidate"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    source_ocr_result_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_result.id",
+        nullable=True,
+        index=True,
+    )
+    source_ocr_candidate_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_candidate.id",
+        nullable=True,
+        index=True,
+    )
+    raw_barcode_value: str = Field(sa_column=Column(Text, nullable=False))
+    normalized_upc_value: str = Field(max_length=32, nullable=False, index=True)
+    barcode_type: str = Field(default="unknown", max_length=20, nullable=False, index=True)
+    confidence: float | None = Field(default=None, sa_column=Column(Float, nullable=True))
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    review_state: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    reviewed_by_user_id: int | None = Field(
+        default=None,
+        foreign_key="user.id",
+        nullable=True,
+        index=True,
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageFingerprint(SQLModel, table=True):
+    __tablename__ = "cover_image_fingerprint"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    fingerprint_type: str = Field(max_length=20, nullable=False, index=True)
+    fingerprint_value: str = Field(max_length=255, nullable=False)
+    derivative_type: str = Field(max_length=20, nullable=False, index=True)
+    image_width: int | None = Field(default=None, nullable=True)
+    image_height: int | None = Field(default=None, nullable=True)
+    image_sha256: str | None = Field(default=None, max_length=64, nullable=True)
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverImageOcrQualityAnalysis(SQLModel, table=True):
+    __tablename__ = "cover_image_ocr_quality_analysis"
+    __table_args__ = (
+        UniqueConstraint(
+            "cover_image_id",
+            "quality_type",
+            "extraction_version",
+            name="uq_cover_image_ocr_quality_analysis_signature",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    source_ocr_result_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_result.id",
+        nullable=True,
+        index=True,
+    )
+    quality_type: str = Field(max_length=30, nullable=False, index=True)
+    deterministic_score: float = Field(sa_column=Column(Float, nullable=False))
+    severity: str = Field(max_length=20, nullable=False, index=True)
+    detail_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class OcrBatch(SQLModel, table=True):
+    __tablename__ = "ocr_batch"
+
+    id: int | None = Field(default=None, primary_key=True)
+    batch_key: str = Field(max_length=120, nullable=False, index=True, unique=True)
+    status: str = Field(max_length=30, nullable=False, index=True)
+    total_items: int = Field(default=0, nullable=False)
+    pending_count: int = Field(default=0, nullable=False)
+    running_count: int = Field(default=0, nullable=False)
+    completed_count: int = Field(default=0, nullable=False)
+    failed_count: int = Field(default=0, nullable=False)
+    skipped_count: int = Field(default=0, nullable=False)
+    created_by: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    batch_options_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+
+
+class OcrBatchItem(SQLModel, table=True):
+    __tablename__ = "ocr_batch_item"
+    __table_args__ = (
+        UniqueConstraint("batch_id", "cover_image_id", name="uq_ocr_batch_item_batch_cover"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    batch_id: int = Field(foreign_key="ocr_batch.id", nullable=False, index=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    status: str = Field(max_length=20, nullable=False, index=True)
+    job_id: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    attempt_count: int = Field(default=0, nullable=False)
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class OcrReplayRun(SQLModel, table=True):
+    __tablename__ = "ocr_replay_run"
+
+    id: int | None = Field(default=None, primary_key=True)
+    replay_type: str = Field(max_length=40, nullable=False, index=True)
+    extraction_version_from: str = Field(max_length=255, nullable=False)
+    extraction_version_to: str = Field(max_length=255, nullable=False)
+    status: str = Field(max_length=30, nullable=False, index=True)
+    total_items: int = Field(default=0, nullable=False)
+    changed_items: int = Field(default=0, nullable=False)
+    unchanged_items: int = Field(default=0, nullable=False)
+    failed_items: int = Field(default=0, nullable=False)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_by: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+
+
+class OcrReplayItem(SQLModel, table=True):
+    __tablename__ = "ocr_replay_item"
+    __table_args__ = (
+        UniqueConstraint("replay_run_id", "cover_image_id", name="uq_ocr_replay_item_run_cover"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    replay_run_id: int = Field(foreign_key="ocr_replay_run.id", nullable=False, index=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    status: str = Field(max_length=20, nullable=False, index=True)
+    previous_snapshot_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    replay_snapshot_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    diff_summary_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class CoverImageMatchCandidate(SQLModel, table=True):
+    __tablename__ = "cover_image_match_candidate"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_cover_image_id",
+            "candidate_cover_image_id",
+            "candidate_type",
+            "extraction_version",
+            name="uq_cover_image_match_candidate_signature",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_cover_image_id: int = Field(
+        foreign_key="cover_image.id",
+        nullable=False,
+        index=True,
+    )
+    candidate_cover_image_id: int = Field(
+        foreign_key="cover_image.id",
+        nullable=False,
+        index=True,
+    )
+    candidate_type: str = Field(max_length=30, nullable=False, index=True)
+    confidence_bucket: str = Field(max_length=20, nullable=False, index=True)
+    deterministic_score: float = Field(sa_column=Column(Float, nullable=False))
+    normalized_confidence_score: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    confidence_version: str = Field(max_length=100, nullable=False, index=True, default="cover-match-confidence-v1")
+    scoring_breakdown_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    matched_signal_count: int = Field(default=0, nullable=False)
+    hard_match_flags_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    weak_signal_flags_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    ranking_score: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    ranking_version: str = Field(max_length=100, nullable=False, index=True, default="cover-match-ranking-v1")
+    ranking_reason_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    candidate_rank: int = Field(default=0, nullable=False, index=True)
+    grouping_key: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    grouping_type: str | None = Field(default=None, max_length=50, nullable=True, index=True)
+    grouping_confidence_bucket: str | None = Field(default=None, max_length=20, nullable=True)
+    grouping_reason_summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    matched_signals: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    extraction_version: str = Field(max_length=100, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    dismissed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    acknowledged_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class CoverImageLinkDecision(SQLModel, table=True):
+    __tablename__ = "cover_image_link_decision"
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_cover_image_id: int = Field(
+        foreign_key="cover_image.id",
+        nullable=False,
+        index=True,
+    )
+    candidate_cover_image_id: int = Field(
+        foreign_key="cover_image.id",
+        nullable=False,
+        index=True,
+    )
+    pair_key: str = Field(max_length=255, nullable=False, index=True)
+    source_match_candidate_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_match_candidate.id",
+        nullable=True,
+        index=True,
+    )
+    decision_type: str = Field(max_length=30, nullable=False, index=True)
+    relationship_type: str = Field(max_length=30, nullable=False, index=True)
+    decision_state: str = Field(max_length=20, nullable=False, index=True, default="active")
+    reviewer_user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    decision_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    decision_source: str = Field(max_length=20, nullable=False, index=True, default="human")
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    reverted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    superseded_by_decision_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_link_decision.id",
+        nullable=True,
+        index=True,
+    )
+
+
 class DraftImport(SQLModel, table=True):
     __tablename__ = "draft_import"
 
@@ -171,6 +792,12 @@ class DraftImport(SQLModel, table=True):
     )
     status: str = Field(default="draft", max_length=20, nullable=False)
     linked_order_id: int | None = Field(default=None, foreign_key="customer_order.id", index=True)
+    primary_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -192,6 +819,175 @@ class User(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+class DuplicateCandidateReview(SQLModel, table=True):
+    __tablename__ = "duplicate_candidate_review"
+    __table_args__ = (
+        UniqueConstraint(
+            "metadata_identity_key",
+            name="uq_duplicate_candidate_review_metadata_key",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    metadata_identity_key: str = Field(max_length=1024, nullable=False)
+    review_status: str = Field(max_length=40, nullable=False, index=True)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    reviewed_by_user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CanonicalIssueLinkSuggestion(SQLModel, table=True):
+    __tablename__ = "canonical_issue_link_suggestion"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cover_image_id: int = Field(foreign_key="cover_image.id", nullable=False, index=True)
+    inventory_copy_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True, index=True)
+    canonical_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    canonical_series_id: int | None = Field(
+        default=None,
+        foreign_key="canonical_series.id",
+        nullable=True,
+        index=True,
+    )
+    canonical_publisher_id: int | None = Field(default=None, foreign_key="publisher.id", nullable=True, index=True)
+    suggested_metadata_identity_key: str | None = Field(
+        default=None,
+        sa_column=Column(String(length=1024), nullable=True),
+    )
+    suggestion_type: str = Field(max_length=50, nullable=False, index=True)
+    confidence_bucket: str = Field(max_length=20, nullable=False, index=True)
+    deterministic_score: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    confidence_version: str = Field(
+        max_length=100,
+        nullable=False,
+        index=True,
+        default="canonical-issue-suggestion-v1",
+    )
+    evidence_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    suppression_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    review_state: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    reviewed_by_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CoverRelationshipConflict(SQLModel, table=True):
+    __tablename__ = "cover_relationship_conflict"
+
+    id: int | None = Field(default=None, primary_key=True)
+    conflict_type: str = Field(max_length=80, nullable=False, index=True)
+    severity: str = Field(max_length=20, nullable=False, index=True)
+    source_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    related_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    link_decision_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_link_decision.id",
+        nullable=True,
+        index=True,
+    )
+    match_candidate_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_match_candidate.id",
+        nullable=True,
+        index=True,
+    )
+    canonical_issue_suggestion_id: int | None = Field(
+        default=None,
+        foreign_key="canonical_issue_link_suggestion.id",
+        nullable=True,
+        index=True,
+    )
+    conflict_key: str = Field(max_length=255, nullable=False, index=True, unique=True)
+    status: str = Field(default="open", max_length=20, nullable=False, index=True)
+    evidence_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    acknowledged_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    dismissed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    resolved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class RelationshipReplayRun(SQLModel, table=True):
+    __tablename__ = "relationship_replay_run"
+
+    id: int | None = Field(default=None, primary_key=True)
+    replay_type: str = Field(max_length=50, nullable=False, index=True)
+    status: str = Field(max_length=30, nullable=False, index=True)
+    total_items: int = Field(default=0, nullable=False)
+    changed_items: int = Field(default=0, nullable=False)
+    unchanged_items: int = Field(default=0, nullable=False)
+    failed_items: int = Field(default=0, nullable=False)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_by: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    replay_version: str = Field(max_length=100, nullable=False, index=True)
+
+
+class RelationshipReplayItem(SQLModel, table=True):
+    __tablename__ = "relationship_replay_item"
+    __table_args__ = (
+        UniqueConstraint(
+            "replay_run_id",
+            "relationship_key",
+            name="uq_relationship_replay_item_run_key",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    replay_run_id: int = Field(foreign_key="relationship_replay_run.id", nullable=False, index=True)
+    cover_image_id: int | None = Field(default=None, foreign_key="cover_image.id", nullable=True, index=True)
+    relationship_key: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    status: str = Field(max_length=20, nullable=False, index=True)
+    previous_snapshot_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    replay_snapshot_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    diff_summary_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
 class GmailAccount(SQLModel, table=True):
@@ -266,3 +1062,163 @@ class OpsEvent(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+class ScanSession(SQLModel, table=True):
+    __tablename__ = "scan_session"
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    session_type: str = Field(max_length=40, nullable=False, index=True)
+    status: str = Field(max_length=40, nullable=False, index=True)
+    scanner_profile: str | None = Field(default=None, max_length=120, nullable=True)
+    source_device: str | None = Field(default=None, max_length=120, nullable=True)
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    total_items: int = Field(default=0, nullable=False)
+    processed_items: int = Field(default=0, nullable=False)
+    failed_items: int = Field(default=0, nullable=False)
+    skipped_items: int = Field(default=0, nullable=False)
+    session_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+
+class ScanSessionItem(SQLModel, table=True):
+    __tablename__ = "scan_session_item"
+    __table_args__ = (
+        UniqueConstraint("scan_session_id", "sequence_index", name="uq_scan_session_item_session_sequence_idx"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scan_session_id: int = Field(foreign_key="scan_session.id", nullable=False, index=True)
+    inventory_copy_id: int | None = Field(
+        default=None,
+        foreign_key="inventory_copy.id",
+        nullable=True,
+        index=True,
+    )
+    cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    source_filename: str | None = Field(default=None, max_length=510, nullable=True)
+    sequence_index: int = Field(nullable=False, index=True)
+    ingest_status: str = Field(max_length=40, nullable=False, index=True)
+    ingest_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    image_width: int | None = Field(default=None, nullable=True)
+    image_height: int | None = Field(default=None, nullable=True)
+    image_sha256: str | None = Field(default=None, max_length=64, nullable=True, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class ScanQaResult(SQLModel, table=True):
+    """Deterministic scan QA verdict snapshot (written only via explicit run-qa; no pipelines)."""
+
+    __tablename__ = "scan_qa_result"
+    __table_args__ = (
+        UniqueConstraint("scan_session_item_id", name="uq_scan_qa_result_session_item"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scan_session_id: int = Field(foreign_key="scan_session.id", nullable=False, index=True)
+    scan_session_item_id: int = Field(foreign_key="scan_session_item.id", nullable=False, index=True)
+    cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    qa_classification: str = Field(max_length=48, nullable=False, index=True)
+    routing_recommendation: str = Field(max_length=48, nullable=False, index=True)
+    severity: str = Field(max_length=20, nullable=False, index=True)
+    evidence_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class HighResReviewRequest(SQLModel, table=True):
+    """Deterministic Epson / flatbed high-resolution review workflow request (no auto-OCR enqueue)."""
+
+    __tablename__ = "high_res_review_request"
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+
+    inventory_copy_id: int = Field(foreign_key="inventory_copy.id", nullable=False, index=True)
+
+    source_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+    source_scan_session_item_id: int | None = Field(
+        default=None,
+        foreign_key="scan_session_item.id",
+        nullable=True,
+        index=True,
+    )
+    source_ocr_quality_analysis_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image_ocr_quality_analysis.id",
+        nullable=True,
+        index=True,
+    )
+    source_inventory_risk_type: str | None = Field(default=None, max_length=80, nullable=True)
+    source_action_center_category: str | None = Field(default=None, max_length=80, nullable=True)
+
+    attach_scan_session_id: int | None = Field(
+        default=None,
+        foreign_key="scan_session.id",
+        nullable=True,
+        index=True,
+    )
+    attach_scan_session_item_id: int | None = Field(
+        default=None,
+        foreign_key="scan_session_item.id",
+        nullable=True,
+        index=True,
+    )
+    high_res_cover_image_id: int | None = Field(
+        default=None,
+        foreign_key="cover_image.id",
+        nullable=True,
+        index=True,
+    )
+
+    request_reason: str = Field(max_length=40, nullable=False, index=True)
+    status: str = Field(max_length=24, nullable=False, index=True)
+    priority: str = Field(max_length=12, nullable=False, index=True)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))

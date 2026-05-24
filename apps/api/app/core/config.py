@@ -34,6 +34,34 @@ class Settings(BaseSettings):
     rq_job_failure_ttl_seconds: int = 604800
     rq_job_retry_max: int = 3
     rq_job_retry_interval_seconds: int = 30
+    rq_cover_pipeline_job_timeout_seconds: int = Field(default=420, alias="RQ_COVER_PIPELINE_JOB_TIMEOUT_SECONDS")
+    rq_cover_pipeline_retry_max: int = Field(default=2, alias="RQ_COVER_PIPELINE_RETRY_MAX")
+    rq_cover_pipeline_retry_interval_seconds: int = Field(default=45, alias="RQ_COVER_PIPELINE_RETRY_INTERVAL_SECONDS")
+
+    cover_pipeline_max_image_bytes: int = Field(default=35 * 1024 * 1024, alias="COVER_PIPELINE_MAX_IMAGE_BYTES")
+    cover_pipeline_max_image_side_px: int = Field(default=8000, alias="COVER_PIPELINE_MAX_IMAGE_SIDE_PX")
+    cover_pipeline_max_image_pixels: int = Field(default=64_000_000, alias="COVER_PIPELINE_MAX_IMAGE_PIXELS")
+
+    cover_ocr_tesseract_timeout_seconds: float = Field(default=60.0, alias="COVER_OCR_TESSERACT_TIMEOUT_SECONDS")
+    cover_barcode_derive_regex_timeout_seconds: float = Field(default=10.0, alias="COVER_BARCODE_REGEX_TIMEOUT_SECONDS")
+    cover_fingerprint_generation_thread_timeout_seconds: float = Field(default=45.0, alias="COVER_FINGERPRINT_THREAD_TIMEOUT_SECONDS")
+    cover_quality_analysis_thread_timeout_seconds: float = Field(default=60.0, alias="COVER_QUALITY_THREAD_TIMEOUT_SECONDS")
+
+    cover_ocr_max_raw_text_chars: int = Field(default=200_000, alias="COVER_OCR_MAX_RAW_TEXT_CHARS")
+    cover_ocr_max_candidates_per_extract: int = Field(default=64, alias="COVER_OCR_MAX_CANDIDATES_PER_EXTRACT")
+    cover_barcode_raw_derive_scan_max_chars: int = Field(default=120_000, alias="COVER_BARCODE_RAW_SCAN_MAX_CHARS")
+    cover_barcode_candidate_emit_max_per_extract: int = Field(default=32, alias="COVER_BARCODE_EMIT_MAX_PER_EXTRACT")
+    cover_ocr_replay_diff_max_chars: int = Field(default=32_768, alias="COVER_OCR_REPLAY_DIFF_MAX_CHARS")
+    cover_ocr_batch_max_items: int = Field(default=250, alias="COVER_OCR_BATCH_MAX_ITEMS")
+    cover_ocr_batch_item_max_enqueue_attempts: int = Field(default=5, alias="COVER_OCR_BATCH_ITEM_MAX_ENQUEUE_ATTEMPTS")
+
+    ocr_health_window_hours: int = Field(default=24, alias="OCR_HEALTH_WINDOW_HOURS")
+    cover_ocr_processing_stale_seconds: int = Field(default=7200, alias="COVER_OCR_PROCESSING_STALE_SECONDS")
+    ocr_batch_item_orphan_seconds: int = Field(default=3600, alias="OCR_BATCH_ITEM_ORPHAN_SECONDS")
+    ocr_replay_item_stuck_seconds: int = Field(default=7200, alias="OCR_REPLAY_ITEM_STUCK_SECONDS")
+
+    cover_images_storage_root_raw: str = Field(default="", alias="COVER_IMAGES_STORAGE_ROOT")
+    cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
 
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
@@ -52,6 +80,13 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def cover_images_storage_root(self) -> Path:
+        trimmed = self.cover_images_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "cover_images"
 
 
 def validate_production_settings(settings: Settings) -> None:

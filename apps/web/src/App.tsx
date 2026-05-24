@@ -15,6 +15,7 @@ import { OrderNewPage } from "./pages/OrderNewPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 
 function HomeRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />
         <Route path="/imports/email" element={<EmailImportsPage />} />

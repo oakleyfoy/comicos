@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.ai import ParseOrderResponse
+from app.schemas.cover_images import CoverImageRead
 
 DraftImportStatus = Literal["draft", "confirmed", "discarded"]
 DraftImportSortBy = Literal["created_at", "updated_at", "confidence_score", "status"]
@@ -59,9 +60,18 @@ class DraftImportRead(BaseModel):
     parsed_payload_json: ParseOrderResponse
     confidence_score: Decimal
     status: DraftImportStatus
+    needs_metadata_review: bool = False
+    metadata_review_item_count: int = 0
+    needs_release_date_review: bool = False
+    release_date_review_item_count: int = 0
     order_id: int | None = None
     created_at: datetime
     updated_at: datetime
+    cover_images: list[CoverImageRead] = Field(default_factory=list)
+    cover_image_count: int = Field(
+        default=0,
+        description="Number of cover images linked to this draft import.",
+    )
 
 
 class DraftImportListResponse(BaseModel):
@@ -78,3 +88,7 @@ class DraftImportConfirmResponse(BaseModel):
     total_items: int
     total_copies_created: int
     all_in_total: Decimal
+    notices: list[str] = Field(
+        default_factory=list,
+        description="Non-blocking post-confirm messages (e.g. import cover scans not auto-linked).",
+    )

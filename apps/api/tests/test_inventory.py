@@ -187,6 +187,113 @@ def test_inventory_search_by_title_works(client: TestClient) -> None:
     assert response.json()["items"][0]["title"] == "Saga"
 
 
+def test_inventory_filter_by_release_year_works(client: TestClient) -> None:
+    token = register_and_login(client, "release-year-inv@example.com")
+    create_order(
+        client,
+        token,
+        items=[
+            {
+                "title": "Saga",
+                "publisher": "Image",
+                "issue_number": "1",
+                "release_year": 2024,
+                "cover_name": "Cover A",
+                "printing": None,
+                "ratio": None,
+                "variant_type": None,
+                "cover_artist": None,
+                "quantity": 1,
+                "raw_item_price": 6.00,
+            }
+        ],
+    )
+    create_order(
+        client,
+        token,
+        items=[
+            {
+                "title": "Monstress",
+                "publisher": "Image",
+                "issue_number": "1",
+                "release_year": 2026,
+                "cover_name": "Cover A",
+                "printing": None,
+                "ratio": None,
+                "variant_type": None,
+                "cover_artist": None,
+                "quantity": 1,
+                "raw_item_price": 8.50,
+            }
+        ],
+    )
+
+    filtered = client.get("/inventory?release_year=2024", headers=auth_headers(token))
+    assert filtered.status_code == 200
+    payload = filtered.json()
+    assert payload["total"] == 1
+    row = payload["items"][0]
+    assert row["release_year"] == 2024
+    assert row["title"] == "Saga"
+
+
+def test_inventory_filters_by_release_calendar_present_or_missing(
+    client: TestClient,
+) -> None:
+    token = register_and_login(client, "calendar-inv@example.com")
+    create_order(
+        client,
+        token,
+        items=[
+            {
+                "title": "Inkblot",
+                "publisher": "Image",
+                "issue_number": "1",
+                "release_date": "2025-06-01",
+                "release_year": 2025,
+                "cover_name": None,
+                "printing": None,
+                "ratio": None,
+                "variant_type": None,
+                "cover_artist": None,
+                "quantity": 1,
+                "raw_item_price": 4.99,
+            }
+        ],
+    )
+    create_order(
+        client,
+        token,
+        items=[
+            {
+                "title": "Dept H",
+                "publisher": "Dark Horse",
+                "issue_number": "1",
+                "release_year": 2026,
+                "cover_name": None,
+                "printing": None,
+                "ratio": None,
+                "variant_type": None,
+                "cover_artist": None,
+                "quantity": 1,
+                "raw_item_price": 3.49,
+            }
+        ],
+    )
+
+    present = client.get("/inventory?release_calendar=present", headers=auth_headers(token))
+    missing = client.get("/inventory?release_calendar=missing", headers=auth_headers(token))
+
+    assert present.status_code == 200 and missing.status_code == 200
+    assert present.json()["total"] == 1
+    assert missing.json()["total"] == 1
+    assert present.json()["items"][0]["title"] == "Inkblot"
+    assert missing.json()["items"][0]["title"] == "Dept H"
+    assert present.json()["items"][0]["release_date"] == "2025-06-01"
+    assert present.json()["items"][0]["release_year"] == 2025
+    assert missing.json()["items"][0]["release_date"] is None
+
+
 def test_inventory_filter_by_publisher_works(client: TestClient) -> None:
     token = register_and_login(client, "publisher@example.com")
     create_order(

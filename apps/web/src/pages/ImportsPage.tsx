@@ -52,6 +52,8 @@ function importMetrics(draftImport: DraftImport) {
   return {
     itemCount: draftImport.parsed_payload_json.items.length,
     warningCount: draftImport.parsed_payload_json.warnings.length,
+    metadataReviewItemCount: draftImport.metadata_review_item_count,
+    releaseDateReviewItemCount: draftImport.release_date_review_item_count,
     retailer: draftImport.parsed_payload_json.retailer ?? "Unknown retailer",
     orderDate: draftImport.parsed_payload_json.order_date,
   };
@@ -77,6 +79,8 @@ export function ImportsPage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [statusFilter, setStatusFilter] = useState<DraftImportStatus | "">("");
+  const [needsMetadataReviewFilter, setNeedsMetadataReviewFilter] = useState(false);
+  const [needsReleaseDateReviewFilter, setNeedsReleaseDateReviewFilter] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<ImportSortBy>("updated_at");
@@ -93,10 +97,21 @@ export function ImportsPage() {
       page_size: pageSize,
       status: statusFilter || undefined,
       search: search || undefined,
+      needs_metadata_review: needsMetadataReviewFilter || undefined,
+      needs_release_date_review: needsReleaseDateReviewFilter || undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [page, pageSize, search, sortBy, sortDir, statusFilter],
+    [
+      page,
+      pageSize,
+      search,
+      sortBy,
+      sortDir,
+      statusFilter,
+      needsMetadataReviewFilter,
+      needsReleaseDateReviewFilter,
+    ],
   );
 
   async function loadImports(query: ImportQueryParams = importQuery): Promise<void> {
@@ -246,8 +261,8 @@ export function ImportsPage() {
           <EmptyState
             title={search || statusFilter ? "No imports match the current filters" : "No saved imports yet"}
             description={
-              search || statusFilter
-                ? "Try a different search term or status filter, or start a new import."
+              search || statusFilter || needsMetadataReviewFilter
+                ? "Try a different search term or filter, or start a new import."
                 : "Pasted AI drafts appear here after you start a new import. Save one to reopen it later or confirm it into inventory."
             }
             action={
@@ -321,7 +336,35 @@ export function ImportsPage() {
                 </button>
               </form>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={needsMetadataReviewFilter}
+                      onChange={(event) =>
+                        updateFilter(() => {
+                          setNeedsMetadataReviewFilter(event.target.checked);
+                        })
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-400 focus:ring-cyan-300/40"
+                    />
+                    Metadata review flags only
+                  </label>
+                  <label className="flex items-center gap-3 rounded-2xl border border-rose-400/15 bg-rose-950/20 px-4 py-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={needsReleaseDateReviewFilter}
+                      onChange={(event) =>
+                        updateFilter(() => {
+                          setNeedsReleaseDateReviewFilter(event.target.checked);
+                        })
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-slate-950 text-rose-300 focus:ring-rose-300/40"
+                    />
+                    Release date warnings only
+                  </label>
+                </div>
                 <select
                   value={sortDir}
                   onChange={(event) =>
@@ -329,7 +372,7 @@ export function ImportsPage() {
                       setSortDir(event.target.value as "asc" | "desc");
                     })
                   }
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40 lg:col-span-1"
                 >
                   <option value="desc">Descending</option>
                   <option value="asc">Ascending</option>
@@ -342,6 +385,8 @@ export function ImportsPage() {
                   onClick={() => {
                     setPage(1);
                     setStatusFilter("");
+                    setNeedsMetadataReviewFilter(false);
+                    setNeedsReleaseDateReviewFilter(false);
                     setSearch("");
                     setSearchInput("");
                     setSortBy("updated_at");
@@ -392,7 +437,21 @@ export function ImportsPage() {
 
                     return (
                       <tr key={draftImport.id} className="border-b border-white/5 align-top">
-                        <td className="px-4 py-3.5 font-medium text-white">#{draftImport.id}</td>
+                        <td className="px-4 py-3.5 font-medium text-white">
+                          <div className="flex flex-col gap-2">
+                            <span>#{draftImport.id}</span>
+                            {draftImport.cover_image_count > 0 ? (
+                              <span
+                                className="inline-flex items-center gap-1 self-start rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-100"
+                                title={`${draftImport.cover_image_count} cover scan${draftImport.cover_image_count === 1 ? "" : "s"}`}
+                              >
+                                <span aria-hidden>📷</span>
+                                <span>{draftImport.cover_image_count}</span>
+                                <span className="sr-only">cover uploads</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="px-4 py-3.5">
                           <span
                             className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(draftImport.status)}`}
@@ -406,7 +465,23 @@ export function ImportsPage() {
                           {Math.round(Number(draftImport.confidence_score) * 100)}%
                         </td>
                         <td className="px-4 py-3.5">{metrics.itemCount}</td>
-                        <td className="px-4 py-3.5">{metrics.warningCount}</td>
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-2">
+                            <p>{metrics.warningCount}</p>
+                            {draftImport.needs_metadata_review ? (
+                              <span className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">
+                                {metrics.metadataReviewItemCount} metadata
+                                {metrics.metadataReviewItemCount === 1 ? " item" : " items"}
+                              </span>
+                            ) : null}
+                            {draftImport.needs_release_date_review ? (
+                              <span className="inline-flex rounded-full border border-rose-400/25 bg-rose-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-100">
+                                {metrics.releaseDateReviewItemCount} release date
+                                {metrics.releaseDateReviewItemCount === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="px-4 py-3.5">{formatTimestamp(draftImport.created_at)}</td>
                         <td className="px-4 py-3.5">{formatTimestamp(draftImport.updated_at)}</td>
                         <td className="px-4 py-3.5">
@@ -477,6 +552,15 @@ export function ImportsPage() {
                         <p className="mt-1 text-sm text-slate-400">
                           Order date {formatDate(metrics.orderDate)}
                         </p>
+                        {draftImport.cover_image_count > 0 ? (
+                          <p
+                            className="mt-2 inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100"
+                            title={`${draftImport.cover_image_count} cover scan${draftImport.cover_image_count === 1 ? "" : "s"}`}
+                          >
+                            <span aria-hidden>📷</span>
+                            {draftImport.cover_image_count} scans
+                          </p>
+                        ) : null}
                       </div>
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(draftImport.status)}`}
@@ -494,6 +578,26 @@ export function ImportsPage() {
                         <p className="text-slate-500">Items / Warnings</p>
                         <p>
                           {metrics.itemCount} items / {metrics.warningCount} warnings
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Metadata review</p>
+                        <p>
+                          {draftImport.needs_metadata_review
+                            ? `${metrics.metadataReviewItemCount} item${
+                                metrics.metadataReviewItemCount === 1 ? "" : "s"
+                              } flagged`
+                            : "No metadata flags"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Release date notes</p>
+                        <p>
+                          {draftImport.needs_release_date_review
+                            ? `${metrics.releaseDateReviewItemCount} item${
+                                metrics.releaseDateReviewItemCount === 1 ? "" : "s"
+                              } with warnings`
+                            : "No release date warnings"}
                         </p>
                       </div>
                       <div>

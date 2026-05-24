@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -6,7 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy import String, cast, func, or_
 from sqlmodel import Session, select
 
-from app.models import DraftImport, User
+from app.models import CoverImage, DraftImport, InventoryCopy, OrderItem, User
 from app.schemas.ai import ParseOrderResponse
 from app.schemas.imports import (
     DraftImportConfirmResponse,
@@ -17,143 +16,146 @@ from app.schemas.imports import (
     DraftImportUpdate,
     ManualDraftImportCreate,
 )
+from app.schemas.cover_images import CoverImageRead
 from app.schemas.orders import OrderCreate
 from app.services.ai_order_parser import parse_order_draft_from_text
+from app.services.canonical_creators import get_or_create_canonical_creator
+from app.services.metadata_audits import record_metadata_audit
+from app.services.metadata_enrichment import (
+    RELEASE_DATE_PAYLOAD_SEARCH_FRAGMENT,
+    enrich_parse_order_metadata,
+    iter_canonical_creator_names,
+    normalize_creator_name,
+)
 from app.services.ops_events import classify_failure_message, record_ops_event
 from app.services.orders import create_order_for_user_in_transaction
-
-PUBLISHER_INFERENCE_WARNING_PREFIX = "Publisher auto-filled deterministically for items:"
-PUBLISHER_REVIEW_WARNING_PREFIX = "Publisher still missing for items:"
-HIGH_CONFIDENCE_TITLE_PUBLISHERS = {
-    "DC": ("batman", "superman", "wonder woman"),
-    "Marvel": ("spider man", "x men", "avengers"),
-    "Image": ("spawn", "invincible", "geiger", "hyde street"),
-}
-SOURCE_LINE_PUBLISHER_MARKERS = {
-    "DC": re.compile(r"\bdc\b", re.IGNORECASE),
-    "Marvel": re.compile(r"\bmarvel\b", re.IGNORECASE),
-    "Image": re.compile(r"\bimage\b", re.IGNORECASE),
-}
+from app.services.cover_images import (
+    COVER_CARRY_MULTI_COPY_NOTICE,
+    carry_draft_import_cover_images_to_inventory_copy,
+    list_cover_reads_for_draft,
+)
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _normalize_spaces(value: str | None) -> str:
-    if value is None:
-        return ""
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _normalize_title_key(value: str | None) -> str:
-    normalized = _normalize_spaces(value).lower()
-    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
-
-
-def _strip_generated_publisher_warnings(warnings: list[str]) -> list[str]:
-    return [
-        warning
-        for warning in warnings
-        if not warning.startswith(PUBLISHER_INFERENCE_WARNING_PREFIX)
-        and not warning.startswith(PUBLISHER_REVIEW_WARNING_PREFIX)
-    ]
-
-
-def _format_item_label(index: int, title: str | None, issue_number: str | None) -> str:
-    normalized_title = _normalize_spaces(title) or "Untitled item"
-    normalized_issue = _normalize_spaces(issue_number)
-    if normalized_issue:
-        return f"{index} ({normalized_title} #{normalized_issue})"
-    return f"{index} ({normalized_title})"
-
-
-def _infer_publisher_from_source_text(title: str | None, raw_text: str) -> str | None:
-    title_key = _normalize_title_key(title)
-    if not title_key or not raw_text.strip():
-        return None
-
-    for raw_line in raw_text.splitlines():
-        line_key = _normalize_title_key(raw_line)
-        if not line_key or title_key not in line_key:
-            continue
-
-        matched_publishers = [
-            publisher
-            for publisher, pattern in SOURCE_LINE_PUBLISHER_MARKERS.items()
-            if pattern.search(raw_line)
-        ]
-        if len(matched_publishers) == 1:
-            return matched_publishers[0]
-
-    return None
-
-
-def _infer_publisher_from_title(title: str | None) -> str | None:
-    title_key = _normalize_title_key(title)
-    if not title_key:
-        return None
-
-    for publisher, hints in HIGH_CONFIDENCE_TITLE_PUBLISHERS.items():
-        if any(hint in title_key for hint in hints):
-            return publisher
-
-    return None
+def _release_date_review_item_count(normalized_payload: ParseOrderResponse) -> int:
+    marker = RELEASE_DATE_PAYLOAD_SEARCH_FRAGMENT
+    return sum(
+        1
+        for item in normalized_payload.items
+        if any(marker in note for note in (item.metadata_review_notes or []))
+    )
 
 
 def normalize_parsed_order_response(
-    parsed: ParseOrderResponse, *, raw_text: str
+    parsed: ParseOrderResponse,
+    *,
+    session: Session | None = None,
+    raw_text: str,
 ) -> ParseOrderResponse:
-    normalized_items = []
-    inferred_publishers: list[str] = []
-    unresolved_publishers: list[str] = []
-
-    for index, item in enumerate(parsed.items, start=1):
-        normalized_publisher = _normalize_spaces(item.publisher) or None
-        inferred_publisher = None
-
-        if normalized_publisher is None:
-            inferred_publisher = _infer_publisher_from_source_text(item.title, raw_text)
-            if inferred_publisher is None:
-                inferred_publisher = _infer_publisher_from_title(item.title)
-            normalized_publisher = inferred_publisher
-
-        normalized_item = item.model_copy(update={"publisher": normalized_publisher})
-        normalized_items.append(normalized_item)
-
-        item_label = _format_item_label(index, normalized_item.title, normalized_item.issue_number)
-        if inferred_publisher is not None:
-            inferred_publishers.append(f"{item_label} -> {inferred_publisher}")
-        elif normalized_publisher is None:
-            unresolved_publishers.append(item_label)
-
-    warnings = _strip_generated_publisher_warnings(parsed.warnings)
-    if inferred_publishers:
-        warnings.append(
-            f"{PUBLISHER_INFERENCE_WARNING_PREFIX} " + "; ".join(inferred_publishers) + "."
-        )
-    if unresolved_publishers:
-        warnings.append(
-            f"{PUBLISHER_REVIEW_WARNING_PREFIX} " + "; ".join(unresolved_publishers) + "."
-        )
-
-    return parsed.model_copy(update={"items": normalized_items, "warnings": warnings})
+    return enrich_parse_order_metadata(parsed, session=session, raw_text=raw_text)
 
 
-def serialize_import(draft_import: DraftImport) -> DraftImportRead:
+def sync_canonical_creators_for_payload(
+    session: Session,
+    payload: ParseOrderResponse,
+    *,
+    actor_user_id: int | None = None,
+    audit_reason: str | None = None,
+) -> None:
+    for item in payload.items:
+        for creator_name in iter_canonical_creator_names(item):
+            normalized = normalize_creator_name(creator_name, session=session)
+            if normalized.canonical_value is None or normalized.normalized_value is None:
+                continue
+            get_or_create_canonical_creator(
+                session,
+                canonical_name=normalized.canonical_value,
+                normalized_name=normalized.normalized_value,
+                actor_user_id=actor_user_id,
+                audit_reason=audit_reason,
+            )
+
+
+def draft_import_cover_image_counts(session: Session, draft_import_ids: list[int]) -> dict[int, int]:
+    if not draft_import_ids:
+        return {}
+    rows = session.exec(
+        select(CoverImage.draft_import_id, func.count(CoverImage.id))
+        .where(CoverImage.draft_import_id.in_(draft_import_ids))
+        .group_by(CoverImage.draft_import_id)
+    ).all()
+    return {int(draft_id): int(total or 0) for draft_id, total in rows}
+
+
+def build_draft_import_audit_snapshot(
+    draft_import: DraftImport,
+    *,
+    parsed_payload_json: dict | None = None,
+) -> dict:
+    return {
+        "id": draft_import.id,
+        "status": draft_import.status,
+        "linked_order_id": draft_import.linked_order_id,
+        "confidence_score": draft_import.confidence_score,
+        "parsed_payload_json": (
+            parsed_payload_json
+            if parsed_payload_json is not None
+            else draft_import.parsed_payload_json
+        ),
+    }
+
+
+def serialize_import(
+    session: Session,
+    draft_import: DraftImport,
+    *,
+    prefetch_cover_images: bool = True,
+    cover_image_count: int | None = None,
+) -> DraftImportRead:
     normalized_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
+        session=session,
         raw_text=draft_import.raw_text,
     )
+    metadata_review_item_count = sum(
+        1 for item in normalized_payload.items if item.metadata_review_required
+    )
+    release_review_count = _release_date_review_item_count(normalized_payload)
+    covers: list[CoverImageRead] = []
+    draft_pk = draft_import.id
+
+    if prefetch_cover_images and draft_pk is not None:
+        covers = list_cover_reads_for_draft(session, draft_pk)
+        resolved_cover_count = len(covers)
+    elif cover_image_count is not None:
+        resolved_cover_count = cover_image_count
+    elif draft_pk is not None:
+        resolved_cover_count = int(
+            session.exec(
+                select(func.count(CoverImage.id)).where(CoverImage.draft_import_id == draft_pk)
+            ).one()
+        )
+    else:
+        resolved_cover_count = 0
+
     return DraftImportRead(
         id=draft_import.id,
         raw_text=draft_import.raw_text,
         parsed_payload_json=normalized_payload,
         confidence_score=draft_import.confidence_score,
         status=draft_import.status,
+        needs_metadata_review=metadata_review_item_count > 0,
+        metadata_review_item_count=metadata_review_item_count,
+        needs_release_date_review=release_review_count > 0,
+        release_date_review_item_count=release_review_count,
         order_id=draft_import.linked_order_id,
         created_at=draft_import.created_at,
         updated_at=draft_import.updated_at,
+        cover_images=covers,
+        cover_image_count=resolved_cover_count,
     )
 
 
@@ -185,6 +187,8 @@ def apply_imports_filters(
     *,
     status: DraftImportStatus | None,
     search: str | None,
+    needs_metadata_review: bool | None,
+    needs_release_date_review: bool | None,
 ):
     if status is not None:
         stmt = stmt.where(DraftImport.status == status)
@@ -196,6 +200,41 @@ def apply_imports_filters(
                 DraftImport.raw_text.ilike(search_term),
                 cast(DraftImport.parsed_payload_json, String).ilike(search_term),
             )
+        )
+
+    if needs_metadata_review is True:
+        stmt = stmt.where(
+            or_(
+                cast(DraftImport.parsed_payload_json, String).ilike(
+                    '%"metadata_review_required": true%'
+                ),
+                cast(DraftImport.parsed_payload_json, String).ilike(
+                    '%"metadata_review_required":true%'
+                ),
+            )
+        )
+    elif needs_metadata_review is False:
+        stmt = stmt.where(
+            ~or_(
+                cast(DraftImport.parsed_payload_json, String).ilike(
+                    '%"metadata_review_required": true%'
+                ),
+                cast(DraftImport.parsed_payload_json, String).ilike(
+                    '%"metadata_review_required":true%'
+                ),
+            )
+        )
+
+    release_fragment = RELEASE_DATE_PAYLOAD_SEARCH_FRAGMENT
+    release_pattern = f"%{release_fragment}%"
+
+    if needs_release_date_review is True:
+        stmt = stmt.where(
+            cast(DraftImport.parsed_payload_json, String).ilike(release_pattern)
+        )
+    elif needs_release_date_review is False:
+        stmt = stmt.where(
+            ~cast(DraftImport.parsed_payload_json, String).ilike(release_pattern)
         )
 
     return stmt
@@ -226,6 +265,8 @@ def list_imports_for_user(
     page_size: int,
     status: DraftImportStatus | None,
     search: str | None,
+    needs_metadata_review: bool | None,
+    needs_release_date_review: bool | None,
     sort_by: str | None,
     sort_dir: str,
 ) -> DraftImportListResponse:
@@ -233,6 +274,8 @@ def list_imports_for_user(
         build_imports_base_query(current_user),
         status=status,
         search=search,
+        needs_metadata_review=needs_metadata_review,
+        needs_release_date_review=needs_release_date_review,
     )
     total_stmt = select(func.count()).select_from(filtered_stmt.subquery())
     paginated_stmt = apply_imports_sort(filtered_stmt, sort_by, sort_dir).offset(
@@ -241,11 +284,22 @@ def list_imports_for_user(
 
     total = session.exec(total_stmt).one()
     imports = session.exec(paginated_stmt).all()
+    draft_ids = [row.id for row in imports if row.id is not None]
+    counts = draft_import_cover_image_counts(session, draft_ids)
+
+    def count_for(import_row: DraftImport) -> int:
+        if import_row.id is None:
+            return 0
+        return counts.get(import_row.id, 0)
+
     return DraftImportListResponse(
         page=page,
         page_size=page_size,
         total=total,
-        items=[serialize_import(item) for item in imports],
+        items=[
+            serialize_import(session, row, prefetch_cover_images=False, cover_image_count=count_for(row))
+            for row in imports
+        ],
     )
 
 
@@ -254,7 +308,10 @@ def get_import_for_user(
     current_user: User,
     import_id: int,
 ) -> DraftImportRead:
-    return serialize_import(get_import_for_user_or_404(session, current_user, import_id))
+    return serialize_import(
+        session,
+        get_import_for_user_or_404(session, current_user, import_id),
+    )
 
 
 def persist_draft_import(
@@ -265,7 +322,13 @@ def persist_draft_import(
     parsed: ParseOrderResponse,
 ) -> DraftImportRead:
     timestamp = utc_now()
-    normalized_parsed = normalize_parsed_order_response(parsed, raw_text=raw_text)
+    normalized_parsed = normalize_parsed_order_response(parsed, session=session, raw_text=raw_text)
+    sync_canonical_creators_for_payload(
+        session,
+        normalized_parsed,
+        actor_user_id=current_user.id,
+        audit_reason="Deterministic draft enrichment during import persistence.",
+    )
     draft_import = DraftImport(
         user_id=current_user.id,
         raw_text=raw_text,
@@ -276,9 +339,22 @@ def persist_draft_import(
         updated_at=timestamp,
     )
     session.add(draft_import)
+    session.flush()
+    record_metadata_audit(
+        session,
+        entity_type="draft_item",
+        entity_id=draft_import.id,
+        action="enriched",
+        after_snapshot=build_draft_import_audit_snapshot(
+            draft_import,
+            parsed_payload_json=normalized_parsed.model_dump(mode="json"),
+        ),
+        reason="Deterministic metadata enrichment saved for draft import.",
+        actor_user_id=current_user.id,
+    )
     session.commit()
     session.refresh(draft_import)
-    return serialize_import(draft_import)
+    return serialize_import(session, draft_import)
 
 
 def create_import_for_user(
@@ -325,6 +401,7 @@ def update_import_for_user(
     if payload.parsed_payload_json is not None:
         validated_payload = normalize_parsed_order_response(
             ParseOrderResponse.model_validate(payload.parsed_payload_json),
+            session=session,
             raw_text=draft_import.raw_text,
         )
         draft_import.parsed_payload_json = validated_payload.model_dump(mode="json")
@@ -338,7 +415,14 @@ def update_import_for_user(
 
     normalized_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
+        session=session,
         raw_text=draft_import.raw_text,
+    )
+    sync_canonical_creators_for_payload(
+        session,
+        normalized_payload,
+        actor_user_id=current_user.id,
+        audit_reason="Deterministic draft enrichment during draft update.",
     )
     draft_import.parsed_payload_json = normalized_payload.model_dump(mode="json")
 
@@ -346,7 +430,7 @@ def update_import_for_user(
     session.add(draft_import)
     session.commit()
     session.refresh(draft_import)
-    return serialize_import(draft_import)
+    return serialize_import(session, draft_import)
 
 
 def discard_import_for_user(
@@ -363,12 +447,13 @@ def discard_import_for_user(
     session.add(draft_import)
     session.commit()
     session.refresh(draft_import)
-    return serialize_import(draft_import)
+    return serialize_import(session, draft_import)
 
 
-def build_order_create_from_import(draft_import: DraftImport) -> OrderCreate:
+def build_order_create_from_import(session: Session, draft_import: DraftImport) -> OrderCreate:
     parsed_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
+        session=session,
         raw_text=draft_import.raw_text,
     )
     draft_import.parsed_payload_json = parsed_payload.model_dump(mode="json")
@@ -402,12 +487,23 @@ def build_order_create_from_import(draft_import: DraftImport) -> OrderCreate:
             {
                 "publisher": item.publisher,
                 "title": item.title,
+                "release_date": item.parsed_release_date,
+                "release_year": item.parsed_release_year,
+                "release_status": item.release_status,
+                "order_status": item.order_status,
+                "purchase_date": item.purchase_date,
+                "expected_ship_date": item.expected_ship_date,
+                "received_at": item.received_at,
                 "issue_number": item.issue_number,
                 "cover_name": item.cover_name,
                 "printing": item.printing,
                 "ratio": item.ratio,
                 "variant_type": item.variant_type,
                 "cover_artist": item.cover_artist,
+                "writers": item.canonical_writers or item.writers,
+                "artists": item.canonical_artists or item.artists,
+                "cover_artists": item.canonical_cover_artists or item.cover_artists,
+                "metadata_identity_key": item.metadata_identity_key,
                 "quantity": item.quantity,
                 "raw_item_price": item.raw_item_price,
             }
@@ -463,7 +559,7 @@ def confirm_import_for_user(
         raise HTTPException(status_code=409, detail="Import already confirmed")
 
     try:
-        order_payload = build_order_create_from_import(draft_import)
+        order_payload = build_order_create_from_import(session, draft_import)
     except HTTPException as exc:
         record_ops_event(
             event_type="confirm_failure",
@@ -478,12 +574,46 @@ def confirm_import_for_user(
         )
         raise
 
+    notices: list[str] = []
+    draft_cover_carryover_mode = "none"
+    draft_cover_count_before_carryover = 0
+
     try:
         order_response = create_order_for_user_in_transaction(
             session=session,
             current_user=current_user,
             payload=order_payload,
         )
+        draft_cover_count_before_carryover = len(
+            session.exec(
+                select(CoverImage.id).where(CoverImage.draft_import_id == draft_import.id)
+            ).all()
+        )
+
+        if draft_cover_count_before_carryover > 0:
+            if order_response.total_copies_created == 1:
+                inventory_ids = list(
+                    session.exec(
+                        select(InventoryCopy.id)
+                        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
+                        .where(OrderItem.order_id == order_response.order_id)
+                        .order_by(InventoryCopy.id.asc())
+                    ).all()
+                )
+                if len(inventory_ids) == 1:
+                    carry_draft_import_cover_images_to_inventory_copy(
+                        session,
+                        draft_import=draft_import,
+                        inventory_copy_id=inventory_ids[0],
+                    )
+                    draft_cover_carryover_mode = "single_inventory_copy"
+                elif draft_cover_count_before_carryover > 0:
+                    notices.append(COVER_CARRY_MULTI_COPY_NOTICE)
+                    draft_cover_carryover_mode = "skipped_invariant_mismatch"
+            else:
+                notices.append(COVER_CARRY_MULTI_COPY_NOTICE)
+                draft_cover_carryover_mode = "skipped_multiple_inventory_copies"
+
         draft_import.status = "confirmed"
         draft_import.linked_order_id = order_response.order_id
         draft_import.updated_at = utc_now()
@@ -512,6 +642,9 @@ def confirm_import_for_user(
             "total_items": order_response.total_items,
             "total_copies_created": order_response.total_copies_created,
             "all_in_total": order_response.all_in_total,
+            "draft_import_cover_carryover_mode": draft_cover_carryover_mode,
+            "draft_import_cover_count_before_carryover": draft_cover_count_before_carryover,
+            "draft_import_cover_notice_count": len(notices),
         },
     )
 
@@ -522,4 +655,5 @@ def confirm_import_for_user(
         total_items=order_response.total_items,
         total_copies_created=order_response.total_copies_created,
         all_in_total=order_response.all_in_total,
+        notices=notices,
     )

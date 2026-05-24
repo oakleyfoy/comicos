@@ -4,6 +4,8 @@ from datetime import date, datetime
 import json
 from typing import Annotated, Literal
 
+from pydantic import ValidationError
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -205,6 +207,32 @@ from app.schemas.variant_family import (
     VariantFamilyClassificationFilter,
     VariantFamilyClustersListResponse,
 )
+from app.schemas.scan_sessions import (
+    ScanSessionCreatePayload,
+    ScanSessionDashboardResponse,
+    ScanSessionDetailRead,
+    ScanSessionIngestManifest,
+    ScanSessionIngestManifestRow,
+    ScanSessionItemsAppendPayload,
+    ScanSessionItemsListRead,
+    ScanSessionItemUpdatePayload,
+    ScanSessionListResponse,
+    ScanSessionStatus,
+    ScanSessionSummaryRead,
+    ScanSessionType,
+)
+from app.schemas.scan_qa import (
+    InventoryScanQaPanelRead,
+    OpsScanQaFleetSummaryRead,
+    ScanQaItemRead,
+    ScanSessionQaSummaryRead,
+)
+from app.schemas.high_res_review_requests import (
+    HighResReviewRequestCreatePayload,
+    HighResReviewRequestListResponse,
+    HighResReviewRequestRead,
+    HighResReviewRequestStatsRead,
+)
 from app.services.ai_order_parser import (
     AiOrderParserError,
     AiOrderParserNotConfiguredError,
@@ -336,6 +364,38 @@ from app.services.run_detection import (
     list_missing_issues_owner,
     list_run_detection_ops,
     list_run_detection_owner,
+)
+from app.services.scan_session_ingest import ParsedScanUploadSlot, ingest_uploaded_images_into_scan_session
+from app.services.high_res_review_requests import (
+    attach_high_res_review_scan_multipart,
+    cancel_high_res_review_request,
+    complete_high_res_review_request,
+    create_high_res_review_request,
+    get_high_res_review_request_detail,
+    high_res_review_request_stats_ops,
+    high_res_review_request_stats_owner,
+    list_high_res_review_requests_ops,
+    list_high_res_review_requests_owner,
+)
+from app.services.scan_qa import (
+    fleet_scan_qa_summary,
+    get_scan_session_item_qa,
+    get_scan_session_qa,
+    inventory_cover_scan_qa,
+    run_scan_session_qa,
+)
+from app.services.scan_sessions import (
+    append_scan_session_items,
+    cancel_scan_session,
+    complete_scan_session,
+    create_scan_session,
+    get_scan_session_detail,
+    list_scan_session_items_read,
+    list_scan_sessions,
+    owner_scan_session_dashboard,
+    pause_scan_session,
+    patch_scan_session_item,
+    start_scan_session,
 )
 from app.services.gmail_ingestion import (
     GmailIntegrationError,
@@ -5724,6 +5784,447 @@ def get_run_detection_detail_endpoint(
     return get_run_detection_detail_owner(session, user=current_user, series_key=series_key)
 
 
+@app.post("/scan-sessions", response_model=ScanSessionSummaryRead, status_code=status.HTTP_201_CREATED)
+def owner_create_scan_session(
+    payload: ScanSessionCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionSummaryRead:
+    assert current_user.id is not None
+    return create_scan_session(session, owner_user_id=int(current_user.id), payload=payload)
+
+
+@app.get("/scan-sessions/dashboard", response_model=ScanSessionDashboardResponse)
+def owner_scan_sessions_dashboard_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionDashboardResponse:
+    assert current_user.id is not None
+    active_trim, recent_trim = owner_scan_session_dashboard(session, owner_user_id=int(current_user.id))
+    return ScanSessionDashboardResponse(active_sessions=active_trim, recent_sessions=recent_trim)
+
+
+@app.get("/scan-sessions", response_model=ScanSessionListResponse)
+def owner_list_scan_sessions(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    status_filter: Annotated[ScanSessionStatus | None, Query(alias="status")] = None,
+    session_type: Annotated[ScanSessionType | None, Query(alias="session_type")] = None,
+    limit: Annotated[int, Query(ge=1, le=250)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanSessionListResponse:
+    assert current_user.id is not None
+    rows = list_scan_sessions(
+        session,
+        owner_user_id=int(current_user.id),
+        status=status_filter,
+        session_type=session_type,
+        limit=limit,
+        offset=offset,
+    )
+    return ScanSessionListResponse(sessions=rows)
+
+
+@app.get("/scan-sessions/{session_id}", response_model=ScanSessionDetailRead)
+def owner_get_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionDetailRead:
+    assert current_user.id is not None
+    return get_scan_session_detail(session, owner_user_id=int(current_user.id), session_id=session_id)
+
+
+@app.get("/scan-sessions/{session_id}/items", response_model=ScanSessionItemsListRead)
+def owner_list_scan_session_items_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    limit: Annotated[int, Query(ge=1, le=2500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanSessionItemsListRead:
+    assert current_user.id is not None
+    return list_scan_session_items_read(
+        session,
+        owner_user_id=int(current_user.id),
+        session_id=session_id,
+        limit=int(limit),
+        offset=int(offset),
+    )
+
+
+@app.get("/scan-sessions/{session_id}/qa", response_model=ScanSessionQaSummaryRead)
+def owner_get_scan_session_qa_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionQaSummaryRead:
+    assert current_user.id is not None
+    return get_scan_session_qa(session, owner_user_id=int(current_user.id), scan_session_id=session_id)
+
+
+@app.get("/scan-sessions/{session_id}/items/{item_id}/qa", response_model=ScanQaItemRead)
+def owner_get_scan_session_item_qa_endpoint(
+    session_id: int,
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanQaItemRead:
+    assert current_user.id is not None
+    return get_scan_session_item_qa(session, owner_user_id=int(current_user.id), scan_session_id=session_id, item_id=item_id)
+
+
+@app.post("/scan-sessions/{session_id}/run-qa", response_model=ScanSessionQaSummaryRead)
+def owner_run_scan_session_qa_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionQaSummaryRead:
+    assert current_user.id is not None
+    return run_scan_session_qa(session, owner_user_id=int(current_user.id), scan_session_id=session_id)
+
+
+@app.post("/scan-sessions/{session_id}/ingest-files", response_model=ScanSessionDetailRead)
+async def owner_ingest_scan_session_files_endpoint(
+    session_id: int,
+    files: Annotated[list[UploadFile], File()],
+    manifest: Annotated[str, Form()] = '{"items":[]}',
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanSessionDetailRead:
+    assert current_user.id is not None
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one upload file is required.")
+    try:
+        manifest_payload = ScanSessionIngestManifest.model_validate_json(manifest)
+    except (ValueError, TypeError, ValidationError):
+        raise HTTPException(status_code=422, detail="manifest must be JSON matching ScanSessionIngestManifest")
+
+    slots: list[ParsedScanUploadSlot] = []
+    for idx, upload in enumerate(files):
+        blob = await upload.read()
+        row = manifest_payload.items[idx] if idx < len(manifest_payload.items) else ScanSessionIngestManifestRow()
+        slots.append(
+            ParsedScanUploadSlot(
+                body=blob,
+                declared_content_type=upload.content_type,
+                upload_filename=upload.filename,
+                manifest_row=row,
+            ),
+        )
+
+    return ingest_uploaded_images_into_scan_session(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        scan_session_id=session_id,
+        slots=slots,
+    )
+
+
+@app.post("/scan-sessions/{session_id}/items", response_model=ScanSessionDetailRead)
+def owner_append_scan_session_items(
+    session_id: int,
+    payload: ScanSessionItemsAppendPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionDetailRead:
+    assert current_user.id is not None
+    return append_scan_session_items(
+        session,
+        owner_user_id=int(current_user.id),
+        session_id=session_id,
+        payload=payload,
+    )
+
+
+@app.patch("/scan-sessions/{session_id}/items/{item_id}", response_model=ScanSessionDetailRead)
+def owner_patch_scan_session_item(
+    session_id: int,
+    item_id: int,
+    payload: ScanSessionItemUpdatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionDetailRead:
+    assert current_user.id is not None
+    return patch_scan_session_item(
+        session,
+        owner_user_id=int(current_user.id),
+        session_id=session_id,
+        item_id=item_id,
+        payload=payload,
+    )
+
+
+@app.post("/scan-sessions/{session_id}/start", response_model=ScanSessionSummaryRead)
+def owner_start_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionSummaryRead:
+    assert current_user.id is not None
+    return start_scan_session(session, owner_user_id=int(current_user.id), session_id=session_id)
+
+
+@app.post("/scan-sessions/{session_id}/pause", response_model=ScanSessionSummaryRead)
+def owner_pause_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionSummaryRead:
+    assert current_user.id is not None
+    return pause_scan_session(session, owner_user_id=int(current_user.id), session_id=session_id)
+
+
+@app.post("/scan-sessions/{session_id}/cancel", response_model=ScanSessionSummaryRead)
+def owner_cancel_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionSummaryRead:
+    assert current_user.id is not None
+    return cancel_scan_session(session, owner_user_id=int(current_user.id), session_id=session_id)
+
+
+@app.post("/scan-sessions/{session_id}/complete", response_model=ScanSessionSummaryRead)
+def owner_complete_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanSessionSummaryRead:
+    assert current_user.id is not None
+    return complete_scan_session(session, owner_user_id=int(current_user.id), session_id=session_id)
+
+
+@app.post("/high-res-review-requests", response_model=HighResReviewRequestRead)
+def owner_create_high_res_review_request(
+    payload: HighResReviewRequestCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HighResReviewRequestRead:
+    assert current_user.id is not None
+    return create_high_res_review_request(session, owner_user_id=int(current_user.id), payload=payload)
+
+
+@app.get("/high-res-review-requests/stats", response_model=HighResReviewRequestStatsRead)
+def owner_high_res_review_requests_stats_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HighResReviewRequestStatsRead:
+    assert current_user.id is not None
+    return high_res_review_request_stats_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/high-res-review-requests", response_model=HighResReviewRequestListResponse)
+def owner_list_high_res_review_requests_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    inventory_copy_id: Annotated[int | None, Query(ge=1)] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+    priority: Annotated[str | None, Query()] = None,
+    reason: Annotated[str | None, Query(alias="reason")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> HighResReviewRequestListResponse:
+    assert current_user.id is not None
+    return list_high_res_review_requests_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_copy_id=inventory_copy_id,
+        status_filter=status_filter,
+        priority_filter=priority,
+        reason_filter=reason,
+        limit=int(limit),
+        offset=int(offset),
+    )
+
+
+@app.get("/high-res-review-requests/{request_id}", response_model=HighResReviewRequestRead)
+def owner_get_high_res_review_request_endpoint(
+    request_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HighResReviewRequestRead:
+    assert current_user.id is not None
+    return get_high_res_review_request_detail(session, owner_user_id=int(current_user.id), request_id=request_id)
+
+
+@app.post("/high-res-review-requests/{request_id}/attach-scan", response_model=HighResReviewRequestRead)
+async def owner_attach_high_res_review_scan_endpoint(
+    request_id: int,
+    file: Annotated[UploadFile, File(description="Deterministic Epson/flatbed high-resolution scan.")],
+    source_filename: Annotated[str | None, Form()] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> HighResReviewRequestRead:
+    assert current_user.id is not None
+    body = await file.read()
+    return attach_high_res_review_scan_multipart(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        request_id=request_id,
+        body=body,
+        declared_content_type=file.content_type,
+        source_filename=source_filename if source_filename else file.filename,
+    )
+
+
+@app.post("/high-res-review-requests/{request_id}/cancel", response_model=HighResReviewRequestRead)
+def owner_cancel_high_res_review_request_endpoint(
+    request_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HighResReviewRequestRead:
+    assert current_user.id is not None
+    return cancel_high_res_review_request(session, owner_user_id=int(current_user.id), request_id=request_id)
+
+
+@app.post("/high-res-review-requests/{request_id}/complete", response_model=HighResReviewRequestRead)
+def owner_complete_high_res_review_request_endpoint(
+    request_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HighResReviewRequestRead:
+    assert current_user.id is not None
+    return complete_high_res_review_request(session, owner_user_id=int(current_user.id), request_id=request_id)
+
+
+@app.get("/ops/scan-sessions", response_model=ScanSessionListResponse, include_in_schema=False)
+def ops_list_scan_sessions(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: Annotated[int | None, Query(description="Filter sessions by deterministic owner user id.")] = None,
+    status_filter: Annotated[ScanSessionStatus | None, Query(alias="status")] = None,
+    session_type: Annotated[ScanSessionType | None, Query(alias="session_type")] = None,
+    limit: Annotated[int, Query(ge=1, le=250)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanSessionListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    rows = list_scan_sessions(
+        session,
+        owner_user_id=owner_user_id,
+        status=status_filter,
+        session_type=session_type,
+        limit=limit,
+        offset=offset,
+    )
+    return ScanSessionListResponse(sessions=rows)
+
+
+@app.get("/ops/scan-sessions/{session_id}", response_model=ScanSessionDetailRead, include_in_schema=False)
+def ops_get_scan_session(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanSessionDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_scan_session_detail(session, owner_user_id=None, session_id=session_id)
+
+
+@app.get("/ops/scan-sessions/{session_id}/items", response_model=ScanSessionItemsListRead, include_in_schema=False)
+def ops_list_scan_session_items_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    limit: Annotated[int, Query(ge=1, le=2500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ScanSessionItemsListRead:
+    ensure_ops_admin_access(current_user, settings)
+    return list_scan_session_items_read(
+        session,
+        owner_user_id=None,
+        session_id=session_id,
+        limit=int(limit),
+        offset=int(offset),
+    )
+
+
+@app.get("/ops/scan-sessions/{session_id}/qa", response_model=ScanSessionQaSummaryRead, include_in_schema=False)
+def ops_get_scan_session_qa_endpoint(
+    session_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanSessionQaSummaryRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_scan_session_qa(session, owner_user_id=None, scan_session_id=session_id)
+
+
+@app.get("/ops/scan-sessions/{session_id}/items/{item_id}/qa", response_model=ScanQaItemRead, include_in_schema=False)
+def ops_get_scan_session_item_qa_endpoint(
+    session_id: int,
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanQaItemRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_scan_session_item_qa(session, owner_user_id=None, scan_session_id=session_id, item_id=item_id)
+
+
+@app.get("/ops/scan-qa/summary", response_model=OpsScanQaFleetSummaryRead, include_in_schema=False)
+def ops_scan_qa_fleet_summary_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OpsScanQaFleetSummaryRead:
+    ensure_ops_admin_access(current_user, settings)
+    return fleet_scan_qa_summary(session)
+
+
+@app.get("/ops/high-res-review-requests/stats", response_model=HighResReviewRequestStatsRead, include_in_schema=False)
+def ops_high_res_review_requests_stats_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> HighResReviewRequestStatsRead:
+    ensure_ops_admin_access(current_user, settings)
+    return high_res_review_request_stats_ops(session)
+
+
+@app.get("/ops/high-res-review-requests", response_model=HighResReviewRequestListResponse, include_in_schema=False)
+def ops_list_high_res_review_requests_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: Annotated[int | None, Query(description="Filter by deterministic owning user id.")] = None,
+    inventory_copy_id: Annotated[int | None, Query(ge=1)] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+    priority: Annotated[str | None, Query()] = None,
+    reason: Annotated[str | None, Query(alias="reason")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 250,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> HighResReviewRequestListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_high_res_review_requests_ops(
+        session,
+        owner_user_id_filter=owner_user_id,
+        inventory_copy_id=inventory_copy_id,
+        status_filter=status_filter,
+        priority_filter=priority,
+        reason_filter=reason,
+        limit=int(limit),
+        offset=int(offset),
+    )
+
+
+@app.get("/ops/high-res-review-requests/{request_id}", response_model=HighResReviewRequestRead, include_in_schema=False)
+def ops_get_high_res_review_request_endpoint(
+    request_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> HighResReviewRequestRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_high_res_review_request_detail(session, owner_user_id=None, request_id=request_id)
+
+
 @app.get("/missing-issues", response_model=MissingIssueListRead)
 def list_missing_issues_endpoint(
     session: Session = Depends(get_session),
@@ -5747,6 +6248,16 @@ def get_inventory_copy(
         current_user=current_user,
         inventory_copy_id=inventory_copy_id,
     )
+
+
+@app.get("/inventory/{inventory_copy_id}/scan-qa", response_model=InventoryScanQaPanelRead)
+def get_inventory_cover_scan_qa_endpoint(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryScanQaPanelRead:
+    assert current_user.id is not None
+    return inventory_cover_scan_qa(session, owner_user_id=int(current_user.id), inventory_copy_id=inventory_copy_id)
 
 
 @app.get("/inventory/{inventory_copy_id}/timeline", response_model=CollectionTimelineEventsResponse)
