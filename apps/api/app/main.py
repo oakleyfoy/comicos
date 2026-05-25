@@ -263,6 +263,11 @@ from app.schemas.high_res_review_requests import (
 from app.schemas.market_sales import (
     MarketSaleListResponse,
     MarketSaleRead,
+    MarketSaleReviewActionPayload,
+    MarketSaleNormalizationIssueRead,
+    MarketSaleNormalizationUpdatePayload,
+    MarketSaleReviewQueueResponse,
+    MarketSaleReviewQueueSummaryRead,
     MarketSourceImportRunCreatePayload,
     MarketSourceImportRunListResponse,
     MarketSourceImportRunRead,
@@ -417,7 +422,6 @@ from app.services.market_sales import (
     cancel_market_import_run_for_ops,
     complete_market_import_run_for_ops,
     create_market_import_run_for_ops,
-    get_market_sale_record,
     get_market_import_run_for_owner,
     get_market_source_read,
     list_market_import_runs_for_ops,
@@ -426,6 +430,15 @@ from app.services.market_sales import (
     list_market_sales,
     start_market_import_run_for_ops,
     upsert_market_sale_record,
+)
+from app.services.market_sale_review_queue import (
+    flag_duplicate_market_sale_record,
+    get_market_sale_review_detail,
+    ignore_market_sale_record,
+    list_market_sale_normalization_issues,
+    list_market_sale_review_queue,
+    market_sale_review_queue_summary,
+    update_market_sale_normalization,
 )
 from app.services.scan_qa import (
     fleet_scan_qa_summary,
@@ -5957,8 +5970,13 @@ def owner_get_market_sale_endpoint(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> MarketSaleRead:
-    del current_user
-    return get_market_sale_record(session, market_sale_record_id=market_sale_record_id)
+    assert current_user.id is not None
+    return get_market_sale_review_detail(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        ops_mode=False,
+        owner_user_id=int(current_user.id),
+    )
 
 
 @app.get("/ops/market-sales", response_model=MarketSaleListResponse)
@@ -5999,7 +6017,12 @@ def ops_get_market_sale_endpoint(
     settings: Settings = Depends(get_settings),
 ) -> MarketSaleRead:
     ensure_ops_admin_access(current_user, settings)
-    return get_market_sale_record(session, market_sale_record_id=market_sale_record_id)
+    return get_market_sale_review_detail(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        ops_mode=True,
+        owner_user_id=None,
+    )
 
 
 @app.post("/ops/market-sales", response_model=MarketSaleRead, status_code=status.HTTP_201_CREATED)
@@ -6011,6 +6034,202 @@ def ops_upsert_market_sale_endpoint(
 ) -> MarketSaleRead:
     ensure_ops_admin_access(current_user, settings)
     return upsert_market_sale_record(session, payload=payload)
+
+
+@app.get("/market-sale-review-queue", response_model=MarketSaleReviewQueueResponse)
+def owner_list_market_sale_review_queue_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    classification: Annotated[
+        str | None,
+        Query(description="Filter by deterministic review classification."),
+    ] = None,
+    priority: Annotated[str | None, Query(description="Filter by static priority lane.")] = None,
+    review_status: Annotated[str | None, Query(description="Filter by record review status.")] = None,
+    source: Annotated[str | None, Query(description="Filter by source name or type.")] = None,
+    source_type: Annotated[str | None, Query(description="Filter by source type.")] = None,
+    issue_type: Annotated[str | None, Query(description="Filter by normalization issue type.")] = None,
+) -> MarketSaleReviewQueueResponse:
+    assert current_user.id is not None
+    return list_market_sale_review_queue(
+        session,
+        ops_mode=False,
+        owner_user_id=int(current_user.id),
+        classification=classification,  # type: ignore[arg-type]
+        priority=priority,  # type: ignore[arg-type]
+        review_status=review_status,  # type: ignore[arg-type]
+        source=source,
+        source_type=source_type,
+        issue_type=issue_type,  # type: ignore[arg-type]
+    )
+
+
+@app.get("/market-sale-review-queue/summary", response_model=MarketSaleReviewQueueSummaryRead)
+def owner_market_sale_review_queue_summary_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    classification: Annotated[
+        str | None,
+        Query(description="Filter by deterministic review classification."),
+    ] = None,
+    priority: Annotated[str | None, Query(description="Filter by static priority lane.")] = None,
+    review_status: Annotated[str | None, Query(description="Filter by record review status.")] = None,
+    source: Annotated[str | None, Query(description="Filter by source name or type.")] = None,
+    source_type: Annotated[str | None, Query(description="Filter by source type.")] = None,
+    issue_type: Annotated[str | None, Query(description="Filter by normalization issue type.")] = None,
+) -> MarketSaleReviewQueueSummaryRead:
+    assert current_user.id is not None
+    return market_sale_review_queue_summary(
+        session,
+        ops_mode=False,
+        owner_user_id=int(current_user.id),
+        classification=classification,  # type: ignore[arg-type]
+        priority=priority,  # type: ignore[arg-type]
+        review_status=review_status,  # type: ignore[arg-type]
+        source=source,
+        source_type=source_type,
+        issue_type=issue_type,  # type: ignore[arg-type]
+    )
+
+
+@app.get("/market-sales/{market_sale_record_id}/normalization-issues", response_model=list[MarketSaleNormalizationIssueRead])
+def owner_get_market_sale_normalization_issues_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[MarketSaleNormalizationIssueRead]:
+    assert current_user.id is not None
+    return list_market_sale_normalization_issues(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        ops_mode=False,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@app.get("/ops/market-sale-review-queue", response_model=MarketSaleReviewQueueResponse)
+def ops_list_market_sale_review_queue_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    classification: Annotated[
+        str | None,
+        Query(description="Filter by deterministic review classification."),
+    ] = None,
+    priority: Annotated[str | None, Query(description="Filter by static priority lane.")] = None,
+    review_status: Annotated[str | None, Query(description="Filter by record review status.")] = None,
+    source: Annotated[str | None, Query(description="Filter by source name or type.")] = None,
+    source_type: Annotated[str | None, Query(description="Filter by source type.")] = None,
+    issue_type: Annotated[str | None, Query(description="Filter by normalization issue type.")] = None,
+) -> MarketSaleReviewQueueResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_sale_review_queue(
+        session,
+        ops_mode=True,
+        owner_user_id=None,
+        classification=classification,  # type: ignore[arg-type]
+        priority=priority,  # type: ignore[arg-type]
+        review_status=review_status,  # type: ignore[arg-type]
+        source=source,
+        source_type=source_type,
+        issue_type=issue_type,  # type: ignore[arg-type]
+    )
+
+
+@app.get("/ops/market-sale-review-queue/summary", response_model=MarketSaleReviewQueueSummaryRead)
+def ops_market_sale_review_queue_summary_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    classification: Annotated[
+        str | None,
+        Query(description="Filter by deterministic review classification."),
+    ] = None,
+    priority: Annotated[str | None, Query(description="Filter by static priority lane.")] = None,
+    review_status: Annotated[str | None, Query(description="Filter by record review status.")] = None,
+    source: Annotated[str | None, Query(description="Filter by source name or type.")] = None,
+    source_type: Annotated[str | None, Query(description="Filter by source type.")] = None,
+    issue_type: Annotated[str | None, Query(description="Filter by normalization issue type.")] = None,
+) -> MarketSaleReviewQueueSummaryRead:
+    ensure_ops_admin_access(current_user, settings)
+    return market_sale_review_queue_summary(
+        session,
+        ops_mode=True,
+        owner_user_id=None,
+        classification=classification,  # type: ignore[arg-type]
+        priority=priority,  # type: ignore[arg-type]
+        review_status=review_status,  # type: ignore[arg-type]
+        source=source,
+        source_type=source_type,
+        issue_type=issue_type,  # type: ignore[arg-type]
+    )
+
+
+@app.get("/ops/market-sales/{market_sale_record_id}/normalization-issues", response_model=list[MarketSaleNormalizationIssueRead])
+def ops_get_market_sale_normalization_issues_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[MarketSaleNormalizationIssueRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_sale_normalization_issues(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        ops_mode=True,
+        owner_user_id=None,
+    )
+
+
+@app.patch("/ops/market-sales/{market_sale_record_id}/normalization", response_model=MarketSaleRead)
+def ops_patch_market_sale_normalization_endpoint(
+    market_sale_record_id: int,
+    payload: MarketSaleNormalizationUpdatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleRead:
+    ensure_ops_admin_access(current_user, settings)
+    return update_market_sale_normalization(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        actor_user_id=current_user.id,
+        payload=payload,
+    )
+
+
+@app.post("/ops/market-sales/{market_sale_record_id}/ignore", response_model=MarketSaleRead)
+def ops_ignore_market_sale_record_endpoint(
+    market_sale_record_id: int,
+    payload: MarketSaleReviewActionPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleRead:
+    ensure_ops_admin_access(current_user, settings)
+    return ignore_market_sale_record(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        actor_user_id=current_user.id,
+        payload=payload,
+    )
+
+
+@app.post("/ops/market-sales/{market_sale_record_id}/flag-duplicate", response_model=MarketSaleRead)
+def ops_flag_duplicate_market_sale_record_endpoint(
+    market_sale_record_id: int,
+    payload: MarketSaleReviewActionPayload | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleRead:
+    ensure_ops_admin_access(current_user, settings)
+    return flag_duplicate_market_sale_record(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        actor_user_id=current_user.id,
+        payload=payload,
+    )
 
 
 @app.get("/market-sources", response_model=list[MarketSourceRead])

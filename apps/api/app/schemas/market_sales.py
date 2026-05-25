@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MarketSaleListingType = Literal["auction", "fixed_price", "accepted_offer", "buy_it_now", "other"]
 MarketSaleNormalizationStatus = Literal["raw", "partially_normalized", "normalized", "normalization_failed", "ignored"]
+MarketSaleReviewStatus = Literal["pending", "reviewed", "ignored", "duplicate_flagged"]
 MarketSaleGradingCompany = Literal["CGC", "CBCS", "PGX", "other"]
 MarketSaleIssueType = Literal[
     "missing_issue_number",
@@ -19,6 +20,19 @@ MarketSaleIssueType = Literal[
     "unsupported_currency",
 ]
 MarketSaleIssueSeverity = Literal["info", "warning", "critical"]
+MarketSaleReviewClassification = Literal[
+    "needs_title_review",
+    "needs_issue_review",
+    "needs_variant_review",
+    "needs_grade_review",
+    "needs_price_review",
+    "possible_duplicate",
+    "unsupported_currency",
+    "ready_for_comp_review",
+    "ignored",
+]
+MarketSaleReviewPriority = Literal["critical", "high", "medium", "low", "info"]
+MarketSaleReviewActionType = Literal["mark_reviewed", "ignore_record", "flag_duplicate", "manual_normalization_update"]
 MarketSourceType = Literal["marketplace", "auction", "fixed_price", "historical_archive", "other"]
 MarketSourceImportRunStatus = Literal["pending", "running", "cancelled", "completed"]
 MarketSourceImportRunEventType = Literal["created", "started", "cancelled", "completed"]
@@ -131,6 +145,19 @@ class MarketSaleNormalizationIssueRead(BaseModel):
     created_at: datetime
 
 
+class MarketSaleReviewActionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    market_sale_record_id: int
+    action_type: MarketSaleReviewActionType
+    actor_user_id: int | None = None
+    details_json: dict[str, Any] = Field(default_factory=dict)
+    before_snapshot_json: dict[str, Any] = Field(default_factory=dict)
+    after_snapshot_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
 class MarketSaleSummaryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -174,7 +201,54 @@ class MarketSaleRead(MarketSaleSummaryRead):
     source_metadata_json: dict[str, Any]
     images: list[MarketSaleRecordImageRead] = Field(default_factory=list)
     normalization_issues: list[MarketSaleNormalizationIssueRead] = Field(default_factory=list)
+    review_status: MarketSaleReviewStatus = "pending"
+    review_actions: list[MarketSaleReviewActionRead] = Field(default_factory=list)
     source_snapshot: MarketSourceSnapshotRead | None = None
+
+
+class MarketSaleReviewQueueItemRead(MarketSaleSummaryRead):
+    review_status: MarketSaleReviewStatus = "pending"
+    queue_classification: MarketSaleReviewClassification
+    queue_priority: MarketSaleReviewPriority
+    queue_reasons: list[str] = Field(default_factory=list)
+    issue_types: list[MarketSaleIssueType] = Field(default_factory=list)
+
+
+class MarketSaleReviewQueueResponse(BaseModel):
+    items: list[MarketSaleReviewQueueItemRead] = Field(default_factory=list)
+    total: int = 0
+
+
+class MarketSaleReviewQueueSummaryRead(BaseModel):
+    total: int = 0
+    by_classification: dict[MarketSaleReviewClassification, int] = Field(default_factory=dict)
+    by_priority: dict[MarketSaleReviewPriority, int] = Field(default_factory=dict)
+
+
+class MarketSaleNormalizationUpdatePayload(BaseModel):
+    normalized_title: str | None = Field(default=None, max_length=510)
+    normalized_issue: str | None = Field(default=None, max_length=120)
+    normalized_publisher: str | None = Field(default=None, max_length=255)
+    normalized_variant: str | None = Field(default=None, max_length=255)
+    normalized_grade: str | None = Field(default=None, max_length=120)
+    normalized_cert_number: str | None = Field(default=None, max_length=120)
+    normalization_status: MarketSaleNormalizationStatus | None = None
+    mark_reviewed: bool = False
+    review_note: str | None = Field(default=None, max_length=4096)
+
+    _trim_normalized_title = field_validator("normalized_title", mode="before")(_trim)
+    _trim_normalized_issue = field_validator("normalized_issue", mode="before")(_trim)
+    _trim_normalized_publisher = field_validator("normalized_publisher", mode="before")(_trim)
+    _trim_normalized_variant = field_validator("normalized_variant", mode="before")(_trim)
+    _trim_normalized_grade = field_validator("normalized_grade", mode="before")(_trim)
+    _trim_normalized_cert_number = field_validator("normalized_cert_number", mode="before")(_trim)
+    _trim_review_note = field_validator("review_note", mode="before")(_trim)
+
+
+class MarketSaleReviewActionPayload(BaseModel):
+    reason: str | None = Field(default=None, max_length=4096)
+
+    _trim_reason = field_validator("reason", mode="before")(_trim)
 
 
 class MarketSaleRecordImageUpsertPayload(BaseModel):

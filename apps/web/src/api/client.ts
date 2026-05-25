@@ -2394,11 +2394,86 @@ export interface MarketSaleRead extends MarketSaleSummaryRead {
   source_metadata_json: Record<string, unknown>;
   images: MarketSaleRecordImageRead[];
   normalization_issues: MarketSaleNormalizationIssueRead[];
+  review_status: MarketSaleReviewStatus;
+  review_actions: MarketSaleReviewActionRead[];
   source_snapshot: MarketSourceSnapshotRead | null;
+}
+
+export type MarketSaleReviewStatus = "pending" | "reviewed" | "ignored" | "duplicate_flagged";
+export type MarketSaleReviewClassification =
+  | "needs_title_review"
+  | "needs_issue_review"
+  | "needs_variant_review"
+  | "needs_grade_review"
+  | "needs_price_review"
+  | "possible_duplicate"
+  | "unsupported_currency"
+  | "ready_for_comp_review"
+  | "ignored";
+export type MarketSaleReviewPriority = "critical" | "high" | "medium" | "low" | "info";
+export type MarketSaleReviewActionType =
+  | "mark_reviewed"
+  | "ignore_record"
+  | "flag_duplicate"
+  | "manual_normalization_update";
+
+export interface MarketSaleReviewActionRead {
+  id: number;
+  market_sale_record_id: number;
+  action_type: MarketSaleReviewActionType;
+  actor_user_id: number | null;
+  details_json: Record<string, unknown>;
+  before_snapshot_json: Record<string, unknown>;
+  after_snapshot_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketSaleReviewQueueItemRead extends MarketSaleSummaryRead {
+  review_status: MarketSaleReviewStatus;
+  queue_classification: MarketSaleReviewClassification;
+  queue_priority: MarketSaleReviewPriority;
+  queue_reasons: string[];
+  issue_types: MarketSaleIssueType[];
+}
+
+export interface MarketSaleReviewQueueResponse {
+  items: MarketSaleReviewQueueItemRead[];
+  total: number;
+}
+
+export interface MarketSaleReviewQueueSummaryRead {
+  total: number;
+  by_classification: Record<MarketSaleReviewClassification, number>;
+  by_priority: Record<MarketSaleReviewPriority, number>;
+}
+
+export interface MarketSaleNormalizationUpdatePayload {
+  normalized_title?: string | null;
+  normalized_issue?: string | null;
+  normalized_publisher?: string | null;
+  normalized_variant?: string | null;
+  normalized_grade?: string | null;
+  normalized_cert_number?: string | null;
+  normalization_status?: MarketSaleNormalizationStatus | null;
+  mark_reviewed?: boolean;
+  review_note?: string | null;
+}
+
+export interface MarketSaleReviewActionPayload {
+  reason?: string | null;
 }
 
 export interface MarketSaleListResponse {
   items: MarketSaleSummaryRead[];
+}
+
+export interface MarketSaleReviewQueueListParams {
+  classification?: MarketSaleReviewClassification;
+  priority?: MarketSaleReviewPriority;
+  review_status?: MarketSaleReviewStatus;
+  source?: string;
+  source_type?: string;
+  issue_type?: string;
 }
 
 export type MarketSaleListParams = {
@@ -4034,6 +4109,20 @@ export const apiClient = {
     return request<MarketSaleRead>(`/market-sales/${marketSaleRecordId}`);
   },
 
+  getMarketSaleNormalizationIssues(marketSaleRecordId: number): Promise<MarketSaleNormalizationIssueRead[]> {
+    return request<MarketSaleNormalizationIssueRead[]>(`/market-sales/${marketSaleRecordId}/normalization-issues`);
+  },
+
+  getMarketSaleReviewQueue(params?: MarketSaleReviewQueueListParams): Promise<MarketSaleReviewQueueResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleReviewQueueResponse>(`/market-sale-review-queue${query}`);
+  },
+
+  getMarketSaleReviewQueueSummary(params?: MarketSaleReviewQueueListParams): Promise<MarketSaleReviewQueueSummaryRead> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleReviewQueueSummaryRead>(`/market-sale-review-queue/summary${query}`);
+  },
+
   getOpsMarketSales(params?: MarketSaleListParams): Promise<MarketSaleListResponse> {
     const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<MarketSaleListResponse>(`/ops/market-sales${query}`);
@@ -4041,6 +4130,51 @@ export const apiClient = {
 
   getOpsMarketSale(marketSaleRecordId: number): Promise<MarketSaleRead> {
     return request<MarketSaleRead>(`/ops/market-sales/${marketSaleRecordId}`);
+  },
+
+  getOpsMarketSaleNormalizationIssues(marketSaleRecordId: number): Promise<MarketSaleNormalizationIssueRead[]> {
+    return request<MarketSaleNormalizationIssueRead[]>(
+      `/ops/market-sales/${marketSaleRecordId}/normalization-issues`,
+    );
+  },
+
+  getOpsMarketSaleReviewQueue(params?: MarketSaleReviewQueueListParams): Promise<MarketSaleReviewQueueResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleReviewQueueResponse>(`/ops/market-sale-review-queue${query}`);
+  },
+
+  getOpsMarketSaleReviewQueueSummary(
+    params?: MarketSaleReviewQueueListParams,
+  ): Promise<MarketSaleReviewQueueSummaryRead> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleReviewQueueSummaryRead>(`/ops/market-sale-review-queue/summary${query}`);
+  },
+
+  patchOpsMarketSaleNormalization(
+    marketSaleRecordId: number,
+    payload: MarketSaleNormalizationUpdatePayload,
+  ): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>(`/ops/market-sales/${marketSaleRecordId}/normalization`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  ignoreOpsMarketSale(marketSaleRecordId: number, payload?: MarketSaleReviewActionPayload): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>(`/ops/market-sales/${marketSaleRecordId}/ignore`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  flagDuplicateOpsMarketSale(
+    marketSaleRecordId: number,
+    payload?: MarketSaleReviewActionPayload,
+  ): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>(`/ops/market-sales/${marketSaleRecordId}/flag-duplicate`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
   },
 
   upsertOpsMarketSale(payload: MarketSaleUpsertPayload): Promise<MarketSaleRead> {

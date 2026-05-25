@@ -414,6 +414,7 @@ class MarketSaleRecord(SQLModel, table=True):
     source_url: str | None = Field(default=None, max_length=1024, nullable=True)
     source_metadata_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     normalization_status: str = Field(max_length=32, nullable=False, index=True)
+    review_status: str = Field(default="pending", max_length=24, nullable=False, index=True)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -453,6 +454,24 @@ class MarketSaleNormalizationIssue(SQLModel, table=True):
     issue_type: str = Field(max_length=40, nullable=False, index=True)
     severity: str = Field(max_length=20, nullable=False, index=True)
     details_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSaleReviewAction(SQLModel, table=True):
+    """Append-only human review audit trail for market-sale normalization workflows."""
+
+    __tablename__ = "market_sale_review_action"
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_sale_record_id: int = Field(foreign_key="market_sale_record.id", nullable=False, index=True)
+    action_type: str = Field(max_length=40, nullable=False, index=True)
+    actor_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    details_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    before_snapshot_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    after_snapshot_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

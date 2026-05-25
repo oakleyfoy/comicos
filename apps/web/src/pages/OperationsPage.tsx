@@ -63,6 +63,13 @@ import {
   type HighResReviewRequestStatsRead,
   type HighResReviewRequestStatus,
   type MarketSaleRead,
+  type MarketSaleNormalizationUpdatePayload,
+  type MarketSaleReviewActionPayload,
+  type MarketSaleReviewClassification,
+  type MarketSaleReviewPriority,
+  type MarketSaleReviewQueueResponse,
+  type MarketSaleReviewQueueSummaryRead,
+  type MarketSaleReviewStatus,
   type MarketSaleSummaryRead,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
@@ -161,6 +168,30 @@ function marketSaleIssueTone(severity: string): string {
   }
 }
 
+function marketSaleReviewPriorityTone(priority: MarketSaleReviewPriority): string {
+  switch (priority) {
+    case "critical":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "high":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "medium":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "low":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "info":
+    default:
+      return "border-slate-400/35 bg-slate-400/10 text-slate-100";
+  }
+}
+
+function marketSaleReviewClassificationLabel(classification: MarketSaleReviewClassification): string {
+  return classification.replace(/_/g, " ");
+}
+
+function marketSaleReviewStatusLabel(status: MarketSaleReviewStatus): string {
+  return status.replace(/_/g, " ");
+}
+
 const OPS_HIGH_RES_STATUSES: HighResReviewRequestStatus[] = [
   "pending",
   "scanned",
@@ -178,6 +209,26 @@ const OPS_HIGH_RES_REASONS: HighResReviewRequestReason[] = [
   "valuable_review_candidate",
   "manual_review",
   "rescan_required",
+];
+
+const OPS_MARKET_SALE_REVIEW_CLASSIFICATIONS: MarketSaleReviewClassification[] = [
+  "needs_title_review",
+  "needs_issue_review",
+  "needs_variant_review",
+  "needs_grade_review",
+  "needs_price_review",
+  "possible_duplicate",
+  "unsupported_currency",
+  "ready_for_comp_review",
+  "ignored",
+];
+
+const OPS_MARKET_SALE_REVIEW_PRIORITIES: MarketSaleReviewPriority[] = [
+  "critical",
+  "high",
+  "medium",
+  "low",
+  "info",
 ];
 
 type OpsHistoricalTimelineFilters = {
@@ -1073,6 +1124,7 @@ export function OperationsPage() {
   const [opsScanPipelineDashLoading, setOpsScanPipelineDashLoading] = useState(true);
   const [opsScanPipelineDashError, setOpsScanPipelineDashError] = useState<string | null>(null);
 
+  const [opsMarketSalesRefreshTick, setOpsMarketSalesRefreshTick] = useState(0);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -1080,6 +1132,26 @@ export function OperationsPage() {
   const [opsMarketSaleDetail, setOpsMarketSaleDetail] = useState<MarketSaleRead | null>(null);
   const [opsMarketSaleDetailLoading, setOpsMarketSaleDetailLoading] = useState(false);
   const [opsMarketSaleDetailError, setOpsMarketSaleDetailError] = useState<string | null>(null);
+  const [opsMarketSaleNormalizationDraft, setOpsMarketSaleNormalizationDraft] =
+    useState<MarketSaleNormalizationUpdatePayload>({ mark_reviewed: false });
+  const [opsMarketSaleReviewQueueRefreshTick, setOpsMarketSaleReviewQueueRefreshTick] = useState(0);
+  const [opsMarketSaleReviewQueue, setOpsMarketSaleReviewQueue] = useState<MarketSaleReviewQueueResponse | null>(null);
+  const [opsMarketSaleReviewQueueLoading, setOpsMarketSaleReviewQueueLoading] = useState(true);
+  const [opsMarketSaleReviewQueueError, setOpsMarketSaleReviewQueueError] = useState<string | null>(null);
+  const [opsMarketSaleReviewQueueSummary, setOpsMarketSaleReviewQueueSummary] =
+    useState<MarketSaleReviewQueueSummaryRead | null>(null);
+  const [opsMarketSaleReviewClassificationFilter, setOpsMarketSaleReviewClassificationFilter] = useState<
+    "" | MarketSaleReviewClassification
+  >("");
+  const [opsMarketSaleReviewPriorityFilter, setOpsMarketSaleReviewPriorityFilter] = useState<
+    "" | MarketSaleReviewPriority
+  >("");
+  const [opsMarketSaleReviewStatusFilter, setOpsMarketSaleReviewStatusFilter] = useState<
+    "" | MarketSaleReviewStatus
+  >("");
+  const [opsMarketSaleReviewSourceFilter, setOpsMarketSaleReviewSourceFilter] = useState("");
+  const [opsMarketSaleReviewSourceTypeFilter, setOpsMarketSaleReviewSourceTypeFilter] = useState("");
+  const [opsMarketSaleReviewIssueTypeFilter, setOpsMarketSaleReviewIssueTypeFilter] = useState("");
 
   const [opsScanSessions, setOpsScanSessions] = useState<ScanSessionSummary[]>([]);
   const [opsScanSessionsLoading, setOpsScanSessionsLoading] = useState(true);
@@ -1231,7 +1303,57 @@ export function OperationsPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [opsMarketSalesRefreshTick]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketSaleReviewQueueLoading(true);
+      setOpsMarketSaleReviewQueueError(null);
+      const params = {
+        ...(opsMarketSaleReviewClassificationFilter ? { classification: opsMarketSaleReviewClassificationFilter } : {}),
+        ...(opsMarketSaleReviewPriorityFilter ? { priority: opsMarketSaleReviewPriorityFilter } : {}),
+        ...(opsMarketSaleReviewStatusFilter ? { review_status: opsMarketSaleReviewStatusFilter } : {}),
+        ...(opsMarketSaleReviewSourceFilter.trim() ? { source: opsMarketSaleReviewSourceFilter.trim() } : {}),
+        ...(opsMarketSaleReviewSourceTypeFilter.trim() ? { source_type: opsMarketSaleReviewSourceTypeFilter.trim() } : {}),
+        ...(opsMarketSaleReviewIssueTypeFilter.trim() ? { issue_type: opsMarketSaleReviewIssueTypeFilter.trim() } : {}),
+      };
+      try {
+        const [queue, summary] = await Promise.all([
+          apiClient.getOpsMarketSaleReviewQueue(params),
+          apiClient.getOpsMarketSaleReviewQueueSummary(params),
+        ]);
+        if (!ignore) {
+          setOpsMarketSaleReviewQueue(queue);
+          setOpsMarketSaleReviewQueueSummary(summary);
+          setOpsMarketSaleSelectedId((cur) => cur ?? queue.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketSaleReviewQueue(null);
+          setOpsMarketSaleReviewQueueSummary(null);
+          setOpsMarketSaleReviewQueueError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market sale review queue.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketSaleReviewQueueLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketSaleReviewClassificationFilter,
+    opsMarketSaleReviewPriorityFilter,
+    opsMarketSaleReviewStatusFilter,
+    opsMarketSaleReviewSourceFilter,
+    opsMarketSaleReviewSourceTypeFilter,
+    opsMarketSaleReviewIssueTypeFilter,
+    opsMarketSaleReviewQueueRefreshTick,
+  ]);
 
   useEffect(() => {
     let ignore = false;
@@ -1265,7 +1387,25 @@ export function OperationsPage() {
     return () => {
       ignore = true;
     };
-  }, [opsMarketSaleSelectedId]);
+  }, [opsMarketSaleSelectedId, opsMarketSalesRefreshTick, opsMarketSaleReviewQueueRefreshTick]);
+
+  useEffect(() => {
+    if (!opsMarketSaleDetail) {
+      setOpsMarketSaleNormalizationDraft({ mark_reviewed: false });
+      return;
+    }
+    setOpsMarketSaleNormalizationDraft({
+      normalized_title: opsMarketSaleDetail.normalized_title,
+      normalized_issue: opsMarketSaleDetail.normalized_issue,
+      normalized_publisher: opsMarketSaleDetail.normalized_publisher,
+      normalized_variant: opsMarketSaleDetail.normalized_variant,
+      normalized_grade: opsMarketSaleDetail.normalized_grade,
+      normalized_cert_number: opsMarketSaleDetail.normalized_cert_number,
+      normalization_status: opsMarketSaleDetail.normalization_status,
+      mark_reviewed: false,
+      review_note: "",
+    });
+  }, [opsMarketSaleDetail]);
 
   useEffect(() => {
     let ignore = false;
@@ -1402,6 +1542,54 @@ export function OperationsPage() {
       duplicateWarnings,
     };
   }, [opsMarketSales]);
+
+  const refreshMarketSalesAndReviewQueue = useCallback(() => {
+    setOpsMarketSalesRefreshTick((value) => value + 1);
+    setOpsMarketSaleReviewQueueRefreshTick((value) => value + 1);
+  }, []);
+
+  const handleMarketSaleNormalizationSave = useCallback(async () => {
+    if (opsMarketSaleSelectedId == null) {
+      return;
+    }
+    try {
+      const updated = await apiClient.patchOpsMarketSaleNormalization(opsMarketSaleSelectedId, opsMarketSaleNormalizationDraft);
+      setOpsMarketSaleDetail(updated);
+      refreshMarketSalesAndReviewQueue();
+    } catch (err) {
+      setOpsMarketSaleDetailError(err instanceof ApiError ? err.message : "Unable to save market-sale normalization.");
+    }
+  }, [opsMarketSaleNormalizationDraft, opsMarketSaleSelectedId, refreshMarketSalesAndReviewQueue]);
+
+  const handleMarketSaleIgnore = useCallback(async () => {
+    if (opsMarketSaleSelectedId == null) {
+      return;
+    }
+    try {
+      const updated = await apiClient.ignoreOpsMarketSale(opsMarketSaleSelectedId, {
+        reason: opsMarketSaleNormalizationDraft.review_note ?? undefined,
+      });
+      setOpsMarketSaleDetail(updated);
+      refreshMarketSalesAndReviewQueue();
+    } catch (err) {
+      setOpsMarketSaleDetailError(err instanceof ApiError ? err.message : "Unable to ignore market-sale record.");
+    }
+  }, [opsMarketSaleNormalizationDraft.review_note, opsMarketSaleSelectedId, refreshMarketSalesAndReviewQueue]);
+
+  const handleMarketSaleFlagDuplicate = useCallback(async () => {
+    if (opsMarketSaleSelectedId == null) {
+      return;
+    }
+    try {
+      const updated = await apiClient.flagDuplicateOpsMarketSale(opsMarketSaleSelectedId, {
+        reason: opsMarketSaleNormalizationDraft.review_note ?? undefined,
+      });
+      setOpsMarketSaleDetail(updated);
+      refreshMarketSalesAndReviewQueue();
+    } catch (err) {
+      setOpsMarketSaleDetailError(err instanceof ApiError ? err.message : "Unable to flag duplicate.");
+    }
+  }, [opsMarketSaleNormalizationDraft.review_note, opsMarketSaleSelectedId, refreshMarketSalesAndReviewQueue]);
 
   useEffect(() => {
     if (opsScanSessionSelectedId == null) {
@@ -3198,6 +3386,176 @@ export function OperationsPage() {
                         </pre>
                       </div>
                     </div>
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Normalization editor
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Manual updates only. Raw fields and issue history stay intact.
+                          </p>
+                        </div>
+                        <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketSaleReviewPriorityTone(
+                          opsMarketSaleDetail.review_status === "ignored"
+                            ? "info"
+                            : opsMarketSaleDetail.review_status === "duplicate_flagged"
+                              ? "high"
+                              : "low",
+                        )}`}>
+                          {marketSaleReviewStatusLabel(opsMarketSaleDetail.review_status)}
+                        </span>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized title
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_title ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_title: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized issue
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_issue ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_issue: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized publisher
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_publisher ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_publisher: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized variant
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_variant ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_variant: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized grade
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_grade ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_grade: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalized cert
+                          <input
+                            value={opsMarketSaleNormalizationDraft.normalized_cert_number ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalized_cert_number: event.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Normalization status
+                          <select
+                            value={opsMarketSaleNormalizationDraft.normalization_status ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                normalization_status: (event.target.value as MarketSaleNormalizationUpdatePayload["normalization_status"]) || undefined,
+                              }))
+                            }
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          >
+                            <option value="">Keep current</option>
+                            <option value="raw">Raw</option>
+                            <option value="partially_normalized">Partially normalized</option>
+                            <option value="normalized">Normalized</option>
+                            <option value="normalization_failed">Normalization failed</option>
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400 md:col-span-2 xl:col-span-3">
+                          Review note
+                          <textarea
+                            value={opsMarketSaleNormalizationDraft.review_note ?? ""}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                review_note: event.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-slate-300 md:col-span-2 xl:col-span-3">
+                          <input
+                            type="checkbox"
+                            checked={opsMarketSaleNormalizationDraft.mark_reviewed ?? false}
+                            onChange={(event) =>
+                              setOpsMarketSaleNormalizationDraft((draft) => ({
+                                ...draft,
+                                mark_reviewed: event.target.checked,
+                              }))
+                            }
+                          />
+                          Mark reviewed
+                        </label>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-100"
+                          onClick={() => void handleMarketSaleNormalizationSave()}
+                        >
+                          Save normalization
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border border-slate-300/30 bg-slate-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100"
+                          onClick={() => void handleMarketSaleIgnore()}
+                        >
+                          Ignore record
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border border-amber-300/40 bg-amber-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100"
+                          onClick={() => void handleMarketSaleFlagDuplicate()}
+                        >
+                          Flag duplicate
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-4">
                     <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
@@ -3227,6 +3585,32 @@ export function OperationsPage() {
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Review history
+                      </p>
+                      {opsMarketSaleDetail.review_actions.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-500">No review actions recorded yet.</p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {opsMarketSaleDetail.review_actions.map((action) => (
+                            <div key={action.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-300">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-semibold uppercase tracking-[0.12em] text-slate-100">
+                                  {action.action_type.replace(/_/g, " ")}
+                                </span>
+                                <span className="text-[10px] text-slate-500">{formatDateTime(action.created_at)}</span>
+                              </div>
+                              {action.details_json && Object.keys(action.details_json).length > 0 ? (
+                                <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-slate-400">
+                                  {JSON.stringify(action.details_json, null, 2)}
+                                </pre>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                         Image evidence
                       </p>
                       {opsMarketSaleDetail.images.length === 0 ? (
@@ -3249,6 +3633,206 @@ export function OperationsPage() {
                 </div>
               ) : null}
             </>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="market-sale-review-queue"
+        className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/10 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market sale review queue</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic triage only. No FMV, no fuzzy normalization, no automatic canonical linking, and no raw
+                field mutation. Use the table to select a record and the editor above to make explicit human updates.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / review-only
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/15 pt-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[12rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Classification</span>
+              <select
+                value={opsMarketSaleReviewClassificationFilter}
+                onChange={(event) => setOpsMarketSaleReviewClassificationFilter(event.target.value as "" | MarketSaleReviewClassification)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                {OPS_MARKET_SALE_REVIEW_CLASSIFICATIONS.map((classification) => (
+                  <option key={classification} value={classification}>
+                    {marketSaleReviewClassificationLabel(classification)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Priority</span>
+              <select
+                value={opsMarketSaleReviewPriorityFilter}
+                onChange={(event) => setOpsMarketSaleReviewPriorityFilter(event.target.value as "" | MarketSaleReviewPriority)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                {OPS_MARKET_SALE_REVIEW_PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Review status</span>
+              <select
+                value={opsMarketSaleReviewStatusFilter}
+                onChange={(event) => setOpsMarketSaleReviewStatusFilter(event.target.value as "" | MarketSaleReviewStatus)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+              >
+                <option value="">Any</option>
+                <option value="pending">Pending</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="ignored">Ignored</option>
+                <option value="duplicate_flagged">Duplicate flagged</option>
+              </select>
+            </label>
+            <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Source</span>
+              <input
+                value={opsMarketSaleReviewSourceFilter}
+                onChange={(event) => setOpsMarketSaleReviewSourceFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+                placeholder="Source name or type"
+              />
+            </label>
+            <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Source type</span>
+              <input
+                value={opsMarketSaleReviewSourceTypeFilter}
+                onChange={(event) => setOpsMarketSaleReviewSourceTypeFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+                placeholder="marketplace"
+              />
+            </label>
+            <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+              <span className="font-semibold uppercase tracking-[0.1em]">Issue type</span>
+              <input
+                value={opsMarketSaleReviewIssueTypeFilter}
+                onChange={(event) => setOpsMarketSaleReviewIssueTypeFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+                placeholder="missing_issue_number"
+              />
+            </label>
+          </div>
+
+          {opsMarketSaleReviewQueueSummary ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <StatCard label="Queue total" value={String(opsMarketSaleReviewQueueSummary.total)} />
+              {OPS_MARKET_SALE_REVIEW_PRIORITIES.map((priority) => (
+                <StatCard
+                  key={priority}
+                  label={`Priority ${priority}`}
+                  value={String(opsMarketSaleReviewQueueSummary.by_priority[priority] ?? 0)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {opsMarketSaleReviewQueueSummary ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {OPS_MARKET_SALE_REVIEW_CLASSIFICATIONS.map((classification) => (
+                <StatCard
+                  key={classification}
+                  label={marketSaleReviewClassificationLabel(classification)}
+                  value={String(opsMarketSaleReviewQueueSummary?.by_classification[classification] ?? 0)}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {opsMarketSaleReviewQueueLoading ? (
+            <p className="mt-4 text-sm text-slate-400">Loading market sale review queue…</p>
+          ) : opsMarketSaleReviewQueueError ? (
+            <div className="mt-4">
+              <StatusBanner tone="error">{opsMarketSaleReviewQueueError}</StatusBanner>
+            </div>
+          ) : opsMarketSaleReviewQueue?.items.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No market-sale records matched the active review filters.</p>
+          ) : (
+            <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Inspect</th>
+                    <th className="p-3 font-medium">Source</th>
+                    <th className="p-3 font-medium">Title / issue</th>
+                    <th className="p-3 font-medium">Classification</th>
+                    <th className="p-3 font-medium">Priority</th>
+                    <th className="p-3 font-medium">Review</th>
+                    <th className="p-3 font-medium">Issues</th>
+                    <th className="p-3 font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsMarketSaleReviewQueue?.items.map((row) => {
+                    const isSelected = opsMarketSaleSelectedId === row.id;
+                    return (
+                      <tr key={row.id}>
+                        <td className="p-3 align-top">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                              isSelected
+                                ? "border-cyan-300/70 bg-cyan-400/20 text-cyan-50"
+                                : "border-white/15 text-slate-200 hover:border-cyan-300/35"
+                            }`}
+                            onClick={() => setOpsMarketSaleSelectedId((cur) => (cur === row.id ? null : row.id))}
+                          >
+                            {isSelected ? "Hide" : "View"}
+                          </button>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="text-slate-100">{row.source_name}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">{row.source_type}</div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                          <div className="mt-1 text-[11px] text-slate-400">
+                            Issue {row.normalized_issue ?? row.raw_issue}
+                            {row.source_listing_id ? ` · ${row.source_listing_id}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketSaleReviewPriorityTone(row.queue_priority)}`}>
+                            {marketSaleReviewClassificationLabel(row.queue_classification)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketSaleReviewPriorityTone(row.queue_priority)}`}>
+                            {row.queue_priority}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                            {marketSaleReviewStatusLabel(row.review_status)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                            {row.issue_types.length}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400 align-top">{formatDateTime(row.updated_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </details>

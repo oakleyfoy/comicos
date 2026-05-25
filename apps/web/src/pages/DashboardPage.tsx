@@ -39,6 +39,7 @@ import {
   type MarketSourceImportRunSummaryRead,
   type MarketSourceRead,
   type MarketSaleSummaryRead,
+  type MarketSaleReviewQueueSummaryRead,
   type ScanPipelineDashboardResponse,
   type ScanSessionSummary,
 } from "../api/client";
@@ -97,6 +98,15 @@ function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_statu
     default:
       return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
   }
+}
+
+function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    </div>
+  );
 }
 
 function variantLabel(item: InventoryItem): string {
@@ -759,6 +769,10 @@ export function DashboardPage() {
   const [marketSalesPreview, setMarketSalesPreview] = useState<MarketSaleSummaryRead[]>([]);
   const [marketSalesLoading, setMarketSalesLoading] = useState(true);
   const [marketSalesError, setMarketSalesError] = useState<string | null>(null);
+  const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
+    useState<MarketSaleReviewQueueSummaryRead | null>(null);
+  const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
+  const [marketSaleReviewQueueSummaryError, setMarketSaleReviewQueueSummaryError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -983,6 +997,34 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketSalesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketSaleReviewQueueSummaryLoading(true);
+      setMarketSaleReviewQueueSummaryError(null);
+      try {
+        const summary = await apiClient.getMarketSaleReviewQueueSummary();
+        if (!ignore) {
+          setMarketSaleReviewQueueSummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketSaleReviewQueueSummary(null);
+          setMarketSaleReviewQueueSummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load market sale review summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketSaleReviewQueueSummaryLoading(false);
         }
       }
     })();
@@ -1535,6 +1577,59 @@ export function DashboardPage() {
                   </table>
                 </div>
               )}
+            </section>
+          ) : null}
+
+          {marketSaleReviewQueueSummaryLoading || marketSaleReviewQueueSummaryError || marketSaleReviewQueueSummary ? (
+            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market sale review queue</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only review summary</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic queue counts only. Operators can open the review workspace to update normalized fields
+                    and log explicit review actions; the dashboard stays read-only.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-sale-review-queue"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                >
+                  Open ops review queue
+                </Link>
+              </div>
+              {marketSaleReviewQueueSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market sale review summary…</p>
+              ) : marketSaleReviewQueueSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketSaleReviewQueueSummaryError}</StatusBanner>
+                </div>
+              ) : marketSaleReviewQueueSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                    <StatCard label="Queue total" value={String(marketSaleReviewQueueSummary.total)} />
+                    <StatCard label="Critical" value={String(marketSaleReviewQueueSummary.by_priority.critical ?? 0)} />
+                    <StatCard label="High" value={String(marketSaleReviewQueueSummary.by_priority.high ?? 0)} />
+                    <StatCard label="Medium" value={String(marketSaleReviewQueueSummary.by_priority.medium ?? 0)} />
+                    <StatCard label="Low" value={String(marketSaleReviewQueueSummary.by_priority.low ?? 0)} />
+                    <StatCard label="Info" value={String(marketSaleReviewQueueSummary.by_priority.info ?? 0)} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <StatCard
+                      label="Needs title review"
+                      value={String(marketSaleReviewQueueSummary.by_classification.needs_title_review ?? 0)}
+                    />
+                    <StatCard
+                      label="Needs issue review"
+                      value={String(marketSaleReviewQueueSummary.by_classification.needs_issue_review ?? 0)}
+                    />
+                    <StatCard
+                      label="Possible duplicate"
+                      value={String(marketSaleReviewQueueSummary.by_classification.possible_duplicate ?? 0)}
+                    />
+                  </div>
+                </>
+              ) : null}
             </section>
           ) : null}
         </section>

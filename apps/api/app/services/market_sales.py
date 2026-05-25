@@ -844,6 +844,7 @@ def _market_sale_detail(
         buyer_name=record.buyer_name,
         source_url=record.source_url,
         source_metadata_json=record.source_metadata_json or {},
+        review_status=record.review_status,  # type: ignore[arg-type]
         images=[MarketSaleRecordImageRead.model_validate(row, from_attributes=True) for row in image_rows],
         normalization_issues=[
             MarketSaleNormalizationIssueRead.model_validate(row, from_attributes=True) for row in issue_rows
