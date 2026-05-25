@@ -36,7 +36,10 @@ import {
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
   type PhysicalIntakeSummaryResponse,
-  type ScanSessionDashboardResponse,
+  type MarketSourceImportRunSummaryRead,
+  type MarketSourceRead,
+  type MarketSaleSummaryRead,
+  type ScanPipelineDashboardResponse,
   type ScanSessionSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
@@ -68,6 +71,32 @@ function formatDate(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {
+  switch (status) {
+    case "normalized":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "partially_normalized":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "normalization_failed":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "ignored":
+      return "border-slate-400/35 bg-slate-400/10 text-slate-100";
+    case "raw":
+    default:
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+  }
 }
 
 function variantLabel(item: InventoryItem): string {
@@ -718,9 +747,18 @@ export function DashboardPage() {
 
   const [collectionHistoricalTimeline, setCollectionHistoricalTimeline] =
     useState<CollectionHistoricalTimelineEventsResponse | null>(null);
-  const [scanSessionDash, setScanSessionDash] = useState<ScanSessionDashboardResponse | null>(null);
+  const [scanPipelineDash, setScanPipelineDash] = useState<ScanPipelineDashboardResponse | null>(null);
   const [physicalIntakeSummary, setPhysicalIntakeSummary] =
     useState<PhysicalIntakeSummaryResponse | null>(null);
+  const [marketSources, setMarketSources] = useState<MarketSourceRead[]>([]);
+  const [marketSourcesLoading, setMarketSourcesLoading] = useState(true);
+  const [marketSourcesError, setMarketSourcesError] = useState<string | null>(null);
+  const [marketImportRuns, setMarketImportRuns] = useState<MarketSourceImportRunSummaryRead[]>([]);
+  const [marketImportRunsLoading, setMarketImportRunsLoading] = useState(true);
+  const [marketImportRunsError, setMarketImportRunsError] = useState<string | null>(null);
+  const [marketSalesPreview, setMarketSalesPreview] = useState<MarketSaleSummaryRead[]>([]);
+  const [marketSalesLoading, setMarketSalesLoading] = useState(true);
+  const [marketSalesError, setMarketSalesError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -802,7 +840,7 @@ export function DashboardPage() {
       caSummary,
       caPublishers,
       caQuality,
-      scanSessionDashboard,
+      scanPipelineDashboard,
       physicalIntakeSummaryResponse,
     ] = await Promise.all([
       apiClient.getInventorySummary(),
@@ -817,7 +855,7 @@ export function DashboardPage() {
       apiClient.getCollectionAnalyticsSummary(),
       apiClient.getCollectionAnalyticsPublishers(),
       apiClient.getCollectionAnalyticsQuality(),
-      apiClient.getScanSessionDashboard(),
+      apiClient.getScanPipelineDashboard(),
       apiClient.getPhysicalIntakeSummary(),
     ]);
     setSummary(summaryResponse);
@@ -833,7 +871,7 @@ export function DashboardPage() {
     setCollectionAnalyticsSummary(caSummary);
     setCollectionAnalyticsPublishers(caPublishers);
     setCollectionAnalyticsQuality(caQuality);
-    setScanSessionDash(scanSessionDashboard);
+    setScanPipelineDash(scanPipelineDashboard);
     setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
     setSelectedIds((current) =>
       current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
@@ -863,7 +901,7 @@ export function DashboardPage() {
           caSummary,
           caPublishers,
           caQuality,
-          scanSessionDashboard,
+          scanPipelineDashboard,
           physicalIntakeSummaryResponse,
         ] =
           await Promise.all([
@@ -881,7 +919,7 @@ export function DashboardPage() {
             apiClient.getCollectionAnalyticsSummary(),
             apiClient.getCollectionAnalyticsPublishers(),
             apiClient.getCollectionAnalyticsQuality(),
-            apiClient.getScanSessionDashboard(),
+            apiClient.getScanPipelineDashboard(),
             apiClient.getPhysicalIntakeSummary(),
           ]);
 
@@ -904,7 +942,7 @@ export function DashboardPage() {
         setCollectionAnalyticsSummary(caSummary);
         setCollectionAnalyticsPublishers(caPublishers);
         setCollectionAnalyticsQuality(caQuality);
-        setScanSessionDash(scanSessionDashboard);
+        setScanPipelineDash(scanPipelineDashboard);
         setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
         setSelectedIds((current) =>
           current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
@@ -926,6 +964,86 @@ export function DashboardPage() {
       ignore = true;
     };
   }, [inventoryQuery]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketSalesLoading(true);
+      setMarketSalesError(null);
+      try {
+        const list = await apiClient.getMarketSales();
+        if (!ignore) {
+          setMarketSalesPreview(list.items);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketSalesPreview([]);
+          setMarketSalesError(loadError instanceof ApiError ? loadError.message : "Unable to load market sales.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketSalesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketSourcesLoading(true);
+      setMarketSourcesError(null);
+      try {
+        const list = await apiClient.getMarketSources();
+        if (!ignore) {
+          setMarketSources(list);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketSources([]);
+          setMarketSourcesError(loadError instanceof ApiError ? loadError.message : "Unable to load market sources.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketSourcesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketImportRunsLoading(true);
+      setMarketImportRunsError(null);
+      try {
+        const list = await apiClient.getMarketImportRuns();
+        if (!ignore) {
+          setMarketImportRuns(list.items);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketImportRuns([]);
+          setMarketImportRunsError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load market import runs.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketImportRunsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
@@ -1108,6 +1226,30 @@ export function DashboardPage() {
               Bulk scan ingest
             </Link>
             <Link
+              to="/settings/scanner-profiles"
+              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-violet-300/35 hover:bg-white/5"
+            >
+              Scanner presets
+            </Link>
+            <Link
+              to="/scan-sessions#scan-qa-and-routing"
+              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-amber-300/35 hover:bg-white/5"
+            >
+              QA &amp; routing
+            </Link>
+            <Link
+              to="/dashboard#physical-intake"
+              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
+            >
+              Receiving intake
+            </Link>
+            <Link
+              to="/dashboard#market-sales"
+              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
+            >
+              Market sales
+            </Link>
+            <Link
               to="/orders/new"
               className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
@@ -1129,70 +1271,370 @@ export function DashboardPage() {
         ))}
       </section>
 
-      {physicalIntakeSummary ? (
-        <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">Receiving & scan placeholders</h2>
-              <p className="mt-1 max-w-prose text-sm text-slate-400">
-                Counts derive from deterministic order / shipment / receipt signals. Mark received explicitly, then
-                stage intake-only scan sessions with pending rows — no OCR or ingest runs automatically.
-              </p>
-            </div>
-            <Link
-              to="/scan-sessions"
-              className="rounded-2xl border border-emerald-400/35 px-4 py-3 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+      {physicalIntakeSummary || scanPipelineDash || marketSalesLoading || marketSalesPreview.length > 0 || marketSalesError ? (
+        <section className="mt-6 space-y-6" aria-label="Receiving and bulk scan pipeline">
+          {physicalIntakeSummary ? (
+            <section
+              id="physical-intake"
+              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15"
             >
-              Open scan sessions
-            </Link>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
-                {physicalIntakeSummary.counts.released_not_received}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Receiving & scan placeholders</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Canonical receiving counts stay here — mark received explicitly, then stage intake scan sessions via
+                    the API when eligible. Same logic backs pipeline intake rollups elsewhere (no OCR or ingest runs automatically).
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Link
+                      to="/scan-sessions"
+                      className="rounded-full border border-emerald-400/35 px-3 py-1.5 font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                    >
+                      Stage sessions
+                    </Link>
+                  </div>
+                </div>
+                <Link
+                  to="/scan-sessions"
+                  className="rounded-2xl border border-emerald-400/35 px-4 py-3 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                >
+                  Open scan sessions
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">
+                    {physicalIntakeSummary.counts.released_not_received}
+                  </p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">
+                    {physicalIntakeSummary.counts.received_pending_scan}
+                  </p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                    Shipment overdue (expected ship)
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-white">
+                    {physicalIntakeSummary.counts.overdue_expected_ship}
+                  </p>
+                </article>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-4 text-[11px] text-slate-500">
+                <span>Intake blocked: {physicalIntakeSummary.counts.intake_blocked}</span>
+                <span>Released awaiting receipt (state roll-up): {physicalIntakeSummary.counts.released_awaiting_receipt}</span>
+                <span>As of {physicalIntakeSummary.generated_as_of}</span>
+              </div>
+            </section>
+          ) : null}
+
+          {scanPipelineDash ? (
+            <section
+              id="bulk-scan-pipeline"
+              className="rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">Bulk scan pipeline · read-only snapshot</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Session & queue visibility</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Condensed aggregates (QA ledger, unresolved routing signals, queued high-res asks, presets, replay deltas).
+                    Receiving placeholders stay in Physical intake above — avoids duplicating shipment vs scan semantics here.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Link
+                      to="/scan-sessions"
+                      className="rounded-full border border-teal-400/35 px-3 py-1.5 font-semibold text-teal-100 transition hover:border-teal-300/55 hover:bg-teal-500/10"
+                    >
+                      Lifecycle &amp; ingest
+                    </Link>
+                    <Link
+                      to="/scan-sessions#scan-qa-and-routing"
+                      className="rounded-full border border-white/15 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-white/30 hover:bg-white/5"
+                    >
+                      Persisted QA &amp; routing
+                    </Link>
+                    <Link
+                      to="/settings/scanner-profiles"
+                      className="rounded-full border border-white/15 px-3 py-1.5 font-semibold text-slate-200 transition hover:border-white/30 hover:bg-white/5"
+                    >
+                      Scanner presets
+                    </Link>
+                  </div>
+                </div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">
+                  Tables · Active {scanPipelineDash.active_sessions.length} · Recent{" "}
+                  {scanPipelineDash.recent_sessions.length}
+                </p>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ["Sessions · active / triage", scanPipelineDash.summary.active_sessions],
+                    ["Sessions · completed with errors", scanPipelineDash.summary.sessions_completed_with_errors],
+                  ] as const
+                ).map(([label, value]) => (
+                  <article key={label} className="rounded-2xl border border-white/10 bg-slate-900/65 p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    ["Scan items · failures (rollup)", scanPipelineDash.summary.failed_items],
+                    ["Scan items · review required", scanPipelineDash.summary.review_required_items],
+                    ["Replay runs with changes", scanPipelineDash.summary.replay_runs_with_changes],
+                  ] as const
+                ).map(([label, value]) => (
+                  <article key={label} className="rounded-2xl border border-white/10 bg-slate-900/65 p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                  </article>
+                ))}
+              </div>
+
+              <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Persisted QA (after Run QA) & routing requests (Generate routing snapshot)
               </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
-                {physicalIntakeSummary.counts.received_pending_scan}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {(
+                  [
+                    ["Needs rescan (persisted)", scanPipelineDash.summary.qa_needs_rescan],
+                    ["Corrupt / unreadable (persisted)", scanPipelineDash.summary.qa_corrupt_or_unreadable],
+                    ["Open routing · recommend OCR", scanPipelineDash.summary.routing_recommend_ocr],
+                    ["Open routing · high-res lane", scanPipelineDash.summary.routing_recommend_high_res_review],
+                    ["High-resolution requests · pending", scanPipelineDash.summary.high_res_pending],
+                  ] as const
+                ).map(([label, value]) => (
+                  <article
+                    key={label}
+                    className="rounded-2xl border border-teal-500/15 bg-slate-900/65 p-3"
+                  >
+                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                  </article>
+                ))}
+              </div>
+
+              <p className="mt-2 text-[11px] text-slate-500">
+                Receipt-to-scan bridging never runs automatically — use Physical intake above for Received / pending scan
+                counts tied to explicit mark-received flows.
               </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Shipment overdue (expected ship)</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{physicalIntakeSummary.counts.overdue_expected_ship}</p>
-            </article>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-4 text-[11px] text-slate-500">
-            <span>Intake blocked: {physicalIntakeSummary.counts.intake_blocked}</span>
-            <span>Released awaiting receipt (state roll-up): {physicalIntakeSummary.counts.released_awaiting_receipt}</span>
-            <span>As of {physicalIntakeSummary.generated_as_of}</span>
-          </div>
+
+              {scanPipelineDash.summary.most_used_scanner_profiles.length > 0 ? (
+                <div className="mt-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Scanner presets · ledger usage (bulk ingest)
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {scanPipelineDash.summary.most_used_scanner_profiles.slice(0, 8).map((row, idx) => (
+                      <span
+                        key={`${row.scanner_profile_id ?? "none"}-${row.profile_label}-${idx}`}
+                        className="rounded-full border border-teal-400/25 bg-teal-500/10 px-3 py-1 text-[11px] text-teal-100"
+                      >
+                        {row.profile_label}{" "}
+                        <span className="font-mono text-teal-200/90">×{row.scan_session_count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {scanPipelineDash.active_sessions.length > 0 || scanPipelineDash.recent_sessions.length > 0 ? (
+                <div className="mt-6 grid gap-4 xl:grid-cols-2">
+                  <ScanSessionMiniTable caption="Active / paused" rows={scanPipelineDash.active_sessions} />
+                  <ScanSessionMiniTable caption="Recently completed / cancelled" rows={scanPipelineDash.recent_sessions} />
+                </div>
+              ) : (
+                <p className="mt-6 text-sm text-slate-500">No active or recently finished scan sessions in your account.</p>
+              )}
+            </section>
+          ) : null}
+
+          {marketSalesLoading || marketSalesError || marketSalesPreview.length > 0 ? (
+            <section
+              id="market-sales"
+              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market sales foundation</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only record preview</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic sales records, source names, and normalization states from the new market-sales layer.
+                    The dashboard stays read-only; see the ops panel for explicit import-upsert detail.
+                  </p>
+                </div>
+                <Link
+                  to="/ops"
+                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                >
+                  Open ops view
+                </Link>
+              </div>
+              {marketSalesLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market sales preview…</p>
+              ) : marketSalesError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketSalesError}</StatusBanner>
+                </div>
+              ) : marketSalesPreview.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">No market-sale records recorded yet.</p>
+              ) : (
+                <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Source</th>
+                        <th className="p-3 font-medium">Title / issue</th>
+                        <th className="p-3 font-medium">Sale</th>
+                        <th className="p-3 font-medium">Status</th>
+                        <th className="p-3 font-medium">Issues</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {marketSalesPreview.slice(0, 6).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 align-top">
+                            <div className="text-slate-100">{row.source_name}</div>
+                            <div className="mt-1 text-[11px] text-slate-500">{row.source_type}</div>
+                          </td>
+                          <td className="p-3 align-top">
+                            <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                            <div className="mt-1 text-[11px] text-slate-400">
+                              Issue {row.normalized_issue ?? row.raw_issue}
+                            </div>
+                          </td>
+                          <td className="p-3 align-top">
+                            {row.total_price ?? row.sale_price ?? "—"} {row.currency_code}
+                          </td>
+                          <td className="p-3 align-top">
+                            <span
+                              className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${marketSaleStatusTone(
+                                row.normalization_status,
+                              )}`}
+                            >
+                              {row.normalization_status.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td className="p-3 align-top">
+                            <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                              {row.normalization_issue_count}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : null}
         </section>
       ) : null}
 
-      {scanSessionDash &&
-      (scanSessionDash.active_sessions.length > 0 || scanSessionDash.recent_sessions.length > 0) ? (
-        <section className="mt-6 rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-black/15">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+      {marketSourcesLoading ||
+      marketSourcesError ||
+      marketImportRunsLoading ||
+      marketImportRunsError ||
+      marketSources.length > 0 ||
+      marketImportRuns.length > 0 ? (
+        <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/12 p-5 shadow-xl shadow-black/15">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Scan ingest sessions</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Deterministic orchestration scaffolding only — lifecycle and queue-state visibility without automatic
-                metadata changes.
+              <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/70">Market source registry</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">Registry and import-run summaries</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-400">
+                Deterministic source rows and append-only import-run history. The dashboard only reads these records;
+                lifecycle changes remain in the ops API.
               </p>
             </div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">
-              Active {scanSessionDash.active_sessions.length} · Recent{" "}
-              {scanSessionDash.recent_sessions.length}
-            </p>
           </div>
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <ScanSessionMiniTable caption="Active / paused" rows={scanSessionDash.active_sessions} />
-            <ScanSessionMiniTable caption="Recently completed / cancelled" rows={scanSessionDash.recent_sessions} />
-          </div>
+          {marketSourcesLoading || marketImportRunsLoading ? (
+            <p className="mt-4 text-sm text-slate-400">Loading market registry…</p>
+          ) : marketSourcesError || marketImportRunsError ? (
+            <div className="mt-4 space-y-3">
+              {marketSourcesError ? <StatusBanner tone="error">{marketSourcesError}</StatusBanner> : null}
+              {marketImportRunsError ? <StatusBanner tone="error">{marketImportRunsError}</StatusBanner> : null}
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Source registry</p>
+                {marketSources.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">No market sources available yet.</p>
+                ) : (
+                  <div className="mt-3 overflow-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="pb-2 pr-3 font-medium">Source</th>
+                          <th className="pb-2 pr-3 font-medium">Type</th>
+                          <th className="pb-2 pr-3 font-medium">Priority</th>
+                          <th className="pb-2 font-medium">Enabled</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-200">
+                        {marketSources.slice(0, 8).map((row) => (
+                          <tr key={row.id} className="border-t border-white/10">
+                            <td className="py-2 pr-3 text-slate-100">{row.source_name}</td>
+                            <td className="py-2 pr-3 text-slate-300">{row.source_type}</td>
+                            <td className="py-2 pr-3 text-slate-300">{row.import_priority}</td>
+                            <td className="py-2 text-slate-300">{row.enabled ? "Yes" : "No"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent import runs</p>
+                {marketImportRuns.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">No import runs recorded yet.</p>
+                ) : (
+                  <div className="mt-3 overflow-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="pb-2 pr-3 font-medium">Source</th>
+                          <th className="pb-2 pr-3 font-medium">Status</th>
+                          <th className="pb-2 pr-3 font-medium">Counts</th>
+                          <th className="pb-2 font-medium">Started / updated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-200">
+                        {marketImportRuns.slice(0, 8).map((row) => (
+                          <tr key={row.id} className="border-t border-white/10">
+                            <td className="py-2 pr-3">
+                              <div className="text-slate-100">{row.source_name}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">#{row.market_source_id}</div>
+                            </td>
+                            <td className="py-2 pr-3 text-slate-300">{row.status.replace(/_/g, " ")}</td>
+                            <td className="py-2 pr-3 text-slate-300">
+                              {row.imported_records}/{row.total_records} imported
+                            </td>
+                            <td className="py-2 text-slate-400">
+                              <div>{row.started_at ? formatDateTime(row.started_at) : "Not started"}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{formatDateTime(row.updated_at)}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       ) : null}
 

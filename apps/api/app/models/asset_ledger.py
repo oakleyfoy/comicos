@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -273,6 +273,190 @@ class InventoryFmvSnapshot(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     source: str = Field(default="manual", max_length=50, nullable=False)
+
+
+class MarketSource(SQLModel, table=True):
+    """Deterministic market-source registry row."""
+
+    __tablename__ = "market_source"
+    __table_args__ = (UniqueConstraint("source_name", name="uq_market_source_source_name"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_name: str = Field(max_length=120, nullable=False, index=True)
+    source_type: str = Field(max_length=40, nullable=False, index=True)
+    enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+    import_priority: int = Field(default=0, nullable=False, index=True)
+    supports_raw: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+    supports_graded: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+    supports_variants: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSourceSnapshot(SQLModel, table=True):
+    """Append-only snapshot metadata for a market-source import pass."""
+
+    __tablename__ = "market_source_snapshot"
+    __table_args__ = (
+        UniqueConstraint("market_source_id", "snapshot_date", name="uq_market_source_snapshot_source_date"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_source_id: int = Field(foreign_key="market_source.id", nullable=False, index=True)
+    snapshot_date: date = Field(sa_column=Column(Date, nullable=False, index=True))
+    import_status: str = Field(max_length=32, nullable=False, index=True)
+    total_records: int = Field(default=0, nullable=False)
+    imported_records: int = Field(default=0, nullable=False)
+    failed_records: int = Field(default=0, nullable=False)
+    skipped_records: int = Field(default=0, nullable=False)
+    source_metadata_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSourceImportRun(SQLModel, table=True):
+    """Append-only market-source import run ledger with explicit lifecycle state."""
+
+    __tablename__ = "market_source_import_run"
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_source_id: int = Field(foreign_key="market_source.id", nullable=False, index=True)
+    created_by_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    status: str = Field(default="pending", max_length=32, nullable=False, index=True)
+    total_records: int = Field(default=0, nullable=False)
+    imported_records: int = Field(default=0, nullable=False)
+    failed_records: int = Field(default=0, nullable=False)
+    skipped_records: int = Field(default=0, nullable=False)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class MarketSourceImportRunEvent(SQLModel, table=True):
+    """Append-only lifecycle event log for market-source import runs."""
+
+    __tablename__ = "market_source_import_run_event"
+
+    id: int | None = Field(default=None, primary_key=True)
+    import_run_id: int = Field(foreign_key="market_source_import_run.id", nullable=False, index=True)
+    event_type: str = Field(max_length=24, nullable=False, index=True)
+    previous_status: str | None = Field(default=None, max_length=32, nullable=True)
+    new_status: str = Field(max_length=32, nullable=False, index=True)
+    actor_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    details_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSaleRecord(SQLModel, table=True):
+    """Normalized market-sales row with preserved raw source values."""
+
+    __tablename__ = "market_sale_record"
+    __table_args__ = (
+        UniqueConstraint("market_source_id", "source_listing_id", name="uq_market_sale_record_source_listing"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_source_id: int = Field(foreign_key="market_source.id", nullable=False, index=True)
+    source_listing_id: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    source_snapshot_id: int | None = Field(
+        default=None,
+        foreign_key="market_source_snapshot.id",
+        nullable=True,
+        index=True,
+    )
+    listing_type: str = Field(max_length=24, nullable=False, index=True)
+    raw_title: str = Field(max_length=510, nullable=False, index=True)
+    normalized_title: str | None = Field(default=None, max_length=510, nullable=True, index=True)
+    raw_issue: str = Field(max_length=120, nullable=False, index=True)
+    normalized_issue: str | None = Field(default=None, max_length=120, nullable=True, index=True)
+    raw_publisher: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    normalized_publisher: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    raw_variant: str | None = Field(default=None, max_length=255, nullable=True)
+    normalized_variant: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    raw_grade: str | None = Field(default=None, max_length=120, nullable=True)
+    normalized_grade: str | None = Field(default=None, max_length=120, nullable=True, index=True)
+    raw_cert_number: str | None = Field(default=None, max_length=120, nullable=True)
+    normalized_cert_number: str | None = Field(default=None, max_length=120, nullable=True, index=True)
+    sale_price: Decimal | None = Field(default=None, sa_column=Column(Numeric(12, 2), nullable=True))
+    shipping_price: Decimal | None = Field(default=None, sa_column=Column(Numeric(12, 2), nullable=True))
+    total_price: Decimal | None = Field(default=None, sa_column=Column(Numeric(12, 2), nullable=True))
+    currency_code: str = Field(max_length=8, nullable=False, index=True)
+    sale_date: date | None = Field(default=None, sa_column=Column(Date, nullable=True, index=True))
+    seller_name: str | None = Field(default=None, max_length=255, nullable=True)
+    buyer_name: str | None = Field(default=None, max_length=255, nullable=True)
+    is_graded: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, default=False, index=True))
+    grading_company: str | None = Field(default=None, max_length=80, nullable=True, index=True)
+    is_signed: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, default=False, index=True))
+    source_url: str | None = Field(default=None, max_length=1024, nullable=True)
+    source_metadata_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    normalization_status: str = Field(max_length=32, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSaleRecordImage(SQLModel, table=True):
+    """Ordered evidence/media attachment for a market sale record."""
+
+    __tablename__ = "market_sale_record_image"
+    __table_args__ = (
+        UniqueConstraint("market_sale_record_id", "display_order", name="uq_market_sale_record_image_order"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_sale_record_id: int = Field(foreign_key="market_sale_record.id", nullable=False, index=True)
+    image_url: str | None = Field(default=None, max_length=1024, nullable=True)
+    image_sha256: str | None = Field(default=None, max_length=64, nullable=True, index=True)
+    display_order: int = Field(nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketSaleNormalizationIssue(SQLModel, table=True):
+    """Deterministic issue ledger for a normalized market sale record."""
+
+    __tablename__ = "market_sale_normalization_issue"
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_sale_record_id: int = Field(foreign_key="market_sale_record.id", nullable=False, index=True)
+    issue_type: str = Field(max_length=40, nullable=False, index=True)
+    severity: str = Field(max_length=20, nullable=False, index=True)
+    details_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 
 
 class CoverImage(SQLModel, table=True):

@@ -2212,6 +2212,207 @@ export type ScannerProfileUpdatePayload = Partial<Omit<ScannerProfileCreatePaylo
   profile_name?: string;
 };
 
+export type MarketSaleListingType = "auction" | "fixed_price" | "accepted_offer" | "buy_it_now" | "other";
+export type MarketSaleNormalizationStatus =
+  | "raw"
+  | "partially_normalized"
+  | "normalized"
+  | "normalization_failed"
+  | "ignored";
+export type MarketSaleGradingCompany = "CGC" | "CBCS" | "PGX" | "other";
+export type MarketSaleIssueType =
+  | "missing_issue_number"
+  | "ambiguous_variant"
+  | "invalid_grade"
+  | "malformed_title"
+  | "missing_sale_price"
+  | "duplicate_listing"
+  | "unsupported_currency";
+export type MarketSaleIssueSeverity = "info" | "warning" | "critical";
+export type MarketSourceType = "marketplace" | "auction" | "fixed_price" | "historical_archive" | "other";
+export type MarketSourceImportRunStatus = "pending" | "running" | "cancelled" | "completed";
+export type MarketSourceImportRunEventType = "created" | "started" | "cancelled" | "completed";
+
+export interface MarketSourceRead {
+  id: number;
+  source_name: string;
+  source_type: MarketSourceType;
+  enabled: boolean;
+  import_priority: number;
+  supports_raw: boolean;
+  supports_graded: boolean;
+  supports_variants: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketSaleRecordImageUpsertPayload {
+  image_url?: string | null;
+  image_sha256?: string | null;
+  display_order?: number | null;
+}
+
+export interface MarketSaleUpsertPayload {
+  market_source_id: number;
+  source_listing_id?: string | null;
+  source_snapshot_id?: number | null;
+  listing_type: MarketSaleListingType;
+  raw_title: string;
+  raw_issue: string;
+  raw_publisher?: string | null;
+  raw_variant?: string | null;
+  raw_grade?: string | null;
+  raw_cert_number?: string | null;
+  sale_price?: string | null;
+  shipping_price?: string | null;
+  total_price?: string | null;
+  currency_code: string;
+  sale_date?: string | null;
+  seller_name?: string | null;
+  buyer_name?: string | null;
+  is_graded?: boolean;
+  grading_company?: MarketSaleGradingCompany | null;
+  is_signed?: boolean;
+  source_url?: string | null;
+  source_metadata_json?: Record<string, unknown>;
+  images?: MarketSaleRecordImageUpsertPayload[];
+}
+
+export interface MarketSaleRecordImageRead {
+  id: number;
+  market_sale_record_id: number;
+  image_url: string | null;
+  image_sha256: string | null;
+  display_order: number;
+  created_at: string;
+}
+
+export interface MarketSaleNormalizationIssueRead {
+  id: number;
+  market_sale_record_id: number;
+  issue_type: MarketSaleIssueType;
+  severity: MarketSaleIssueSeverity;
+  details_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketSourceSnapshotRead {
+  id: number;
+  market_source_id: number;
+  snapshot_date: string;
+  import_status: string;
+  total_records: number;
+  imported_records: number;
+  failed_records: number;
+  skipped_records: number;
+  source_metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketSourceImportRunEventRead {
+  id: number;
+  import_run_id: number;
+  event_type: MarketSourceImportRunEventType;
+  previous_status: MarketSourceImportRunStatus | null;
+  new_status: MarketSourceImportRunStatus;
+  actor_user_id: number | null;
+  details_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketSourceImportRunSummaryRead {
+  id: number;
+  market_source_id: number;
+  source_name: string;
+  source_type: MarketSourceType;
+  created_by_user_id: number | null;
+  status: MarketSourceImportRunStatus;
+  total_records: number;
+  imported_records: number;
+  failed_records: number;
+  skipped_records: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MarketSourceImportRunRead extends MarketSourceImportRunSummaryRead {
+  events: MarketSourceImportRunEventRead[];
+}
+
+export interface MarketSourceImportRunListResponse {
+  items: MarketSourceImportRunSummaryRead[];
+}
+
+export interface MarketSourceImportRunCreatePayload {
+  market_source_id: number;
+  notes?: string | null;
+}
+
+export interface MarketSaleSummaryRead {
+  id: number;
+  market_source_id: number;
+  source_name: string;
+  source_type: MarketSourceType;
+  source_listing_id: string | null;
+  source_snapshot_id: number | null;
+  listing_type: MarketSaleListingType;
+  raw_title: string;
+  normalized_title: string | null;
+  raw_issue: string;
+  normalized_issue: string | null;
+  sale_price: string | null;
+  shipping_price: string | null;
+  total_price: string | null;
+  currency_code: string;
+  sale_date: string | null;
+  is_graded: boolean;
+  grading_company: MarketSaleGradingCompany | null;
+  is_signed: boolean;
+  normalization_status: MarketSaleNormalizationStatus;
+  normalization_issue_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketSaleRead extends MarketSaleSummaryRead {
+  raw_publisher: string | null;
+  normalized_publisher: string | null;
+  raw_variant: string | null;
+  normalized_variant: string | null;
+  raw_grade: string | null;
+  normalized_grade: string | null;
+  raw_cert_number: string | null;
+  normalized_cert_number: string | null;
+  seller_name: string | null;
+  buyer_name: string | null;
+  source_url: string | null;
+  source_metadata_json: Record<string, unknown>;
+  images: MarketSaleRecordImageRead[];
+  normalization_issues: MarketSaleNormalizationIssueRead[];
+  source_snapshot: MarketSourceSnapshotRead | null;
+}
+
+export interface MarketSaleListResponse {
+  items: MarketSaleSummaryRead[];
+}
+
+export type MarketSaleListParams = {
+  source?: string;
+  publisher?: string;
+  normalized_title?: string;
+  normalized_issue?: string;
+  grading_company?: string;
+  is_graded?: boolean;
+  normalization_status?: MarketSaleNormalizationStatus;
+  sale_date_from?: string;
+  sale_date_to?: string;
+};
+
 export function scannerRecommendedUseLabel(use: ScannerRecommendedUse): string {
   switch (use) {
     case "bulk_ingest":
@@ -2301,6 +2502,34 @@ export interface ScanSessionDetail extends ScanSessionSummary {
 }
 
 export interface ScanSessionDashboardResponse {
+  active_sessions: ScanSessionSummary[];
+  recent_sessions: ScanSessionSummary[];
+}
+
+/** Aggregate scan pipeline dashboards (deterministic counters + session previews). */
+export interface ScannerProfileUsageRow {
+  scanner_profile_id?: number | null;
+  profile_label: string;
+  scan_session_count: number;
+}
+
+export interface ScanPipelineDashboardSummary {
+  active_sessions: number;
+  sessions_completed_with_errors: number;
+  failed_items: number;
+  review_required_items: number;
+  qa_needs_rescan: number;
+  qa_corrupt_or_unreadable: number;
+  routing_recommend_ocr: number;
+  routing_recommend_high_res_review: number;
+  high_res_pending: number;
+  physical_intake_received_pending_scan: number;
+  replay_runs_with_changes: number;
+  most_used_scanner_profiles: ScannerProfileUsageRow[];
+}
+
+export interface ScanPipelineDashboardResponse {
+  summary: ScanPipelineDashboardSummary;
   active_sessions: ScanSessionSummary[];
   recent_sessions: ScanSessionSummary[];
 }
@@ -3739,6 +3968,88 @@ export const apiClient = {
     return request<ScanSessionDashboardResponse>("/scan-sessions/dashboard");
   },
 
+  getScanPipelineDashboardSummary(): Promise<ScanPipelineDashboardSummary> {
+    return request<ScanPipelineDashboardSummary>("/scan-pipeline-dashboard/summary");
+  },
+
+  getScanPipelineDashboard(): Promise<ScanPipelineDashboardResponse> {
+    return request<ScanPipelineDashboardResponse>("/scan-pipeline-dashboard");
+  },
+
+  getMarketSources(): Promise<MarketSourceRead[]> {
+    return request<MarketSourceRead[]>("/market-sources");
+  },
+
+  getMarketSource(marketSourceId: number): Promise<MarketSourceRead> {
+    return request<MarketSourceRead>(`/market-sources/${marketSourceId}`);
+  },
+
+  getMarketImportRuns(): Promise<MarketSourceImportRunListResponse> {
+    return request<MarketSourceImportRunListResponse>("/market-import-runs");
+  },
+
+  getMarketImportRun(runId: number): Promise<MarketSourceImportRunRead> {
+    return request<MarketSourceImportRunRead>(`/market-import-runs/${runId}`);
+  },
+
+  getOpsMarketSources(): Promise<MarketSourceRead[]> {
+    return request<MarketSourceRead[]>("/ops/market-sources");
+  },
+
+  getOpsMarketImportRuns(): Promise<MarketSourceImportRunListResponse> {
+    return request<MarketSourceImportRunListResponse>("/ops/market-import-runs");
+  },
+
+  createOpsMarketImportRun(payload: MarketSourceImportRunCreatePayload): Promise<MarketSourceImportRunRead> {
+    return request<MarketSourceImportRunRead>("/ops/market-import-runs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  startOpsMarketImportRun(runId: number): Promise<MarketSourceImportRunRead> {
+    return request<MarketSourceImportRunRead>(`/ops/market-import-runs/${runId}/start`, {
+      method: "POST",
+    });
+  },
+
+  cancelOpsMarketImportRun(runId: number): Promise<MarketSourceImportRunRead> {
+    return request<MarketSourceImportRunRead>(`/ops/market-import-runs/${runId}/cancel`, {
+      method: "POST",
+    });
+  },
+
+  completeOpsMarketImportRun(runId: number): Promise<MarketSourceImportRunRead> {
+    return request<MarketSourceImportRunRead>(`/ops/market-import-runs/${runId}/complete`, {
+      method: "POST",
+    });
+  },
+
+  getMarketSales(params?: MarketSaleListParams): Promise<MarketSaleListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleListResponse>(`/market-sales${query}`);
+  },
+
+  getMarketSale(marketSaleRecordId: number): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>(`/market-sales/${marketSaleRecordId}`);
+  },
+
+  getOpsMarketSales(params?: MarketSaleListParams): Promise<MarketSaleListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleListResponse>(`/ops/market-sales${query}`);
+  },
+
+  getOpsMarketSale(marketSaleRecordId: number): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>(`/ops/market-sales/${marketSaleRecordId}`);
+  },
+
+  upsertOpsMarketSale(payload: MarketSaleUpsertPayload): Promise<MarketSaleRead> {
+    return request<MarketSaleRead>("/ops/market-sales", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   createScanSession(payload?: ScanSessionCreatePayload): Promise<ScanSessionSummary> {
     return request<ScanSessionSummary>("/scan-sessions", {
       method: "POST",
@@ -4019,6 +4330,14 @@ export const apiClient = {
 
   getOpsScanQaFleetSummary(): Promise<OpsScanQaFleetSummaryRead> {
     return request<OpsScanQaFleetSummaryRead>("/ops/scan-qa/summary");
+  },
+
+  getOpsScanPipelineDashboardSummary(): Promise<ScanPipelineDashboardSummary> {
+    return request<ScanPipelineDashboardSummary>("/ops/scan-pipeline-dashboard/summary");
+  },
+
+  getOpsScanPipelineDashboard(): Promise<ScanPipelineDashboardResponse> {
+    return request<ScanPipelineDashboardResponse>("/ops/scan-pipeline-dashboard");
   },
 
   getOpsScanRoutingRecommendations(): Promise<QueueRoutingListResponse> {

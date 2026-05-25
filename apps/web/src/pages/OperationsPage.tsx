@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -62,6 +62,8 @@ import {
   type HighResReviewRequestReason,
   type HighResReviewRequestStatsRead,
   type HighResReviewRequestStatus,
+  type MarketSaleRead,
+  type MarketSaleSummaryRead,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
   type RelationshipConflictListResponse,
@@ -72,6 +74,7 @@ import {
   type RunDetectionSeries,
   type RunDetectionSeriesStatus,
   type ScanPipelineReplayRunRead,
+  type ScanPipelineDashboardResponse,
   type ScanSessionDetail,
   type ScanSessionSummary,
   type VariantFamilyClassificationFilter,
@@ -129,6 +132,33 @@ function formatDateTime(value: string | null): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {
+  switch (status) {
+    case "normalized":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "partially_normalized":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "normalization_failed":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "ignored":
+      return "border-slate-400/35 bg-slate-400/10 text-slate-100";
+    case "raw":
+    default:
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+  }
+}
+
+function marketSaleIssueTone(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "warning":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    default:
+      return "border-slate-400/30 bg-white/5 text-slate-200";
+  }
 }
 
 const OPS_HIGH_RES_STATUSES: HighResReviewRequestStatus[] = [
@@ -1039,6 +1069,18 @@ export function OperationsPage() {
   const [relationshipConflictsDetectBusy, setRelationshipConflictsDetectBusy] = useState(false);
   const [relationshipConflictsDetectMessage, setRelationshipConflictsDetectMessage] = useState<string | null>(null);
 
+  const [opsScanPipelineDash, setOpsScanPipelineDash] = useState<ScanPipelineDashboardResponse | null>(null);
+  const [opsScanPipelineDashLoading, setOpsScanPipelineDashLoading] = useState(true);
+  const [opsScanPipelineDashError, setOpsScanPipelineDashError] = useState<string | null>(null);
+
+  const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
+  const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
+  const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
+  const [opsMarketSaleSelectedId, setOpsMarketSaleSelectedId] = useState<number | null>(null);
+  const [opsMarketSaleDetail, setOpsMarketSaleDetail] = useState<MarketSaleRead | null>(null);
+  const [opsMarketSaleDetailLoading, setOpsMarketSaleDetailLoading] = useState(false);
+  const [opsMarketSaleDetailError, setOpsMarketSaleDetailError] = useState<string | null>(null);
+
   const [opsScanSessions, setOpsScanSessions] = useState<ScanSessionSummary[]>([]);
   const [opsScanSessionsLoading, setOpsScanSessionsLoading] = useState(true);
   const [opsScanSessionsError, setOpsScanSessionsError] = useState<string | null>(null);
@@ -1134,6 +1176,96 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsScanPipelineDashLoading(true);
+      setOpsScanPipelineDashError(null);
+      try {
+        const dash = await apiClient.getOpsScanPipelineDashboard();
+        if (!ignore) {
+          setOpsScanPipelineDash(dash);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsScanPipelineDash(null);
+          setOpsScanPipelineDashError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load bulk ingest pipeline dashboard.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsScanPipelineDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketSalesLoading(true);
+      setOpsMarketSalesError(null);
+      try {
+        const list = await apiClient.getOpsMarketSales();
+        if (!ignore) {
+          setOpsMarketSales(list.items);
+          setOpsMarketSaleSelectedId((cur) => cur ?? list.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketSales([]);
+          setOpsMarketSaleSelectedId(null);
+          setOpsMarketSalesError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market sales.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketSalesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    if (opsMarketSaleSelectedId == null) {
+      setOpsMarketSaleDetail(null);
+      setOpsMarketSaleDetailError(null);
+      setOpsMarketSaleDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setOpsMarketSaleDetailLoading(true);
+      setOpsMarketSaleDetailError(null);
+      try {
+        const detail = await apiClient.getOpsMarketSale(opsMarketSaleSelectedId);
+        if (!ignore) {
+          setOpsMarketSaleDetail(detail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketSaleDetail(null);
+          setOpsMarketSaleDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market sale detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketSaleDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketSaleSelectedId]);
 
   useEffect(() => {
     let ignore = false;
@@ -1246,6 +1378,30 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  const opsBulkPipelineActiveSessions = useMemo(() => {
+    const sessions = opsScanPipelineDash?.active_sessions ?? [];
+    return sessions.filter((s) => s.session_type === "bulk_ingest");
+  }, [opsScanPipelineDash]);
+
+  const opsBulkPipelineSessionsCompletedWithErrors = useMemo(() => {
+    const sessions = opsScanPipelineDash?.recent_sessions ?? [];
+    return sessions.filter((s) => s.session_type === "bulk_ingest" && s.status === "completed_with_errors");
+  }, [opsScanPipelineDash]);
+
+  const opsMarketSalesSummary = useMemo(() => {
+    const normalized = opsMarketSales.filter((row) => row.normalization_status === "normalized").length;
+    const partial = opsMarketSales.filter((row) => row.normalization_status === "partially_normalized").length;
+    const failed = opsMarketSales.filter((row) => row.normalization_status === "normalization_failed").length;
+    const duplicateWarnings = opsMarketSales.filter((row) => row.normalization_issue_count > 0).length;
+    return {
+      total: opsMarketSales.length,
+      normalized,
+      partial,
+      failed,
+      duplicateWarnings,
+    };
+  }, [opsMarketSales]);
 
   useEffect(() => {
     if (opsScanSessionSelectedId == null) {
@@ -2710,6 +2866,393 @@ export function OperationsPage() {
         </div>
       ) : null}
 
+      <details className="mt-6 rounded-3xl border border-cyan-400/40 bg-cyan-950/20 p-5 shadow-xl shadow-black/25 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-cyan-50">Bulk ingest operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Consolidated fleet counters for scan sessions, persisted QA, open routing recommendations, high-resolution
+                queues, physical intake projections, pipeline replays that reported item changes, and bulk-ingest scanner
+                presets. Read-only aggregates — no OCR enqueue and no metadata mutation from these reads.
+              </p>
+              <p className="mt-2 max-w-3xl text-[11px] text-cyan-100/85">
+                Collapsed by default to avoid repeating the QA / replay / routing drawers below — expand when you want the
+                single-pane headline rollup before drilling into ledger tables.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / ingest
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/20 pt-4">
+          {opsScanPipelineDashLoading ? (
+            <p className="text-sm text-slate-400">Loading bulk ingest dashboard…</p>
+          ) : opsScanPipelineDashError ? (
+            <StatusBanner tone="error">{opsScanPipelineDashError}</StatusBanner>
+          ) : opsScanPipelineDash ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+                <StatCard label="Active sessions" value={String(opsScanPipelineDash.summary.active_sessions)} />
+                <StatCard
+                  label="Sessions · completed w/ errors"
+                  value={String(opsScanPipelineDash.summary.sessions_completed_with_errors)}
+                />
+                <StatCard label="Σ session failed items" value={String(opsScanPipelineDash.summary.failed_items)} />
+                <StatCard label="Review-required items" value={String(opsScanPipelineDash.summary.review_required_items)} />
+                <StatCard label="QA persisted · needs rescan" value={String(opsScanPipelineDash.summary.qa_needs_rescan)} />
+                <StatCard
+                  label="QA persisted · corrupt / unreadable"
+                  value={String(opsScanPipelineDash.summary.qa_corrupt_or_unreadable)}
+                />
+                <StatCard
+                  label="Open routing · recommend OCR"
+                  value={String(opsScanPipelineDash.summary.routing_recommend_ocr)}
+                />
+                <StatCard
+                  label="Open routing · high-res review"
+                  value={String(opsScanPipelineDash.summary.routing_recommend_high_res_review)}
+                />
+                <StatCard label="High-res queue · pending" value={String(opsScanPipelineDash.summary.high_res_pending)} />
+                <StatCard
+                  label="Physical intake · received pending scan"
+                  value={String(opsScanPipelineDash.summary.physical_intake_received_pending_scan)}
+                />
+                <StatCard
+                  label="Replay runs w/ changes"
+                  value={String(opsScanPipelineDash.summary.replay_runs_with_changes)}
+                />
+              </div>
+
+              <div className="mt-8 grid gap-6 xl:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Bulk ingest · active / paused (preview)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    First page from the pipeline dashboard; see{" "}
+                    <span className="text-slate-300">Scan sessions (fleet)</span> for the full ledger.
+                  </p>
+                  <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Session</th>
+                          <th className="p-3 font-medium">Owner</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Fails / total</th>
+                          <th className="p-3 font-medium">Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsBulkPipelineActiveSessions.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={5}>
+                              No active bulk-ingest sessions in the preview window.
+                            </td>
+                          </tr>
+                        ) : (
+                          opsBulkPipelineActiveSessions.slice(0, 12).map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3 font-mono text-[11px] text-white">#{row.id}</td>
+                              <td className="p-3 font-mono text-[11px]">#{row.owner_user_id}</td>
+                              <td className="p-3 capitalize">{row.status.replace(/_/g, " ")}</td>
+                              <td className="p-3">
+                                {row.failed_items}/{row.total_items}
+                              </td>
+                              <td className="p-3 text-slate-400">{formatDateTime(row.updated_at)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Bulk ingest · completed with errors (preview)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Surfaced from recent terminal sessions; cross-check QA &amp; routing panels below.
+                  </p>
+                  <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Session</th>
+                          <th className="p-3 font-medium">Owner</th>
+                          <th className="p-3 font-medium">Fails / total</th>
+                          <th className="p-3 font-medium">Preset</th>
+                          <th className="p-3 font-medium">Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsBulkPipelineSessionsCompletedWithErrors.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={5}>
+                              No recent bulk-ingest sessions completed with errors in the preview window.
+                            </td>
+                          </tr>
+                        ) : (
+                          opsBulkPipelineSessionsCompletedWithErrors.slice(0, 12).map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3 font-mono text-[11px] text-white">#{row.id}</td>
+                              <td className="p-3 font-mono text-[11px]">#{row.owner_user_id}</td>
+                              <td className="p-3">
+                                {row.failed_items}/{row.total_items}
+                              </td>
+                              <td className="p-3 text-slate-300">{row.scanner_profile ?? "—"}</td>
+                              <td className="p-3 text-slate-400">{formatDateTime(row.updated_at)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Scanner presets · fleet usage (bulk ingest)
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Counts grouped by linked profile id / frozen preset label on scan sessions with items.
+                </p>
+                {opsScanPipelineDash.summary.most_used_scanner_profiles.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">No labelled bulk-ingest presets recorded yet.</p>
+                ) : (
+                  <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Preset</th>
+                          <th className="p-3 font-medium">Profile id</th>
+                          <th className="p-3 font-medium">Sessions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsScanPipelineDash.summary.most_used_scanner_profiles.map((row, idx) => (
+                          <tr key={`${row.scanner_profile_id ?? "nl"}-${row.profile_label}-${idx}`}>
+                            <td className="p-3 text-slate-100">{row.profile_label}</td>
+                            <td className="p-3 font-mono text-[11px]">
+                              {row.scanner_profile_id != null ? `#${row.scanner_profile_id}` : "—"}
+                            </td>
+                            <td className="p-3">{row.scan_session_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No pipeline dashboard payload.</p>
+          )}
+        </div>
+      </details>
+
+      <details className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market sales foundation</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic market-sale rows with preserved raw payload history, ordered image evidence, and surfaced
+                normalization issues. The panel is read-only except for the explicit ops upsert flow used for future imports.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/90">
+              Ops / sales foundation
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-emerald-200/15 pt-4">
+          {opsMarketSalesLoading ? (
+            <p className="text-sm text-slate-400">Loading market sales…</p>
+          ) : opsMarketSalesError ? (
+            <StatusBanner tone="error">{opsMarketSalesError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                <StatCard label="Records" value={String(opsMarketSalesSummary.total)} />
+                <StatCard label="Normalized" value={String(opsMarketSalesSummary.normalized)} />
+                <StatCard label="Partially normalized" value={String(opsMarketSalesSummary.partial)} />
+                <StatCard label="Normalization failed" value={String(opsMarketSalesSummary.failed)} />
+                <StatCard label="Duplicate warnings" value={String(opsMarketSalesSummary.duplicateWarnings)} />
+              </div>
+
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Source</th>
+                      <th className="p-3 font-medium">Title / issue</th>
+                      <th className="p-3 font-medium">Sale</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Issues</th>
+                      <th className="p-3 font-medium">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketSales.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={7}>
+                          No market-sale records have been imported yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsMarketSales.map((row) => {
+                        const isSelected = opsMarketSaleSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSelected
+                                    ? "border-emerald-300/70 bg-emerald-400/20 text-emerald-50"
+                                    : "border-white/15 text-slate-200 hover:border-emerald-300/35"
+                                }`}
+                                onClick={() => setOpsMarketSaleSelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSelected ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top">
+                              <div className="text-slate-100">{row.source_name}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{row.source_type}</div>
+                            </td>
+                            <td className="p-3 align-top">
+                              <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                Issue {row.normalized_issue ?? row.raw_issue}
+                                {row.source_listing_id ? ` · ${row.source_listing_id}` : ""}
+                              </div>
+                            </td>
+                            <td className="p-3 align-top">
+                              <div>
+                                {row.total_price ?? row.sale_price ?? "—"} {row.currency_code}
+                              </div>
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                {row.sale_date ?? "No sale date"}
+                              </div>
+                            </td>
+                            <td className="p-3 align-top">
+                              <span
+                                className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${marketSaleStatusTone(
+                                  row.normalization_status,
+                                )}`}
+                              >
+                                {row.normalization_status.replace(/_/g, " ")}
+                              </span>
+                            </td>
+                            <td className="p-3 align-top">
+                              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                                {row.normalization_issue_count}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-400 align-top">{formatDateTime(row.updated_at)}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsMarketSaleDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading selected market-sale detail…</p>
+              ) : opsMarketSaleDetailError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{opsMarketSaleDetailError}</StatusBanner>
+                </div>
+              ) : opsMarketSaleDetail ? (
+                <div className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Selected record
+                    </p>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2 text-xs text-slate-300">
+                        <div><span className="text-slate-500">Source:</span> {opsMarketSaleDetail.source_name}</div>
+                        <div><span className="text-slate-500">Source type:</span> {opsMarketSaleDetail.source_type}</div>
+                        <div><span className="text-slate-500">Listing id:</span> {opsMarketSaleDetail.source_listing_id ?? "—"}</div>
+                        <div><span className="text-slate-500">Snapshot id:</span> {opsMarketSaleDetail.source_snapshot_id ?? "—"}</div>
+                        <div><span className="text-slate-500">Sale date:</span> {opsMarketSaleDetail.sale_date ?? "—"}</div>
+                        <div><span className="text-slate-500">Total / shipping:</span> {opsMarketSaleDetail.total_price ?? "—"} / {opsMarketSaleDetail.shipping_price ?? "—"} {opsMarketSaleDetail.currency_code}</div>
+                        <div><span className="text-slate-500">Graded:</span> {opsMarketSaleDetail.is_graded ? "Yes" : "No"}</div>
+                        <div><span className="text-slate-500">Grading company:</span> {opsMarketSaleDetail.grading_company ?? "—"}</div>
+                        <div><span className="text-slate-500">Signed:</span> {opsMarketSaleDetail.is_signed ? "Yes" : "No"}</div>
+                        <div><span className="text-slate-500">Seller / buyer:</span> {opsMarketSaleDetail.seller_name ?? "—"} / {opsMarketSaleDetail.buyer_name ?? "—"}</div>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Raw payload history
+                        </p>
+                        <pre className="mt-2 max-h-56 overflow-auto rounded-xl border border-white/10 bg-slate-950/70 p-3 text-[11px] leading-5 text-slate-300">
+                          {JSON.stringify(opsMarketSaleDetail.source_metadata_json, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Normalization issues
+                      </p>
+                      {opsMarketSaleDetail.normalization_issues.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-500">No issues recorded for this record.</p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {opsMarketSaleDetail.normalization_issues.map((issue) => (
+                            <div
+                              key={issue.id}
+                              className={`rounded-xl border px-3 py-2 text-xs ${marketSaleIssueTone(issue.severity)}`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-semibold uppercase tracking-[0.12em]">{issue.issue_type.replace(/_/g, " ")}</span>
+                                <span className="text-[10px] uppercase tracking-[0.16em]">{issue.severity}</span>
+                              </div>
+                              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-slate-100/90">
+                                {JSON.stringify(issue.details_json, null, 2)}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Image evidence
+                      </p>
+                      {opsMarketSaleDetail.images.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-500">No images recorded for this record.</p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {opsMarketSaleDetail.images.map((image) => (
+                            <div key={image.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-300">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-100">Image #{image.display_order}</span>
+                                <span className="text-[11px] text-slate-500">{image.image_sha256 ?? "no hash"}</span>
+                              </div>
+                              <div className="mt-1 break-all text-slate-400">{image.image_url ?? "No URL recorded"}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
       <details className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/15 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2798,8 +3341,8 @@ export function OperationsPage() {
             <div>
               <h2 className="text-sm font-semibold text-white">Scan QA (fleet)</h2>
               <p className="mt-1 max-w-3xl text-xs text-slate-400">
-                Persists only after owners run &quot;Run QA snapshot&quot; on a session. Counts are routing and classification
-                visibility — no automatic OCR enqueue or metadata mutation from QA alone.
+                Persists only after owners run &quot;Run QA snapshot&quot; on a session. Classification + routing aggregates also
+                appear in the condensed <span className="font-semibold text-slate-200">Bulk ingest operations</span> header — expand here for ledger-level breakdowns without duplicating OCR actions elsewhere.
               </p>
             </div>
             <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">

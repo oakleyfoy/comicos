@@ -384,6 +384,18 @@ export function ScanSessionsPage() {
         actions={
           <>
             <Link
+              to="/dashboard#bulk-scan-pipeline"
+              className="inline-flex rounded-2xl border border-teal-300/35 px-4 py-2 text-sm font-semibold text-teal-100 transition hover:border-teal-200/55 hover:bg-teal-500/10"
+            >
+              Portfolio pipeline snapshot
+            </Link>
+            <Link
+              to="/dashboard#physical-intake"
+              className="inline-flex rounded-2xl border border-emerald-300/35 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-200/50 hover:bg-emerald-500/10"
+            >
+              Receiving totals
+            </Link>
+            <Link
               to="/dashboard"
               className="inline-flex rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-300/35 hover:bg-white/5"
             >
@@ -409,7 +421,7 @@ export function ScanSessionsPage() {
       ) : null}
 
       <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-1">
+        <section id="bulk-session-controls" className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-1">
           <h2 className="text-sm font-semibold text-white">Session controls</h2>
           <p className="mt-1 text-xs text-slate-400">
             Create a deterministic bulk session target, paste its numeric id from exports, refresh rows after each ingest batch.
@@ -563,7 +575,7 @@ export function ScanSessionsPage() {
           ) : null}
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-2">
+        <section id="bulk-multipart-ingest" className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-2">
           <h2 className="text-sm font-semibold text-white">Multipart ingest ({selectedFiles.length} files staged)</h2>
           <p className="mt-1 text-xs text-slate-400">
             JSON manifest rows align positionally with multipart file order; omit entries to accept defaults (
@@ -581,7 +593,7 @@ export function ScanSessionsPage() {
             </label>
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/tiff,.tif,.tiff"
               multiple
               className="text-xs text-slate-300 file:rounded-lg file:border-0 file:bg-cyan-400/90 file:px-3 file:py-2 file:text-[11px] file:font-semibold file:text-slate-950"
               onChange={(e) => setSelectedFiles(e.target.files ? Array.from(e.target.files) : [])}
@@ -643,7 +655,7 @@ export function ScanSessionsPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4">
+              <div id="scan-qa-and-routing" className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-violet-400/30 bg-violet-950/20 p-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200">Scan QA (deterministic routing)</p>
                   <p className="mt-1 text-[11px] text-slate-400">

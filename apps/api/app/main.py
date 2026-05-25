@@ -245,6 +245,10 @@ from app.schemas.scan_pipeline_replays import (
     ScanPipelineReplayListRead,
     ScanPipelineReplayRunRead,
 )
+from app.schemas.scan_pipeline_dashboard import (
+    ScanPipelineDashboardRead,
+    ScanPipelineDashboardSummaryRead,
+)
 from app.schemas.queue_routing import (
     QueueRoutingListResponse,
     QueueRoutingRecommendationRead,
@@ -255,6 +259,15 @@ from app.schemas.high_res_review_requests import (
     HighResReviewRequestListResponse,
     HighResReviewRequestRead,
     HighResReviewRequestStatsRead,
+)
+from app.schemas.market_sales import (
+    MarketSaleListResponse,
+    MarketSaleRead,
+    MarketSourceImportRunCreatePayload,
+    MarketSourceImportRunListResponse,
+    MarketSourceImportRunRead,
+    MarketSourceRead,
+    MarketSaleUpsertPayload,
 )
 from app.services.ai_order_parser import (
     AiOrderParserError,
@@ -400,6 +413,20 @@ from app.services.high_res_review_requests import (
     list_high_res_review_requests_ops,
     list_high_res_review_requests_owner,
 )
+from app.services.market_sales import (
+    cancel_market_import_run_for_ops,
+    complete_market_import_run_for_ops,
+    create_market_import_run_for_ops,
+    get_market_sale_record,
+    get_market_import_run_for_owner,
+    get_market_source_read,
+    list_market_import_runs_for_ops,
+    list_market_import_runs_for_owner,
+    list_market_sources,
+    list_market_sales,
+    start_market_import_run_for_ops,
+    upsert_market_sale_record,
+)
 from app.services.scan_qa import (
     fleet_scan_qa_summary,
     get_scan_session_item_qa,
@@ -444,6 +471,10 @@ from app.services.scan_pipeline_replays import (
     list_scan_pipeline_replay_runs_owner,
     list_scan_pipeline_replay_runs_ops,
     start_scan_pipeline_replay_run,
+)
+from app.services.scan_pipeline_dashboard import (
+    scan_pipeline_dashboard,
+    scan_pipeline_dashboard_summary,
 )
 from app.services.gmail_ingestion import (
     GmailIntegrationError,
@@ -5891,6 +5922,196 @@ def owner_delete_scanner_profile_endpoint(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@app.get("/market-sales", response_model=MarketSaleListResponse)
+def owner_list_market_sales_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    publisher: Annotated[str | None, Query(description="Filter by normalized publisher.")] = None,
+    normalized_title: Annotated[str | None, Query(description="Filter by normalized title.")] = None,
+    normalized_issue: Annotated[str | None, Query(description="Filter by normalized issue.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    normalization_status: Annotated[str | None, Query(description="Filter by normalization status.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> MarketSaleListResponse:
+    del current_user
+    return list_market_sales(
+        session,
+        source=source,
+        publisher=publisher,
+        normalized_title=normalized_title,
+        normalized_issue=normalized_issue,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        normalization_status=normalization_status,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+
+
+@app.get("/market-sales/{market_sale_record_id}", response_model=MarketSaleRead)
+def owner_get_market_sale_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketSaleRead:
+    del current_user
+    return get_market_sale_record(session, market_sale_record_id=market_sale_record_id)
+
+
+@app.get("/ops/market-sales", response_model=MarketSaleListResponse)
+def ops_list_market_sales_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    publisher: Annotated[str | None, Query(description="Filter by normalized publisher.")] = None,
+    normalized_title: Annotated[str | None, Query(description="Filter by normalized title.")] = None,
+    normalized_issue: Annotated[str | None, Query(description="Filter by normalized issue.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    normalization_status: Annotated[str | None, Query(description="Filter by normalization status.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> MarketSaleListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_sales(
+        session,
+        source=source,
+        publisher=publisher,
+        normalized_title=normalized_title,
+        normalized_issue=normalized_issue,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        normalization_status=normalization_status,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+
+
+@app.get("/ops/market-sales/{market_sale_record_id}", response_model=MarketSaleRead)
+def ops_get_market_sale_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_sale_record(session, market_sale_record_id=market_sale_record_id)
+
+
+@app.post("/ops/market-sales", response_model=MarketSaleRead, status_code=status.HTTP_201_CREATED)
+def ops_upsert_market_sale_endpoint(
+    payload: MarketSaleUpsertPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleRead:
+    ensure_ops_admin_access(current_user, settings)
+    return upsert_market_sale_record(session, payload=payload)
+
+
+@app.get("/market-sources", response_model=list[MarketSourceRead])
+def owner_list_market_sources_endpoint(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)) -> list[MarketSourceRead]:
+    del current_user
+    return list_market_sources(session)
+
+
+@app.get("/market-sources/{market_source_id}", response_model=MarketSourceRead)
+def owner_get_market_source_endpoint(
+    market_source_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketSourceRead:
+    del current_user
+    return get_market_source_read(session, market_source_id=market_source_id)
+
+
+@app.get("/market-import-runs", response_model=MarketSourceImportRunListResponse)
+def owner_list_market_import_runs_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketSourceImportRunListResponse:
+    assert current_user.id is not None
+    return list_market_import_runs_for_owner(session, current_user_id=int(current_user.id))
+
+
+@app.get("/market-import-runs/{run_id}", response_model=MarketSourceImportRunRead)
+def owner_get_market_import_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketSourceImportRunRead:
+    assert current_user.id is not None
+    return get_market_import_run_for_owner(session, current_user_id=int(current_user.id), run_id=run_id)
+
+
+@app.get("/ops/market-sources", response_model=list[MarketSourceRead], include_in_schema=False)
+def ops_list_market_sources_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[MarketSourceRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_sources(session)
+
+
+@app.get("/ops/market-import-runs", response_model=MarketSourceImportRunListResponse, include_in_schema=False)
+def ops_list_market_import_runs_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSourceImportRunListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_import_runs_for_ops(session)
+
+
+@app.post("/ops/market-import-runs", response_model=MarketSourceImportRunRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+def ops_create_market_import_run_endpoint(
+    payload: MarketSourceImportRunCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSourceImportRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return create_market_import_run_for_ops(session, actor_user_id=current_user.id, payload=payload)
+
+
+@app.post("/ops/market-import-runs/{run_id}/start", response_model=MarketSourceImportRunRead, include_in_schema=False)
+def ops_start_market_import_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSourceImportRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return start_market_import_run_for_ops(session, run_id=run_id, actor_user_id=current_user.id)
+
+
+@app.post("/ops/market-import-runs/{run_id}/cancel", response_model=MarketSourceImportRunRead, include_in_schema=False)
+def ops_cancel_market_import_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSourceImportRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return cancel_market_import_run_for_ops(session, run_id=run_id, actor_user_id=current_user.id)
+
+
+@app.post("/ops/market-import-runs/{run_id}/complete", response_model=MarketSourceImportRunRead, include_in_schema=False)
+def ops_complete_market_import_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSourceImportRunRead:
+    ensure_ops_admin_access(current_user, settings)
+    return complete_market_import_run_for_ops(session, run_id=run_id, actor_user_id=current_user.id)
+
+
 @app.post("/scan-pipeline-replays", response_model=ScanPipelineReplayRunRead, status_code=status.HTTP_201_CREATED)
 def owner_create_scan_pipeline_replay_endpoint(
     payload: ScanPipelineReplayCreatePayload,
@@ -5963,6 +6184,24 @@ def owner_scan_sessions_dashboard_endpoint(
     assert current_user.id is not None
     active_trim, recent_trim = owner_scan_session_dashboard(session, owner_user_id=int(current_user.id))
     return ScanSessionDashboardResponse(active_sessions=active_trim, recent_sessions=recent_trim)
+
+
+@app.get("/scan-pipeline-dashboard/summary", response_model=ScanPipelineDashboardSummaryRead)
+def owner_scan_pipeline_dashboard_summary_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineDashboardSummaryRead:
+    assert current_user.id is not None
+    return scan_pipeline_dashboard_summary(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/scan-pipeline-dashboard", response_model=ScanPipelineDashboardRead)
+def owner_scan_pipeline_dashboard_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanPipelineDashboardRead:
+    assert current_user.id is not None
+    return scan_pipeline_dashboard(session, owner_user_id=int(current_user.id))
 
 
 @app.get("/scan-sessions", response_model=ScanSessionListResponse)
@@ -6349,6 +6588,26 @@ def ops_get_scan_pipeline_replay_endpoint(
 ) -> ScanPipelineReplayRunRead:
     ensure_ops_admin_access(current_user, settings)
     return get_scan_pipeline_replay_run_ops(session, replay_id=replay_id)
+
+
+@app.get("/ops/scan-pipeline-dashboard/summary", response_model=ScanPipelineDashboardSummaryRead, include_in_schema=False)
+def ops_scan_pipeline_dashboard_summary_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanPipelineDashboardSummaryRead:
+    ensure_ops_admin_access(current_user, settings)
+    return scan_pipeline_dashboard_summary(session, owner_user_id=None)
+
+
+@app.get("/ops/scan-pipeline-dashboard", response_model=ScanPipelineDashboardRead, include_in_schema=False)
+def ops_scan_pipeline_dashboard_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanPipelineDashboardRead:
+    ensure_ops_admin_access(current_user, settings)
+    return scan_pipeline_dashboard(session, owner_user_id=None)
 
 
 @app.get("/ops/scan-sessions", response_model=ScanSessionListResponse, include_in_schema=False)

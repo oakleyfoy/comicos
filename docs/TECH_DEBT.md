@@ -30,6 +30,24 @@ Resolved routes:
 - Relationship conflict detection and relationship replay remain strictly non-mutating surfaces. They should continue to log review/audit state only, never automatic relationship or metadata changes.
 - The default backend suite should remain independent of an external Redis instance; tests rely on in-memory `fakeredis` wiring in `apps/api/tests/conftest.py`.
 
+## P34 — Scan pipeline / bulk ingest closeout (2026-05-24)
+
+- **Architecture note:** see `docs/SCAN_PIPELINE_ARCHITECTURE.md` for lifecycle boundaries (Fujitsu bulk ingest semantics, Epson high-res escalation lane wording, deterministic QA/routing/replay/dashboard reads without OCR enqueue).
+
+- **Operational surfaces consolidated** (`ScanSessionsPage`, owner dashboard receiving + pipeline rails, Ops **Bulk ingest operations** drawer) prioritize explicit buttons (`Run QA snapshot`, `Generate routing snapshot`, `Queue OCR`) over implicit automation — regression tests cover routing/dashboard non-enqueue guards.
+
+- **Known follow-ups**
+  - List endpoints that currently cap at owner-selected limits (scan items `limit=500` in SPA) remain UI-side until product defines shared pagination primitives for ingest queues.
+  - FastAPI uniqueness regression only asserts the guarded scan-plane path prefixes enumerated in `test_scan_pipeline_closeout.py`; adding new sibling routers requires extending that registry when paths are logically part of the scan pipeline contract.
+
+## P35 — Market sales foundation closeout (2026-05-24)
+
+- **Architecture note:** market-sale persistence now keeps raw source payloads, ordered image evidence, deterministic issue rows, and stable source registry rows for future comp / FMV work without any live scraping or pricing heuristics.
+- **Operational surfaces**: owner reads remain read-only, ops gets the explicit upsert lane, and the dashboard/ops page show compact preview surfaces without mutating inventory metadata.
+- **Known follow-ups**
+  - Extend market-sales pagination and bulk import ergonomics only when product defines the final ingest workflow.
+  - Keep duplicate handling issue-only; no auto-merge or delete paths should be introduced on the sales foundation tables.
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.
