@@ -29,6 +29,7 @@ from app.schemas.inventory import (
     PortfolioPerformanceResponse,
     ReleaseCalendarPresence,
 )
+from app.services.inventory_fmv import build_inventory_fmv_attachment, summarize_inventory_fmv
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.ops import (
     OpsInventoryDuplicateCandidateGroup,
@@ -108,6 +109,7 @@ def build_inventory_base_query(current_user: User):
             ComicTitle.name.label("title"),
             Publisher.name.label("publisher"),
             ComicIssue.issue_number.label("issue_number"),
+            ComicIssue.id.label("canonical_issue_id"),
             Variant.cover_name.label("cover_name"),
             Variant.printing.label("printing"),
             Variant.ratio.label("ratio"),
@@ -117,6 +119,8 @@ def build_inventory_base_query(current_user: User):
             Order.order_date.label("order_date"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
+            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+            InventoryCopy.canonical_series_id.label("canonical_series_id"),
             gain_loss_expr,
             InventoryCopy.grade_status.label("grade_status"),
             InventoryCopy.hold_status.label("hold_status"),
@@ -154,6 +158,7 @@ def build_inventory_detail_query(current_user: User):
             ComicTitle.name.label("title"),
             Publisher.name.label("publisher"),
             ComicIssue.issue_number.label("issue_number"),
+            ComicIssue.id.label("canonical_issue_id"),
             Variant.cover_name.label("cover_name"),
             Variant.printing.label("printing"),
             Variant.ratio.label("ratio"),
@@ -164,6 +169,8 @@ def build_inventory_detail_query(current_user: User):
             Order.source_type.label("source_type"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
+            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+            InventoryCopy.canonical_series_id.label("canonical_series_id"),
             gain_loss_expr,
             InventoryCopy.grade_status.label("grade_status"),
             InventoryCopy.hold_status.label("hold_status"),
@@ -453,6 +460,12 @@ def list_inventory(
     asset_state: str | None,
     intelligence_health: str | None,
     ownership_intel: str | None,
+    valuation_scope: str | None = None,
+    fmv_confidence_bucket: str | None = None,
+    fmv_liquidity_bucket: str | None = None,
+    fmv_stale_data: bool | None = None,
+    fmv_currency_code: str | None = None,
+    ownership_state: str | None = None,
     risk_priority: str | None,
     risk_type: str | None,
     needs_attention: bool,
@@ -527,7 +540,7 @@ def list_inventory(
         return False
 
     intel_allowlist: set[int] | None = None
-    if intelligence_health or ownership_intel:
+    if intelligence_health or ownership_intel or ownership_state:
         intel_allowlist = set()
         for inv_id, sig in intel_signals.items():
             if intelligence_health:
@@ -536,7 +549,8 @@ def list_inventory(
                         continue
                 elif sig.inventory_health != intelligence_health:
                     continue
-            if ownership_intel and sig.ownership_state != ownership_intel:
+            ownership_filter = ownership_state or ownership_intel
+            if ownership_filter and sig.ownership_state != ownership_filter:
                 continue
             intel_allowlist.add(inv_id)
 
@@ -614,30 +628,51 @@ def list_inventory(
         filtered_stmt = filtered_stmt.where(InventoryCopy.id.in_(id_tuple))
         total_stmt = total_stmt.where(InventoryCopy.id.in_(id_tuple))
 
-    paginated_stmt = apply_inventory_sort(filtered_stmt, sort_by, sort_dir).offset(
-        (page - 1) * page_size
-    ).limit(page_size)
-
-    total = session.exec(total_stmt).one()
-    rows = session.exec(paginated_stmt).all()
-    items = []
+    rows = session.exec(apply_inventory_sort(filtered_stmt, sort_by, sort_dir)).all()
+    inventory_rows: list[InventoryRow] = []
     for row in rows:
         row_map = dict(row._mapping)
         inv_pk = int(row_map["inventory_copy_id"])
         row_map["inventory_intelligence"] = intel_signals.get(inv_pk)
+        row_map["ownership_state"] = intel_signals.get(inv_pk).ownership_state if intel_signals.get(inv_pk) else None
         row_map["duplicate_ownership"] = dup_attachments.get(inv_pk)
         row_map["run_detection"] = run_attachments.get(inv_pk)
         row_map["inventory_risks"] = risks_by_inventory.get(inv_pk, [])
         row_map["order_arrival_classifications"] = arrival_by_inventory.get(inv_pk, [])
         row_map["inventory_action_center"] = attachment_from_items(actions_by_inventory.get(inv_pk, []))
-        items.append(InventoryRow.model_validate(row_map))
+        fmv_attachment = build_inventory_fmv_attachment(session, row=row_map, include_detail=False)
+        row_map["current_market_fmv"] = fmv_attachment.current_market_fmv
+        row_map["fmv_snapshot_id"] = fmv_attachment.fmv_snapshot_id
+        row_map["fmv_method"] = fmv_attachment.fmv_method
+        row_map["fmv_confidence_bucket"] = fmv_attachment.fmv_confidence_bucket
+        row_map["fmv_liquidity_bucket"] = fmv_attachment.fmv_liquidity_bucket
+        row_map["fmv_volatility_bucket"] = fmv_attachment.fmv_volatility_bucket
+        row_map["fmv_stale_data"] = fmv_attachment.fmv_stale_data
+        row_map["fmv_currency_code"] = fmv_attachment.fmv_currency_code
+        row_map["valuation_scope"] = fmv_attachment.valuation_scope
+        row_map["valuation_evidence_json"] = fmv_attachment.valuation_evidence_json
+        inventory_rows.append(InventoryRow.model_validate(row_map))
 
-    return InventoryListResponse(
-        page=page,
-        page_size=page_size,
-        total=total,
-        items=items,
-    )
+    def _fmv_row_matches(row: InventoryRow) -> bool:
+        if valuation_scope is not None and row.valuation_scope != valuation_scope:
+            return False
+        if fmv_confidence_bucket is not None and row.fmv_confidence_bucket != fmv_confidence_bucket:
+            return False
+        if fmv_liquidity_bucket is not None and row.fmv_liquidity_bucket != fmv_liquidity_bucket:
+            return False
+        if fmv_stale_data is not None and bool(row.fmv_stale_data) != fmv_stale_data:
+            return False
+        if fmv_currency_code is not None and (row.fmv_currency_code or "").upper() != fmv_currency_code.strip().upper():
+            return False
+        return True
+
+    filtered_rows = [row for row in inventory_rows if _fmv_row_matches(row)]
+    total = len(filtered_rows)
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = filtered_rows[start:end]
+
+    return InventoryListResponse(page=page, page_size=page_size, total=total, items=items)
 
 
 def inventory_summary(session: Session, current_user: User) -> InventorySummaryResponse:
@@ -746,6 +781,7 @@ def get_inventory_copy_detail(
         dup_scan_classification="all",
     )
     merged["inventory_intelligence"] = intelligence_signals.get(inventory_copy_id)
+    merged["ownership_state"] = intelligence_signals.get(inventory_copy_id).ownership_state if intelligence_signals.get(inventory_copy_id) else None
     merged["duplicate_ownership"] = dup_attachments.get(inventory_copy_id)
     _, run_attachments = run_detection_inventory_context_for_owner(
         session,
@@ -769,6 +805,18 @@ def get_inventory_copy_detail(
         inventory_copy_id=inventory_copy_id,
         user_id=int(current_user.id),
     )
+    fmv_attachment = build_inventory_fmv_attachment(session, row=merged, include_detail=True)
+    merged["current_market_fmv"] = fmv_attachment.current_market_fmv
+    merged["fmv_snapshot_id"] = fmv_attachment.fmv_snapshot_id
+    merged["fmv_method"] = fmv_attachment.fmv_method
+    merged["fmv_confidence_bucket"] = fmv_attachment.fmv_confidence_bucket
+    merged["fmv_liquidity_bucket"] = fmv_attachment.fmv_liquidity_bucket
+    merged["fmv_volatility_bucket"] = fmv_attachment.fmv_volatility_bucket
+    merged["fmv_stale_data"] = fmv_attachment.fmv_stale_data
+    merged["fmv_currency_code"] = fmv_attachment.fmv_currency_code
+    merged["valuation_scope"] = fmv_attachment.valuation_scope
+    merged["valuation_evidence_json"] = fmv_attachment.valuation_evidence_json
+    merged["inventory_fmv"] = fmv_attachment
     merged["originating_scan_session"] = originating_scan_session_for_inventory_copy(
         session,
         owner_user_id=int(current_user.id),

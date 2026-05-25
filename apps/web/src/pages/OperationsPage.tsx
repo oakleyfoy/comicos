@@ -27,6 +27,7 @@ import {
   type InventoryRiskPriority,
   type InventoryRiskRead,
   type InventoryRiskType,
+  type InventoryResponse,
   type MetadataAlias,
   type MetadataAliasType,
   type OcrBatch,
@@ -108,6 +109,7 @@ import {
   type ScanPipelineDashboardResponse,
   type ScanSessionDetail,
   type ScanSessionSummary,
+  type PortfolioValueSummaryResponse,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
   type CollectionHistoricalTimelineEventKind,
@@ -178,6 +180,14 @@ function formatCurrency(value: string | null): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
+  }).format(amount);
+}
+
+function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode || "USD",
   }).format(amount);
 }
 
@@ -1076,6 +1086,13 @@ function TableSection({
 
 export function OperationsPage() {
   const [dashboard, setDashboard] = useState<OpsDashboardResponse | null>(null);
+  const [portfolioValueSummary, setPortfolioValueSummary] = useState<PortfolioValueSummaryResponse | null>(null);
+  const [inventoryFmvCoverage, setInventoryFmvCoverage] = useState<InventoryResponse | null>(null);
+  const [inventoryFmvLowConfidence, setInventoryFmvLowConfidence] = useState<InventoryResponse | null>(null);
+  const [inventoryFmvStale, setInventoryFmvStale] = useState<InventoryResponse | null>(null);
+  const [inventoryFmvNoMarketData, setInventoryFmvNoMarketData] = useState<InventoryResponse | null>(null);
+  const [inventoryFmvLoading, setInventoryFmvLoading] = useState(true);
+  const [inventoryFmvError, setInventoryFmvError] = useState<string | null>(null);
   const [coverLinkDecisions, setCoverLinkDecisions] = useState<
     Awaited<ReturnType<typeof apiClient.listCoverLinkDecisionsForOps>>
   >([]);
@@ -1501,19 +1518,36 @@ export function OperationsPage() {
 
     async function loadDashboardAndAliases() {
       setIsLoading(true);
+      setInventoryFmvLoading(true);
       setError(null);
+      setInventoryFmvError(null);
       try {
-        const [dashboardResponse, aliases] = await Promise.all([
+        const [dashboardResponse, aliases, portfolioSummary, fmvCoverage, lowConfidence, stale, noMarketData] = await Promise.all([
           apiClient.getOpsDashboard(),
           apiClient.listMetadataAliases(),
+          apiClient.getOpsPortfolioValueSummary(),
+          apiClient.getOpsInventoryFmvList({ page: 1, page_size: 25 }),
+          apiClient.getOpsInventoryFmvList({ page: 1, page_size: 12, confidence_bucket: "low" }),
+          apiClient.getOpsInventoryFmvList({ page: 1, page_size: 12, stale_data: true }),
+          apiClient.getOpsInventoryFmvList({ page: 1, page_size: 12, valuation_scope: "no_market_data" }),
         ]);
         if (!ignore) {
           setDashboard(dashboardResponse);
           setMetadataAliases(aliases);
+          setPortfolioValueSummary(portfolioSummary);
+          setInventoryFmvCoverage(fmvCoverage);
+          setInventoryFmvLowConfidence(lowConfidence);
+          setInventoryFmvStale(stale);
+          setInventoryFmvNoMarketData(noMarketData);
           void apiClient.listRecentCoverLinkDecisionsForOps({ include_inactive: true, limit: 12 }).then(setCoverLinkDecisions);
         }
       } catch (loadError) {
         if (!ignore) {
+          setInventoryFmvError(
+            loadError instanceof ApiError
+              ? loadError.message
+              : "Unable to load FMV coverage dashboard.",
+          );
           setError(
             loadError instanceof ApiError
               ? loadError.message
@@ -1523,6 +1557,7 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setIsLoading(false);
+          setInventoryFmvLoading(false);
         }
       }
     }
@@ -3093,6 +3128,12 @@ export function OperationsPage() {
   const opsExportChipClass =
     "rounded-xl border border-amber-200/35 px-3 py-2 text-xs font-semibold text-amber-50 transition hover:border-amber-200/65 hover:bg-amber-400/10";
 
+  const inventoryFmvPanels: Array<{ title: string; resp: InventoryResponse | null }> = [
+    { title: "Low-confidence rows", resp: inventoryFmvLowConfidence },
+    { title: "Stale rows", resp: inventoryFmvStale },
+    { title: "No market data rows", resp: inventoryFmvNoMarketData },
+  ];
+
   async function handleOpsAssignCoverToInventory(coverImageId: number): Promise<void> {
     const invRaw = (coverOpsAssignInvDraft[coverImageId] ?? "").trim();
     const invNum = Number(invRaw);
@@ -3764,6 +3805,106 @@ export function OperationsPage() {
         <div className="mt-6">
           <StatusBanner tone="error">{error}</StatusBanner>
         </div>
+      ) : null}
+
+      {inventoryFmvError ? (
+        <div className="mt-6">
+          <StatusBanner tone="warning">{inventoryFmvError}</StatusBanner>
+        </div>
+      ) : null}
+
+      {!inventoryFmvLoading ? (
+        <section className="mt-6 rounded-3xl border border-cyan-400/30 bg-cyan-950/20 p-5 shadow-xl shadow-black/25">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-cyan-50">Inventory FMV coverage</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic market valuation attached to inventory copies. Currencies stay separated, preorder rows stay
+                informational, and cancelled rows are excluded from active value.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / FMV
+            </span>
+          </div>
+          {portfolioValueSummary?.items.length ? (
+            <div className="mt-5 space-y-6">
+              {portfolioValueSummary.items.map((bucket) => (
+                <div key={bucket.currency_code} className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{bucket.currency_code}</p>
+                      <p className="mt-1 text-sm text-slate-300">Separated currency bucket</p>
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                      Active value {formatCurrencyWithCode(bucket.total_active_market_value, bucket.currency_code)}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Raw" value={formatCurrencyWithCode(bucket.raw_market_value, bucket.currency_code)} />
+                    <StatCard label="Graded" value={formatCurrencyWithCode(bucket.graded_market_value, bucket.currency_code)} />
+                    <StatCard
+                      label="Preorder informational"
+                      value={formatCurrencyWithCode(bucket.preorder_informational_value, bucket.currency_code)}
+                    />
+                    <StatCard
+                      label="Low-confidence"
+                      value={formatCurrencyWithCode(bucket.low_confidence_value, bucket.currency_code)}
+                    />
+                    <StatCard label="Stale value" value={formatCurrencyWithCode(bucket.stale_value, bucket.currency_code)} />
+                    <StatCard label="No market data" value={String(bucket.no_market_data_count)} />
+                    <StatCard label="Cancelled excluded" value={String(bucket.cancelled_excluded_count)} />
+                    <StatCard
+                      label="Duplicate exposure"
+                      value={formatCurrencyWithCode(bucket.duplicate_value_exposure, bucket.currency_code)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400">No portfolio FMV summary returned.</p>
+          )}
+          <div className="mt-6 grid gap-4 xl:grid-cols-3">
+            {inventoryFmvPanels.map(({ title, resp }) => (
+              <article key={title} className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">{title}</h3>
+                    <p className="text-xs text-slate-500">{resp?.total ?? 0} rows shown</p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                    FMV
+                  </span>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {resp?.items.slice(0, 8).map((item) => (
+                    <Link
+                      key={item.inventory_copy_id}
+                      to={`/inventory/${item.inventory_copy_id}`}
+                      className="block rounded-xl border border-white/10 bg-slate-900/70 p-3 transition hover:border-cyan-300/35 hover:bg-slate-900"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">{item.title}</p>
+                          <p className="text-xs text-slate-400">{item.publisher} #{item.issue_number}</p>
+                        </div>
+                        <div className="text-right text-xs text-slate-400">
+                          <p>{item.valuation_scope?.replace(/_/g, " ")}</p>
+                          <p className="mt-1 text-slate-300">
+                            {item.current_market_fmv
+                              ? formatCurrencyWithCode(item.current_market_fmv, item.fmv_currency_code ?? "USD")
+                              : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <details className="mt-6 rounded-3xl border border-cyan-400/40 bg-cyan-950/20 p-5 shadow-xl shadow-black/25 [&>summary::-webkit-details-marker]:hidden">

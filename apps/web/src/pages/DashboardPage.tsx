@@ -45,8 +45,11 @@ import {
   type MarketTrendSnapshotListResponse,
   type MarketSaleSummaryRead,
   type MarketSaleReviewQueueSummaryRead,
+  type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
   type ScanSessionSummary,
+  type InventoryValuationScope,
+  type PortfolioValueSummaryResponse,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -68,6 +71,14 @@ function formatCurrency(value: string | null): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
+  }).format(amount);
+}
+
+function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode || "USD",
   }).format(amount);
 }
 
@@ -716,6 +727,7 @@ export function DashboardPage() {
 
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [performance, setPerformance] = useState<PortfolioPerformance | null>(null);
+  const [portfolioValueSummary, setPortfolioValueSummary] = useState<PortfolioValueSummaryResponse | null>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -736,6 +748,8 @@ export function DashboardPage() {
   const [ownershipIntelFilter, setOwnershipIntelFilter] = useState<"" | InventoryOwnershipNormalized>(
     "",
   );
+  const [valuationScopeFilter, setValuationScopeFilter] = useState<"" | InventoryValuationScope>("");
+  const [confidenceBucketFilter, setConfidenceBucketFilter] = useState<"" | MarketFmvConfidenceBucket>("");
   const [riskPriorityFilter, setRiskPriorityFilter] = useState<"" | InventoryRiskPriority>("");
   const [riskTypeFilter, setRiskTypeFilter] = useState<"" | InventoryRiskType>("");
   const [needsAttentionFilter, setNeedsAttentionFilter] = useState(false);
@@ -830,6 +844,8 @@ export function DashboardPage() {
         intelHealthFilter ||
         undefined,
       ownership_intel: ownershipIntelFilter || undefined,
+      valuation_scope: valuationScopeFilter || undefined,
+      confidence_bucket: confidenceBucketFilter || undefined,
       risk_priority: riskPriorityFilter || undefined,
       risk_type: riskTypeFilter || undefined,
       needs_attention: needsAttentionFilter || undefined,
@@ -852,6 +868,8 @@ export function DashboardPage() {
       actionAttentionFilter,
       actionCategoryFilter,
       ownershipIntelFilter,
+      valuationScopeFilter,
+      confidenceBucketFilter,
       riskPriorityFilter,
       riskTypeFilter,
       arrivalClassificationFilter,
@@ -880,6 +898,7 @@ export function DashboardPage() {
     const [
       summaryResponse,
       performanceResponse,
+      portfolioValueSummaryResponse,
       inventoryResponse,
       riskSummaryResponse,
       workflowSummaryResponse,
@@ -895,6 +914,12 @@ export function DashboardPage() {
     ] = await Promise.all([
       apiClient.getInventorySummary(),
       apiClient.getPortfolioPerformance(),
+      apiClient.getPortfolioValueSummary({
+        publisher: publisher || undefined,
+        ownership_state: ownershipIntelFilter || undefined,
+        valuation_scope: valuationScopeFilter || undefined,
+        confidence_bucket: confidenceBucketFilter || undefined,
+      }),
       apiClient.getInventory(query),
       apiClient.getInventoryRisksSummary(),
       apiClient.getInventoryActionCenterSummary(),
@@ -910,6 +935,7 @@ export function DashboardPage() {
     ]);
     setSummary(summaryResponse);
     setPerformance(performanceResponse);
+    setPortfolioValueSummary(portfolioValueSummaryResponse);
     setInventory(inventoryResponse.items);
     setTotal(inventoryResponse.total);
     setInventoryRiskSummary(riskSummaryResponse);
@@ -939,6 +965,7 @@ export function DashboardPage() {
         const [
           summaryResponse,
           performanceResponse,
+          portfolioValueSummaryResponse,
           inventoryResponse,
           intelSummary,
           intelHealth,
@@ -957,6 +984,12 @@ export function DashboardPage() {
           await Promise.all([
             apiClient.getInventorySummary(),
             apiClient.getPortfolioPerformance(),
+            apiClient.getPortfolioValueSummary({
+              publisher: publisher || undefined,
+              ownership_state: ownershipIntelFilter || undefined,
+              valuation_scope: valuationScopeFilter || undefined,
+              confidence_bucket: confidenceBucketFilter || undefined,
+            }),
             apiClient.getInventory(inventoryQuery),
             apiClient.getInventoryIntelligenceSummary(),
             apiClient.getInventoryIntelligenceHealth(),
@@ -979,6 +1012,7 @@ export function DashboardPage() {
 
         setSummary(summaryResponse);
         setPerformance(performanceResponse);
+        setPortfolioValueSummary(portfolioValueSummaryResponse);
         setInventory(inventoryResponse.items);
         setTotal(inventoryResponse.total);
         setInventoryIntelSummary(intelSummary);
@@ -1352,6 +1386,8 @@ export function DashboardPage() {
     }
   }
 
+  const portfolioValue = portfolioValueSummary?.items[0] ?? null;
+  const portfolioHasMultipleCurrencies = (portfolioValueSummary?.items.length ?? 0) > 1;
   const cards = [
     { label: "Copies", value: summary?.total_copies ?? 0 },
     { label: "In Hand", value: summary?.in_hand_copies ?? 0 },
@@ -1360,6 +1396,35 @@ export function DashboardPage() {
     { label: "Cancelled", value: summary?.cancelled_copies ?? 0 },
     { label: "Cost Basis", value: formatCurrency(summary?.total_cost_basis ?? "0") },
     { label: "Current FMV", value: formatCurrency(summary?.total_current_fmv ?? "0") },
+    {
+      label: "Active Market Value",
+      value: formatCurrencyWithCode(portfolioValue?.total_active_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+    },
+    {
+      label: "Raw Market Value",
+      value: formatCurrencyWithCode(portfolioValue?.raw_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+    },
+    {
+      label: "Graded Market Value",
+      value: formatCurrencyWithCode(portfolioValue?.graded_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+    },
+    {
+      label: "Low-Confidence Value",
+      value: formatCurrencyWithCode(portfolioValue?.low_confidence_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+    },
+    {
+      label: "Preorder Informational",
+      value: formatCurrencyWithCode(
+        portfolioValue?.preorder_informational_value ?? "0",
+        portfolioValue?.currency_code ?? "USD",
+      ),
+    },
+    {
+      label: "Stale Value",
+      value: formatCurrencyWithCode(portfolioValue?.stale_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+    },
+    { label: "No Market Data", value: portfolioValue?.no_market_data_count ?? 0 },
+    { label: "Cancelled Excluded", value: portfolioValue?.cancelled_excluded_count ?? 0 },
     {
       label: "Unrealized P/L",
       value: formatCurrency(summary?.total_unrealized_gain_loss ?? "0"),
@@ -1484,6 +1549,13 @@ export function DashboardPage() {
           </article>
         ))}
       </section>
+      {portfolioValue ? (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-300">
+          Showing {portfolioValue.currency_code} market value.{" "}
+          {portfolioHasMultipleCurrencies ? "Multiple currencies are kept separate." : "Single-currency summary."}{" "}
+          Low-confidence and stale values are surfaced in the cards above without changing acquisition data.
+        </div>
+      ) : null}
 
       {physicalIntakeSummary || scanPipelineDash || marketSalesLoading || marketSalesPreview.length > 0 || marketSalesError ? (
         <section className="mt-6 space-y-6" aria-label="Receiving and bulk scan pipeline">
@@ -3308,6 +3380,42 @@ export function DashboardPage() {
               </select>
             </div>
 
+            <div className="grid gap-3 md:grid-cols-2">
+              <select
+                value={valuationScopeFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setValuationScopeFilter(event.target.value as "" | InventoryValuationScope);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any FMV scope</option>
+                <option value="raw">Raw</option>
+                <option value="graded">Graded</option>
+                <option value="preorder_pending">Preorder pending</option>
+                <option value="no_market_data">No market data</option>
+                <option value="low_confidence">Low confidence</option>
+                <option value="cancelled_excluded">Cancelled excluded</option>
+              </select>
+              <select
+                value={confidenceBucketFilter}
+                onChange={(event) =>
+                  resetPageAndUpdate(() => {
+                    setConfidenceBucketFilter(event.target.value as "" | MarketFmvConfidenceBucket);
+                  })
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+              >
+                <option value="">Any confidence</option>
+                <option value="very_high">Very high</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="very_low">Very low</option>
+              </select>
+            </div>
+
             <div className="grid gap-3 md:grid-cols-4">
               <select
                 value={riskPriorityFilter}
@@ -3582,7 +3690,9 @@ export function DashboardPage() {
                   <th className="px-4 py-3">Retailer</th>
                   <th className="px-4 py-3">Order Date</th>
                   <th className="px-4 py-3">Acquisition</th>
-                  <th className="px-4 py-3">Current FMV</th>
+                  <th className="px-4 py-3">Market FMV</th>
+                  <th className="px-4 py-3">Valuation</th>
+                  <th className="px-4 py-3">Manual FMV</th>
                   <th className="px-4 py-3">Gain / Loss</th>
                   <th className="px-4 py-3">Grade</th>
                   <th className="px-4 py-3">Hold</th>
@@ -3626,6 +3736,36 @@ export function DashboardPage() {
                     <td className="px-4 py-3.5">{item.retailer}</td>
                     <td className="px-4 py-3.5">{formatDate(item.order_date)}</td>
                     <td className="px-4 py-3.5">{formatCurrency(item.acquisition_cost)}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="space-y-1">
+                        <p className="font-medium text-white">
+                          {item.current_market_fmv
+                            ? formatCurrencyWithCode(item.current_market_fmv, item.fmv_currency_code ?? "USD")
+                            : "—"}
+                        </p>
+                        {item.fmv_stale_data ? (
+                          <p className="text-[11px] text-amber-200">Stale data</p>
+                        ) : null}
+                        {!item.current_market_fmv || item.valuation_scope === "no_market_data" ? (
+                          <p className="text-[11px] text-slate-500">No market data</p>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                          item.valuation_scope === "no_market_data"
+                            ? "border-slate-400/30 bg-white/5 text-slate-300"
+                            : item.valuation_scope === "cancelled_excluded"
+                              ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
+                              : item.valuation_scope === "low_confidence"
+                                ? "border-amber-400/35 bg-amber-400/10 text-amber-100"
+                                : "border-cyan-400/35 bg-cyan-400/10 text-cyan-100"
+                        }`}
+                      >
+                        {item.valuation_scope?.replace(/_/g, " ") ?? "—"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3.5">
                       <div className="flex gap-2">
                         <input

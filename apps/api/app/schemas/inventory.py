@@ -8,6 +8,7 @@ from app.schemas.cover_images import CoverImageRead
 from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
 from app.schemas.inventory_action_center import InventoryActionCenterAttachment
 from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
+from app.schemas.inventory_fmv import InventoryFmvAttachmentRead, InventoryValuationScope
 from app.schemas.scan_sessions import InventoryScanSessionOriginRead
 from app.schemas.inventory_risks import InventoryRiskRead
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
@@ -32,6 +33,16 @@ class InventoryRow(BaseModel):
     acquisition_cost: Decimal
     current_fmv: Decimal | None
     gain_loss: Decimal | None
+    current_market_fmv: Decimal | None = None
+    fmv_snapshot_id: int | None = None
+    fmv_method: str | None = None
+    fmv_confidence_bucket: str | None = None
+    fmv_liquidity_bucket: str | None = None
+    fmv_volatility_bucket: str | None = None
+    fmv_stale_data: bool | None = None
+    fmv_currency_code: str | None = None
+    valuation_scope: InventoryValuationScope | None = None
+    valuation_evidence_json: dict[str, object] = Field(default_factory=dict)
     grade_status: str
     hold_status: str
     star_rating: int | None
@@ -92,6 +103,16 @@ class InventoryDetailResponse(BaseModel):
     source_type: str | None
     acquisition_cost: Decimal
     current_fmv: Decimal | None
+    current_market_fmv: Decimal | None = None
+    fmv_snapshot_id: int | None = None
+    fmv_method: str | None = None
+    fmv_confidence_bucket: str | None = None
+    fmv_liquidity_bucket: str | None = None
+    fmv_volatility_bucket: str | None = None
+    fmv_stale_data: bool | None = None
+    fmv_currency_code: str | None = None
+    valuation_scope: InventoryValuationScope | None = None
+    valuation_evidence_json: dict[str, object] = Field(default_factory=dict)
     gain_loss: Decimal | None
     grade_status: str
     hold_status: str
@@ -117,6 +138,7 @@ class InventoryDetailResponse(BaseModel):
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
     order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
     inventory_action_center: InventoryActionCenterAttachment | None = None
+    inventory_fmv: InventoryFmvAttachmentRead | None = None
     originating_scan_session: InventoryScanSessionOriginRead | None = None
 
 

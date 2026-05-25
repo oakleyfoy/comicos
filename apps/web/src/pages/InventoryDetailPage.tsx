@@ -609,11 +609,29 @@ function formatCurrency(value: string | null): string {
   }).format(amount);
 }
 
+function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode || "USD",
+  }).format(amount);
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -2571,6 +2589,10 @@ export function InventoryDetailPage() {
     { label: "Cost Basis", value: formatCurrency(detail.acquisition_cost) },
     { label: "Current FMV", value: formatCurrency(detail.current_fmv) },
     {
+      label: "Market FMV",
+      value: formatCurrencyWithCode(detail.current_market_fmv, detail.fmv_currency_code ?? "USD"),
+    },
+    {
       label: "Gain / Loss",
       value: formatCurrency(detail.gain_loss),
       className: gainLossClass(detail.gain_loss),
@@ -3028,6 +3050,133 @@ export function InventoryDetailPage() {
               ))}
             </div>
           </div>
+
+          {detail.inventory_fmv ? (
+            <section className="mt-6 rounded-3xl border border-cyan-400/20 bg-cyan-950/15 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-cyan-100/75">FMV attachment</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic market valuation</h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                    This read-only attachment links the inventory copy to the selected FMV snapshot, trend snapshot,
+                    and comp references without mutating inventory metadata.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
+                    Scope: {detail.inventory_fmv.valuation_scope.replace(/_/g, " ")}
+                  </span>
+                  {detail.inventory_fmv.fmv_confidence_bucket ? (
+                    <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
+                      Confidence: {detail.inventory_fmv.fmv_confidence_bucket.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
+                  {detail.inventory_fmv.fmv_liquidity_bucket ? (
+                    <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
+                      Liquidity: {detail.inventory_fmv.fmv_liquidity_bucket.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
+                  {detail.inventory_fmv.fmv_volatility_bucket ? (
+                    <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
+                      Volatility: {detail.inventory_fmv.fmv_volatility_bucket.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
+                  {detail.inventory_fmv.fmv_stale_data ? (
+                    <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100">
+                      Stale data
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Snapshot evidence</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Snapshot ID</p>
+                      <p className="mt-1 text-sm text-white">{detail.inventory_fmv.fmv_snapshot_id ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Currency</p>
+                      <p className="mt-1 text-sm text-white">{detail.inventory_fmv.fmv_currency_code ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Method</p>
+                      <p className="mt-1 text-sm text-white">{detail.inventory_fmv.fmv_method ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Market FMV</p>
+                      <p className="mt-1 text-sm text-white">
+                        {formatCurrencyWithCode(
+                          detail.inventory_fmv.current_market_fmv,
+                          detail.inventory_fmv.fmv_currency_code ?? "USD",
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {detail.inventory_fmv.market_fmv_snapshot ? (
+                      <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3 text-sm text-slate-300">
+                        <p className="font-semibold text-white">{detail.inventory_fmv.market_fmv_snapshot.snapshot_scope.replace(/_/g, " ")}</p>
+                        <p className="mt-1 text-slate-400">
+                          Confidence {detail.inventory_fmv.market_fmv_snapshot.confidence_bucket} · Liquidity{" "}
+                          {detail.inventory_fmv.market_fmv_snapshot.liquidity_bucket} · Volatility{" "}
+                          {detail.inventory_fmv.market_fmv_snapshot.volatility_bucket}
+                        </p>
+                        <p className="mt-1 text-slate-400">
+                          Grading {detail.inventory_fmv.market_fmv_snapshot.grading_company ?? "all"} · Grade{" "}
+                          {detail.inventory_fmv.market_fmv_snapshot.normalized_grade ?? "all"}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-3 text-sm text-slate-500">
+                        No market snapshot was attached.
+                      </p>
+                    )}
+                    {detail.inventory_fmv.market_trend_snapshot ? (
+                      <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3 text-sm text-slate-300">
+                        <p className="font-semibold text-white">Trend snapshot</p>
+                        <p className="mt-1 text-slate-400">
+                          Direction {detail.inventory_fmv.market_trend_snapshot.trend_direction} · Strength{" "}
+                          {detail.inventory_fmv.market_trend_snapshot.trend_strength} · Liquidity{" "}
+                          {detail.inventory_fmv.market_trend_snapshot.liquidity_direction}
+                        </p>
+                        <p className="mt-1 text-slate-400">
+                          Window {detail.inventory_fmv.market_trend_snapshot.trend_window} · Updated{" "}
+                          {formatDateTime(detail.inventory_fmv.market_trend_snapshot.updated_at)}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Evidence JSON</p>
+                  <pre className="mt-3 overflow-x-auto rounded-xl border border-white/10 bg-slate-900/70 p-3 text-[11px] leading-5 text-slate-300">
+                    {JSON.stringify(detail.inventory_fmv.valuation_evidence_json, null, 2)}
+                  </pre>
+                  {detail.inventory_fmv.market_fmv_snapshot?.comp_references?.length ? (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Comp references</p>
+                      {detail.inventory_fmv.market_fmv_snapshot.comp_references.slice(0, 5).map((reference) => (
+                        <div key={reference.id} className="rounded-xl border border-white/10 bg-slate-900/70 p-3 text-sm text-slate-300">
+                          <p className="font-semibold text-white">
+                            {reference.market_sale_record_id ? `Sale #${reference.market_sale_record_id}` : "Comp reference"}
+                          </p>
+                          <p className="mt-1 text-slate-400">
+                            Weight {reference.weighting_factor} · {reference.included_reason}
+                          </p>
+                          <p className="mt-1 text-slate-400">
+                            {reference.market_sale_record?.source_name ?? "Unknown source"} ·{" "}
+                            {reference.market_sale_record?.sale_date ?? "Unknown sale date"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <section className="mt-8 rounded-3xl border border-cyan-400/20 bg-slate-950/45 p-5 shadow-xl shadow-black/15">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

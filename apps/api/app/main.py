@@ -136,6 +136,7 @@ from app.schemas.inventory import (
     PortfolioPerformanceResponse,
     ReleaseCalendarPresence,
 )
+from app.schemas.inventory_fmv import InventoryFmvAttachmentRead, InventoryValuationScope, PortfolioValueSummaryResponse
 from app.schemas.inventory_risks import (
     InventoryRiskListResponse,
     InventoryRiskPriority,
@@ -579,6 +580,11 @@ from app.services.inventory import (
     list_inventory,
     portfolio_performance,
     update_inventory_copy,
+)
+from app.services.inventory_fmv import (
+    inventory_fmv_detail_for_scope,
+    inventory_fmv_inventory_response_for_scope,
+    portfolio_value_summary_for_scope,
 )
 from app.services.physical_intake import (
     build_physical_intake_summary,
@@ -7676,6 +7682,167 @@ def get_inventory_copy(
         session=session,
         current_user=current_user,
         inventory_copy_id=inventory_copy_id,
+    )
+
+
+@app.get("/inventory-fmv", response_model=InventoryListResponse)
+def get_inventory_fmv(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=250)] = 25,
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+    valuation_scope: Annotated[InventoryValuationScope | None, Query(description="Filter by FMV valuation scope.")] = None,
+    confidence_bucket: Annotated[str | None, Query(description="Filter by FMV confidence bucket.")] = None,
+    liquidity_bucket: Annotated[str | None, Query(description="Filter by FMV liquidity bucket.")] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale FMV rows.")] = None,
+    currency_code: Annotated[str | None, Query(description="Filter by FMV currency code.")] = None,
+) -> InventoryListResponse:
+    assert current_user.id is not None
+    return list_inventory(
+        session=session,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        search=None,
+        publisher=publisher,
+        hold_status=None,
+        grade_status=None,
+        release_year=None,
+        release_calendar=None,
+        asset_state=None,
+        intelligence_health=None,
+        ownership_intel=None,
+        valuation_scope=valuation_scope,
+        fmv_confidence_bucket=confidence_bucket,
+        fmv_liquidity_bucket=liquidity_bucket,
+        fmv_stale_data=stale_data,
+        fmv_currency_code=currency_code,
+        ownership_state=ownership_state,
+        risk_priority=None,
+        risk_type=None,
+        needs_attention=False,
+        action_attention=False,
+        action_center_category=None,
+        arrival_classification=None,
+        sort_by="purchase_date",
+        sort_dir="asc",
+    )
+
+
+@app.get("/inventory/{inventory_copy_id}/fmv", response_model=InventoryFmvAttachmentRead)
+def get_inventory_copy_fmv(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryFmvAttachmentRead:
+    assert current_user.id is not None
+    return inventory_fmv_detail_for_scope(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_copy_id=inventory_copy_id,
+        include_detail=True,
+    )
+
+
+@app.get("/ops/inventory-fmv", response_model=InventoryListResponse, include_in_schema=False)
+def ops_get_inventory_fmv(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=250)] = 25,
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+    valuation_scope: Annotated[InventoryValuationScope | None, Query(description="Filter by FMV valuation scope.")] = None,
+    confidence_bucket: Annotated[str | None, Query(description="Filter by FMV confidence bucket.")] = None,
+    liquidity_bucket: Annotated[str | None, Query(description="Filter by FMV liquidity bucket.")] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale FMV rows.")] = None,
+    currency_code: Annotated[str | None, Query(description="Filter by FMV currency code.")] = None,
+) -> InventoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return inventory_fmv_inventory_response_for_scope(
+        session,
+        owner_user_id=None,
+        page=page,
+        page_size=page_size,
+        publisher=publisher,
+        ownership_state=ownership_state,
+        valuation_scope=valuation_scope,
+        confidence_bucket=confidence_bucket,
+        liquidity_bucket=liquidity_bucket,
+        stale_data=stale_data,
+        currency_code=currency_code,
+    )
+
+
+@app.get("/ops/inventory/{inventory_copy_id}/fmv", response_model=InventoryFmvAttachmentRead, include_in_schema=False)
+def ops_get_inventory_copy_fmv(
+    inventory_copy_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> InventoryFmvAttachmentRead:
+    ensure_ops_admin_access(current_user, settings)
+    return inventory_fmv_detail_for_scope(
+        session,
+        owner_user_id=None,
+        inventory_copy_id=inventory_copy_id,
+        include_detail=True,
+    )
+
+
+@app.get("/portfolio-value/summary", response_model=PortfolioValueSummaryResponse)
+def get_portfolio_value_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+    valuation_scope: Annotated[InventoryValuationScope | None, Query(description="Filter by FMV valuation scope.")] = None,
+    confidence_bucket: Annotated[str | None, Query(description="Filter by FMV confidence bucket.")] = None,
+    liquidity_bucket: Annotated[str | None, Query(description="Filter by FMV liquidity bucket.")] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale FMV rows.")] = None,
+    currency_code: Annotated[str | None, Query(description="Filter by FMV currency code.")] = None,
+) -> PortfolioValueSummaryResponse:
+    assert current_user.id is not None
+    return portfolio_value_summary_for_scope(
+        session,
+        owner_user_id=int(current_user.id),
+        publisher=publisher,
+        ownership_state=ownership_state,
+        valuation_scope=valuation_scope,
+        confidence_bucket=confidence_bucket,
+        liquidity_bucket=liquidity_bucket,
+        stale_data=stale_data,
+        currency_code=currency_code,
+    )
+
+
+@app.get("/ops/portfolio-value/summary", response_model=PortfolioValueSummaryResponse, include_in_schema=False)
+def ops_get_portfolio_value_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+    valuation_scope: Annotated[InventoryValuationScope | None, Query(description="Filter by FMV valuation scope.")] = None,
+    confidence_bucket: Annotated[str | None, Query(description="Filter by FMV confidence bucket.")] = None,
+    liquidity_bucket: Annotated[str | None, Query(description="Filter by FMV liquidity bucket.")] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale FMV rows.")] = None,
+    currency_code: Annotated[str | None, Query(description="Filter by FMV currency code.")] = None,
+) -> PortfolioValueSummaryResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_value_summary_for_scope(
+        session,
+        owner_user_id=None,
+        publisher=publisher,
+        ownership_state=ownership_state,
+        valuation_scope=valuation_scope,
+        confidence_bucket=confidence_bucket,
+        liquidity_bucket=liquidity_bucket,
+        stale_data=stale_data,
+        currency_code=currency_code,
     )
 
 

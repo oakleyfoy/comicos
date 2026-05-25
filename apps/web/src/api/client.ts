@@ -2101,6 +2101,16 @@ export interface InventoryItem {
   order_date: string;
   acquisition_cost: string;
   current_fmv: string | null;
+  current_market_fmv: string | null;
+  fmv_snapshot_id: number | null;
+  fmv_method: MarketFmvValuationMethod | null;
+  fmv_confidence_bucket: MarketFmvConfidenceBucket | null;
+  fmv_liquidity_bucket: MarketFmvLiquidityBucket | null;
+  fmv_volatility_bucket: MarketFmvVolatilityBucket | null;
+  fmv_stale_data: boolean | null;
+  fmv_currency_code: string | null;
+  valuation_scope: InventoryValuationScope | null;
+  valuation_evidence_json: Record<string, unknown> | null;
   gain_loss: string | null;
   grade_status: "raw" | "submitted" | "graded";
   hold_status: "hold" | "sell" | "sold";
@@ -2700,6 +2710,54 @@ export interface MarketTrendGenerateResponse {
   snapshots: MarketTrendSnapshotSummaryRead[];
 }
 
+export type InventoryValuationScope =
+  | "raw"
+  | "graded"
+  | "preorder_pending"
+  | "no_market_data"
+  | "low_confidence"
+  | "cancelled_excluded";
+
+export interface InventoryFmvAttachmentRead {
+  inventory_copy_id: number;
+  current_market_fmv: string | null;
+  fmv_snapshot_id: number | null;
+  fmv_method: MarketFmvValuationMethod | null;
+  fmv_confidence_bucket: MarketFmvConfidenceBucket | null;
+  fmv_liquidity_bucket: MarketFmvLiquidityBucket | null;
+  fmv_volatility_bucket: MarketFmvVolatilityBucket | null;
+  fmv_stale_data: boolean | null;
+  fmv_currency_code: string | null;
+  valuation_scope: InventoryValuationScope;
+  valuation_evidence_json: Record<string, unknown>;
+  market_fmv_snapshot: MarketFmvSnapshotRead | null;
+  market_trend_snapshot: MarketTrendSnapshotSummaryRead | null;
+}
+
+export interface PortfolioValueCurrencySummaryRead {
+  currency_code: string;
+  total_active_market_value: string;
+  raw_market_value: string;
+  graded_market_value: string;
+  preorder_informational_value: string;
+  low_confidence_value: string;
+  stale_value: string;
+  no_market_data_count: number;
+  cancelled_excluded_count: number;
+  duplicate_group_total_value: string;
+  duplicate_extra_copy_value: string;
+  duplicate_value_exposure: string;
+  duplicate_raw_value: string;
+  duplicate_graded_value: string;
+}
+
+export interface PortfolioValueSummaryResponse {
+  scope: "owner" | "ops";
+  scope_user_id: number | null;
+  generated_as_of_date: string;
+  items: PortfolioValueCurrencySummaryRead[];
+}
+
 export interface MarketTrendListParams {
   snapshot_scope?: MarketTrendSnapshotScope;
   grading_company?: string;
@@ -3195,6 +3253,7 @@ export interface InventoryDetail extends InventoryItem {
   order_item_id: number;
   variant_id: number;
   created_at: string;
+  inventory_fmv: InventoryFmvAttachmentRead | null;
   cover_images: InventoryCoverImage[];
   originating_scan_session?: InventoryScanSessionOrigin | null;
 }
@@ -3645,6 +3704,12 @@ export interface InventoryQueryParams {
   asset_state?: "in_hand" | "ordered_not_received" | "preorder_not_released_yet" | "cancelled";
   intelligence_health?: InventoryIntelligenceHealthLevel | "not_healthy";
   ownership_intel?: InventoryOwnershipNormalized;
+  valuation_scope?: InventoryValuationScope;
+  confidence_bucket?: MarketFmvConfidenceBucket;
+  liquidity_bucket?: MarketFmvLiquidityBucket;
+  stale_data?: boolean;
+  currency_code?: string;
+  ownership_state?: InventoryOwnershipNormalized;
   risk_priority?: InventoryRiskPriority;
   risk_type?: InventoryRiskType;
   needs_attention?: boolean;
@@ -5065,6 +5130,52 @@ export const apiClient = {
 
   getInventoryCopy(inventoryCopyId: number): Promise<InventoryDetail> {
     return request<InventoryDetail>(`/inventory/${inventoryCopyId}`);
+  },
+
+  getInventoryFmvList(params: InventoryQueryParams): Promise<InventoryResponse> {
+    const query = buildQueryString(params);
+    return request<InventoryResponse>(`/inventory-fmv${query}`);
+  },
+
+  getOpsInventoryFmvList(params: InventoryQueryParams): Promise<InventoryResponse> {
+    const query = buildQueryString(params);
+    return request<InventoryResponse>(`/ops/inventory-fmv${query}`);
+  },
+
+  getInventoryFmvDetail(inventoryCopyId: number): Promise<InventoryFmvAttachmentRead> {
+    return request<InventoryFmvAttachmentRead>(`/inventory/${inventoryCopyId}/fmv`);
+  },
+
+  getOpsInventoryFmvDetail(inventoryCopyId: number): Promise<InventoryFmvAttachmentRead> {
+    return request<InventoryFmvAttachmentRead>(`/ops/inventory/${inventoryCopyId}/fmv`);
+  },
+
+  getPortfolioValueSummary(params?: {
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    valuation_scope?: InventoryValuationScope;
+    confidence_bucket?: MarketFmvConfidenceBucket;
+    liquidity_bucket?: MarketFmvLiquidityBucket;
+    stale_data?: boolean;
+    currency_code?: string;
+  }): Promise<PortfolioValueSummaryResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<PortfolioValueSummaryResponse>(`/portfolio-value/summary${query}`);
+  },
+
+  getOpsPortfolioValueSummary(params?: {
+    publisher?: string;
+    ownership_state?: InventoryOwnershipNormalized;
+    valuation_scope?: InventoryValuationScope;
+    confidence_bucket?: MarketFmvConfidenceBucket;
+    liquidity_bucket?: MarketFmvLiquidityBucket;
+    stale_data?: boolean;
+    currency_code?: string;
+  }): Promise<PortfolioValueSummaryResponse> {
+    const query =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<PortfolioValueSummaryResponse>(`/ops/portfolio-value/summary${query}`);
   },
 
   getInventoryFmvHistory(inventoryCopyId: number): Promise<InventoryFmvSnapshot[]> {
