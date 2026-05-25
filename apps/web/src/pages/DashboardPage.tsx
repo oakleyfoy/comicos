@@ -42,6 +42,7 @@ import {
   type MarketSaleCompEligibilityListResponse,
   type MarketComparableListResponse,
   type MarketFmvSnapshotListResponse,
+  type MarketTrendSnapshotListResponse,
   type MarketSaleSummaryRead,
   type MarketSaleReviewQueueSummaryRead,
   type ScanPipelineDashboardResponse,
@@ -264,6 +265,21 @@ function runDetectionBadgeTone(value: RunDetectionSeriesStatus): string {
       return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
     case "complete_limited_series":
       return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    default:
+      return "border-white/15 bg-white/5 text-slate-200";
+  }
+}
+
+function marketTrendTone(value: string): string {
+  switch (value) {
+    case "rising":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "stable":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "falling":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "volatile":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
     default:
       return "border-white/15 bg-white/5 text-slate-200";
   }
@@ -790,6 +806,9 @@ export function DashboardPage() {
   const [marketFmvSummary, setMarketFmvSummary] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [marketFmvSummaryLoading, setMarketFmvSummaryLoading] = useState(true);
   const [marketFmvSummaryError, setMarketFmvSummaryError] = useState<string | null>(null);
+  const [marketTrendSummary, setMarketTrendSummary] = useState<MarketTrendSnapshotListResponse | null>(null);
+  const [marketTrendSummaryLoading, setMarketTrendSummaryLoading] = useState(true);
+  const [marketTrendSummaryError, setMarketTrendSummaryError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -1122,6 +1141,32 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketFmvSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketTrendSummaryLoading(true);
+      setMarketTrendSummaryError(null);
+      try {
+        const list = await apiClient.getMarketTrends();
+        if (!ignore) {
+          setMarketTrendSummary(list);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketTrendSummary(null);
+          setMarketTrendSummaryError(loadError instanceof ApiError ? loadError.message : "Unable to load market trend snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketTrendSummaryLoading(false);
         }
       }
     })();
@@ -1919,6 +1964,41 @@ export function DashboardPage() {
                     )}
                   />
                   <StatCard label="Stale snapshots" value={String(marketFmvSummary.stale_count)} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {marketTrendSummaryLoading || marketTrendSummaryError || marketTrendSummary ? (
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market trend snapshots</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic trend signal strip</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Compare FMV history over fixed windows to surface rising, falling, stable, and volatile movement without
+                    forecasting, speculation scoring, or inventory mutation.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-trends"
+                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                >
+                  Open ops trend workspace
+                </Link>
+              </div>
+              {marketTrendSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market trend snapshots…</p>
+              ) : marketTrendSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketTrendSummaryError}</StatusBanner>
+                </div>
+              ) : marketTrendSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard label="Rising" value={String(marketTrendSummary.by_trend_direction.rising ?? 0)} />
+                  <StatCard label="Falling" value={String(marketTrendSummary.by_trend_direction.falling ?? 0)} />
+                  <StatCard label="Volatile" value={String(marketTrendSummary.by_trend_direction.volatile ?? 0)} />
+                  <StatCard label="Stale trends" value={String(marketTrendSummary.stale_count)} />
                 </div>
               ) : null}
             </section>

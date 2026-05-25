@@ -86,6 +86,14 @@ import {
   type MarketFmvSnapshotListResponse,
   type MarketFmvSnapshotRead,
   type MarketFmvSnapshotScope,
+  type MarketTrendDirection,
+  type MarketTrendGenerateResponse,
+  type MarketTrendLiquidityDirection,
+  type MarketTrendSnapshotListResponse,
+  type MarketTrendSnapshotRead,
+  type MarketTrendSnapshotScope,
+  type MarketTrendStrength,
+  type MarketTrendWindow,
   type MarketSaleSummaryRead,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
@@ -263,6 +271,25 @@ function marketFmvBucketTone(bucket: string): string {
 
 function marketFmvScopeLabel(scope: MarketFmvSnapshotScope): string {
   return scope.replace(/_/g, " ");
+}
+
+function marketTrendLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function marketTrendTone(value: string): string {
+  switch (value) {
+    case "rising":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "stable":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "falling":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "volatile":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
 }
 
 function marketSaleMatchSuggestionTone(bucket: MarketSaleMatchSuggestionConfidenceBucket): string {
@@ -1370,6 +1397,29 @@ export function OperationsPage() {
   const [opsMarketFmvGenerateBusy, setOpsMarketFmvGenerateBusy] = useState(false);
   const [opsMarketFmvGenerateSummary, setOpsMarketFmvGenerateSummary] = useState<MarketFmvGenerateResponse | null>(null);
   const [opsMarketFmvRefreshTick, setOpsMarketFmvRefreshTick] = useState(0);
+  const [opsMarketTrends, setOpsMarketTrends] = useState<MarketTrendSnapshotListResponse | null>(null);
+  const [opsMarketTrendsLoading, setOpsMarketTrendsLoading] = useState(true);
+  const [opsMarketTrendsError, setOpsMarketTrendsError] = useState<string | null>(null);
+  const [opsMarketTrendScopeFilter, setOpsMarketTrendScopeFilter] = useState<"" | MarketTrendSnapshotScope>("");
+  const [opsMarketTrendDirectionFilter, setOpsMarketTrendDirectionFilter] =
+    useState<"" | MarketTrendDirection>("");
+  const [opsMarketTrendStrengthFilter, setOpsMarketTrendStrengthFilter] =
+    useState<"" | MarketTrendStrength>("");
+  const [opsMarketTrendLiquidityFilter, setOpsMarketTrendLiquidityFilter] =
+    useState<"" | MarketTrendLiquidityDirection>("");
+  const [opsMarketTrendStaleFilter, setOpsMarketTrendStaleFilter] = useState<"" | "true" | "false">("");
+  const [opsMarketTrendCurrencyFilter, setOpsMarketTrendCurrencyFilter] = useState("");
+  const [opsMarketTrendGradingCompanyFilter, setOpsMarketTrendGradingCompanyFilter] = useState("");
+  const [opsMarketTrendGradeFilter, setOpsMarketTrendGradeFilter] = useState("");
+  const [opsMarketTrendWindowFilter, setOpsMarketTrendWindowFilter] = useState<"" | MarketTrendWindow>("");
+  const [opsMarketTrendSelectedId, setOpsMarketTrendSelectedId] = useState<number | null>(null);
+  const [opsMarketTrendDetail, setOpsMarketTrendDetail] = useState<MarketTrendSnapshotRead | null>(null);
+  const [opsMarketTrendDetailLoading, setOpsMarketTrendDetailLoading] = useState(false);
+  const [opsMarketTrendDetailError, setOpsMarketTrendDetailError] = useState<string | null>(null);
+  const [opsMarketTrendGenerateBusy, setOpsMarketTrendGenerateBusy] = useState(false);
+  const [opsMarketTrendGenerateSummary, setOpsMarketTrendGenerateSummary] =
+    useState<MarketTrendGenerateResponse | null>(null);
+  const [opsMarketTrendsRefreshTick, setOpsMarketTrendsRefreshTick] = useState(0);
   const [opsMarketMatchSuggestionsRefreshTick, setOpsMarketMatchSuggestionsRefreshTick] = useState(0);
   const [opsMarketMatchSuggestions, setOpsMarketMatchSuggestions] =
     useState<MarketSaleMatchSuggestionOpsListResponse | null>(null);
@@ -1428,6 +1478,21 @@ export function OperationsPage() {
       setOpsMarketFmvError(generateErr instanceof ApiError ? generateErr.message : "Unable to generate market FMV snapshots.");
     } finally {
       setOpsMarketFmvGenerateBusy(false);
+    }
+  }, []);
+
+  const handleGenerateMarketTrends = useCallback(async () => {
+    setOpsMarketTrendGenerateBusy(true);
+    setOpsMarketTrendsError(null);
+    try {
+      const response = await apiClient.generateOpsMarketTrends();
+      setOpsMarketTrendGenerateSummary(response);
+      setOpsMarketTrendsRefreshTick((cur) => cur + 1);
+    } catch (generateErr) {
+      setOpsMarketTrendGenerateSummary(null);
+      setOpsMarketTrendsError(generateErr instanceof ApiError ? generateErr.message : "Unable to generate market trend snapshots.");
+    } finally {
+      setOpsMarketTrendGenerateBusy(false);
     }
   }, []);
 
@@ -1831,6 +1896,88 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketFmvSelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketTrendsLoading(true);
+      setOpsMarketTrendsError(null);
+      const params = {
+        ...(opsMarketTrendScopeFilter ? { snapshot_scope: opsMarketTrendScopeFilter } : {}),
+        ...(opsMarketTrendDirectionFilter ? { trend_direction: opsMarketTrendDirectionFilter } : {}),
+        ...(opsMarketTrendStrengthFilter ? { trend_strength: opsMarketTrendStrengthFilter } : {}),
+        ...(opsMarketTrendLiquidityFilter ? { liquidity_direction: opsMarketTrendLiquidityFilter } : {}),
+        ...(opsMarketTrendStaleFilter ? { stale_data: opsMarketTrendStaleFilter === "true" } : {}),
+        ...(opsMarketTrendCurrencyFilter.trim() ? { currency: opsMarketTrendCurrencyFilter.trim() } : {}),
+        ...(opsMarketTrendGradingCompanyFilter.trim() ? { grading_company: opsMarketTrendGradingCompanyFilter.trim() } : {}),
+        ...(opsMarketTrendGradeFilter.trim() ? { grade: opsMarketTrendGradeFilter.trim() } : {}),
+        ...(opsMarketTrendWindowFilter ? { trend_window: opsMarketTrendWindowFilter } : {}),
+      };
+      try {
+        const list = await apiClient.getOpsMarketTrends(params);
+        if (!ignore) {
+          setOpsMarketTrends(list);
+          setOpsMarketTrendSelectedId((cur) => (cur != null && list.items.some((row) => row.id === cur) ? cur : list.items[0]?.id ?? null));
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketTrends(null);
+          setOpsMarketTrendSelectedId(null);
+          setOpsMarketTrendsError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market trend snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketTrendsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketTrendScopeFilter,
+    opsMarketTrendDirectionFilter,
+    opsMarketTrendStrengthFilter,
+    opsMarketTrendLiquidityFilter,
+    opsMarketTrendStaleFilter,
+    opsMarketTrendCurrencyFilter,
+    opsMarketTrendGradingCompanyFilter,
+    opsMarketTrendGradeFilter,
+    opsMarketTrendWindowFilter,
+    opsMarketTrendsRefreshTick,
+  ]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (opsMarketTrendSelectedId == null) {
+      setOpsMarketTrendDetail(null);
+      setOpsMarketTrendDetailError(null);
+      setOpsMarketTrendDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setOpsMarketTrendDetailLoading(true);
+      setOpsMarketTrendDetailError(null);
+      try {
+        const detail = await apiClient.getOpsMarketTrendSnapshot(opsMarketTrendSelectedId);
+        if (!ignore) {
+          setOpsMarketTrendDetail(detail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketTrendDetail(null);
+          setOpsMarketTrendDetailError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market trend detail.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketTrendDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketTrendSelectedId]);
 
   useEffect(() => {
     let ignore = false;
@@ -5249,6 +5396,321 @@ export function OperationsPage() {
           </div>
         ) : null}
       </section>
+
+    <section
+      id="market-trends"
+      className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-black/20"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Market trend snapshots</h2>
+          <p className="mt-1 max-w-3xl text-xs text-slate-400">
+            Deterministic trend movement only. Generate windowed signals from FMV history, comp cadence, and volatility
+            spread without forecasting, recommendation labels, or inventory mutation.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="rounded-full border border-violet-300/35 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:border-violet-200/60 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => void handleGenerateMarketTrends()}
+            disabled={opsMarketTrendGenerateBusy}
+          >
+            {opsMarketTrendGenerateBusy ? "Generating…" : "Generate trend snapshots"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Scope</span>
+          <select
+            value={opsMarketTrendScopeFilter}
+            onChange={(event) => setOpsMarketTrendScopeFilter(event.target.value as "" | MarketTrendSnapshotScope)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            {OPS_MARKET_FMV_SCOPES.map((scope) => (
+              <option key={scope} value={scope}>
+                {marketFmvScopeLabel(scope)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Trend</span>
+          <select
+            value={opsMarketTrendDirectionFilter}
+            onChange={(event) => setOpsMarketTrendDirectionFilter(event.target.value as "" | MarketTrendDirection)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            <option value="rising">Rising</option>
+            <option value="stable">Stable</option>
+            <option value="falling">Falling</option>
+            <option value="volatile">Volatile</option>
+          </select>
+        </label>
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Strength</span>
+          <select
+            value={opsMarketTrendStrengthFilter}
+            onChange={(event) => setOpsMarketTrendStrengthFilter(event.target.value as "" | MarketTrendStrength)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            <option value="very_high">Very high</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="very_low">Very low</option>
+          </select>
+        </label>
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Liquidity</span>
+          <select
+            value={opsMarketTrendLiquidityFilter}
+            onChange={(event) =>
+              setOpsMarketTrendLiquidityFilter(event.target.value as "" | MarketTrendLiquidityDirection)
+            }
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            <option value="improving">Improving</option>
+            <option value="stable">Stable</option>
+            <option value="weakening">Weakening</option>
+          </select>
+        </label>
+        <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Stale</span>
+          <select
+            value={opsMarketTrendStaleFilter}
+            onChange={(event) => setOpsMarketTrendStaleFilter(event.target.value as "" | "true" | "false")}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </label>
+        <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Window</span>
+          <select
+            value={opsMarketTrendWindowFilter}
+            onChange={(event) => setOpsMarketTrendWindowFilter(event.target.value as "" | MarketTrendWindow)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+          >
+            <option value="">Any</option>
+            <option value="seven_day">Seven day</option>
+            <option value="thirty_day">Thirty day</option>
+            <option value="ninety_day">Ninety day</option>
+            <option value="one_year">One year</option>
+          </select>
+        </label>
+        <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Currency</span>
+          <input
+            value={opsMarketTrendCurrencyFilter}
+            onChange={(event) => setOpsMarketTrendCurrencyFilter(event.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-violet-300/40"
+            placeholder="USD"
+          />
+        </label>
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Grading company</span>
+          <input
+            value={opsMarketTrendGradingCompanyFilter}
+            onChange={(event) => setOpsMarketTrendGradingCompanyFilter(event.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-violet-300/40"
+            placeholder="CGC"
+          />
+        </label>
+        <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+          <span className="font-semibold uppercase tracking-[0.1em]">Grade</span>
+          <input
+            value={opsMarketTrendGradeFilter}
+            onChange={(event) => setOpsMarketTrendGradeFilter(event.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-violet-300/40"
+            placeholder="9.8"
+          />
+        </label>
+      </div>
+
+      {opsMarketTrendGenerateSummary ? (
+        <div className="mt-4">
+          <StatusBanner tone="success">
+            Generated {opsMarketTrendGenerateSummary.snapshot_count} deterministic trend snapshot
+            {opsMarketTrendGenerateSummary.snapshot_count === 1 ? "" : "s"}.
+          </StatusBanner>
+        </div>
+      ) : null}
+      {opsMarketTrendsError ? (
+        <div className="mt-4">
+          <StatusBanner tone="error">{opsMarketTrendsError}</StatusBanner>
+        </div>
+      ) : null}
+
+      {opsMarketTrends ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total snapshots" value={String(opsMarketTrends.total)} />
+          <StatCard label="Rising" value={String(opsMarketTrends.by_trend_direction.rising ?? 0)} />
+          <StatCard label="Volatile" value={String(opsMarketTrends.by_trend_direction.volatile ?? 0)} />
+          <StatCard label="Stale trends" value={String(opsMarketTrends.stale_count)} />
+        </div>
+      ) : null}
+
+      {opsMarketTrendsLoading ? (
+        <p className="mt-4 text-sm text-slate-400">Loading market trend snapshots…</p>
+      ) : opsMarketTrends?.items.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">No trend snapshots matched the active filters.</p>
+      ) : opsMarketTrends ? (
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+          <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="p-3 font-medium">Inspect</th>
+                  <th className="p-3 font-medium">Window / scope</th>
+                  <th className="p-3 font-medium">Identity</th>
+                  <th className="p-3 font-medium">Direction</th>
+                  <th className="p-3 font-medium">Movement</th>
+                  <th className="p-3 font-medium">Liquidity</th>
+                  <th className="p-3 font-medium">Volatility</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-slate-200">
+                {opsMarketTrends.items.map((row) => {
+                  const isSelected = opsMarketTrendSelectedId === row.id;
+                  return (
+                    <tr key={row.id}>
+                      <td className="p-3 align-top">
+                        <button
+                          type="button"
+                          className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                            isSelected
+                              ? "border-violet-300/70 bg-violet-400/20 text-violet-50"
+                              : "border-white/15 text-slate-200 hover:border-violet-300/35"
+                          }`}
+                          onClick={() => setOpsMarketTrendSelectedId((cur) => (cur === row.id ? null : row.id))}
+                        >
+                          {isSelected ? "Hide" : "View"}
+                        </button>
+                      </td>
+                      <td className="p-3 align-top">
+                        <div className="font-medium text-slate-100">{marketTrendLabel(row.trend_window)}</div>
+                        <div className="mt-1 text-[11px] text-slate-400">{marketFmvScopeLabel(row.snapshot_scope)}</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          {row.currency_code}
+                          {row.grading_company ? ` · ${row.grading_company}` : ""}
+                          {row.normalized_grade ? ` · ${row.normalized_grade}` : ""}
+                        </div>
+                      </td>
+                      <td className="p-3 align-top">
+                        <div className="text-slate-100">{row.metadata_identity_key ?? `Issue #${row.canonical_issue_id ?? "—"}`}</div>
+                      </td>
+                      <td className="p-3 align-top">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketTrendTone(
+                            row.trend_direction,
+                          )}`}
+                        >
+                          {marketTrendLabel(row.trend_direction)}
+                        </span>
+                        <div className="mt-1 text-[11px] text-slate-400">{marketTrendLabel(row.trend_strength)}</div>
+                      </td>
+                      <td className="p-3 align-top text-slate-200">{Number(row.percent_change).toFixed(2)}%</td>
+                      <td className="p-3 align-top">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketTrendTone(
+                            row.liquidity_direction,
+                          )}`}
+                        >
+                          {marketTrendLabel(row.liquidity_direction)}
+                        </span>
+                        {row.stale_data ? <div className="mt-1 text-[11px] text-amber-200">stale</div> : null}
+                      </td>
+                      <td className="p-3 align-top text-slate-200">{row.volatility_score.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            {opsMarketTrendDetailLoading ? (
+              <p className="text-sm text-slate-400">Loading market trend evidence…</p>
+            ) : opsMarketTrendDetailError ? (
+              <StatusBanner tone="error">{opsMarketTrendDetailError}</StatusBanner>
+            ) : opsMarketTrendDetail ? (
+              <>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100">
+                    Snapshot #{opsMarketTrendDetail.id}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-100">
+                    {marketTrendLabel(opsMarketTrendDetail.trend_window)} · {marketTrendLabel(opsMarketTrendDetail.trend_direction)} ·{" "}
+                    {marketTrendLabel(opsMarketTrendDetail.trend_strength)}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {opsMarketTrendDetail.percent_change}% movement across {opsMarketTrendDetail.comp_count} comps.
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Liquidity</p>
+                    <p className="mt-2 text-sm text-slate-100">{marketTrendLabel(opsMarketTrendDetail.liquidity_direction)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Volatility score</p>
+                    <p className="mt-2 text-sm text-slate-100">{opsMarketTrendDetail.volatility_score.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Stale</p>
+                    <p className="mt-2 text-sm text-slate-100">{opsMarketTrendDetail.stale_data ? "Yes" : "No"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Percent change</p>
+                    <p className="mt-2 text-sm text-slate-100">{opsMarketTrendDetail.percent_change}%</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Evidence drawer</p>
+                  <div className="mt-3 space-y-2">
+                    {opsMarketTrendDetail.evidence_items.slice(0, 6).map((evidence) => (
+                      <div key={evidence.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-300">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-slate-100">{marketTrendLabel(evidence.evidence_type)}</div>
+                            <div className="mt-1 text-[11px] text-slate-400">
+                              {evidence.market_fmv_snapshot?.snapshot_date ?? evidence.market_sale_record?.sale_date ?? "Unknown"}
+                            </div>
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            {evidence.market_sale_record?.total_price ??
+                              evidence.market_sale_record?.sale_price ??
+                              evidence.market_fmv_snapshot?.estimated_fmv ??
+                              "—"}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-[11px] text-slate-400">
+                          {Object.entries(evidence.evidence_json)
+                            .slice(0, 3)
+                            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+                            .join(" · ")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Select a trend row to inspect its evidence drawer.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </section>
 
       <section
         id="market-match-suggestions"

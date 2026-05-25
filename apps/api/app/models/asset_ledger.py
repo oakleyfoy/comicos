@@ -591,6 +591,66 @@ class MarketFmvCompReference(SQLModel, table=True):
     )
 
 
+class MarketTrendSnapshot(SQLModel, table=True):
+    """Deterministic market trend snapshot derived from FMV history and comp cadence."""
+
+    __tablename__ = "market_trend_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "canonical_issue_id",
+            "metadata_identity_key",
+            "snapshot_scope",
+            "grading_company",
+            "normalized_grade",
+            "currency_code",
+            "trend_window",
+            name="uq_market_trend_snapshot_signature",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    canonical_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    metadata_identity_key: str | None = Field(default=None, max_length=1024, nullable=True, index=True)
+    snapshot_scope: str = Field(max_length=24, nullable=False, index=True)
+    grading_company: str | None = Field(default=None, max_length=80, nullable=True, index=True)
+    normalized_grade: str | None = Field(default=None, max_length=120, nullable=True, index=True)
+    currency_code: str = Field(max_length=8, nullable=False, index=True)
+    trend_window: str = Field(max_length=16, nullable=False, index=True)
+    trend_direction: str = Field(max_length=16, nullable=False, index=True)
+    trend_strength: str = Field(max_length=16, nullable=False, index=True)
+    liquidity_direction: str = Field(max_length=16, nullable=False, index=True)
+    comp_count: int = Field(default=0, nullable=False)
+    percent_change: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    volatility_score: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    stale_data: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, default=False, index=True))
+    evidence_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketTrendEvidence(SQLModel, table=True):
+    """Traceable evidence rows backing a deterministic market trend snapshot."""
+
+    __tablename__ = "market_trend_evidence"
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_trend_snapshot_id: int = Field(foreign_key="market_trend_snapshot.id", nullable=False, index=True)
+    market_sale_record_id: int | None = Field(default=None, foreign_key="market_sale_record.id", nullable=True, index=True)
+    market_fmv_snapshot_id: int | None = Field(default=None, foreign_key="market_fmv_snapshot.id", nullable=True, index=True)
+    evidence_type: str = Field(max_length=40, nullable=False, index=True)
+    evidence_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
 class CoverImage(SQLModel, table=True):
     __tablename__ = "cover_image"
 

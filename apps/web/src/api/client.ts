@@ -2642,6 +2642,76 @@ export interface MarketFmvListParams {
   snapshot_date_to?: string;
 }
 
+export type MarketTrendSnapshotScope = MarketFmvSnapshotScope;
+export type MarketTrendWindow = "seven_day" | "thirty_day" | "ninety_day" | "one_year";
+export type MarketTrendDirection = "rising" | "stable" | "falling" | "volatile";
+export type MarketTrendStrength = "very_high" | "high" | "medium" | "low" | "very_low";
+export type MarketTrendLiquidityDirection = "improving" | "stable" | "weakening";
+export type MarketTrendEvidenceType = "comp_reference" | "fmv_snapshot" | "liquidity_signal" | "volatility_signal";
+
+export interface MarketTrendEvidenceRead {
+  id: number;
+  market_trend_snapshot_id: number;
+  market_sale_record_id: number | null;
+  market_fmv_snapshot_id: number | null;
+  evidence_type: MarketTrendEvidenceType;
+  evidence_json: Record<string, unknown>;
+  created_at: string;
+  market_sale_record: MarketSaleSummaryRead | null;
+  market_fmv_snapshot: MarketFmvSnapshotSummaryRead | null;
+}
+
+export interface MarketTrendSnapshotSummaryRead {
+  id: number;
+  canonical_issue_id: number | null;
+  metadata_identity_key: string | null;
+  snapshot_scope: MarketTrendSnapshotScope;
+  grading_company: string | null;
+  normalized_grade: string | null;
+  currency_code: string;
+  trend_window: MarketTrendWindow;
+  trend_direction: MarketTrendDirection;
+  trend_strength: MarketTrendStrength;
+  liquidity_direction: MarketTrendLiquidityDirection;
+  comp_count: number;
+  percent_change: string;
+  volatility_score: number;
+  stale_data: boolean;
+  evidence_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketTrendSnapshotRead extends MarketTrendSnapshotSummaryRead {
+  evidence_items: MarketTrendEvidenceRead[];
+}
+
+export interface MarketTrendSnapshotListResponse {
+  items: MarketTrendSnapshotSummaryRead[];
+  total: number;
+  by_trend_direction: Record<MarketTrendDirection, number>;
+  by_trend_strength: Record<MarketTrendStrength, number>;
+  by_liquidity_direction: Record<MarketTrendLiquidityDirection, number>;
+  stale_count: number;
+}
+
+export interface MarketTrendGenerateResponse {
+  snapshot_count: number;
+  snapshots: MarketTrendSnapshotSummaryRead[];
+}
+
+export interface MarketTrendListParams {
+  snapshot_scope?: MarketTrendSnapshotScope;
+  grading_company?: string;
+  grade?: string;
+  trend_direction?: MarketTrendDirection;
+  trend_strength?: MarketTrendStrength;
+  liquidity_direction?: MarketTrendLiquidityDirection;
+  stale_data?: boolean;
+  currency?: string;
+  trend_window?: MarketTrendWindow;
+}
+
 export type MarketSaleMatchSuggestionType =
   | "exact_identity_key"
   | "normalized_title_issue_publisher"
@@ -4448,6 +4518,23 @@ export const apiClient = {
     return request<MarketFmvSnapshotListResponse>(`/market-fmv/by-identity/${encodeURIComponent(metadataIdentityKey)}`);
   },
 
+  getMarketTrends(params?: MarketTrendListParams): Promise<MarketTrendSnapshotListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketTrendSnapshotListResponse>(`/market-trends${query}`);
+  },
+
+  getMarketTrendsByIdentity(
+    metadataIdentityKey: string,
+    params?: Omit<MarketTrendListParams, "metadata_identity_key">,
+  ): Promise<MarketTrendSnapshotListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketTrendSnapshotListResponse>(`/market-trends/by-identity/${encodeURIComponent(metadataIdentityKey)}${query}`);
+  },
+
+  getMarketTrendSnapshot(snapshotId: number): Promise<MarketTrendSnapshotRead> {
+    return request<MarketTrendSnapshotRead>(`/market-trends/${snapshotId}`);
+  },
+
   getMarketSaleCompEligibility(marketSaleRecordId: number): Promise<MarketSaleCompEligibilityRead> {
     return request<MarketSaleCompEligibilityRead>(`/market-sales/${marketSaleRecordId}/comp-eligibility`);
   },
@@ -4530,6 +4617,21 @@ export const apiClient = {
 
   generateOpsMarketFmvSnapshots(): Promise<MarketFmvGenerateResponse> {
     return request<MarketFmvGenerateResponse>("/ops/market-fmv/generate", {
+      method: "POST",
+    });
+  },
+
+  getOpsMarketTrends(params?: MarketTrendListParams): Promise<MarketTrendSnapshotListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketTrendSnapshotListResponse>(`/ops/market-trends${query}`);
+  },
+
+  getOpsMarketTrendSnapshot(snapshotId: number): Promise<MarketTrendSnapshotRead> {
+    return request<MarketTrendSnapshotRead>(`/ops/market-trends/${snapshotId}`);
+  },
+
+  generateOpsMarketTrends(): Promise<MarketTrendGenerateResponse> {
+    return request<MarketTrendGenerateResponse>("/ops/market-trends/generate", {
       method: "POST",
     });
   },

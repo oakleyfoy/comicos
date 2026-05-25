@@ -23,6 +23,8 @@ import {
   type MarketFmvSnapshotListResponse,
   type MarketFmvSnapshotRead,
   type MarketComparableListResponse,
+  type MarketTrendSnapshotListResponse,
+  type MarketTrendSnapshotRead,
   type OrderArrivalClassification,
   type InventoryUpdatePayload,
   type CoverRelationshipGraphEdge,
@@ -662,6 +664,25 @@ function marketFmvScopeLabel(value: string): string {
   return value.replace(/_/g, " ");
 }
 
+function marketTrendTone(value: string): string {
+  switch (value) {
+    case "rising":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "stable":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "falling":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "volatile":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function marketTrendLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
 function marketComparableClassificationLabel(value: string): string {
   return value.replace(/_/g, " ");
 }
@@ -958,6 +979,13 @@ export function InventoryDetailPage() {
   const [selectedMarketFmvDetail, setSelectedMarketFmvDetail] = useState<MarketFmvSnapshotRead | null>(null);
   const [selectedMarketFmvDetailLoading, setSelectedMarketFmvDetailLoading] = useState(false);
   const [selectedMarketFmvDetailError, setSelectedMarketFmvDetailError] = useState<string | null>(null);
+  const [marketTrends, setMarketTrends] = useState<MarketTrendSnapshotListResponse | null>(null);
+  const [marketTrendsLoading, setMarketTrendsLoading] = useState(false);
+  const [marketTrendsError, setMarketTrendsError] = useState<string | null>(null);
+  const [selectedMarketTrendId, setSelectedMarketTrendId] = useState<number | null>(null);
+  const [selectedMarketTrendDetail, setSelectedMarketTrendDetail] = useState<MarketTrendSnapshotRead | null>(null);
+  const [selectedMarketTrendDetailLoading, setSelectedMarketTrendDetailLoading] = useState(false);
+  const [selectedMarketTrendDetailError, setSelectedMarketTrendDetailError] = useState<string | null>(null);
   const [fMvDraft, setFmvDraft] = useState("");
   const [holdDraft, setHoldDraft] = useState<InventoryDetail["hold_status"]>("hold");
   const [gradeDraft, setGradeDraft] = useState<InventoryDetail["grade_status"]>("raw");
@@ -1108,6 +1136,10 @@ export function InventoryDetailPage() {
       setMarketFmvError(null);
       setMarketFmvLoading(false);
       setSelectedMarketFmvId(null);
+      setMarketTrends(null);
+      setMarketTrendsError(null);
+      setMarketTrendsLoading(false);
+      setSelectedMarketTrendId(null);
       setMarketComps(null);
       setMarketCompsError(null);
       setMarketCompsLoading(false);
@@ -1137,6 +1169,41 @@ export function InventoryDetailPage() {
       } finally {
         if (!ignore) {
           setMarketFmvLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.metadata_identity_key]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.metadata_identity_key) {
+      return undefined;
+    }
+    void (async () => {
+      setMarketTrendsLoading(true);
+      setMarketTrendsError(null);
+      try {
+        const response = await apiClient.getMarketTrendsByIdentity(detail.metadata_identity_key as string);
+        if (!ignore) {
+          setMarketTrends(response);
+          const preferred =
+            response.items.find((row) => row.trend_window === "seven_day" && row.trend_direction !== "volatile") ??
+            response.items[0] ??
+            null;
+          setSelectedMarketTrendId(preferred?.id ?? null);
+        }
+      } catch (trendLoadErr) {
+        if (!ignore) {
+          setMarketTrends(null);
+          setSelectedMarketTrendId(null);
+          setMarketTrendsError(trendLoadErr instanceof ApiError ? trendLoadErr.message : "Unable to load market trend snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketTrendsLoading(false);
         }
       }
     })();
@@ -1211,6 +1278,40 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [selectedMarketFmvId]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (selectedMarketTrendId == null) {
+      setSelectedMarketTrendDetail(null);
+      setSelectedMarketTrendDetailError(null);
+      setSelectedMarketTrendDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setSelectedMarketTrendDetailLoading(true);
+      setSelectedMarketTrendDetailError(null);
+      try {
+        const response = await apiClient.getMarketTrendSnapshot(selectedMarketTrendId);
+        if (!ignore) {
+          setSelectedMarketTrendDetail(response);
+        }
+      } catch (trendDetailErr) {
+        if (!ignore) {
+          setSelectedMarketTrendDetail(null);
+          setSelectedMarketTrendDetailError(
+            trendDetailErr instanceof ApiError ? trendDetailErr.message : "Unable to load market trend detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setSelectedMarketTrendDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedMarketTrendId]);
 
   useEffect(() => {
     if (!detail?.cover_images) {
@@ -5240,6 +5341,184 @@ export function InventoryDetailPage() {
                   <EmptyState
                     title="No snapshot selected"
                     description="Pick a deterministic FMV snapshot row to inspect the comp references used to produce it."
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-6 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Market Trend Snapshots</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Deterministic trend movement only. This panel compares FMV history, liquidity cadence, and volatility
+                without forecasting, speculation labels, or inventory mutation.
+              </p>
+            </div>
+            <span className="text-xs uppercase tracking-[0.16em] text-slate-500">{marketTrends?.total ?? 0} snapshots</span>
+          </div>
+
+          {!detail.metadata_identity_key ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No metadata identity key"
+                description="This inventory copy does not have a metadata identity key yet, so no trend snapshots can be mapped."
+              />
+            </div>
+          ) : marketTrendsLoading ? (
+            <p className="mt-6 text-sm text-slate-400">Loading market trend snapshots…</p>
+          ) : marketTrendsError ? (
+            <div className="mt-6">
+              <StatusBanner tone="error">{marketTrendsError}</StatusBanner>
+            </div>
+          ) : !marketTrends || marketTrends.items.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No trend snapshots yet"
+                description="Ops generation has not produced any deterministic market trend snapshots for this metadata identity."
+              />
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Window / scope</th>
+                      <th className="p-3 font-medium">Direction</th>
+                      <th className="p-3 font-medium">Movement</th>
+                      <th className="p-3 font-medium">Liquidity</th>
+                      <th className="p-3 font-medium">Volatility</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {marketTrends.items.map((row) => {
+                      const isSelected = selectedMarketTrendId === row.id;
+                      return (
+                        <tr key={row.id}>
+                          <td className="p-3 align-top">
+                            <button
+                              type="button"
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                isSelected
+                                  ? "border-violet-300/70 bg-violet-400/20 text-violet-50"
+                                  : "border-white/15 text-slate-200 hover:border-violet-300/35"
+                              }`}
+                              onClick={() => setSelectedMarketTrendId((cur) => (cur === row.id ? null : row.id))}
+                            >
+                              {isSelected ? "Hide" : "View"}
+                            </button>
+                          </td>
+                          <td className="p-3 align-top">
+                            <div className="font-medium text-slate-100">{marketTrendLabel(row.trend_window)}</div>
+                            <div className="mt-1 text-[11px] text-slate-400">{marketTrendLabel(row.snapshot_scope)}</div>
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              {row.currency_code}
+                              {row.grading_company ? ` · ${row.grading_company}` : ""}
+                              {row.normalized_grade ? ` · ${row.normalized_grade}` : ""}
+                            </div>
+                          </td>
+                          <td className="p-3 align-top">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketTrendTone(
+                                row.trend_direction,
+                              )}`}
+                            >
+                              {marketTrendLabel(row.trend_direction)}
+                            </span>
+                            <div className="mt-2 text-[11px] text-slate-400">{marketTrendLabel(row.trend_strength)}</div>
+                          </td>
+                          <td className="p-3 align-top text-slate-200">{Number(row.percent_change).toFixed(2)}%</td>
+                          <td className="p-3 align-top">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketTrendTone(
+                                row.liquidity_direction,
+                              )}`}
+                            >
+                              {marketTrendLabel(row.liquidity_direction)}
+                            </span>
+                            {row.stale_data ? <div className="mt-1 text-[11px] text-amber-200">stale</div> : null}
+                          </td>
+                          <td className="p-3 align-top text-slate-200">{row.volatility_score.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                {selectedMarketTrendDetailLoading ? (
+                  <p className="text-sm text-slate-400">Loading market trend evidence…</p>
+                ) : selectedMarketTrendDetailError ? (
+                  <StatusBanner tone="error">{selectedMarketTrendDetailError}</StatusBanner>
+                ) : selectedMarketTrendDetail ? (
+                  <>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100">
+                        Snapshot #{selectedMarketTrendDetail.id}
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold text-white">
+                        {selectedMarketTrendDetail.percent_change}% · {marketTrendLabel(selectedMarketTrendDetail.trend_direction)}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {marketTrendLabel(selectedMarketTrendDetail.trend_window)} /{" "}
+                        {marketTrendLabel(selectedMarketTrendDetail.trend_strength)} /{" "}
+                        {marketTrendLabel(selectedMarketTrendDetail.liquidity_direction)}
+                      </p>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Comp count</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketTrendDetail.comp_count}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Volatility score</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketTrendDetail.volatility_score.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Percent change</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketTrendDetail.percent_change}%</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Stale</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketTrendDetail.stale_data ? "Yes" : "No"}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trend evidence</p>
+                      <div className="mt-3 space-y-2">
+                        {selectedMarketTrendDetail.evidence_items.slice(0, 6).map((evidence) => (
+                          <div key={evidence.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-300">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-slate-100">{marketTrendLabel(evidence.evidence_type)}</div>
+                                <div className="mt-1 text-[11px] text-slate-400">
+                                  {evidence.market_fmv_snapshot?.snapshot_date ?? evidence.market_sale_record?.sale_date ?? "Unknown"}
+                                </div>
+                              </div>
+                              <span className="text-[11px] text-slate-500">
+                                {evidence.market_sale_record?.total_price ?? evidence.market_sale_record?.sale_price ?? evidence.market_fmv_snapshot?.estimated_fmv ?? "—"}
+                              </span>
+                            </div>
+                            <div className="mt-2 text-[11px] text-slate-400">
+                              {Object.entries(evidence.evidence_json)
+                                .slice(0, 3)
+                                .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+                                .join(" · ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No trend selected"
+                    description="Pick a deterministic market trend row to inspect the evidence used to produce it."
                   />
                 )}
               </div>

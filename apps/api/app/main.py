@@ -288,6 +288,16 @@ from app.schemas.market_fmv import (
     MarketFmvSnapshotRead,
     MarketFmvSnapshotScope,
 )
+from app.schemas.market_trends import (
+    MarketTrendDirection,
+    MarketTrendGenerateResponse,
+    MarketTrendLiquidityDirection,
+    MarketTrendSnapshotListResponse,
+    MarketTrendSnapshotRead,
+    MarketTrendSnapshotScope,
+    MarketTrendStrength,
+    MarketTrendWindow,
+)
 from app.schemas.market_sale_comps import MarketComparableListResponse, MarketComparableSnapshotCompsResponse
 from app.schemas.market_sale_match_suggestions import (
     MarketSaleMatchSuggestionGenerateResponse,
@@ -483,6 +493,11 @@ from app.services.market_fmv import (
     generate_market_fmv_snapshots,
     get_market_fmv_snapshot,
     list_market_fmv_snapshots,
+)
+from app.services.market_trends import (
+    generate_market_trend_snapshots,
+    get_market_trend_snapshot,
+    list_market_trends,
 )
 from app.services.scan_qa import (
     fleet_scan_qa_summary,
@@ -6555,6 +6570,136 @@ def ops_get_market_fmv_snapshot_comps_endpoint(
 ) -> MarketComparableSnapshotCompsResponse:
     ensure_ops_admin_access(current_user, settings)
     return get_market_fmv_snapshot_comps(session, snapshot_id=snapshot_id, include_excluded=include_excluded)
+
+
+@app.get("/market-trends", response_model=MarketTrendSnapshotListResponse)
+def owner_list_market_trends_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_scope: Annotated[MarketTrendSnapshotScope | None, Query(description="Filter by trend snapshot scope.")] = None,
+    trend_direction: Annotated[MarketTrendDirection | None, Query(description="Filter by trend direction.")] = None,
+    trend_strength: Annotated[MarketTrendStrength | None, Query(description="Filter by trend strength.")] = None,
+    liquidity_direction: Annotated[
+        MarketTrendLiquidityDirection | None,
+        Query(description="Filter by liquidity direction."),
+    ] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale trend rows.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    trend_window: Annotated[MarketTrendWindow | None, Query(description="Filter by trend window.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+) -> MarketTrendSnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_trends(
+        session,
+        snapshot_scope=snapshot_scope,
+        grading_company=grading_company,
+        grade=grade,
+        trend_direction=trend_direction,
+        trend_strength=trend_strength,
+        liquidity_direction=liquidity_direction,
+        stale_data=stale_data,
+        currency=currency,
+        trend_window=trend_window,
+    )
+
+
+@app.get("/market-trends/by-identity/{metadata_identity_key}", response_model=MarketTrendSnapshotListResponse)
+def owner_list_market_trends_by_identity_endpoint(
+    metadata_identity_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_scope: Annotated[MarketTrendSnapshotScope | None, Query(description="Filter by trend snapshot scope.")] = None,
+    trend_direction: Annotated[MarketTrendDirection | None, Query(description="Filter by trend direction.")] = None,
+    trend_strength: Annotated[MarketTrendStrength | None, Query(description="Filter by trend strength.")] = None,
+    liquidity_direction: Annotated[
+        MarketTrendLiquidityDirection | None,
+        Query(description="Filter by liquidity direction."),
+    ] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale trend rows.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    trend_window: Annotated[MarketTrendWindow | None, Query(description="Filter by trend window.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+) -> MarketTrendSnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_trends(
+        session,
+        snapshot_scope=snapshot_scope,
+        grading_company=grading_company,
+        grade=grade,
+        trend_direction=trend_direction,
+        trend_strength=trend_strength,
+        liquidity_direction=liquidity_direction,
+        stale_data=stale_data,
+        currency=currency,
+        trend_window=trend_window,
+        metadata_identity_key=metadata_identity_key,
+    )
+
+
+@app.get("/market-trends/{snapshot_id}", response_model=MarketTrendSnapshotRead)
+def owner_get_market_trend_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketTrendSnapshotRead:
+    assert current_user.id is not None
+    return get_market_trend_snapshot(session, snapshot_id=snapshot_id)
+
+
+@app.post("/ops/market-trends/generate", response_model=MarketTrendGenerateResponse)
+def ops_generate_market_trends_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketTrendGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return generate_market_trend_snapshots(session)
+
+
+@app.get("/ops/market-trends", response_model=MarketTrendSnapshotListResponse)
+def ops_list_market_trends_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    snapshot_scope: Annotated[MarketTrendSnapshotScope | None, Query(description="Filter by trend snapshot scope.")] = None,
+    trend_direction: Annotated[MarketTrendDirection | None, Query(description="Filter by trend direction.")] = None,
+    trend_strength: Annotated[MarketTrendStrength | None, Query(description="Filter by trend strength.")] = None,
+    liquidity_direction: Annotated[
+        MarketTrendLiquidityDirection | None,
+        Query(description="Filter by liquidity direction."),
+    ] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale trend rows.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    trend_window: Annotated[MarketTrendWindow | None, Query(description="Filter by trend window.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+) -> MarketTrendSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_trends(
+        session,
+        snapshot_scope=snapshot_scope,
+        grading_company=grading_company,
+        grade=grade,
+        trend_direction=trend_direction,
+        trend_strength=trend_strength,
+        liquidity_direction=liquidity_direction,
+        stale_data=stale_data,
+        currency=currency,
+        trend_window=trend_window,
+    )
+
+
+@app.get("/ops/market-trends/{snapshot_id}", response_model=MarketTrendSnapshotRead)
+def ops_get_market_trend_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketTrendSnapshotRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_trend_snapshot(session, snapshot_id=snapshot_id)
 
 
 @app.get("/ops/market-sales/{market_sale_record_id}/normalization-issues", response_model=list[MarketSaleNormalizationIssueRead])
