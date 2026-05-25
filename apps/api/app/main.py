@@ -288,6 +288,7 @@ from app.schemas.market_fmv import (
     MarketFmvSnapshotRead,
     MarketFmvSnapshotScope,
 )
+from app.schemas.market_sale_comps import MarketComparableListResponse, MarketComparableSnapshotCompsResponse
 from app.schemas.market_sale_match_suggestions import (
     MarketSaleMatchSuggestionGenerateResponse,
     MarketSaleMatchSuggestionOpsListResponse,
@@ -468,6 +469,7 @@ from app.services.market_sale_comp_eligibility import (
     get_market_comp_eligibility_for_owner,
     list_market_comp_eligibility,
 )
+from app.services.market_sale_comps import get_market_fmv_snapshot_comps, list_market_comps
 from app.services.market_sale_match_suggestions import (
     approve_market_sale_match_suggestion_for_ops,
     generate_market_sale_match_suggestions,
@@ -638,6 +640,7 @@ from app.services.ocr_review_queue import (
     list_ocr_review_queue,
 )
 from app.services.ops_admin import build_ops_dashboard, ensure_ops_admin_access
+from app.services.ops_access import is_ops_admin_user
 from app.services.reports_export import (
     ACTION_CENTER_CSV_COLUMNS,
     INVENTORY_OPS_CSV_COLUMNS,
@@ -6299,6 +6302,126 @@ def ops_get_market_comp_eligibility_endpoint(
     return get_market_comp_eligibility_for_ops(session, market_sale_record_id=market_sale_record_id)
 
 
+@app.get("/market-comps", response_model=MarketComparableListResponse)
+def owner_list_market_comps_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    metadata_identity_key: Annotated[str | None, Query(description="Filter by metadata identity key.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter raw or graded sale records.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter comps on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter comps on or before this date.")] = None,
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableListResponse:
+    assert current_user.id is not None
+    return list_market_comps(
+        session,
+        source=source,
+        metadata_identity_key=metadata_identity_key,
+        is_graded=is_graded,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        include_excluded=include_excluded,
+    )
+
+
+@app.get("/market-comps/by-identity/{metadata_identity_key}", response_model=MarketComparableListResponse)
+def owner_list_market_comps_by_identity_endpoint(
+    metadata_identity_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter raw or graded sale records.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter comps on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter comps on or before this date.")] = None,
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableListResponse:
+    assert current_user.id is not None
+    return list_market_comps(
+        session,
+        source=source,
+        metadata_identity_key=metadata_identity_key,
+        is_graded=is_graded,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        include_excluded=include_excluded,
+    )
+
+
+@app.get("/ops/market-comps", response_model=MarketComparableListResponse)
+def ops_list_market_comps_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    metadata_identity_key: Annotated[str | None, Query(description="Filter by metadata identity key.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter raw or graded sale records.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter comps on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter comps on or before this date.")] = None,
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableListResponse:
+    if not is_ops_admin_user(current_user, Settings()):
+        raise HTTPException(status_code=403, detail="Operations dashboard access denied")
+    return list_market_comps(
+        session,
+        source=source,
+        metadata_identity_key=metadata_identity_key,
+        is_graded=is_graded,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        include_excluded=include_excluded,
+    )
+
+
+@app.get("/ops/market-comps/by-identity/{metadata_identity_key}", response_model=MarketComparableListResponse)
+def ops_list_market_comps_by_identity_endpoint(
+    metadata_identity_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter raw or graded sale records.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter comps on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter comps on or before this date.")] = None,
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableListResponse:
+    if not is_ops_admin_user(current_user, Settings()):
+        raise HTTPException(status_code=403, detail="Operations dashboard access denied")
+    return list_market_comps(
+        session,
+        source=source,
+        metadata_identity_key=metadata_identity_key,
+        is_graded=is_graded,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        include_excluded=include_excluded,
+    )
+
+
 @app.get("/market-fmv", response_model=MarketFmvSnapshotListResponse)
 def owner_list_market_fmv_endpoint(
     session: Session = Depends(get_session),
@@ -6352,6 +6475,17 @@ def owner_get_market_fmv_by_identity_endpoint(
 ) -> MarketFmvSnapshotListResponse:
     assert current_user.id is not None
     return list_market_fmv_snapshots(session, metadata_identity_key=metadata_identity_key)
+
+
+@app.get("/market-fmv/{snapshot_id}/comps", response_model=MarketComparableSnapshotCompsResponse)
+def owner_get_market_fmv_snapshot_comps_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableSnapshotCompsResponse:
+    assert current_user.id is not None
+    return get_market_fmv_snapshot_comps(session, snapshot_id=snapshot_id, include_excluded=include_excluded)
 
 
 @app.post("/ops/market-fmv/generate", response_model=MarketFmvGenerateResponse)
@@ -6409,6 +6543,18 @@ def ops_get_market_fmv_snapshot_endpoint(
 ) -> MarketFmvSnapshotRead:
     ensure_ops_admin_access(current_user, settings)
     return get_market_fmv_snapshot(session, snapshot_id=snapshot_id)
+
+
+@app.get("/ops/market-fmv/{snapshot_id}/comps", response_model=MarketComparableSnapshotCompsResponse, include_in_schema=False)
+def ops_get_market_fmv_snapshot_comps_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    include_excluded: Annotated[bool, Query(description="Include excluded comps in grouped results.")] = False,
+) -> MarketComparableSnapshotCompsResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_fmv_snapshot_comps(session, snapshot_id=snapshot_id, include_excluded=include_excluded)
 
 
 @app.get("/ops/market-sales/{market_sale_record_id}/normalization-issues", response_model=list[MarketSaleNormalizationIssueRead])

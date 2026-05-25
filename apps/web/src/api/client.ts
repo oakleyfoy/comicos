@@ -2495,6 +2495,86 @@ export interface MarketSaleCompEligibilityListResponse {
   by_eligibility_classification: Record<MarketCompEligibilityClassification, number>;
 }
 
+export type MarketComparableScope = "raw" | "graded" | "graded_by_company" | "graded_by_grade";
+export type MarketComparableClassification =
+  | "included_comp"
+  | "excluded_duplicate"
+  | "excluded_stale"
+  | "excluded_wrong_grade"
+  | "excluded_wrong_scope"
+  | "excluded_unresolved_identity"
+  | "excluded_unsupported_currency"
+  | "excluded_missing_price"
+  | "excluded_review_required";
+export type MarketComparableRecencyBucket = "fresh" | "recent" | "aged" | "stale";
+export type MarketComparablePriceSpreadBucket = "tight" | "moderate" | "wide" | "volatile";
+export type MarketComparableSourceDiversityBucket = "single_source" | "low" | "medium" | "high";
+export type MarketComparableGradeConsistencyBucket = "consistent" | "mixed" | "mismatched";
+export type MarketComparableDuplicateRiskBucket = "low" | "medium" | "high";
+
+export interface MarketComparableQualitySignalsRead {
+  comp_count: number;
+  included_count: number;
+  excluded_count: number;
+  source_diversity_count: number;
+  source_diversity_bucket: MarketComparableSourceDiversityBucket;
+  sale_recency_days: number | null;
+  sale_recency_bucket: MarketComparableRecencyBucket;
+  price_spread: string;
+  price_spread_ratio: number;
+  price_spread_bucket: MarketComparablePriceSpreadBucket;
+  grade_consistency_bucket: MarketComparableGradeConsistencyBucket;
+  duplicate_risk_bucket: MarketComparableDuplicateRiskBucket;
+  volatility_signal: string;
+  stale_data_warning: boolean;
+}
+
+export interface MarketComparableSaleRead extends MarketSaleCompEligibilityRead {
+  comp_classification: MarketComparableClassification;
+  comp_reason: string;
+  comp_scope: MarketComparableScope;
+  comp_group_key: string;
+  comp_group_label: string;
+  comp_window_start: string | null;
+  comp_window_end: string | null;
+  comp_included: boolean;
+  comp_group_order: number;
+  comp_evidence_json: Record<string, unknown>;
+}
+
+export interface MarketComparableGroupRead {
+  group_key: string;
+  group_label: string;
+  metadata_identity_key: string | null;
+  canonical_issue_id: number | null;
+  comp_scope: MarketComparableScope;
+  grading_company: string | null;
+  normalized_grade: string | null;
+  currency_code: string;
+  sale_window_start: string | null;
+  sale_window_end: string | null;
+  included_count: number;
+  excluded_count: number;
+  comp_count: number;
+  source_names: string[];
+  source_types: string[];
+  quality_signals: MarketComparableQualitySignalsRead;
+  included_comps: MarketComparableSaleRead[];
+  excluded_comps: MarketComparableSaleRead[];
+}
+
+export interface MarketComparableListResponse {
+  items: MarketComparableGroupRead[];
+  total_groups: number;
+  total_comps: number;
+  by_classification: Record<MarketComparableClassification, number>;
+  by_scope: Record<MarketComparableScope, number>;
+}
+
+export interface MarketComparableSnapshotCompsResponse extends MarketComparableListResponse {
+  snapshot: MarketFmvSnapshotSummaryRead;
+}
+
 export type MarketFmvSnapshotScope = "raw" | "graded" | "graded_by_company" | "graded_by_grade";
 export type MarketFmvValuationMethod = "median_recent_sales" | "weighted_recent_sales";
 export type MarketFmvConfidenceBucket = "very_high" | "high" | "medium" | "low" | "very_low";
@@ -2666,6 +2746,18 @@ export interface MarketSaleCompEligibilityListParams {
   currency?: string;
   sale_date_from?: string;
   sale_date_to?: string;
+}
+
+export interface MarketComparableListParams {
+  source?: string;
+  metadata_identity_key?: string;
+  is_graded?: boolean;
+  grading_company?: string;
+  normalized_grade?: string;
+  currency?: string;
+  sale_date_from?: string;
+  sale_date_to?: string;
+  include_excluded?: boolean;
 }
 
 export interface MarketSaleReviewQueueListParams {
@@ -4330,6 +4422,19 @@ export const apiClient = {
     return request<MarketSaleCompEligibilityListResponse>(`/market-comp-eligibility${query}`);
   },
 
+  getMarketComps(params?: MarketComparableListParams): Promise<MarketComparableListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableListResponse>(`/market-comps${query}`);
+  },
+
+  getMarketCompsByIdentity(
+    metadataIdentityKey: string,
+    params?: Omit<MarketComparableListParams, "metadata_identity_key">,
+  ): Promise<MarketComparableListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableListResponse>(`/market-comps/by-identity/${encodeURIComponent(metadataIdentityKey)}${query}`);
+  },
+
   getMarketFmv(params?: MarketFmvListParams): Promise<MarketFmvSnapshotListResponse> {
     const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<MarketFmvSnapshotListResponse>(`/market-fmv${query}`);
@@ -4345,6 +4450,14 @@ export const apiClient = {
 
   getMarketSaleCompEligibility(marketSaleRecordId: number): Promise<MarketSaleCompEligibilityRead> {
     return request<MarketSaleCompEligibilityRead>(`/market-sales/${marketSaleRecordId}/comp-eligibility`);
+  },
+
+  getMarketFmvSnapshotComps(
+    snapshotId: number,
+    params?: { include_excluded?: boolean },
+  ): Promise<MarketComparableSnapshotCompsResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableSnapshotCompsResponse>(`/market-fmv/${snapshotId}/comps${query}`);
   },
 
   getMarketSaleMatchSuggestions(marketSaleRecordId: number): Promise<MarketSaleMatchSuggestionRead[]> {
@@ -4393,6 +4506,19 @@ export const apiClient = {
     return request<MarketSaleCompEligibilityListResponse>(`/ops/market-comp-eligibility${query}`);
   },
 
+  getOpsMarketComps(params?: MarketComparableListParams): Promise<MarketComparableListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableListResponse>(`/ops/market-comps${query}`);
+  },
+
+  getOpsMarketCompsByIdentity(
+    metadataIdentityKey: string,
+    params?: Omit<MarketComparableListParams, "metadata_identity_key">,
+  ): Promise<MarketComparableListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableListResponse>(`/ops/market-comps/by-identity/${encodeURIComponent(metadataIdentityKey)}${query}`);
+  },
+
   getOpsMarketFmv(params?: MarketFmvListParams): Promise<MarketFmvSnapshotListResponse> {
     const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<MarketFmvSnapshotListResponse>(`/ops/market-fmv${query}`);
@@ -4410,6 +4536,14 @@ export const apiClient = {
 
   getOpsMarketSaleCompEligibility(marketSaleRecordId: number): Promise<MarketSaleCompEligibilityRead> {
     return request<MarketSaleCompEligibilityRead>(`/ops/market-sales/${marketSaleRecordId}/comp-eligibility`);
+  },
+
+  getOpsMarketFmvSnapshotComps(
+    snapshotId: number,
+    params?: { include_excluded?: boolean },
+  ): Promise<MarketComparableSnapshotCompsResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketComparableSnapshotCompsResponse>(`/ops/market-fmv/${snapshotId}/comps${query}`);
   },
 
   getOpsMarketSaleMatchSuggestions(marketSaleRecordId: number): Promise<MarketSaleMatchSuggestionRead[]> {

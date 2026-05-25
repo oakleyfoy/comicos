@@ -22,6 +22,7 @@ import {
   type InventoryFmvSnapshot,
   type MarketFmvSnapshotListResponse,
   type MarketFmvSnapshotRead,
+  type MarketComparableListResponse,
   type OrderArrivalClassification,
   type InventoryUpdatePayload,
   type CoverRelationshipGraphEdge,
@@ -661,6 +662,53 @@ function marketFmvScopeLabel(value: string): string {
   return value.replace(/_/g, " ");
 }
 
+function marketComparableClassificationLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function marketComparableTone(value: string): string {
+  switch (value) {
+    case "included_comp":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "excluded_stale":
+    case "excluded_missing_price":
+    case "excluded_unsupported_currency":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "excluded_duplicate":
+    case "excluded_wrong_scope":
+    case "excluded_wrong_grade":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "excluded_review_required":
+    case "excluded_unresolved_identity":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function compQualityTone(value: string): string {
+  switch (value) {
+    case "fresh":
+    case "recent":
+    case "high":
+    case "consistent":
+    case "low":
+    case "stable":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "aged":
+    case "medium":
+    case "moderate":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "stale":
+    case "wide":
+    case "volatile":
+    case "mismatched":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
 function variantLabel(item: InventoryDetail): string {
   return [item.cover_name, item.printing, item.ratio, item.variant_type]
     .filter(Boolean)
@@ -903,6 +951,9 @@ export function InventoryDetailPage() {
   const [marketFmv, setMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [marketFmvLoading, setMarketFmvLoading] = useState(false);
   const [marketFmvError, setMarketFmvError] = useState<string | null>(null);
+  const [marketComps, setMarketComps] = useState<MarketComparableListResponse | null>(null);
+  const [marketCompsLoading, setMarketCompsLoading] = useState(false);
+  const [marketCompsError, setMarketCompsError] = useState<string | null>(null);
   const [selectedMarketFmvId, setSelectedMarketFmvId] = useState<number | null>(null);
   const [selectedMarketFmvDetail, setSelectedMarketFmvDetail] = useState<MarketFmvSnapshotRead | null>(null);
   const [selectedMarketFmvDetailLoading, setSelectedMarketFmvDetailLoading] = useState(false);
@@ -1057,6 +1108,9 @@ export function InventoryDetailPage() {
       setMarketFmvError(null);
       setMarketFmvLoading(false);
       setSelectedMarketFmvId(null);
+      setMarketComps(null);
+      setMarketCompsError(null);
+      setMarketCompsLoading(false);
       return undefined;
     }
     void (async () => {
@@ -1083,6 +1137,39 @@ export function InventoryDetailPage() {
       } finally {
         if (!ignore) {
           setMarketFmvLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.metadata_identity_key]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.metadata_identity_key) {
+      return undefined;
+    }
+    void (async () => {
+      setMarketCompsLoading(true);
+      setMarketCompsError(null);
+      try {
+        const response = await apiClient.getMarketCompsByIdentity(detail.metadata_identity_key as string, {
+          include_excluded: true,
+        });
+        if (!ignore) {
+          setMarketComps(response);
+        }
+      } catch (marketCompsLoadErr) {
+        if (!ignore) {
+          setMarketComps(null);
+          setMarketCompsError(
+            marketCompsLoadErr instanceof ApiError ? marketCompsLoadErr.message : "Unable to load market comps.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketCompsLoading(false);
         }
       }
     })();
@@ -5156,6 +5243,171 @@ export function InventoryDetailPage() {
                   />
                 )}
               </div>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-950/10 p-6 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Comparable Sales</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Deterministic comp analysis only. This panel surfaces the exact market-sale records that support the
+                current identity, scope, and FMV context without mutating inventory, metadata, or pricing.
+              </p>
+            </div>
+            <span className="text-xs uppercase tracking-[0.16em] text-slate-500">
+              {marketComps?.total_comps ?? 0} records · {marketComps?.total_groups ?? 0} groups
+            </span>
+          </div>
+
+          {!detail.metadata_identity_key ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No metadata identity key"
+                description="Comparable sales need a metadata identity key before records can be grouped deterministically."
+              />
+            </div>
+          ) : marketCompsLoading ? (
+            <p className="mt-6 text-sm text-slate-400">Loading comparable sales…</p>
+          ) : marketCompsError ? (
+            <div className="mt-6">
+              <StatusBanner tone="error">{marketCompsError}</StatusBanner>
+            </div>
+          ) : !marketComps || marketComps.items.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No comparable sales"
+                description="No grouped comps matched this identity yet."
+              />
+            </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {marketComps.items.map((group) => (
+                <details key={group.group_key} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" open>
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/70">Comp group</p>
+                        <h3 className="mt-1 text-base font-semibold text-white">{group.group_label}</h3>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {group.comp_count} included · {group.excluded_count} excluded · {group.quality_signals.sale_recency_bucket}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.sale_recency_bucket)}`}>
+                          {group.quality_signals.sale_recency_bucket}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.price_spread_bucket)}`}>
+                          spread {group.quality_signals.price_spread_bucket}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.volatility_signal)}`}>
+                          {group.quality_signals.volatility_signal}
+                        </span>
+                      </div>
+                    </div>
+                  </summary>
+
+                  <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Included comps</p>
+                      <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-900/50">
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                            <tr>
+                              <th className="p-3 font-medium">Sale</th>
+                              <th className="p-3 font-medium">Source</th>
+                              <th className="p-3 font-medium">Scope</th>
+                              <th className="p-3 font-medium">Price</th>
+                              <th className="p-3 font-medium">Signals</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/10 text-slate-200">
+                            {group.included_comps.map((comp) => (
+                              <tr key={comp.id}>
+                                <td className="p-3 align-top">
+                                  <div className="font-medium text-slate-100">
+                                    {comp.normalized_title ?? comp.raw_title}
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-slate-400">
+                                    Issue {comp.normalized_issue ?? comp.raw_issue}
+                                    {comp.sale_date ? ` · ${formatDate(comp.sale_date)}` : ""}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketComparableTone(comp.comp_classification)}`}>
+                                      {marketComparableClassificationLabel(comp.comp_classification)}
+                                    </span>
+                                    {comp.eligibility_classification ? (
+                                      <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                                        {comp.eligibility_classification.replace(/_/g, " ")}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className="p-3 align-top">
+                                  <div className="text-slate-100">{comp.source_name}</div>
+                                  <div className="mt-1 text-[11px] text-slate-500">{comp.source_type}</div>
+                                </td>
+                                <td className="p-3 align-top text-slate-300">
+                                  <div>{comp.comp_scope.replace(/_/g, " ")}</div>
+                                  <div className="mt-1 text-[11px] text-slate-500">
+                                    {comp.grading_company ?? "raw"}{comp.normalized_grade ? ` · ${comp.normalized_grade}` : ""}
+                                  </div>
+                                </td>
+                                <td className="p-3 align-top text-slate-200">
+                                  {formatCurrency(comp.total_price ?? comp.sale_price ?? null)}
+                                </td>
+                                <td className="p-3 align-top">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.source_diversity_bucket)}`}>
+                                      {group.quality_signals.source_diversity_bucket}
+                                    </span>
+                                    <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.grade_consistency_bucket)}`}>
+                                      {group.quality_signals.grade_consistency_bucket}
+                                    </span>
+                                  </div>
+                                  <p className="mt-2 text-[11px] text-slate-500">
+                                    {comp.comp_reason}
+                                  </p>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Excluded comps</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {group.excluded_comps.length} record{group.excluded_comps.length === 1 ? "" : "s"} hidden by default
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {group.excluded_comps.length === 0 ? (
+                          <p className="text-sm text-slate-400">No excluded comps for this group.</p>
+                        ) : (
+                          group.excluded_comps.map((comp) => (
+                            <div key={comp.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="font-medium text-slate-100">{comp.normalized_title ?? comp.raw_title}</p>
+                                  <p className="mt-1 text-[11px] text-slate-400">
+                                    {comp.source_name} · {comp.comp_scope.replace(/_/g, " ")}
+                                  </p>
+                                </div>
+                                <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketComparableTone(comp.comp_classification)}`}>
+                                  {marketComparableClassificationLabel(comp.comp_classification)}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-xs text-slate-500">{comp.comp_reason}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              ))}
             </div>
           )}
         </section>

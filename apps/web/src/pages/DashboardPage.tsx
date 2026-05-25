@@ -40,6 +40,7 @@ import {
   type MarketSourceRead,
   type MarketSaleMatchSuggestionOpsListResponse,
   type MarketSaleCompEligibilityListResponse,
+  type MarketComparableListResponse,
   type MarketFmvSnapshotListResponse,
   type MarketSaleSummaryRead,
   type MarketSaleReviewQueueSummaryRead,
@@ -783,6 +784,9 @@ export function DashboardPage() {
     useState<MarketSaleCompEligibilityListResponse | null>(null);
   const [marketCompEligibilitySummaryLoading, setMarketCompEligibilitySummaryLoading] = useState(true);
   const [marketCompEligibilitySummaryError, setMarketCompEligibilitySummaryError] = useState<string | null>(null);
+  const [marketCompsSummary, setMarketCompsSummary] = useState<MarketComparableListResponse | null>(null);
+  const [marketCompsSummaryLoading, setMarketCompsSummaryLoading] = useState(true);
+  const [marketCompsSummaryError, setMarketCompsSummaryError] = useState<string | null>(null);
   const [marketFmvSummary, setMarketFmvSummary] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [marketFmvSummaryLoading, setMarketFmvSummaryLoading] = useState(true);
   const [marketFmvSummaryError, setMarketFmvSummaryError] = useState<string | null>(null);
@@ -1066,6 +1070,32 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketCompEligibilitySummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketCompsSummaryLoading(true);
+      setMarketCompsSummaryError(null);
+      try {
+        const list = await apiClient.getMarketComps({ include_excluded: true });
+        if (!ignore) {
+          setMarketCompsSummary(list);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketCompsSummary(null);
+          setMarketCompsSummaryError(loadError instanceof ApiError ? loadError.message : "Unable to load comparable sales summary.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketCompsSummaryLoading(false);
         }
       }
     })();
@@ -1798,6 +1828,49 @@ export function DashboardPage() {
                         marketCompEligibilitySummary.by_eligibility_classification.ineligible_unsupported_currency ?? 0,
                       )}
                     />
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {marketCompsSummaryLoading || marketCompsSummaryError || marketCompsSummary ? (
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Comparable sales</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Comp readiness overview</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Lightweight grouped-comp summary. Open the ops explorer for full included and excluded sales evidence.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-comps"
+                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                >
+                  Open comp explorer
+                </Link>
+              </div>
+              {marketCompsSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading comparable sales summary…</p>
+              ) : marketCompsSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketCompsSummaryError}</StatusBanner>
+                </div>
+              ) : marketCompsSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                    <StatCard label="Groups" value={String(marketCompsSummary.total_groups)} />
+                    <StatCard label="Records" value={String(marketCompsSummary.total_comps)} />
+                    <StatCard label="Included" value={String(marketCompsSummary.by_classification.included_comp ?? 0)} />
+                    <StatCard label="Duplicate" value={String(marketCompsSummary.by_classification.excluded_duplicate ?? 0)} />
+                    <StatCard label="Review required" value={String(marketCompsSummary.by_classification.excluded_review_required ?? 0)} />
+                    <StatCard label="Stale" value={String(marketCompsSummary.by_classification.excluded_stale ?? 0)} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <StatCard label="Wrong scope" value={String(marketCompsSummary.by_classification.excluded_wrong_scope ?? 0)} />
+                    <StatCard label="Wrong grade" value={String(marketCompsSummary.by_classification.excluded_wrong_grade ?? 0)} />
+                    <StatCard label="Unsupported currency" value={String(marketCompsSummary.by_classification.excluded_unsupported_currency ?? 0)} />
                   </div>
                 </>
               ) : null}

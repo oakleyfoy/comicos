@@ -79,6 +79,7 @@ import {
   type MarketSaleCompEligibilityListResponse,
   type MarketSaleCompEligibilityRead,
   type MarketCompEligibilityStatus,
+  type MarketComparableListResponse,
   type MarketFmvConfidenceBucket,
   type MarketFmvGenerateResponse,
   type MarketFmvLiquidityBucket,
@@ -153,6 +154,14 @@ function formatDateTime(value: string | null): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   }).format(new Date(value));
 }
 
@@ -274,6 +283,53 @@ function marketSaleMatchSuggestionTone(bucket: MarketSaleMatchSuggestionConfiden
 
 function marketSaleMatchSuggestionLabel(value: MarketSaleMatchSuggestionType | MarketSaleMatchSuggestionReviewState | string): string {
   return value.replace(/_/g, " ");
+}
+
+function marketComparableClassificationLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function marketComparableTone(value: string): string {
+  switch (value) {
+    case "included_comp":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "excluded_stale":
+    case "excluded_missing_price":
+    case "excluded_unsupported_currency":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "excluded_duplicate":
+    case "excluded_wrong_scope":
+    case "excluded_wrong_grade":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "excluded_review_required":
+    case "excluded_unresolved_identity":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function compQualityTone(value: string): string {
+  switch (value) {
+    case "fresh":
+    case "recent":
+    case "high":
+    case "consistent":
+    case "low":
+    case "stable":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "aged":
+    case "medium":
+    case "moderate":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "stale":
+    case "wide":
+    case "volatile":
+    case "mismatched":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
 }
 
 const OPS_HIGH_RES_STATUSES: HighResReviewRequestStatus[] = [
@@ -1283,6 +1339,18 @@ export function OperationsPage() {
     useState<MarketSaleCompEligibilityRead | null>(null);
   const [opsMarketCompEligibilityDetailLoading, setOpsMarketCompEligibilityDetailLoading] = useState(false);
   const [opsMarketCompEligibilityDetailError, setOpsMarketCompEligibilityDetailError] = useState<string | null>(null);
+  const [opsMarketComps, setOpsMarketComps] = useState<MarketComparableListResponse | null>(null);
+  const [opsMarketCompsLoading, setOpsMarketCompsLoading] = useState(true);
+  const [opsMarketCompsError, setOpsMarketCompsError] = useState<string | null>(null);
+  const [opsMarketCompsSourceFilter, setOpsMarketCompsSourceFilter] = useState("");
+  const [opsMarketCompsMetadataIdentityKeyFilter, setOpsMarketCompsMetadataIdentityKeyFilter] = useState("");
+  const [opsMarketCompsIsGradedFilter, setOpsMarketCompsIsGradedFilter] = useState<"" | "true" | "false">("");
+  const [opsMarketCompsGradingCompanyFilter, setOpsMarketCompsGradingCompanyFilter] = useState("");
+  const [opsMarketCompsNormalizedGradeFilter, setOpsMarketCompsNormalizedGradeFilter] = useState("");
+  const [opsMarketCompsCurrencyFilter, setOpsMarketCompsCurrencyFilter] = useState("");
+  const [opsMarketCompsSaleDateFromFilter, setOpsMarketCompsSaleDateFromFilter] = useState("");
+  const [opsMarketCompsSaleDateToFilter, setOpsMarketCompsSaleDateToFilter] = useState("");
+  const [opsMarketCompsIncludeExcluded, setOpsMarketCompsIncludeExcluded] = useState(true);
   const [opsMarketFmv, setOpsMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [opsMarketFmvLoading, setOpsMarketFmvLoading] = useState(true);
   const [opsMarketFmvError, setOpsMarketFmvError] = useState<string | null>(null);
@@ -1630,6 +1698,57 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketCompEligibilitySelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketCompsLoading(true);
+      setOpsMarketCompsError(null);
+      const identityKey = opsMarketCompsMetadataIdentityKeyFilter.trim();
+      const params = {
+        ...(opsMarketCompsSourceFilter.trim() ? { source: opsMarketCompsSourceFilter.trim() } : {}),
+        ...(opsMarketCompsIsGradedFilter ? { is_graded: opsMarketCompsIsGradedFilter === "true" } : {}),
+        ...(opsMarketCompsGradingCompanyFilter.trim() ? { grading_company: opsMarketCompsGradingCompanyFilter.trim() } : {}),
+        ...(opsMarketCompsNormalizedGradeFilter.trim()
+          ? { normalized_grade: opsMarketCompsNormalizedGradeFilter.trim() }
+          : {}),
+        ...(opsMarketCompsCurrencyFilter.trim() ? { currency: opsMarketCompsCurrencyFilter.trim() } : {}),
+        ...(opsMarketCompsSaleDateFromFilter.trim() ? { sale_date_from: opsMarketCompsSaleDateFromFilter.trim() } : {}),
+        ...(opsMarketCompsSaleDateToFilter.trim() ? { sale_date_to: opsMarketCompsSaleDateToFilter.trim() } : {}),
+        include_excluded: opsMarketCompsIncludeExcluded,
+      };
+      try {
+        const response = identityKey
+          ? await apiClient.getOpsMarketCompsByIdentity(identityKey, params)
+          : await apiClient.getOpsMarketComps(params);
+        if (!ignore) {
+          setOpsMarketComps(response);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketComps(null);
+          setOpsMarketCompsError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market comps.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketCompsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketCompsSourceFilter,
+    opsMarketCompsMetadataIdentityKeyFilter,
+    opsMarketCompsIsGradedFilter,
+    opsMarketCompsGradingCompanyFilter,
+    opsMarketCompsNormalizedGradeFilter,
+    opsMarketCompsCurrencyFilter,
+    opsMarketCompsSaleDateFromFilter,
+    opsMarketCompsSaleDateToFilter,
+    opsMarketCompsIncludeExcluded,
+  ]);
 
   useEffect(() => {
     let ignore = false;
@@ -4610,6 +4729,234 @@ export function OperationsPage() {
                 <p className="text-sm text-slate-500">Select a sale to inspect its comp eligibility evidence.</p>
               )}
             </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        id="market-comps"
+        className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Comparable sales explorer</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Deterministic grouped comps only. This explorer surfaces the exact sales records behind comparable-sale
+              analysis, including excluded reasons and quality signals, without predictive pricing or metadata mutation.
+            </p>
+          </div>
+          <span className="rounded-full border border-emerald-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/90">
+            Read-only comp analysis
+          </span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Source</span>
+            <input
+              value={opsMarketCompsSourceFilter}
+              onChange={(event) => setOpsMarketCompsSourceFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="Source name or type"
+            />
+          </label>
+          <label className="flex min-w-[14rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Identity key</span>
+            <input
+              value={opsMarketCompsMetadataIdentityKeyFilter}
+              onChange={(event) => setOpsMarketCompsMetadataIdentityKeyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="Image|Invincible|1|Cover A"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Graded</span>
+            <select
+              value={opsMarketCompsIsGradedFilter}
+              onChange={(event) => setOpsMarketCompsIsGradedFilter(event.target.value as "" | "true" | "false")}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              <option value="true">Graded</option>
+              <option value="false">Raw</option>
+            </select>
+          </label>
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Grading company</span>
+            <input
+              value={opsMarketCompsGradingCompanyFilter}
+              onChange={(event) => setOpsMarketCompsGradingCompanyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="CGC"
+            />
+          </label>
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Normalized grade</span>
+            <input
+              value={opsMarketCompsNormalizedGradeFilter}
+              onChange={(event) => setOpsMarketCompsNormalizedGradeFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="9.8"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Currency</span>
+            <input
+              value={opsMarketCompsCurrencyFilter}
+              onChange={(event) => setOpsMarketCompsCurrencyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="USD"
+            />
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Sale date from</span>
+            <input
+              type="date"
+              value={opsMarketCompsSaleDateFromFilter}
+              onChange={(event) => setOpsMarketCompsSaleDateFromFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+            />
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Sale date to</span>
+            <input
+              type="date"
+              value={opsMarketCompsSaleDateToFilter}
+              onChange={(event) => setOpsMarketCompsSaleDateToFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+            />
+          </label>
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Excluded comps</span>
+            <select
+              value={opsMarketCompsIncludeExcluded ? "true" : "false"}
+              onChange={(event) => setOpsMarketCompsIncludeExcluded(event.target.value === "true")}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="true">Show excluded</option>
+              <option value="false">Show included only</option>
+            </select>
+          </label>
+        </div>
+
+        {opsMarketComps ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Groups" value={String(opsMarketComps.total_groups)} />
+            <StatCard label="Records" value={String(opsMarketComps.total_comps)} />
+            <StatCard label="Included" value={String(opsMarketComps.by_classification.included_comp ?? 0)} />
+            <StatCard label="Excluded" value={String(opsMarketComps.total_comps - (opsMarketComps.by_classification.included_comp ?? 0))} />
+          </div>
+        ) : null}
+
+        {opsMarketCompsLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Loading comparable sales…</p>
+        ) : opsMarketCompsError ? (
+          <div className="mt-4">
+            <StatusBanner tone="error">{opsMarketCompsError}</StatusBanner>
+          </div>
+        ) : opsMarketComps?.items.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">No comparable sales matched the active filters.</p>
+        ) : opsMarketComps ? (
+          <div className="mt-5 space-y-4">
+            {opsMarketComps.items.map((group) => (
+              <details key={group.group_key} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" open>
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Comp group</p>
+                      <h3 className="mt-1 text-base font-semibold text-white">{group.group_label}</h3>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {group.included_count} included · {group.excluded_count} excluded · {group.quality_signals.sale_recency_bucket}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.sale_recency_bucket)}`}>
+                        {group.quality_signals.sale_recency_bucket}
+                      </span>
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.price_spread_bucket)}`}>
+                        {group.quality_signals.price_spread_bucket}
+                      </span>
+                      <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${compQualityTone(group.quality_signals.volatility_signal)}`}>
+                        {group.quality_signals.volatility_signal}
+                      </span>
+                    </div>
+                  </div>
+                </summary>
+                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)]">
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-900/50">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Sale</th>
+                          <th className="p-3 font-medium">Source</th>
+                          <th className="p-3 font-medium">Scope</th>
+                          <th className="p-3 font-medium">Price</th>
+                          <th className="p-3 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {[...group.included_comps, ...(opsMarketCompsIncludeExcluded ? group.excluded_comps : [])].map((comp) => (
+                          <tr key={comp.id}>
+                            <td className="p-3 align-top">
+                              <div className="font-medium text-slate-100">{comp.normalized_title ?? comp.raw_title}</div>
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                Issue {comp.normalized_issue ?? comp.raw_issue}
+                                {comp.sale_date ? ` · ${formatDate(comp.sale_date)}` : ""}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketComparableTone(comp.comp_classification)}`}>
+                                  {marketComparableClassificationLabel(comp.comp_classification)}
+                                </span>
+                                <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                                  {comp.eligibility_classification.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3 align-top">
+                              <div className="text-slate-100">{comp.source_name}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{comp.source_type}</div>
+                            </td>
+                            <td className="p-3 align-top text-slate-300">
+                              <div>{comp.comp_scope.replace(/_/g, " ")}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                {comp.grading_company ?? "raw"}{comp.normalized_grade ? ` · ${comp.normalized_grade}` : ""}
+                              </div>
+                            </td>
+                            <td className="p-3 align-top text-slate-200">
+                              {formatCurrency(comp.total_price ?? comp.sale_price ?? null)}
+                            </td>
+                            <td className="p-3 align-top text-slate-400">
+                              <div className="text-xs text-slate-300">{comp.comp_reason}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                {String((comp.comp_evidence_json as { canonical_match_state?: string }).canonical_match_state ?? "—")}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Quality signals</p>
+                    <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                      <div>Recency: {group.quality_signals.sale_recency_days ?? "—"} days</div>
+                      <div>Source diversity: {group.quality_signals.source_diversity_count}</div>
+                      <div>Price spread: {group.quality_signals.price_spread}</div>
+                      <div>Grade consistency: {group.quality_signals.grade_consistency_bucket}</div>
+                      <div>Duplicate risk: {group.quality_signals.duplicate_risk_bucket}</div>
+                      <div>Volatility: {group.quality_signals.volatility_signal}</div>
+                      <div>Stale warning: {group.quality_signals.stale_data_warning ? "Yes" : "No"}</div>
+                    </div>
+                    {!opsMarketCompsIncludeExcluded ? (
+                      <p className="mt-3 text-[11px] text-slate-500">
+                        Excluded comps are hidden by the active filter.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
+            ))}
           </div>
         ) : null}
       </section>
