@@ -150,6 +150,7 @@ def build_inventory_detail_query(current_user: User):
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.copy_number.label("copy_number"),
+            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
             ComicTitle.name.label("title"),
             Publisher.name.label("publisher"),
             ComicIssue.issue_number.label("issue_number"),

@@ -2447,6 +2447,196 @@ export interface MarketSaleReviewQueueSummaryRead {
   by_priority: Record<MarketSaleReviewPriority, number>;
 }
 
+export type MarketCompEligibilityStatus = "eligible" | "ineligible" | "needs_review";
+export type MarketCompEligibilityClassification =
+  | "eligible_raw_comp"
+  | "eligible_graded_comp"
+  | "ineligible_missing_price"
+  | "ineligible_unsupported_currency"
+  | "ineligible_unresolved_identity"
+  | "ineligible_duplicate_listing"
+  | "ineligible_ignored_record"
+  | "ineligible_invalid_grade"
+  | "needs_review_before_comp";
+export type MarketCompCanonicalMatchState = "approved" | "high_confidence" | "needs_review" | "missing";
+
+export interface MarketSaleCompEligibilitySummaryRead extends MarketSaleSummaryRead {
+  review_status: MarketSaleReviewStatus;
+  eligibility_status: MarketCompEligibilityStatus;
+  eligibility_classification: MarketCompEligibilityClassification;
+  eligibility_reasons: string[];
+  canonical_match_state: MarketCompCanonicalMatchState;
+  canonical_match_suggestion_id: number | null;
+  canonical_match_confidence_bucket: MarketSaleMatchSuggestionConfidenceBucket | null;
+  canonical_match_review_state: MarketSaleMatchSuggestionReviewState | null;
+  canonical_match_deterministic_score: number | null;
+  match_suggestion_count: number;
+}
+
+export interface MarketSaleCompEligibilityRead extends MarketSaleRead {
+  review_status: MarketSaleReviewStatus;
+  eligibility_status: MarketCompEligibilityStatus;
+  eligibility_classification: MarketCompEligibilityClassification;
+  eligibility_reasons: string[];
+  canonical_match_state: MarketCompCanonicalMatchState;
+  canonical_match_suggestion_id: number | null;
+  canonical_match_confidence_bucket: MarketSaleMatchSuggestionConfidenceBucket | null;
+  canonical_match_review_state: MarketSaleMatchSuggestionReviewState | null;
+  canonical_match_deterministic_score: number | null;
+  match_suggestion_count: number;
+  eligibility_evidence_json: Record<string, unknown>;
+  match_suggestions: MarketSaleMatchSuggestionRead[];
+}
+
+export interface MarketSaleCompEligibilityListResponse {
+  items: MarketSaleCompEligibilitySummaryRead[];
+  total: number;
+  by_eligibility_status: Record<MarketCompEligibilityStatus, number>;
+  by_eligibility_classification: Record<MarketCompEligibilityClassification, number>;
+}
+
+export type MarketFmvSnapshotScope = "raw" | "graded" | "graded_by_company" | "graded_by_grade";
+export type MarketFmvValuationMethod = "median_recent_sales" | "weighted_recent_sales";
+export type MarketFmvConfidenceBucket = "very_high" | "high" | "medium" | "low" | "very_low";
+export type MarketFmvLiquidityBucket = "very_high" | "high" | "medium" | "low" | "very_low";
+export type MarketFmvVolatilityBucket = "stable" | "moderate" | "volatile";
+
+export interface MarketFmvCompReferenceRead {
+  id: number;
+  market_fmv_snapshot_id: number;
+  market_sale_record_id: number;
+  weighting_factor: number;
+  included_reason: string;
+  excluded_reason: string | null;
+  created_at: string;
+  market_sale_record: MarketSaleSummaryRead | null;
+}
+
+export interface MarketFmvSnapshotSummaryRead {
+  id: number;
+  canonical_issue_id: number | null;
+  metadata_identity_key: string | null;
+  snapshot_scope: MarketFmvSnapshotScope;
+  grading_company: string | null;
+  normalized_grade: string | null;
+  currency_code: string;
+  snapshot_date: string;
+  comp_count: number;
+  valuation_method: MarketFmvValuationMethod;
+  estimated_fmv: string;
+  confidence_bucket: MarketFmvConfidenceBucket;
+  liquidity_bucket: MarketFmvLiquidityBucket;
+  volatility_bucket: MarketFmvVolatilityBucket;
+  stale_data: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketFmvSnapshotRead extends MarketFmvSnapshotSummaryRead {
+  evidence_json: Record<string, unknown>;
+  comp_references: MarketFmvCompReferenceRead[];
+}
+
+export interface MarketFmvSnapshotListResponse {
+  items: MarketFmvSnapshotSummaryRead[];
+  total: number;
+  by_confidence_bucket: Record<MarketFmvConfidenceBucket, number>;
+  by_liquidity_bucket: Record<MarketFmvLiquidityBucket, number>;
+  stale_count: number;
+}
+
+export interface MarketFmvGenerateResponse {
+  snapshot_count: number;
+  snapshots: MarketFmvSnapshotSummaryRead[];
+}
+
+export interface MarketFmvListParams {
+  snapshot_scope?: MarketFmvSnapshotScope;
+  grading_company?: string;
+  normalized_grade?: string;
+  confidence_bucket?: MarketFmvConfidenceBucket;
+  liquidity_bucket?: MarketFmvLiquidityBucket;
+  stale_data?: boolean;
+  currency?: string;
+  snapshot_date_from?: string;
+  snapshot_date_to?: string;
+}
+
+export type MarketSaleMatchSuggestionType =
+  | "exact_identity_key"
+  | "normalized_title_issue_publisher"
+  | "normalized_title_issue"
+  | "publisher_series_issue"
+  | "barcode_supported"
+  | "inventory_context_supported"
+  | "unresolved_ambiguous";
+export type MarketSaleMatchSuggestionConfidenceBucket = "very_high" | "high" | "medium" | "low" | "very_low";
+export type MarketSaleMatchSuggestionReviewState = "pending" | "approved" | "rejected" | "ignored";
+
+export interface MarketSaleMatchSuggestionRead {
+  id: number;
+  market_sale_record_id: number;
+  market_source_id: number;
+  source_name: string;
+  source_type: MarketSourceType;
+  source_listing_id: string | null;
+  listing_type: MarketSaleListingType;
+  raw_title: string;
+  normalized_title: string | null;
+  raw_issue: string;
+  normalized_issue: string | null;
+  raw_publisher: string | null;
+  normalized_publisher: string | null;
+  raw_variant: string | null;
+  normalized_variant: string | null;
+  raw_grade: string | null;
+  normalized_grade: string | null;
+  raw_cert_number: string | null;
+  normalized_cert_number: string | null;
+  sale_price: string | null;
+  shipping_price: string | null;
+  total_price: string | null;
+  currency_code: string;
+  sale_date: string | null;
+  is_graded: boolean;
+  grading_company: MarketSaleGradingCompany | null;
+  is_signed: boolean;
+  normalization_status: MarketSaleNormalizationStatus;
+  normalization_issue_count: number;
+  canonical_issue_id: number | null;
+  canonical_series_id: number | null;
+  canonical_publisher_id: number | null;
+  suggested_identity_key: string | null;
+  suggestion_type: MarketSaleMatchSuggestionType;
+  confidence_bucket: MarketSaleMatchSuggestionConfidenceBucket;
+  deterministic_score: number;
+  confidence_version: string;
+  evidence_json: Record<string, unknown>;
+  review_state: MarketSaleMatchSuggestionReviewState;
+  reviewed_by_user_id: number | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketSaleMatchSuggestionGenerateResponse {
+  sale_id: number;
+  suggestion_count: number;
+  suggestions: MarketSaleMatchSuggestionRead[];
+}
+
+export interface MarketSaleMatchSuggestionReviewActionResponse {
+  suggestion: MarketSaleMatchSuggestionRead;
+}
+
+export interface MarketSaleMatchSuggestionOpsListResponse {
+  suggestions: MarketSaleMatchSuggestionRead[];
+  review_state: MarketSaleMatchSuggestionReviewState | "all";
+  confidence_bucket: MarketSaleMatchSuggestionConfidenceBucket | "all";
+  suggestion_type: MarketSaleMatchSuggestionType | "all";
+  total_count: number;
+}
+
 export interface MarketSaleNormalizationUpdatePayload {
   normalized_title?: string | null;
   normalized_issue?: string | null;
@@ -2465,6 +2655,17 @@ export interface MarketSaleReviewActionPayload {
 
 export interface MarketSaleListResponse {
   items: MarketSaleSummaryRead[];
+}
+
+export interface MarketSaleCompEligibilityListParams {
+  source?: string;
+  eligibility_status?: MarketCompEligibilityStatus;
+  eligibility_classification?: MarketCompEligibilityClassification;
+  grading_company?: string;
+  is_graded?: boolean;
+  currency?: string;
+  sale_date_from?: string;
+  sale_date_to?: string;
 }
 
 export interface MarketSaleReviewQueueListParams {
@@ -2826,6 +3027,7 @@ export interface HighResReviewRequestStatsRead {
 
 export interface InventoryDetail extends InventoryItem {
   copy_number: number;
+  metadata_identity_key?: string | null;
   source_type: string | null;
   order_id: number;
   order_item_id: number;
@@ -4123,6 +4325,42 @@ export const apiClient = {
     return request<MarketSaleReviewQueueSummaryRead>(`/market-sale-review-queue/summary${query}`);
   },
 
+  getMarketCompEligibility(params?: MarketSaleCompEligibilityListParams): Promise<MarketSaleCompEligibilityListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleCompEligibilityListResponse>(`/market-comp-eligibility${query}`);
+  },
+
+  getMarketFmv(params?: MarketFmvListParams): Promise<MarketFmvSnapshotListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketFmvSnapshotListResponse>(`/market-fmv${query}`);
+  },
+
+  getMarketFmvSnapshot(snapshotId: number): Promise<MarketFmvSnapshotRead> {
+    return request<MarketFmvSnapshotRead>(`/market-fmv/${snapshotId}`);
+  },
+
+  getMarketFmvByIdentity(metadataIdentityKey: string): Promise<MarketFmvSnapshotListResponse> {
+    return request<MarketFmvSnapshotListResponse>(`/market-fmv/by-identity/${encodeURIComponent(metadataIdentityKey)}`);
+  },
+
+  getMarketSaleCompEligibility(marketSaleRecordId: number): Promise<MarketSaleCompEligibilityRead> {
+    return request<MarketSaleCompEligibilityRead>(`/market-sales/${marketSaleRecordId}/comp-eligibility`);
+  },
+
+  getMarketSaleMatchSuggestions(marketSaleRecordId: number): Promise<MarketSaleMatchSuggestionRead[]> {
+    return request<MarketSaleMatchSuggestionRead[]>(`/market-sales/${marketSaleRecordId}/match-suggestions`);
+  },
+
+  getMarketMatchSuggestions(params?: {
+    source?: string;
+    confidence_bucket?: MarketSaleMatchSuggestionConfidenceBucket | "all";
+    review_state?: MarketSaleMatchSuggestionReviewState | "all";
+    suggestion_type?: MarketSaleMatchSuggestionType | "all";
+  }): Promise<MarketSaleMatchSuggestionOpsListResponse> {
+    const query = params ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketSaleMatchSuggestionOpsListResponse>(`/market-match-suggestions${query}`);
+  },
+
   getOpsMarketSales(params?: MarketSaleListParams): Promise<MarketSaleListResponse> {
     const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<MarketSaleListResponse>(`/ops/market-sales${query}`);
@@ -4148,6 +4386,72 @@ export const apiClient = {
   ): Promise<MarketSaleReviewQueueSummaryRead> {
     const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<MarketSaleReviewQueueSummaryRead>(`/ops/market-sale-review-queue/summary${query}`);
+  },
+
+  getOpsMarketCompEligibility(params?: MarketSaleCompEligibilityListParams): Promise<MarketSaleCompEligibilityListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketSaleCompEligibilityListResponse>(`/ops/market-comp-eligibility${query}`);
+  },
+
+  getOpsMarketFmv(params?: MarketFmvListParams): Promise<MarketFmvSnapshotListResponse> {
+    const query = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<MarketFmvSnapshotListResponse>(`/ops/market-fmv${query}`);
+  },
+
+  getOpsMarketFmvSnapshot(snapshotId: number): Promise<MarketFmvSnapshotRead> {
+    return request<MarketFmvSnapshotRead>(`/ops/market-fmv/${snapshotId}`);
+  },
+
+  generateOpsMarketFmvSnapshots(): Promise<MarketFmvGenerateResponse> {
+    return request<MarketFmvGenerateResponse>("/ops/market-fmv/generate", {
+      method: "POST",
+    });
+  },
+
+  getOpsMarketSaleCompEligibility(marketSaleRecordId: number): Promise<MarketSaleCompEligibilityRead> {
+    return request<MarketSaleCompEligibilityRead>(`/ops/market-sales/${marketSaleRecordId}/comp-eligibility`);
+  },
+
+  getOpsMarketSaleMatchSuggestions(marketSaleRecordId: number): Promise<MarketSaleMatchSuggestionRead[]> {
+    return request<MarketSaleMatchSuggestionRead[]>(`/ops/market-sales/${marketSaleRecordId}/match-suggestions`);
+  },
+
+  generateOpsMarketSaleMatchSuggestions(marketSaleRecordId: number): Promise<MarketSaleMatchSuggestionGenerateResponse> {
+    return request<MarketSaleMatchSuggestionGenerateResponse>(
+      `/ops/market-sales/${marketSaleRecordId}/generate-match-suggestions`,
+      { method: "POST" },
+    );
+  },
+
+  listOpsMarketMatchSuggestions(params?: {
+    source?: string;
+    confidence_bucket?: MarketSaleMatchSuggestionConfidenceBucket | "all";
+    review_state?: MarketSaleMatchSuggestionReviewState | "all";
+    suggestion_type?: MarketSaleMatchSuggestionType | "all";
+  }): Promise<MarketSaleMatchSuggestionOpsListResponse> {
+    const query = params ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketSaleMatchSuggestionOpsListResponse>(`/ops/market-match-suggestions${query}`);
+  },
+
+  approveOpsMarketMatchSuggestion(suggestionId: number): Promise<MarketSaleMatchSuggestionReviewActionResponse> {
+    return request<MarketSaleMatchSuggestionReviewActionResponse>(
+      `/ops/market-match-suggestions/${suggestionId}/approve`,
+      { method: "PATCH" },
+    );
+  },
+
+  rejectOpsMarketMatchSuggestion(suggestionId: number): Promise<MarketSaleMatchSuggestionReviewActionResponse> {
+    return request<MarketSaleMatchSuggestionReviewActionResponse>(
+      `/ops/market-match-suggestions/${suggestionId}/reject`,
+      { method: "PATCH" },
+    );
+  },
+
+  ignoreOpsMarketMatchSuggestion(suggestionId: number): Promise<MarketSaleMatchSuggestionReviewActionResponse> {
+    return request<MarketSaleMatchSuggestionReviewActionResponse>(
+      `/ops/market-match-suggestions/${suggestionId}/ignore`,
+      { method: "PATCH" },
+    );
   },
 
   patchOpsMarketSaleNormalization(

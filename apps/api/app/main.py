@@ -274,6 +274,29 @@ from app.schemas.market_sales import (
     MarketSourceRead,
     MarketSaleUpsertPayload,
 )
+from app.schemas.market_sale_comp_eligibility import (
+    MarketSaleCompEligibilityListResponse,
+    MarketSaleCompEligibilityRead,
+    MarketCompEligibilityClassification,
+    MarketCompEligibilityStatus,
+)
+from app.schemas.market_fmv import (
+    MarketFmvConfidenceBucket,
+    MarketFmvGenerateResponse,
+    MarketFmvLiquidityBucket,
+    MarketFmvSnapshotListResponse,
+    MarketFmvSnapshotRead,
+    MarketFmvSnapshotScope,
+)
+from app.schemas.market_sale_match_suggestions import (
+    MarketSaleMatchSuggestionGenerateResponse,
+    MarketSaleMatchSuggestionOpsListResponse,
+    MarketSaleMatchSuggestionRead,
+    MarketSaleMatchSuggestionReviewActionResponse,
+    MarketSaleMatchSuggestionConfidenceBucket,
+    MarketSaleMatchSuggestionReviewState,
+    MarketSaleMatchSuggestionType,
+)
 from app.services.ai_order_parser import (
     AiOrderParserError,
     AiOrderParserNotConfiguredError,
@@ -439,6 +462,25 @@ from app.services.market_sale_review_queue import (
     list_market_sale_review_queue,
     market_sale_review_queue_summary,
     update_market_sale_normalization,
+)
+from app.services.market_sale_comp_eligibility import (
+    get_market_comp_eligibility_for_ops,
+    get_market_comp_eligibility_for_owner,
+    list_market_comp_eligibility,
+)
+from app.services.market_sale_match_suggestions import (
+    approve_market_sale_match_suggestion_for_ops,
+    generate_market_sale_match_suggestions,
+    get_market_sale_match_suggestion_for_ops,
+    get_market_sale_match_suggestion_for_owner,
+    ignore_market_sale_match_suggestion_for_ops,
+    list_market_sale_match_suggestions,
+    reject_market_sale_match_suggestion_for_ops,
+)
+from app.services.market_fmv import (
+    generate_market_fmv_snapshots,
+    get_market_fmv_snapshot,
+    list_market_fmv_snapshots,
 )
 from app.services.scan_qa import (
     fleet_scan_qa_summary,
@@ -6165,6 +6207,210 @@ def ops_market_sale_review_queue_summary_endpoint(
     )
 
 
+@app.get("/market-comp-eligibility", response_model=MarketSaleCompEligibilityListResponse)
+def owner_list_market_comp_eligibility_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    eligibility_status: Annotated[
+        MarketCompEligibilityStatus | None,
+        Query(description="Filter by overall eligibility status."),
+    ] = None,
+    eligibility_classification: Annotated[
+        MarketCompEligibilityClassification | None,
+        Query(description="Filter by deterministic eligibility classification."),
+    ] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> MarketSaleCompEligibilityListResponse:
+    assert current_user.id is not None
+    return list_market_comp_eligibility(
+        session,
+        source=source,
+        eligibility_status=eligibility_status,
+        eligibility_classification=eligibility_classification,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+
+
+@app.get("/market-sales/{market_sale_record_id}/comp-eligibility", response_model=MarketSaleCompEligibilityRead)
+def owner_get_market_comp_eligibility_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketSaleCompEligibilityRead:
+    assert current_user.id is not None
+    return get_market_comp_eligibility_for_owner(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@app.get("/ops/market-comp-eligibility", response_model=MarketSaleCompEligibilityListResponse)
+def ops_list_market_comp_eligibility_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    eligibility_status: Annotated[
+        MarketCompEligibilityStatus | None,
+        Query(description="Filter by overall eligibility status."),
+    ] = None,
+    eligibility_classification: Annotated[
+        MarketCompEligibilityClassification | None,
+        Query(description="Filter by deterministic eligibility classification."),
+    ] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> MarketSaleCompEligibilityListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_comp_eligibility(
+        session,
+        source=source,
+        eligibility_status=eligibility_status,
+        eligibility_classification=eligibility_classification,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        currency=currency,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+
+
+@app.get("/ops/market-sales/{market_sale_record_id}/comp-eligibility", response_model=MarketSaleCompEligibilityRead)
+def ops_get_market_comp_eligibility_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleCompEligibilityRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_comp_eligibility_for_ops(session, market_sale_record_id=market_sale_record_id)
+
+
+@app.get("/market-fmv", response_model=MarketFmvSnapshotListResponse)
+def owner_list_market_fmv_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_scope: Annotated[MarketFmvSnapshotScope | None, Query(description="Filter by FMV snapshot scope.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    confidence_bucket: Annotated[
+        MarketFmvConfidenceBucket | None,
+        Query(description="Filter by deterministic confidence bucket."),
+    ] = None,
+    liquidity_bucket: Annotated[
+        MarketFmvLiquidityBucket | None,
+        Query(description="Filter by deterministic liquidity bucket."),
+    ] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale snapshot rows.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    snapshot_date_from: Annotated[date | None, Query(description="Filter snapshots on or after this date.")] = None,
+    snapshot_date_to: Annotated[date | None, Query(description="Filter snapshots on or before this date.")] = None,
+) -> MarketFmvSnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_fmv_snapshots(
+        session,
+        snapshot_scope=snapshot_scope,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        confidence_bucket=confidence_bucket,
+        liquidity_bucket=liquidity_bucket,
+        stale_data=stale_data,
+        currency=currency,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+    )
+
+
+@app.get("/market-fmv/{snapshot_id}", response_model=MarketFmvSnapshotRead)
+def owner_get_market_fmv_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketFmvSnapshotRead:
+    assert current_user.id is not None
+    return get_market_fmv_snapshot(session, snapshot_id=snapshot_id)
+
+
+@app.get("/market-fmv/by-identity/{metadata_identity_key}", response_model=MarketFmvSnapshotListResponse)
+def owner_get_market_fmv_by_identity_endpoint(
+    metadata_identity_key: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketFmvSnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_fmv_snapshots(session, metadata_identity_key=metadata_identity_key)
+
+
+@app.post("/ops/market-fmv/generate", response_model=MarketFmvGenerateResponse)
+def ops_generate_market_fmv_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketFmvGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return generate_market_fmv_snapshots(session)
+
+
+@app.get("/ops/market-fmv", response_model=MarketFmvSnapshotListResponse)
+def ops_list_market_fmv_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    snapshot_scope: Annotated[MarketFmvSnapshotScope | None, Query(description="Filter by FMV snapshot scope.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    normalized_grade: Annotated[str | None, Query(description="Filter by normalized grade.")] = None,
+    confidence_bucket: Annotated[
+        MarketFmvConfidenceBucket | None,
+        Query(description="Filter by deterministic confidence bucket."),
+    ] = None,
+    liquidity_bucket: Annotated[
+        MarketFmvLiquidityBucket | None,
+        Query(description="Filter by deterministic liquidity bucket."),
+    ] = None,
+    stale_data: Annotated[bool | None, Query(description="Filter stale snapshot rows.")] = None,
+    currency: Annotated[str | None, Query(description="Filter by currency code.")] = None,
+    snapshot_date_from: Annotated[date | None, Query(description="Filter snapshots on or after this date.")] = None,
+    snapshot_date_to: Annotated[date | None, Query(description="Filter snapshots on or before this date.")] = None,
+) -> MarketFmvSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_fmv_snapshots(
+        session,
+        snapshot_scope=snapshot_scope,
+        grading_company=grading_company,
+        normalized_grade=normalized_grade,
+        confidence_bucket=confidence_bucket,
+        liquidity_bucket=liquidity_bucket,
+        stale_data=stale_data,
+        currency=currency,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+    )
+
+
+@app.get("/ops/market-fmv/{snapshot_id}", response_model=MarketFmvSnapshotRead)
+def ops_get_market_fmv_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketFmvSnapshotRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_fmv_snapshot(session, snapshot_id=snapshot_id)
+
+
 @app.get("/ops/market-sales/{market_sale_record_id}/normalization-issues", response_model=list[MarketSaleNormalizationIssueRead])
 def ops_get_market_sale_normalization_issues_endpoint(
     market_sale_record_id: int,
@@ -6230,6 +6476,140 @@ def ops_flag_duplicate_market_sale_record_endpoint(
         actor_user_id=current_user.id,
         payload=payload,
     )
+
+
+@app.get("/market-sales/{market_sale_record_id}/match-suggestions", response_model=list[MarketSaleMatchSuggestionRead])
+def owner_get_market_sale_match_suggestions_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[MarketSaleMatchSuggestionRead]:
+    assert current_user.id is not None
+    return get_market_sale_match_suggestion_for_owner(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@app.get("/market-match-suggestions", response_model=MarketSaleMatchSuggestionOpsListResponse)
+def owner_list_market_sale_match_suggestions_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    confidence_bucket: Annotated[
+        MarketSaleMatchSuggestionConfidenceBucket | None,
+        Query(description="Filter by confidence bucket."),
+    ] = None,
+    review_state: Annotated[
+        MarketSaleMatchSuggestionReviewState | None,
+        Query(description="Filter by suggestion review state."),
+    ] = None,
+    suggestion_type: Annotated[
+        MarketSaleMatchSuggestionType | None,
+        Query(description="Filter by suggestion type."),
+    ] = None,
+) -> MarketSaleMatchSuggestionOpsListResponse:
+    assert current_user.id is not None
+    return list_market_sale_match_suggestions(
+        session,
+        ops_mode=False,
+        owner_user_id=int(current_user.id),
+        source=source,
+        confidence_bucket=confidence_bucket,
+        review_state=review_state,
+        suggestion_type=suggestion_type,
+    )
+
+
+@app.get("/ops/market-sales/{market_sale_record_id}/match-suggestions", response_model=list[MarketSaleMatchSuggestionRead])
+def ops_get_market_sale_match_suggestions_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> list[MarketSaleMatchSuggestionRead]:
+    ensure_ops_admin_access(current_user, settings)
+    return get_market_sale_match_suggestion_for_ops(session, market_sale_record_id=market_sale_record_id)
+
+
+@app.post("/ops/market-sales/{market_sale_record_id}/generate-match-suggestions", response_model=MarketSaleMatchSuggestionGenerateResponse)
+def ops_generate_market_sale_match_suggestions_endpoint(
+    market_sale_record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleMatchSuggestionGenerateResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return generate_market_sale_match_suggestions(
+        session,
+        market_sale_record_id=market_sale_record_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@app.get("/ops/market-match-suggestions", response_model=MarketSaleMatchSuggestionOpsListResponse)
+def ops_list_market_sale_match_suggestions_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    confidence_bucket: Annotated[
+        MarketSaleMatchSuggestionConfidenceBucket | None,
+        Query(description="Filter by confidence bucket."),
+    ] = None,
+    review_state: Annotated[
+        MarketSaleMatchSuggestionReviewState | None,
+        Query(description="Filter by suggestion review state."),
+    ] = None,
+    suggestion_type: Annotated[
+        MarketSaleMatchSuggestionType | None,
+        Query(description="Filter by suggestion type."),
+    ] = None,
+) -> MarketSaleMatchSuggestionOpsListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_sale_match_suggestions(
+        session,
+        ops_mode=True,
+        owner_user_id=None,
+        source=source,
+        confidence_bucket=confidence_bucket,
+        review_state=review_state,
+        suggestion_type=suggestion_type,
+    )
+
+
+@app.patch("/ops/market-match-suggestions/{suggestion_id}/approve", response_model=MarketSaleMatchSuggestionReviewActionResponse)
+def ops_approve_market_sale_match_suggestion_endpoint(
+    suggestion_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleMatchSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return approve_market_sale_match_suggestion_for_ops(session, suggestion_id=suggestion_id, actor_user_id=current_user.id)
+
+
+@app.patch("/ops/market-match-suggestions/{suggestion_id}/reject", response_model=MarketSaleMatchSuggestionReviewActionResponse)
+def ops_reject_market_sale_match_suggestion_endpoint(
+    suggestion_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleMatchSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return reject_market_sale_match_suggestion_for_ops(session, suggestion_id=suggestion_id, actor_user_id=current_user.id)
+
+
+@app.patch("/ops/market-match-suggestions/{suggestion_id}/ignore", response_model=MarketSaleMatchSuggestionReviewActionResponse)
+def ops_ignore_market_sale_match_suggestion_endpoint(
+    suggestion_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketSaleMatchSuggestionReviewActionResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return ignore_market_sale_match_suggestion_for_ops(session, suggestion_id=suggestion_id, actor_user_id=current_user.id)
 
 
 @app.get("/market-sources", response_model=list[MarketSourceRead])

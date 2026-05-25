@@ -20,6 +20,8 @@ import {
   type InventoryRiskRead,
   type InventoryRiskType,
   type InventoryFmvSnapshot,
+  type MarketFmvSnapshotListResponse,
+  type MarketFmvSnapshotRead,
   type OrderArrivalClassification,
   type InventoryUpdatePayload,
   type CoverRelationshipGraphEdge,
@@ -637,6 +639,28 @@ function gainLossClass(value: string | null): string {
   return "text-slate-300";
 }
 
+function marketFmvBucketTone(value: string): string {
+  switch (value) {
+    case "very_high":
+    case "high":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "medium":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "volatile":
+    case "low":
+    case "very_low":
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+    case "moderate":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function marketFmvScopeLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
 function variantLabel(item: InventoryDetail): string {
   return [item.cover_name, item.printing, item.ratio, item.variant_type]
     .filter(Boolean)
@@ -876,6 +900,13 @@ export function InventoryDetailPage() {
 
   const [detail, setDetail] = useState<InventoryDetail | null>(null);
   const [history, setHistory] = useState<InventoryFmvSnapshot[]>([]);
+  const [marketFmv, setMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
+  const [marketFmvLoading, setMarketFmvLoading] = useState(false);
+  const [marketFmvError, setMarketFmvError] = useState<string | null>(null);
+  const [selectedMarketFmvId, setSelectedMarketFmvId] = useState<number | null>(null);
+  const [selectedMarketFmvDetail, setSelectedMarketFmvDetail] = useState<MarketFmvSnapshotRead | null>(null);
+  const [selectedMarketFmvDetailLoading, setSelectedMarketFmvDetailLoading] = useState(false);
+  const [selectedMarketFmvDetailError, setSelectedMarketFmvDetailError] = useState<string | null>(null);
   const [fMvDraft, setFmvDraft] = useState("");
   const [holdDraft, setHoldDraft] = useState<InventoryDetail["hold_status"]>("hold");
   const [gradeDraft, setGradeDraft] = useState<InventoryDetail["grade_status"]>("raw");
@@ -1018,6 +1049,81 @@ export function InventoryDetailPage() {
       setPhysicalIntakeSessionBusy(false);
     }
   }
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.metadata_identity_key) {
+      setMarketFmv(null);
+      setMarketFmvError(null);
+      setMarketFmvLoading(false);
+      setSelectedMarketFmvId(null);
+      return undefined;
+    }
+    void (async () => {
+      setMarketFmvLoading(true);
+      setMarketFmvError(null);
+      try {
+        const response = await apiClient.getMarketFmvByIdentity(detail.metadata_identity_key as string);
+        if (!ignore) {
+          setMarketFmv(response);
+          const preferred =
+            response.items.find((row) => row.snapshot_scope === "raw" && row.valuation_method === "median_recent_sales") ??
+            response.items[0] ??
+            null;
+          setSelectedMarketFmvId(preferred?.id ?? null);
+        }
+      } catch (marketFmvLoadErr) {
+        if (!ignore) {
+          setMarketFmv(null);
+          setSelectedMarketFmvId(null);
+          setMarketFmvError(
+            marketFmvLoadErr instanceof ApiError ? marketFmvLoadErr.message : "Unable to load market FMV snapshots.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketFmvLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.metadata_identity_key]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (selectedMarketFmvId == null) {
+      setSelectedMarketFmvDetail(null);
+      setSelectedMarketFmvDetailError(null);
+      setSelectedMarketFmvDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setSelectedMarketFmvDetailLoading(true);
+      setSelectedMarketFmvDetailError(null);
+      try {
+        const response = await apiClient.getMarketFmvSnapshot(selectedMarketFmvId);
+        if (!ignore) {
+          setSelectedMarketFmvDetail(response);
+        }
+      } catch (detailErr) {
+        if (!ignore) {
+          setSelectedMarketFmvDetail(null);
+          setSelectedMarketFmvDetailError(
+            detailErr instanceof ApiError ? detailErr.message : "Unable to load market FMV snapshot detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setSelectedMarketFmvDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedMarketFmvId]);
 
   useEffect(() => {
     if (!detail?.cover_images) {
@@ -4886,6 +4992,170 @@ export function InventoryDetailPage() {
                 title="No FMV history yet"
                 description="The first manual FMV change will create the opening snapshot for this inventory copy."
               />
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/10 p-6 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Market FMV Snapshots</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Deterministic market-derived FMV is shown here as a read-only snapshot ledger. It never overwrites the
+                manual `Current FMV` field above.
+              </p>
+            </div>
+            <span className="text-xs uppercase tracking-[0.16em] text-slate-500">
+              {marketFmv?.total ?? 0} snapshots
+            </span>
+          </div>
+
+          {!detail.metadata_identity_key ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No metadata identity key"
+                description="This inventory copy does not have a metadata identity key yet, so no market FMV snapshots can be mapped."
+              />
+            </div>
+          ) : marketFmvLoading ? (
+            <p className="mt-6 text-sm text-slate-400">Loading market FMV snapshots…</p>
+          ) : marketFmvError ? (
+            <div className="mt-6">
+              <StatusBanner tone="error">{marketFmvError}</StatusBanner>
+            </div>
+          ) : !marketFmv || marketFmv.items.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                title="No FMV snapshots yet"
+                description="Ops generation has not produced any deterministic market FMV snapshots for this metadata identity."
+              />
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Scope / method</th>
+                      <th className="p-3 font-medium">FMV</th>
+                      <th className="p-3 font-medium">Comps</th>
+                      <th className="p-3 font-medium">Confidence</th>
+                      <th className="p-3 font-medium">Liquidity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {marketFmv.items.map((row) => {
+                      const isSelected = selectedMarketFmvId === row.id;
+                      return (
+                        <tr key={row.id}>
+                          <td className="p-3 align-top">
+                            <button
+                              type="button"
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                isSelected
+                                  ? "border-cyan-300/70 bg-cyan-400/20 text-cyan-50"
+                                  : "border-white/15 text-slate-200 hover:border-cyan-300/35"
+                              }`}
+                              onClick={() => setSelectedMarketFmvId((cur) => (cur === row.id ? null : row.id))}
+                            >
+                              {isSelected ? "Hide" : "View"}
+                            </button>
+                          </td>
+                          <td className="p-3 align-top">
+                            <div className="font-medium text-slate-100">{marketFmvScopeLabel(row.snapshot_scope)}</div>
+                            <div className="mt-1 text-[11px] text-slate-400">{row.valuation_method.replace(/_/g, " ")}</div>
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              {row.snapshot_date} · {row.currency_code}
+                            </div>
+                          </td>
+                          <td className="p-3 align-top font-medium text-white">{formatCurrency(row.estimated_fmv)}</td>
+                          <td className="p-3 align-top text-slate-300">{row.comp_count}</td>
+                          <td className="p-3 align-top">
+                            <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(row.confidence_bucket)}`}>
+                              {row.confidence_bucket.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td className="p-3 align-top">
+                            <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(row.liquidity_bucket)}`}>
+                              {row.liquidity_bucket.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                {selectedMarketFmvDetailLoading ? (
+                  <p className="text-sm text-slate-400">Loading FMV snapshot evidence…</p>
+                ) : selectedMarketFmvDetailError ? (
+                  <StatusBanner tone="error">{selectedMarketFmvDetailError}</StatusBanner>
+                ) : selectedMarketFmvDetail ? (
+                  <>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                        Snapshot #{selectedMarketFmvDetail.id}
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold text-white">
+                        {formatCurrency(selectedMarketFmvDetail.estimated_fmv)} ·{" "}
+                        {marketFmvScopeLabel(selectedMarketFmvDetail.snapshot_scope)}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {selectedMarketFmvDetail.valuation_method.replace(/_/g, " ")} from {selectedMarketFmvDetail.comp_count} comps.
+                      </p>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Confidence</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketFmvDetail.confidence_bucket}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Liquidity</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketFmvDetail.liquidity_bucket}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Volatility</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketFmvDetail.volatility_bucket}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Stale</p>
+                        <p className="mt-2 text-sm text-slate-100">{selectedMarketFmvDetail.stale_data ? "Yes" : "No"}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent comp preview</p>
+                      <div className="mt-3 space-y-2">
+                        {selectedMarketFmvDetail.comp_references.slice(0, 5).map((ref) => (
+                          <div key={ref.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-300">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-slate-100">
+                                  {ref.market_sale_record?.normalized_title ?? ref.market_sale_record?.raw_title ?? `Sale #${ref.market_sale_record_id}`}
+                                </div>
+                                <div className="mt-1 text-[11px] text-slate-400">
+                                  {ref.market_sale_record?.sale_date ? formatDate(ref.market_sale_record.sale_date) : "Unknown date"} ·{" "}
+                                  {formatCurrency(ref.market_sale_record?.total_price ?? ref.market_sale_record?.sale_price ?? null)}
+                                </div>
+                              </div>
+                              <span className="text-[11px] text-slate-500">
+                                {ref.excluded_reason ? ref.excluded_reason.replace(/_/g, " ") : `w=${ref.weighting_factor.toFixed(2)}`}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No snapshot selected"
+                    description="Pick a deterministic FMV snapshot row to inspect the comp references used to produce it."
+                  />
+                )}
+              </div>
             </div>
           )}
         </section>

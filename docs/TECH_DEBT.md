@@ -48,6 +48,14 @@ Resolved routes:
   - Extend market-sales pagination and bulk import ergonomics only when product defines the final ingest workflow.
   - Keep duplicate handling issue-only; no auto-merge or delete paths should be introduced on the sales foundation tables.
 
+## P35-06 — FMV snapshot foundation closeout (2026-05-25)
+
+- **Architecture note:** `market_fmv_snapshot` and `market_fmv_comp_reference` form a separate deterministic ledger sourced only from eligible comps plus approved/high-confidence canonical match state. These rows must stay append-only-or-idempotent snapshot artifacts and must never update `InventoryCopy.current_fmv` or manual `InventoryFmvSnapshot` history.
+- **Operational surfaces:** owner dashboard and inventory detail expose read-only FMV snapshot visibility, while ops owns explicit batch generation and comp-reference inspection. Keep all generation semantics currency-specific and deterministic; no FX conversion, prediction, speculation, or recommendation logic should be introduced on this path.
+- **Known follow-ups**
+  - If snapshot volume grows, move FMV list filtering/aggregation from in-memory service passes to SQL-backed filtering while preserving the current stable sort contract (`snapshot_date`, scope rank, method rank, `id`).
+  - If product wants broader graded comp partitioning later, document new scopes explicitly instead of overloading the existing `graded`, `graded_by_company`, and `graded_by_grade` semantics.
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

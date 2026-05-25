@@ -478,6 +478,119 @@ class MarketSaleReviewAction(SQLModel, table=True):
     )
 
 
+class MarketSaleMatchSuggestion(SQLModel, table=True):
+    """Deterministic, review-only match suggestion for a market sale record."""
+
+    __tablename__ = "market_sale_match_suggestion"
+    __table_args__ = (
+        UniqueConstraint(
+            "market_sale_record_id",
+            "canonical_issue_id",
+            "canonical_series_id",
+            "suggested_identity_key",
+            "suggestion_type",
+            "confidence_version",
+            name="uq_market_sale_match_suggestion_signature",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_sale_record_id: int = Field(foreign_key="market_sale_record.id", nullable=False, index=True)
+    canonical_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    canonical_series_id: int | None = Field(default=None, foreign_key="canonical_series.id", nullable=True, index=True)
+    canonical_publisher_id: int | None = Field(default=None, foreign_key="publisher.id", nullable=True, index=True)
+    suggested_identity_key: str | None = Field(default=None, sa_column=Column(String(length=1024), nullable=True))
+    suggestion_type: str = Field(max_length=50, nullable=False, index=True)
+    confidence_bucket: str = Field(max_length=20, nullable=False, index=True)
+    deterministic_score: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    confidence_version: str = Field(
+        max_length=100,
+        nullable=False,
+        index=True,
+        default="market-sale-match-suggestion-v1",
+    )
+    evidence_json: dict = Field(sa_column=Column(JSON, nullable=False, default=dict))
+    review_state: str = Field(default="pending", max_length=20, nullable=False, index=True)
+    reviewed_by_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketFmvSnapshot(SQLModel, table=True):
+    """Deterministic FMV snapshot built from eligible market comps only."""
+
+    __tablename__ = "market_fmv_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "canonical_issue_id",
+            "metadata_identity_key",
+            "snapshot_scope",
+            "grading_company",
+            "normalized_grade",
+            "currency_code",
+            "snapshot_date",
+            "valuation_method",
+            name="uq_market_fmv_snapshot_signature",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    canonical_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    metadata_identity_key: str | None = Field(default=None, max_length=1024, nullable=True, index=True)
+    snapshot_scope: str = Field(max_length=24, nullable=False, index=True)
+    grading_company: str | None = Field(default=None, max_length=80, nullable=True, index=True)
+    normalized_grade: str | None = Field(default=None, max_length=120, nullable=True, index=True)
+    currency_code: str = Field(max_length=8, nullable=False, index=True)
+    snapshot_date: date = Field(sa_column=Column(Date, nullable=False, index=True))
+    comp_count: int = Field(default=0, nullable=False)
+    valuation_method: str = Field(max_length=32, nullable=False, index=True)
+    estimated_fmv: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    confidence_bucket: str = Field(max_length=16, nullable=False, index=True)
+    liquidity_bucket: str = Field(max_length=16, nullable=False, index=True)
+    volatility_bucket: str = Field(max_length=16, nullable=False, index=True)
+    stale_data: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, default=False, index=True))
+    evidence_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class MarketFmvCompReference(SQLModel, table=True):
+    """Traceable comp references used to generate a deterministic FMV snapshot."""
+
+    __tablename__ = "market_fmv_comp_reference"
+    __table_args__ = (
+        UniqueConstraint(
+            "market_fmv_snapshot_id",
+            "market_sale_record_id",
+            name="uq_market_fmv_comp_reference_snapshot_sale",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    market_fmv_snapshot_id: int = Field(foreign_key="market_fmv_snapshot.id", nullable=False, index=True)
+    market_sale_record_id: int = Field(foreign_key="market_sale_record.id", nullable=False, index=True)
+    weighting_factor: float = Field(sa_column=Column(Float, nullable=False, default=0.0))
+    included_reason: str = Field(max_length=120, nullable=False)
+    excluded_reason: str | None = Field(default=None, max_length=120, nullable=True)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
 class CoverImage(SQLModel, table=True):
     __tablename__ = "cover_image"
 

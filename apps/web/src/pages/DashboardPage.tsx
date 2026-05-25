@@ -38,6 +38,9 @@ import {
   type PhysicalIntakeSummaryResponse,
   type MarketSourceImportRunSummaryRead,
   type MarketSourceRead,
+  type MarketSaleMatchSuggestionOpsListResponse,
+  type MarketSaleCompEligibilityListResponse,
+  type MarketFmvSnapshotListResponse,
   type MarketSaleSummaryRead,
   type MarketSaleReviewQueueSummaryRead,
   type ScanPipelineDashboardResponse,
@@ -773,6 +776,16 @@ export function DashboardPage() {
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
   const [marketSaleReviewQueueSummaryError, setMarketSaleReviewQueueSummaryError] = useState<string | null>(null);
+  const [marketMatchSuggestionsPendingCount, setMarketMatchSuggestionsPendingCount] = useState(0);
+  const [marketMatchSuggestionsPendingLoading, setMarketMatchSuggestionsPendingLoading] = useState(true);
+  const [marketMatchSuggestionsPendingError, setMarketMatchSuggestionsPendingError] = useState<string | null>(null);
+  const [marketCompEligibilitySummary, setMarketCompEligibilitySummary] =
+    useState<MarketSaleCompEligibilityListResponse | null>(null);
+  const [marketCompEligibilitySummaryLoading, setMarketCompEligibilitySummaryLoading] = useState(true);
+  const [marketCompEligibilitySummaryError, setMarketCompEligibilitySummaryError] = useState<string | null>(null);
+  const [marketFmvSummary, setMarketFmvSummary] = useState<MarketFmvSnapshotListResponse | null>(null);
+  const [marketFmvSummaryLoading, setMarketFmvSummaryLoading] = useState(true);
+  const [marketFmvSummaryError, setMarketFmvSummaryError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -1025,6 +1038,90 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketSaleReviewQueueSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketCompEligibilitySummaryLoading(true);
+      setMarketCompEligibilitySummaryError(null);
+      try {
+        const list = await apiClient.getMarketCompEligibility();
+        if (!ignore) {
+          setMarketCompEligibilitySummary(list);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketCompEligibilitySummary(null);
+          setMarketCompEligibilitySummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load market comp eligibility summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketCompEligibilitySummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketFmvSummaryLoading(true);
+      setMarketFmvSummaryError(null);
+      try {
+        const list = await apiClient.getMarketFmv();
+        if (!ignore) {
+          setMarketFmvSummary(list);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketFmvSummary(null);
+          setMarketFmvSummaryError(loadError instanceof ApiError ? loadError.message : "Unable to load market FMV snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketFmvSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setMarketMatchSuggestionsPendingLoading(true);
+      setMarketMatchSuggestionsPendingError(null);
+      try {
+        const list: MarketSaleMatchSuggestionOpsListResponse = await apiClient.getMarketMatchSuggestions({
+          review_state: "pending",
+        });
+        if (!ignore) {
+          setMarketMatchSuggestionsPendingCount(list.total_count);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setMarketMatchSuggestionsPendingCount(0);
+          setMarketMatchSuggestionsPendingError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load market match suggestions.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketMatchSuggestionsPendingLoading(false);
         }
       }
     })();
@@ -1630,6 +1727,159 @@ export function DashboardPage() {
                   </div>
                 </>
               ) : null}
+            </section>
+          ) : null}
+
+          {marketCompEligibilitySummaryLoading || marketCompEligibilitySummaryError || marketCompEligibilitySummary ? (
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market comp eligibility</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only readiness counts</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic comp eligibility only. The dashboard stays read-only and shows lightweight readiness
+                    counts; inspect the ops workspace for the full evidence drawer and filters.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-comp-eligibility"
+                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                >
+                  Open ops eligibility
+                </Link>
+              </div>
+              {marketCompEligibilitySummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market comp eligibility summary…</p>
+              ) : marketCompEligibilitySummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketCompEligibilitySummaryError}</StatusBanner>
+                </div>
+              ) : marketCompEligibilitySummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                    <StatCard label="Total" value={String(marketCompEligibilitySummary.total)} />
+                    <StatCard
+                      label="Eligible"
+                      value={String(marketCompEligibilitySummary.by_eligibility_status.eligible ?? 0)}
+                    />
+                    <StatCard
+                      label="Needs review"
+                      value={String(marketCompEligibilitySummary.by_eligibility_status.needs_review ?? 0)}
+                    />
+                    <StatCard
+                      label="Ineligible"
+                      value={String(marketCompEligibilitySummary.by_eligibility_status.ineligible ?? 0)}
+                    />
+                    <StatCard
+                      label="Eligible raw"
+                      value={String(marketCompEligibilitySummary.by_eligibility_classification.eligible_raw_comp ?? 0)}
+                    />
+                    <StatCard
+                      label="Eligible graded"
+                      value={String(marketCompEligibilitySummary.by_eligibility_classification.eligible_graded_comp ?? 0)}
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <StatCard
+                      label="Needs review before comp"
+                      value={String(
+                        marketCompEligibilitySummary.by_eligibility_classification.needs_review_before_comp ?? 0,
+                      )}
+                    />
+                    <StatCard
+                      label="Missing price"
+                      value={String(
+                        marketCompEligibilitySummary.by_eligibility_classification.ineligible_missing_price ?? 0,
+                      )}
+                    />
+                    <StatCard
+                      label="Unsupported currency"
+                      value={String(
+                        marketCompEligibilitySummary.by_eligibility_classification.ineligible_unsupported_currency ?? 0,
+                      )}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {marketFmvSummaryLoading || marketFmvSummaryError || marketFmvSummary ? (
+            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market FMV snapshots</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic valuation ledger</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Snapshot-only FMV built from eligible comparable sales. This stays separate from manual inventory FMV edits
+                    and never performs prediction, FX conversion, or automated portfolio mutation.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-fmv"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                >
+                  Open ops FMV workspace
+                </Link>
+              </div>
+              {marketFmvSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market FMV snapshots…</p>
+              ) : marketFmvSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketFmvSummaryError}</StatusBanner>
+                </div>
+              ) : marketFmvSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard
+                    label="Raw FMV snapshots"
+                    value={String(marketFmvSummary.items.filter((row) => row.snapshot_scope === "raw").length)}
+                  />
+                  <StatCard
+                    label="Graded FMV snapshots"
+                    value={String(marketFmvSummary.items.filter((row) => row.snapshot_scope !== "raw").length)}
+                  />
+                  <StatCard
+                    label="High confidence"
+                    value={String(
+                      (marketFmvSummary.by_confidence_bucket.very_high ?? 0) +
+                        (marketFmvSummary.by_confidence_bucket.high ?? 0),
+                    )}
+                  />
+                  <StatCard label="Stale snapshots" value={String(marketFmvSummary.stale_count)} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {marketMatchSuggestionsPendingLoading || marketMatchSuggestionsPendingError || marketMatchSuggestionsPendingCount >= 0 ? (
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market match suggestions</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only pending-count widget</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic match suggestions only. Open the ops review workspace to inspect evidence and approve,
+                    reject, or ignore suggestion artifacts without mutating canonical or inventory data.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-match-suggestions"
+                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                >
+                  Open ops match suggestions
+                </Link>
+              </div>
+              {marketMatchSuggestionsPendingLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market match suggestion count…</p>
+              ) : marketMatchSuggestionsPendingError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketMatchSuggestionsPendingError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <StatCard label="Pending suggestions" value={String(marketMatchSuggestionsPendingCount)} />
+                </div>
+              )}
             </section>
           ) : null}
         </section>

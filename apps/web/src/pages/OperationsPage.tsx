@@ -63,6 +63,11 @@ import {
   type HighResReviewRequestStatsRead,
   type HighResReviewRequestStatus,
   type MarketSaleRead,
+  type MarketSaleMatchSuggestionConfidenceBucket,
+  type MarketSaleMatchSuggestionOpsListResponse,
+  type MarketSaleMatchSuggestionRead,
+  type MarketSaleMatchSuggestionReviewState,
+  type MarketSaleMatchSuggestionType,
   type MarketSaleNormalizationUpdatePayload,
   type MarketSaleReviewActionPayload,
   type MarketSaleReviewClassification,
@@ -70,6 +75,16 @@ import {
   type MarketSaleReviewQueueResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketSaleReviewStatus,
+  type MarketCompEligibilityClassification,
+  type MarketSaleCompEligibilityListResponse,
+  type MarketSaleCompEligibilityRead,
+  type MarketCompEligibilityStatus,
+  type MarketFmvConfidenceBucket,
+  type MarketFmvGenerateResponse,
+  type MarketFmvLiquidityBucket,
+  type MarketFmvSnapshotListResponse,
+  type MarketFmvSnapshotRead,
+  type MarketFmvSnapshotScope,
   type MarketSaleSummaryRead,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
@@ -141,6 +156,14 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function formatCurrency(value: string | null): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+}
+
 function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {
   switch (status) {
     case "normalized":
@@ -192,6 +215,67 @@ function marketSaleReviewStatusLabel(status: MarketSaleReviewStatus): string {
   return status.replace(/_/g, " ");
 }
 
+function marketCompEligibilityStatusLabel(status: MarketCompEligibilityStatus): string {
+  return status.replace(/_/g, " ");
+}
+
+function marketCompEligibilityClassificationLabel(classification: MarketCompEligibilityClassification): string {
+  return classification.replace(/_/g, " ");
+}
+
+function marketCompEligibilityStatusTone(status: MarketCompEligibilityStatus): string {
+  switch (status) {
+    case "eligible":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "needs_review":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "ineligible":
+    default:
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+  }
+}
+
+function marketFmvBucketTone(bucket: string): string {
+  switch (bucket) {
+    case "very_high":
+    case "high":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "medium":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "moderate":
+    case "low":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "volatile":
+    case "very_low":
+    default:
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+  }
+}
+
+function marketFmvScopeLabel(scope: MarketFmvSnapshotScope): string {
+  return scope.replace(/_/g, " ");
+}
+
+function marketSaleMatchSuggestionTone(bucket: MarketSaleMatchSuggestionConfidenceBucket): string {
+  switch (bucket) {
+    case "very_high":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "high":
+      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+    case "medium":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "low":
+      return "border-slate-400/35 bg-slate-400/10 text-slate-100";
+    case "very_low":
+    default:
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+  }
+}
+
+function marketSaleMatchSuggestionLabel(value: MarketSaleMatchSuggestionType | MarketSaleMatchSuggestionReviewState | string): string {
+  return value.replace(/_/g, " ");
+}
+
 const OPS_HIGH_RES_STATUSES: HighResReviewRequestStatus[] = [
   "pending",
   "scanned",
@@ -230,6 +314,32 @@ const OPS_MARKET_SALE_REVIEW_PRIORITIES: MarketSaleReviewPriority[] = [
   "low",
   "info",
 ];
+
+const OPS_MARKET_COMP_ELIGIBILITY_STATUSES: MarketCompEligibilityStatus[] = ["eligible", "needs_review", "ineligible"];
+
+const OPS_MARKET_COMP_ELIGIBILITY_CLASSIFICATIONS: MarketCompEligibilityClassification[] = [
+  "eligible_graded_comp",
+  "eligible_raw_comp",
+  "needs_review_before_comp",
+  "ineligible_missing_price",
+  "ineligible_unsupported_currency",
+  "ineligible_unresolved_identity",
+  "ineligible_duplicate_listing",
+  "ineligible_ignored_record",
+  "ineligible_invalid_grade",
+];
+
+const OPS_MARKET_MATCH_SUGGESTION_TYPES: MarketSaleMatchSuggestionType[] = [
+  "exact_identity_key",
+  "normalized_title_issue_publisher",
+  "normalized_title_issue",
+  "publisher_series_issue",
+  "barcode_supported",
+  "inventory_context_supported",
+  "unresolved_ambiguous",
+];
+
+const OPS_MARKET_FMV_SCOPES: MarketFmvSnapshotScope[] = ["raw", "graded", "graded_by_company", "graded_by_grade"];
 
 type OpsHistoricalTimelineFilters = {
   event_type: "" | CollectionHistoricalTimelineEventKind;
@@ -1152,6 +1262,60 @@ export function OperationsPage() {
   const [opsMarketSaleReviewSourceFilter, setOpsMarketSaleReviewSourceFilter] = useState("");
   const [opsMarketSaleReviewSourceTypeFilter, setOpsMarketSaleReviewSourceTypeFilter] = useState("");
   const [opsMarketSaleReviewIssueTypeFilter, setOpsMarketSaleReviewIssueTypeFilter] = useState("");
+  const [opsMarketCompEligibility, setOpsMarketCompEligibility] =
+    useState<MarketSaleCompEligibilityListResponse | null>(null);
+  const [opsMarketCompEligibilityLoading, setOpsMarketCompEligibilityLoading] = useState(true);
+  const [opsMarketCompEligibilityError, setOpsMarketCompEligibilityError] = useState<string | null>(null);
+  const [opsMarketCompEligibilitySourceFilter, setOpsMarketCompEligibilitySourceFilter] = useState("");
+  const [opsMarketCompEligibilityStatusFilter, setOpsMarketCompEligibilityStatusFilter] =
+    useState<"" | MarketCompEligibilityStatus>("");
+  const [opsMarketCompEligibilityClassificationFilter, setOpsMarketCompEligibilityClassificationFilter] =
+    useState<"" | MarketCompEligibilityClassification>("");
+  const [opsMarketCompEligibilityGradingCompanyFilter, setOpsMarketCompEligibilityGradingCompanyFilter] =
+    useState("");
+  const [opsMarketCompEligibilityIsGradedFilter, setOpsMarketCompEligibilityIsGradedFilter] =
+    useState<"" | "true" | "false">("");
+  const [opsMarketCompEligibilityCurrencyFilter, setOpsMarketCompEligibilityCurrencyFilter] = useState("");
+  const [opsMarketCompEligibilitySaleDateFromFilter, setOpsMarketCompEligibilitySaleDateFromFilter] = useState("");
+  const [opsMarketCompEligibilitySaleDateToFilter, setOpsMarketCompEligibilitySaleDateToFilter] = useState("");
+  const [opsMarketCompEligibilitySelectedId, setOpsMarketCompEligibilitySelectedId] = useState<number | null>(null);
+  const [opsMarketCompEligibilityDetail, setOpsMarketCompEligibilityDetail] =
+    useState<MarketSaleCompEligibilityRead | null>(null);
+  const [opsMarketCompEligibilityDetailLoading, setOpsMarketCompEligibilityDetailLoading] = useState(false);
+  const [opsMarketCompEligibilityDetailError, setOpsMarketCompEligibilityDetailError] = useState<string | null>(null);
+  const [opsMarketFmv, setOpsMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
+  const [opsMarketFmvLoading, setOpsMarketFmvLoading] = useState(true);
+  const [opsMarketFmvError, setOpsMarketFmvError] = useState<string | null>(null);
+  const [opsMarketFmvScopeFilter, setOpsMarketFmvScopeFilter] = useState<"" | MarketFmvSnapshotScope>("");
+  const [opsMarketFmvConfidenceFilter, setOpsMarketFmvConfidenceFilter] =
+    useState<"" | MarketFmvConfidenceBucket>("");
+  const [opsMarketFmvLiquidityFilter, setOpsMarketFmvLiquidityFilter] =
+    useState<"" | MarketFmvLiquidityBucket>("");
+  const [opsMarketFmvStaleFilter, setOpsMarketFmvStaleFilter] = useState<"" | "true" | "false">("");
+  const [opsMarketFmvCurrencyFilter, setOpsMarketFmvCurrencyFilter] = useState("");
+  const [opsMarketFmvGradingCompanyFilter, setOpsMarketFmvGradingCompanyFilter] = useState("");
+  const [opsMarketFmvNormalizedGradeFilter, setOpsMarketFmvNormalizedGradeFilter] = useState("");
+  const [opsMarketFmvSelectedId, setOpsMarketFmvSelectedId] = useState<number | null>(null);
+  const [opsMarketFmvDetail, setOpsMarketFmvDetail] = useState<MarketFmvSnapshotRead | null>(null);
+  const [opsMarketFmvDetailLoading, setOpsMarketFmvDetailLoading] = useState(false);
+  const [opsMarketFmvDetailError, setOpsMarketFmvDetailError] = useState<string | null>(null);
+  const [opsMarketFmvGenerateBusy, setOpsMarketFmvGenerateBusy] = useState(false);
+  const [opsMarketFmvGenerateSummary, setOpsMarketFmvGenerateSummary] = useState<MarketFmvGenerateResponse | null>(null);
+  const [opsMarketFmvRefreshTick, setOpsMarketFmvRefreshTick] = useState(0);
+  const [opsMarketMatchSuggestionsRefreshTick, setOpsMarketMatchSuggestionsRefreshTick] = useState(0);
+  const [opsMarketMatchSuggestions, setOpsMarketMatchSuggestions] =
+    useState<MarketSaleMatchSuggestionOpsListResponse | null>(null);
+  const [opsMarketMatchSuggestionsLoading, setOpsMarketMatchSuggestionsLoading] = useState(true);
+  const [opsMarketMatchSuggestionsError, setOpsMarketMatchSuggestionsError] = useState<string | null>(null);
+  const [opsMarketMatchSuggestionSourceFilter, setOpsMarketMatchSuggestionSourceFilter] = useState("");
+  const [opsMarketMatchSuggestionConfidenceFilter, setOpsMarketMatchSuggestionConfidenceFilter] =
+    useState<"" | MarketSaleMatchSuggestionConfidenceBucket>("");
+  const [opsMarketMatchSuggestionReviewFilter, setOpsMarketMatchSuggestionReviewFilter] =
+    useState<"" | MarketSaleMatchSuggestionReviewState>("");
+  const [opsMarketMatchSuggestionTypeFilter, setOpsMarketMatchSuggestionTypeFilter] =
+    useState<"" | MarketSaleMatchSuggestionType>("");
+  const [opsMarketMatchSuggestionSelectedId, setOpsMarketMatchSuggestionSelectedId] = useState<number | null>(null);
+  const [opsMarketMatchSuggestionBusyId, setOpsMarketMatchSuggestionBusyId] = useState<number | null>(null);
 
   const [opsScanSessions, setOpsScanSessions] = useState<ScanSessionSummary[]>([]);
   const [opsScanSessionsLoading, setOpsScanSessionsLoading] = useState(true);
@@ -1183,6 +1347,21 @@ export function OperationsPage() {
   const [opsRouting, setOpsRouting] = useState<QueueRoutingListResponse | null>(null);
   const [opsRoutingLoading, setOpsRoutingLoading] = useState(true);
   const [opsRoutingError, setOpsRoutingError] = useState<string | null>(null);
+
+  const handleGenerateMarketFmv = useCallback(async () => {
+    setOpsMarketFmvGenerateBusy(true);
+    setOpsMarketFmvError(null);
+    try {
+      const response = await apiClient.generateOpsMarketFmvSnapshots();
+      setOpsMarketFmvGenerateSummary(response);
+      setOpsMarketFmvRefreshTick((cur) => cur + 1);
+    } catch (generateErr) {
+      setOpsMarketFmvGenerateSummary(null);
+      setOpsMarketFmvError(generateErr instanceof ApiError ? generateErr.message : "Unable to generate market FMV snapshots.");
+    } finally {
+      setOpsMarketFmvGenerateBusy(false);
+    }
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -1353,6 +1532,233 @@ export function OperationsPage() {
     opsMarketSaleReviewSourceTypeFilter,
     opsMarketSaleReviewIssueTypeFilter,
     opsMarketSaleReviewQueueRefreshTick,
+  ]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketCompEligibilityLoading(true);
+      setOpsMarketCompEligibilityError(null);
+      const params = {
+        ...(opsMarketCompEligibilitySourceFilter.trim() ? { source: opsMarketCompEligibilitySourceFilter.trim() } : {}),
+        ...(opsMarketCompEligibilityStatusFilter ? { eligibility_status: opsMarketCompEligibilityStatusFilter } : {}),
+        ...(opsMarketCompEligibilityClassificationFilter
+          ? { eligibility_classification: opsMarketCompEligibilityClassificationFilter }
+          : {}),
+        ...(opsMarketCompEligibilityGradingCompanyFilter.trim()
+          ? { grading_company: opsMarketCompEligibilityGradingCompanyFilter.trim() }
+          : {}),
+        ...(opsMarketCompEligibilityIsGradedFilter
+          ? { is_graded: opsMarketCompEligibilityIsGradedFilter === "true" }
+          : {}),
+        ...(opsMarketCompEligibilityCurrencyFilter.trim()
+          ? { currency: opsMarketCompEligibilityCurrencyFilter.trim() }
+          : {}),
+        ...(opsMarketCompEligibilitySaleDateFromFilter.trim()
+          ? { sale_date_from: opsMarketCompEligibilitySaleDateFromFilter.trim() }
+          : {}),
+        ...(opsMarketCompEligibilitySaleDateToFilter.trim()
+          ? { sale_date_to: opsMarketCompEligibilitySaleDateToFilter.trim() }
+          : {}),
+      };
+      try {
+        const list = await apiClient.getOpsMarketCompEligibility(params);
+        if (!ignore) {
+          setOpsMarketCompEligibility(list);
+          setOpsMarketCompEligibilitySelectedId((cur) =>
+            cur != null && list.items.some((row) => row.id === cur) ? cur : list.items[0]?.id ?? null,
+          );
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketCompEligibility(null);
+          setOpsMarketCompEligibilitySelectedId(null);
+          setOpsMarketCompEligibilityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market comp eligibility.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketCompEligibilityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketCompEligibilitySourceFilter,
+    opsMarketCompEligibilityStatusFilter,
+    opsMarketCompEligibilityClassificationFilter,
+    opsMarketCompEligibilityGradingCompanyFilter,
+    opsMarketCompEligibilityIsGradedFilter,
+    opsMarketCompEligibilityCurrencyFilter,
+    opsMarketCompEligibilitySaleDateFromFilter,
+    opsMarketCompEligibilitySaleDateToFilter,
+  ]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (opsMarketCompEligibilitySelectedId == null) {
+      setOpsMarketCompEligibilityDetail(null);
+      setOpsMarketCompEligibilityDetailError(null);
+      setOpsMarketCompEligibilityDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setOpsMarketCompEligibilityDetailLoading(true);
+      setOpsMarketCompEligibilityDetailError(null);
+      try {
+        const detail = await apiClient.getOpsMarketSaleCompEligibility(opsMarketCompEligibilitySelectedId);
+        if (!ignore) {
+          setOpsMarketCompEligibilityDetail(detail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketCompEligibilityDetail(null);
+          setOpsMarketCompEligibilityDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market comp eligibility detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketCompEligibilityDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketCompEligibilitySelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketFmvLoading(true);
+      setOpsMarketFmvError(null);
+      const params = {
+        ...(opsMarketFmvScopeFilter ? { snapshot_scope: opsMarketFmvScopeFilter } : {}),
+        ...(opsMarketFmvConfidenceFilter ? { confidence_bucket: opsMarketFmvConfidenceFilter } : {}),
+        ...(opsMarketFmvLiquidityFilter ? { liquidity_bucket: opsMarketFmvLiquidityFilter } : {}),
+        ...(opsMarketFmvStaleFilter ? { stale_data: opsMarketFmvStaleFilter === "true" } : {}),
+        ...(opsMarketFmvCurrencyFilter.trim() ? { currency: opsMarketFmvCurrencyFilter.trim() } : {}),
+        ...(opsMarketFmvGradingCompanyFilter.trim() ? { grading_company: opsMarketFmvGradingCompanyFilter.trim() } : {}),
+        ...(opsMarketFmvNormalizedGradeFilter.trim()
+          ? { normalized_grade: opsMarketFmvNormalizedGradeFilter.trim() }
+          : {}),
+      };
+      try {
+        const list = await apiClient.getOpsMarketFmv(params);
+        if (!ignore) {
+          setOpsMarketFmv(list);
+          setOpsMarketFmvSelectedId((cur) => (cur != null && list.items.some((row) => row.id === cur) ? cur : list.items[0]?.id ?? null));
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketFmv(null);
+          setOpsMarketFmvSelectedId(null);
+          setOpsMarketFmvError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market FMV snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketFmvLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketFmvScopeFilter,
+    opsMarketFmvConfidenceFilter,
+    opsMarketFmvLiquidityFilter,
+    opsMarketFmvStaleFilter,
+    opsMarketFmvCurrencyFilter,
+    opsMarketFmvGradingCompanyFilter,
+    opsMarketFmvNormalizedGradeFilter,
+    opsMarketFmvRefreshTick,
+  ]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (opsMarketFmvSelectedId == null) {
+      setOpsMarketFmvDetail(null);
+      setOpsMarketFmvDetailError(null);
+      setOpsMarketFmvDetailLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setOpsMarketFmvDetailLoading(true);
+      setOpsMarketFmvDetailError(null);
+      try {
+        const detail = await apiClient.getOpsMarketFmvSnapshot(opsMarketFmvSelectedId);
+        if (!ignore) {
+          setOpsMarketFmvDetail(detail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketFmvDetail(null);
+          setOpsMarketFmvDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market FMV snapshot detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketFmvDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketFmvSelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketMatchSuggestionsLoading(true);
+      setOpsMarketMatchSuggestionsError(null);
+      const params = {
+        ...(opsMarketMatchSuggestionSourceFilter.trim()
+          ? { source: opsMarketMatchSuggestionSourceFilter.trim() }
+          : {}),
+        ...(opsMarketMatchSuggestionConfidenceFilter
+          ? { confidence_bucket: opsMarketMatchSuggestionConfidenceFilter }
+          : {}),
+        ...(opsMarketMatchSuggestionReviewFilter ? { review_state: opsMarketMatchSuggestionReviewFilter } : {}),
+        ...(opsMarketMatchSuggestionTypeFilter ? { suggestion_type: opsMarketMatchSuggestionTypeFilter } : {}),
+      };
+      try {
+        const list = await apiClient.listOpsMarketMatchSuggestions(params);
+        if (!ignore) {
+          setOpsMarketMatchSuggestions(list);
+          setOpsMarketMatchSuggestionSelectedId((cur) =>
+            cur != null && list.suggestions.some((row) => row.id === cur) ? cur : list.suggestions[0]?.id ?? null,
+          );
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketMatchSuggestions(null);
+          setOpsMarketMatchSuggestionSelectedId(null);
+          setOpsMarketMatchSuggestionsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market match suggestions.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketMatchSuggestionsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [
+    opsMarketMatchSuggestionSourceFilter,
+    opsMarketMatchSuggestionConfidenceFilter,
+    opsMarketMatchSuggestionReviewFilter,
+    opsMarketMatchSuggestionTypeFilter,
+    opsMarketMatchSuggestionsRefreshTick,
   ]);
 
   useEffect(() => {
@@ -2147,6 +2553,46 @@ export function OperationsPage() {
       setRelationshipConflictsDetectBusy(false);
     }
   }, [relationshipConflictSeverity, relationshipConflictStatus, relationshipConflictType]);
+
+  const handleGenerateMarketMatchSuggestions = useCallback(async (marketSaleRecordId: number) => {
+    setOpsMarketMatchSuggestionBusyId(marketSaleRecordId);
+    try {
+      await apiClient.generateOpsMarketSaleMatchSuggestions(marketSaleRecordId);
+      setOpsMarketMatchSuggestionsRefreshTick((tick) => tick + 1);
+    } catch (loadError) {
+      setOpsMarketMatchSuggestionsError(
+        loadError instanceof ApiError ? loadError.message : "Unable to generate market match suggestions.",
+      );
+    } finally {
+      setOpsMarketMatchSuggestionBusyId(null);
+    }
+  }, []);
+
+  const reviewMarketMatchSuggestion = useCallback(
+    async (suggestionId: number, action: "approve" | "reject" | "ignore") => {
+      setOpsMarketMatchSuggestionBusyId(suggestionId);
+      try {
+        if (action === "approve") {
+          await apiClient.approveOpsMarketMatchSuggestion(suggestionId);
+        } else if (action === "reject") {
+          await apiClient.rejectOpsMarketMatchSuggestion(suggestionId);
+        } else {
+          await apiClient.ignoreOpsMarketMatchSuggestion(suggestionId);
+        }
+        setOpsMarketMatchSuggestionsRefreshTick((tick) => tick + 1);
+      } catch (loadError) {
+        setOpsMarketMatchSuggestionsError(
+          loadError instanceof ApiError ? loadError.message : "Unable to update market match suggestion.",
+        );
+      } finally {
+        setOpsMarketMatchSuggestionBusyId(null);
+      }
+    },
+    [],
+  );
+
+  const opsMarketMatchSelectedSuggestion =
+    opsMarketMatchSuggestions?.suggestions.find((row) => row.id === opsMarketMatchSuggestionSelectedId) ?? null;
 
   const loadCoverRelationshipGraphQuickView = useCallback(async () => {
     setGraphQuickError(null);
@@ -3836,6 +4282,885 @@ export function OperationsPage() {
           )}
         </div>
       </details>
+
+      <section
+        id="market-comp-eligibility"
+        className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Market comp eligibility</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Deterministic comp-readiness only. No FMV, no averaging, no fuzzy matching, and no automatic canonical
+              linking. Use this panel to inspect whether a market sale is eligible, needs review, or is ineligible for
+              future comp analysis.
+            </p>
+          </div>
+          <span className="rounded-full border border-emerald-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/90">
+            Ops / read-only eligibility
+          </span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Status</span>
+            <select
+              value={opsMarketCompEligibilityStatusFilter}
+              onChange={(event) => setOpsMarketCompEligibilityStatusFilter(event.target.value as "" | MarketCompEligibilityStatus)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              {OPS_MARKET_COMP_ELIGIBILITY_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {marketCompEligibilityStatusLabel(status)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[12rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Classification</span>
+            <select
+              value={opsMarketCompEligibilityClassificationFilter}
+              onChange={(event) =>
+                setOpsMarketCompEligibilityClassificationFilter(
+                  event.target.value as "" | MarketCompEligibilityClassification,
+                )
+              }
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              {OPS_MARKET_COMP_ELIGIBILITY_CLASSIFICATIONS.map((classification) => (
+                <option key={classification} value={classification}>
+                  {marketCompEligibilityClassificationLabel(classification)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Source</span>
+            <input
+              value={opsMarketCompEligibilitySourceFilter}
+              onChange={(event) => setOpsMarketCompEligibilitySourceFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="Source name or type"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Graded</span>
+            <select
+              value={opsMarketCompEligibilityIsGradedFilter}
+              onChange={(event) => setOpsMarketCompEligibilityIsGradedFilter(event.target.value as "" | "true" | "false")}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              <option value="true">Graded</option>
+              <option value="false">Raw</option>
+            </select>
+          </label>
+          <label className="flex min-w-[11rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Grading company</span>
+            <input
+              value={opsMarketCompEligibilityGradingCompanyFilter}
+              onChange={(event) => setOpsMarketCompEligibilityGradingCompanyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="CGC"
+            />
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Currency</span>
+            <input
+              value={opsMarketCompEligibilityCurrencyFilter}
+              onChange={(event) => setOpsMarketCompEligibilityCurrencyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+              placeholder="USD"
+            />
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Sale date from</span>
+            <input
+              type="date"
+              value={opsMarketCompEligibilitySaleDateFromFilter}
+              onChange={(event) => setOpsMarketCompEligibilitySaleDateFromFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+            />
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Sale date to</span>
+            <input
+              type="date"
+              value={opsMarketCompEligibilitySaleDateToFilter}
+              onChange={(event) => setOpsMarketCompEligibilitySaleDateToFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-emerald-300/40"
+            />
+          </label>
+        </div>
+
+        {opsMarketCompEligibility ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total" value={String(opsMarketCompEligibility.total)} />
+            <StatCard label="Eligible" value={String(opsMarketCompEligibility.by_eligibility_status.eligible ?? 0)} />
+            <StatCard label="Needs review" value={String(opsMarketCompEligibility.by_eligibility_status.needs_review ?? 0)} />
+            <StatCard label="Ineligible" value={String(opsMarketCompEligibility.by_eligibility_status.ineligible ?? 0)} />
+          </div>
+        ) : null}
+
+        {opsMarketCompEligibility ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Eligible raw"
+              value={String(opsMarketCompEligibility.by_eligibility_classification.eligible_raw_comp ?? 0)}
+            />
+            <StatCard
+              label="Eligible graded"
+              value={String(opsMarketCompEligibility.by_eligibility_classification.eligible_graded_comp ?? 0)}
+            />
+            <StatCard
+              label="Needs review before comp"
+              value={String(opsMarketCompEligibility.by_eligibility_classification.needs_review_before_comp ?? 0)}
+            />
+            <StatCard
+              label="Duplicate listings"
+              value={String(opsMarketCompEligibility.by_eligibility_classification.ineligible_duplicate_listing ?? 0)}
+            />
+          </div>
+        ) : null}
+
+        {opsMarketCompEligibilityLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Loading market comp eligibility…</p>
+        ) : opsMarketCompEligibilityError ? (
+          <div className="mt-4">
+            <StatusBanner tone="error">{opsMarketCompEligibilityError}</StatusBanner>
+          </div>
+        ) : opsMarketCompEligibility?.items.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">No market-sale records matched the active eligibility filters.</p>
+        ) : opsMarketCompEligibility ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Inspect</th>
+                    <th className="p-3 font-medium">Source</th>
+                    <th className="p-3 font-medium">Sale</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Class</th>
+                    <th className="p-3 font-medium">Canonical match</th>
+                    <th className="p-3 font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsMarketCompEligibility.items.map((row) => {
+                    const isSelected = opsMarketCompEligibilitySelectedId === row.id;
+                    return (
+                      <tr key={row.id}>
+                        <td className="p-3 align-top">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                              isSelected
+                                ? "border-emerald-300/70 bg-emerald-400/20 text-emerald-50"
+                                : "border-white/15 text-slate-200 hover:border-emerald-300/35"
+                            }`}
+                            onClick={() => setOpsMarketCompEligibilitySelectedId((cur) => (cur === row.id ? null : row.id))}
+                          >
+                            {isSelected ? "Hide" : "View"}
+                          </button>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="text-slate-100">{row.source_name}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">{row.source_type}</div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                          <div className="mt-1 text-[11px] text-slate-400">
+                            Issue {row.normalized_issue ?? row.raw_issue}
+                            {row.source_listing_id ? ` · ${row.source_listing_id}` : ""}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {row.total_price ?? row.sale_price ?? "—"} {row.currency_code}
+                          </div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketCompEligibilityStatusTone(
+                              row.eligibility_status,
+                            )}`}
+                          >
+                            {marketCompEligibilityStatusLabel(row.eligibility_status)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                            {marketCompEligibilityClassificationLabel(row.eligibility_classification)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="text-slate-100">{marketSaleMatchSuggestionLabel(row.canonical_match_state)}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {row.canonical_match_confidence_bucket ?? "—"}
+                            {row.canonical_match_review_state ? ` · ${row.canonical_match_review_state}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-400 align-top">{formatDateTime(row.updated_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              {opsMarketCompEligibilityDetailLoading ? (
+                <p className="text-sm text-slate-400">Loading comp eligibility evidence…</p>
+              ) : opsMarketCompEligibilityDetailError ? (
+                <StatusBanner tone="error">{opsMarketCompEligibilityDetailError}</StatusBanner>
+              ) : opsMarketCompEligibilityDetail ? (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-100">
+                        Sale #{opsMarketCompEligibilityDetail.id}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-100">
+                        {opsMarketCompEligibilityDetail.normalized_title ?? opsMarketCompEligibilityDetail.raw_title}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {opsMarketCompEligibilityDetail.eligibility_classification.replace(/_/g, " ")}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketCompEligibilityStatusTone(
+                        opsMarketCompEligibilityDetail.eligibility_status,
+                      )}`}
+                    >
+                      {marketCompEligibilityStatusLabel(opsMarketCompEligibilityDetail.eligibility_status)}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-2 text-xs text-slate-300">
+                    <div>
+                      Source: {opsMarketCompEligibilityDetail.source_name} ({opsMarketCompEligibilityDetail.source_type})
+                    </div>
+                    <div>
+                      Sale: {opsMarketCompEligibilityDetail.total_price ?? opsMarketCompEligibilityDetail.sale_price ?? "—"}{" "}
+                      {opsMarketCompEligibilityDetail.currency_code}
+                    </div>
+                    <div>
+                      Graded: {opsMarketCompEligibilityDetail.is_graded ? "Yes" : "No"}
+                      {opsMarketCompEligibilityDetail.grading_company
+                        ? ` · ${opsMarketCompEligibilityDetail.grading_company}`
+                        : ""}
+                    </div>
+                    <div>Normalization: {opsMarketCompEligibilityDetail.normalization_status}</div>
+                    <div>
+                      Canonical match: {opsMarketCompEligibilityDetail.canonical_match_state}
+                      {opsMarketCompEligibilityDetail.canonical_match_review_state
+                        ? ` · ${opsMarketCompEligibilityDetail.canonical_match_review_state}`
+                        : ""}
+                    </div>
+                    {opsMarketCompEligibilityDetail.eligibility_reasons.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {opsMarketCompEligibilityDetail.eligibility_reasons.map((reason) => (
+                          <span
+                            key={reason}
+                            className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200"
+                          >
+                            {reason.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Evidence</p>
+                    <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-slate-300">
+                      {JSON.stringify(opsMarketCompEligibilityDetail.eligibility_evidence_json, null, 2)}
+                    </pre>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        Normalization issues
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {opsMarketCompEligibilityDetail.normalization_issues.length} issue
+                        {opsMarketCompEligibilityDetail.normalization_issues.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        Canonical match suggestions
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {opsMarketCompEligibilityDetail.match_suggestions.length} suggestion
+                        {opsMarketCompEligibilityDetail.match_suggestions.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Review actions</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {opsMarketCompEligibilityDetail.review_actions.length} action
+                        {opsMarketCompEligibilityDetail.review_actions.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Select a sale to inspect its comp eligibility evidence.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        id="market-fmv"
+        className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/10 p-5 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Market FMV snapshots</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Deterministic FMV snapshots only. Generate currency-specific market valuations from eligible comps without
+              updating inventory, metadata, or manual FMV history.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-cyan-300/35 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void handleGenerateMarketFmv()}
+              disabled={opsMarketFmvGenerateBusy}
+            >
+              {opsMarketFmvGenerateBusy ? "Generating…" : "Generate FMV snapshots"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Scope</span>
+            <select
+              value={opsMarketFmvScopeFilter}
+              onChange={(event) => setOpsMarketFmvScopeFilter(event.target.value as "" | MarketFmvSnapshotScope)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              {OPS_MARKET_FMV_SCOPES.map((scope) => (
+                <option key={scope} value={scope}>
+                  {marketFmvScopeLabel(scope)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Confidence</span>
+            <select
+              value={opsMarketFmvConfidenceFilter}
+              onChange={(event) => setOpsMarketFmvConfidenceFilter(event.target.value as "" | MarketFmvConfidenceBucket)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              <option value="very_high">Very high</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="very_low">Very low</option>
+            </select>
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Liquidity</span>
+            <select
+              value={opsMarketFmvLiquidityFilter}
+              onChange={(event) => setOpsMarketFmvLiquidityFilter(event.target.value as "" | MarketFmvLiquidityBucket)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              <option value="very_high">Very high</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="very_low">Very low</option>
+            </select>
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Stale</span>
+            <select
+              value={opsMarketFmvStaleFilter}
+              onChange={(event) => setOpsMarketFmvStaleFilter(event.target.value as "" | "true" | "false")}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">Any</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <label className="flex min-w-[9rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Currency</span>
+            <input
+              value={opsMarketFmvCurrencyFilter}
+              onChange={(event) => setOpsMarketFmvCurrencyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+              placeholder="USD"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Grading company</span>
+            <input
+              value={opsMarketFmvGradingCompanyFilter}
+              onChange={(event) => setOpsMarketFmvGradingCompanyFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+              placeholder="CGC"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Grade</span>
+            <input
+              value={opsMarketFmvNormalizedGradeFilter}
+              onChange={(event) => setOpsMarketFmvNormalizedGradeFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-cyan-300/40"
+              placeholder="9.8"
+            />
+          </label>
+        </div>
+
+        {opsMarketFmvGenerateSummary ? (
+          <div className="mt-4">
+            <StatusBanner tone="success">
+              Generated {opsMarketFmvGenerateSummary.snapshot_count} deterministic FMV snapshot
+              {opsMarketFmvGenerateSummary.snapshot_count === 1 ? "" : "s"}.
+            </StatusBanner>
+          </div>
+        ) : null}
+        {opsMarketFmvError ? (
+          <div className="mt-4">
+            <StatusBanner tone="error">{opsMarketFmvError}</StatusBanner>
+          </div>
+        ) : null}
+
+        {opsMarketFmv ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total snapshots" value={String(opsMarketFmv.total)} />
+            <StatCard
+              label="High confidence"
+              value={String((opsMarketFmv.by_confidence_bucket.very_high ?? 0) + (opsMarketFmv.by_confidence_bucket.high ?? 0))}
+            />
+            <StatCard
+              label="Low liquidity"
+              value={String((opsMarketFmv.by_liquidity_bucket.low ?? 0) + (opsMarketFmv.by_liquidity_bucket.very_low ?? 0))}
+            />
+            <StatCard label="Stale snapshots" value={String(opsMarketFmv.stale_count)} />
+          </div>
+        ) : null}
+
+        {opsMarketFmvLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Loading market FMV snapshots…</p>
+        ) : opsMarketFmv?.items.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">No FMV snapshots matched the active filters.</p>
+        ) : opsMarketFmv ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Inspect</th>
+                    <th className="p-3 font-medium">Scope / method</th>
+                    <th className="p-3 font-medium">Identity</th>
+                    <th className="p-3 font-medium">FMV</th>
+                    <th className="p-3 font-medium">Comps</th>
+                    <th className="p-3 font-medium">Confidence</th>
+                    <th className="p-3 font-medium">Liquidity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsMarketFmv.items.map((row) => {
+                    const isSelected = opsMarketFmvSelectedId === row.id;
+                    return (
+                      <tr key={row.id}>
+                        <td className="p-3 align-top">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                              isSelected
+                                ? "border-cyan-300/70 bg-cyan-400/20 text-cyan-50"
+                                : "border-white/15 text-slate-200 hover:border-cyan-300/35"
+                            }`}
+                            onClick={() => setOpsMarketFmvSelectedId((cur) => (cur === row.id ? null : row.id))}
+                          >
+                            {isSelected ? "Hide" : "View"}
+                          </button>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="font-medium text-slate-100">{marketFmvScopeLabel(row.snapshot_scope)}</div>
+                          <div className="mt-1 text-[11px] text-slate-400">{row.valuation_method.replace(/_/g, " ")}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">{row.snapshot_date}</div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="text-slate-100">{row.metadata_identity_key ?? `Issue #${row.canonical_issue_id ?? "—"}`}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {row.currency_code}
+                            {row.grading_company ? ` · ${row.grading_company}` : ""}
+                            {row.normalized_grade ? ` · ${row.normalized_grade}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 align-top font-medium text-white">{formatCurrency(row.estimated_fmv)}</td>
+                        <td className="p-3 align-top text-slate-300">
+                          {row.comp_count}
+                          {row.stale_data ? <div className="mt-1 text-[11px] text-amber-200">stale</div> : null}
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(row.confidence_bucket)}`}>
+                            {row.confidence_bucket.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(row.liquidity_bucket)}`}>
+                            {row.liquidity_bucket.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              {opsMarketFmvDetailLoading ? (
+                <p className="text-sm text-slate-400">Loading market FMV comp references…</p>
+              ) : opsMarketFmvDetailError ? (
+                <StatusBanner tone="error">{opsMarketFmvDetailError}</StatusBanner>
+              ) : opsMarketFmvDetail ? (
+                <>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                      Snapshot #{opsMarketFmvDetail.id}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-100">
+                      {marketFmvScopeLabel(opsMarketFmvDetail.snapshot_scope)} · {opsMarketFmvDetail.valuation_method.replace(/_/g, " ")}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {opsMarketFmvDetail.metadata_identity_key ?? `Issue #${opsMarketFmvDetail.canonical_issue_id ?? "—"}`}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">FMV</p>
+                      <p className="mt-2 text-sm text-slate-100">{formatCurrency(opsMarketFmvDetail.estimated_fmv)}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Comp count</p>
+                      <p className="mt-2 text-sm text-slate-100">{opsMarketFmvDetail.comp_count}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(opsMarketFmvDetail.confidence_bucket)}`}>
+                        confidence {opsMarketFmvDetail.confidence_bucket.replace(/_/g, " ")}
+                      </span>
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(opsMarketFmvDetail.liquidity_bucket)}`}>
+                        liquidity {opsMarketFmvDetail.liquidity_bucket.replace(/_/g, " ")}
+                      </span>
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketFmvBucketTone(opsMarketFmvDetail.volatility_bucket)}`}>
+                        volatility {opsMarketFmvDetail.volatility_bucket.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Comp references</p>
+                    <div className="mt-3 space-y-2">
+                      {opsMarketFmvDetail.comp_references.map((ref) => (
+                        <div key={ref.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs text-slate-300">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium text-slate-100">
+                                {ref.market_sale_record?.normalized_title ?? ref.market_sale_record?.raw_title ?? `Sale #${ref.market_sale_record_id}`}
+                              </div>
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                {ref.market_sale_record?.sale_date ?? "Unknown date"} ·{" "}
+                                {ref.market_sale_record?.total_price ?? ref.market_sale_record?.sale_price ?? "—"}{" "}
+                                {ref.market_sale_record?.currency_code ?? ""}
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-slate-500">
+                              {ref.excluded_reason ? ref.excluded_reason.replace(/_/g, " ") : `w=${ref.weighting_factor.toFixed(2)}`}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Select a snapshot to inspect the comp reference drawer.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        id="market-match-suggestions"
+        className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Market match suggestions</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Deterministic, review-only suggestions between normalized market sale records and canonical issue or
+              inventory context. No automatic canonical linking, no FMV, and no inventory mutation.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-violet-300/35 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:border-violet-200/60 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() =>
+                opsMarketSaleSelectedId == null ? undefined : void handleGenerateMarketMatchSuggestions(opsMarketSaleSelectedId)
+              }
+              disabled={opsMarketSaleSelectedId == null || opsMarketMatchSuggestionBusyId != null}
+            >
+              {opsMarketSaleSelectedId == null
+                ? "Select a sale to generate"
+                : `Generate for sale #${opsMarketSaleSelectedId}`}
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[12rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Source</span>
+            <input
+              value={opsMarketMatchSuggestionSourceFilter}
+              onChange={(event) => setOpsMarketMatchSuggestionSourceFilter(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-white outline-none focus:border-violet-300/40"
+              placeholder="Source name or type"
+            />
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Confidence</span>
+            <select
+              value={opsMarketMatchSuggestionConfidenceFilter}
+              onChange={(event) =>
+                setOpsMarketMatchSuggestionConfidenceFilter(
+                  event.target.value as "" | MarketSaleMatchSuggestionConfidenceBucket,
+                )
+              }
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">All</option>
+              <option value="very_high">Very high</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="very_low">Very low</option>
+            </select>
+          </label>
+          <label className="flex min-w-[10rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Review state</span>
+            <select
+              value={opsMarketMatchSuggestionReviewFilter}
+              onChange={(event) =>
+                setOpsMarketMatchSuggestionReviewFilter(event.target.value as "" | MarketSaleMatchSuggestionReviewState)
+              }
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="ignored">Ignored</option>
+            </select>
+          </label>
+          <label className="flex min-w-[13rem] flex-col gap-1 text-[11px] text-slate-400">
+            <span className="font-semibold uppercase tracking-[0.1em]">Suggestion type</span>
+            <select
+              value={opsMarketMatchSuggestionTypeFilter}
+              onChange={(event) =>
+                setOpsMarketMatchSuggestionTypeFilter(event.target.value as "" | MarketSaleMatchSuggestionType)
+              }
+              className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
+            >
+              <option value="">All</option>
+              {OPS_MARKET_MATCH_SUGGESTION_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {marketSaleMatchSuggestionLabel(type)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {opsMarketMatchSuggestionsError ? (
+          <div className="mt-4">
+            <StatusBanner tone="error">{opsMarketMatchSuggestionsError}</StatusBanner>
+          </div>
+        ) : null}
+        {opsMarketMatchSuggestionsLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Loading market match suggestions…</p>
+        ) : opsMarketMatchSuggestions?.suggestions.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">No market match suggestions for the active filters.</p>
+        ) : opsMarketMatchSuggestions ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Inspect</th>
+                    <th className="p-3 font-medium">Sale</th>
+                    <th className="p-3 font-medium">Target</th>
+                    <th className="p-3 font-medium">Type</th>
+                    <th className="p-3 font-medium">Confidence</th>
+                    <th className="p-3 font-medium">Review</th>
+                    <th className="p-3 font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsMarketMatchSuggestions.suggestions.map((row) => {
+                    const isSelected = opsMarketMatchSuggestionSelectedId === row.id;
+                    return (
+                      <tr key={row.id}>
+                        <td className="p-3 align-top">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                              isSelected
+                                ? "border-violet-300/70 bg-violet-400/20 text-violet-50"
+                                : "border-white/15 text-slate-200 hover:border-violet-300/35"
+                            }`}
+                            onClick={() => setOpsMarketMatchSuggestionSelectedId((cur) => (cur === row.id ? null : row.id))}
+                          >
+                            {isSelected ? "Hide" : "View"}
+                          </button>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="text-slate-100">{row.source_name}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {row.source_type}
+                            {row.source_listing_id ? ` · ${row.source_listing_id}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                          <div className="mt-1 text-[11px] text-slate-400">
+                            Issue {row.normalized_issue ?? row.raw_issue}
+                            {row.normalized_publisher ? ` · ${row.normalized_publisher}` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                            {marketSaleMatchSuggestionLabel(row.suggestion_type)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${marketSaleMatchSuggestionTone(
+                              row.confidence_bucket,
+                            )}`}
+                          >
+                            {row.confidence_bucket} · {row.deterministic_score.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                            {marketSaleMatchSuggestionLabel(row.review_state)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400 align-top">{formatDateTime(row.updated_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              {opsMarketMatchSelectedSuggestion ? (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100">
+                        Suggestion #{opsMarketMatchSelectedSuggestion.id}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-100">
+                        Sale #{opsMarketMatchSelectedSuggestion.market_sale_record_id}
+                        {opsMarketMatchSelectedSuggestion.suggested_identity_key
+                          ? ` · ${opsMarketMatchSelectedSuggestion.suggested_identity_key}`
+                          : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Canonical refs: issue {opsMarketMatchSelectedSuggestion.canonical_issue_id ?? "—"} · series{" "}
+                        {opsMarketMatchSelectedSuggestion.canonical_series_id ?? "—"} · publisher{" "}
+                        {opsMarketMatchSelectedSuggestion.canonical_publisher_id ?? "—"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-violet-300/35 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:border-violet-200/60 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() =>
+                        void handleGenerateMarketMatchSuggestions(opsMarketMatchSelectedSuggestion.market_sale_record_id)
+                      }
+                      disabled={opsMarketMatchSuggestionBusyId != null}
+                    >
+                      Regenerate sale
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-2 text-xs text-slate-300">
+                    <div>Source: {opsMarketMatchSelectedSuggestion.source_name} ({opsMarketMatchSelectedSuggestion.source_type})</div>
+                    <div>Listing type: {opsMarketMatchSelectedSuggestion.listing_type}</div>
+                    <div>
+                      Normalization: {opsMarketMatchSelectedSuggestion.normalization_status} · issues{" "}
+                      {opsMarketMatchSelectedSuggestion.normalization_issue_count}
+                    </div>
+                    <div>
+                      Review state: {opsMarketMatchSelectedSuggestion.review_state}
+                      {opsMarketMatchSelectedSuggestion.reviewed_by_user_id != null
+                        ? ` · reviewer #${opsMarketMatchSelectedSuggestion.reviewed_by_user_id}`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Evidence</p>
+                    <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-slate-300">
+                      {JSON.stringify(opsMarketMatchSelectedSuggestion.evidence_json, null, 2)}
+                    </pre>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void reviewMarketMatchSuggestion(opsMarketMatchSelectedSuggestion.id, "approve")}
+                      disabled={opsMarketMatchSuggestionBusyId === opsMarketMatchSelectedSuggestion.id}
+                      className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-100 disabled:opacity-40"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void reviewMarketMatchSuggestion(opsMarketMatchSelectedSuggestion.id, "reject")}
+                      disabled={opsMarketMatchSuggestionBusyId === opsMarketMatchSelectedSuggestion.id}
+                      className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-[11px] font-semibold text-rose-100 disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void reviewMarketMatchSuggestion(opsMarketMatchSelectedSuggestion.id, "ignore")}
+                      disabled={opsMarketMatchSuggestionBusyId === opsMarketMatchSelectedSuggestion.id}
+                      className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[11px] font-semibold text-slate-100 disabled:opacity-40"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Select a suggestion to inspect its evidence and review actions.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <details className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/15 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none">

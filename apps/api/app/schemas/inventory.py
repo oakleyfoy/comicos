@@ -78,6 +78,7 @@ class InventorySummaryResponse(BaseModel):
 class InventoryDetailResponse(BaseModel):
     inventory_copy_id: int
     copy_number: int
+    metadata_identity_key: str | None = None
     title: str
     publisher: str
     issue_number: str
