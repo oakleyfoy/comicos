@@ -2758,6 +2758,115 @@ export interface PortfolioValueSummaryResponse {
   items: PortfolioValueCurrencySummaryRead[];
 }
 
+export type ListingSourceType = "manual" | "ebay_export" | "convention" | "whatnot" | "shopify";
+export type ListingStatus = "DRAFT" | "READY" | "ACTIVE" | "SOLD" | "CANCELLED" | "ARCHIVED";
+export type ListingLifecycleEventType =
+  | "CREATED"
+  | "UPDATED"
+  | "ACTIVATED"
+  | "PRICE_CHANGED"
+  | "SOLD"
+  | "CANCELLED"
+  | "ARCHIVED";
+
+export interface ListingLifecycleEventRead {
+  id: number;
+  listing_id: number;
+  event_type: ListingLifecycleEventType;
+  prior_status: string | null;
+  new_status: string | null;
+  metadata_json: Record<string, unknown>;
+  created_by_user_id: number | null;
+  replay_key: string | null;
+  created_at: string;
+}
+
+export interface ListingDashboardSummary {
+  draft_count: number;
+  active_count: number;
+  sold_count: number;
+  recent_events: ListingLifecycleEventRead[];
+}
+
+export interface ListingRead {
+  id: number;
+  owner_user_id: number;
+  replay_key: string | null;
+  canonical_comic_issue_id: number | null;
+  inventory_copy_id: number;
+  source_type: ListingSourceType;
+  status: ListingStatus;
+  title: string;
+  description: string | null;
+  condition_summary: string | null;
+  asking_price_amount: string | null;
+  asking_price_currency: string | null;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+  sold_at: string | null;
+  archived_at: string | null;
+}
+
+export interface ListingListResponse {
+  items: ListingRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingReplayBodyPayload {
+  replay_key?: string | null;
+}
+
+export interface ListingOpsStatusCountRow {
+  status: ListingStatus;
+  count: number;
+}
+
+export interface ListingOpsStatusDistribution {
+  rows: ListingOpsStatusCountRow[];
+}
+
+export interface ListingDetailRead {
+  listing: ListingRead;
+  lifecycle_events_tail: ListingLifecycleEventRead[];
+  price_history_tail: {
+    id: number;
+    listing_id: number;
+    prior_amount: string | null;
+    new_amount: string;
+    currency: string;
+    reason: string | null;
+    replay_key: string | null;
+    created_at: string;
+  }[];
+  images: {
+    id: number;
+    listing_id: number;
+    cover_image_id: number | null;
+    scan_session_item_id: number | null;
+    display_order: number;
+    role: "primary" | "back" | "detail" | "gallery";
+    created_at: string;
+  }[];
+}
+
+export interface OpsListingLifecycleEventListResponse {
+  items: ListingLifecycleEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OpsListingPriceHistoryListResponse {
+  items: ListingDetailRead["price_history_tail"];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export interface MarketTrendListParams {
   snapshot_scope?: MarketTrendSnapshotScope;
   grading_company?: string;
@@ -6229,6 +6338,66 @@ export const apiClient = {
     return downloadAuthenticatedReport("/reports/collection-summary.json", "collection-summary.json");
   },
 
+  /** Market / FMV deterministic CSV + JSON snapshots (owner scope, read-only exports). */
+
+  downloadOwnerReportsMarketSalesCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/market-sales.csv", "market-sales.csv");
+  },
+
+  downloadOwnerReportsMarketEligibleCompsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/market-eligible-comps.csv", "market-eligible-comps.csv");
+  },
+
+  downloadOwnerReportsMarketFmvSnapshotsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/market-fmv-snapshots.csv", "market-fmv-snapshots.csv");
+  },
+
+  downloadOwnerReportsMarketTrendsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/market-trends.csv", "market-trends.csv");
+  },
+
+  downloadOwnerReportsMarketNormalizationIssuesCsv(): Promise<void> {
+    return downloadAuthenticatedReport(
+      "/reports/market-normalization-issues-summary.csv",
+      "market-normalization-issues-summary.csv",
+    );
+  },
+
+  downloadOwnerReportsPortfolioValueSummaryCsv(filters?: {
+    publisher?: string;
+    ownership_state?: string;
+  }): Promise<void> {
+    const q = filters ? buildQueryString(filters as Record<string, string | number | boolean | undefined>) : "";
+    return downloadAuthenticatedReport(`/reports/portfolio-value-summary.csv${q}`, "portfolio-value-summary.csv");
+  },
+
+  downloadOwnerReportsInventoryNoMarketDataCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory-no-market-data.csv", "inventory-no-market-data.csv");
+  },
+
+  downloadOwnerReportsInventoryNoMarketDataJson(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory-no-market-data.json", "inventory-no-market-data.json");
+  },
+
+  downloadOwnerReportsInventoryFmvLowConfidenceCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory-fmv-low-confidence.csv", "inventory-fmv-low-confidence.csv");
+  },
+
+  downloadOwnerReportsInventoryFmvStaleCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/reports/inventory-fmv-stale.csv", "inventory-fmv-stale.csv");
+  },
+
+  downloadOwnerReportsMarketDeterministicSummaryJson(filters?: {
+    publisher?: string;
+    ownership_state?: string;
+  }): Promise<void> {
+    const q = filters ? buildQueryString(filters as Record<string, string | number | boolean | undefined>) : "";
+    return downloadAuthenticatedReport(
+      `/reports/market-deterministic-summary.json${q}`,
+      "market-deterministic-summary.json",
+    );
+  },
+
   /** Fleet-scoped deterministic exports (`GET /ops/reports/...`, ops admins only). */
 
   downloadOpsReportsInventoryCsvAll(): Promise<void> {
@@ -6257,6 +6426,139 @@ export const apiClient = {
 
   downloadOpsReportsCollectionSummaryJson(): Promise<void> {
     return downloadAuthenticatedReport("/ops/reports/collection-summary.json", "ops-collection-summary.json");
+  },
+
+  /** Market / FMV deterministic exports (ops admins). */
+
+  downloadOpsReportsMarketSalesCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/market-sales.csv", "ops-market-sales.csv");
+  },
+
+  downloadOpsReportsMarketEligibleCompsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/market-eligible-comps.csv", "ops-market-eligible-comps.csv");
+  },
+
+  downloadOpsReportsMarketFmvSnapshotsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/market-fmv-snapshots.csv", "ops-market-fmv-snapshots.csv");
+  },
+
+  downloadOpsReportsMarketTrendsCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/market-trends.csv", "ops-market-trends.csv");
+  },
+
+  downloadOpsReportsMarketNormalizationIssuesCsv(): Promise<void> {
+    return downloadAuthenticatedReport(
+      "/ops/reports/market-normalization-issues-summary.csv",
+      "ops-market-normalization-issues-summary.csv",
+    );
+  },
+
+  downloadOpsReportsPortfolioValueSummaryCsv(filters?: {
+    publisher?: string;
+    ownership_state?: string;
+  }): Promise<void> {
+    const q = filters ? buildQueryString(filters as Record<string, string | number | boolean | undefined>) : "";
+    return downloadAuthenticatedReport(`/ops/reports/portfolio-value-summary.csv${q}`, "ops-portfolio-value-summary.csv");
+  },
+
+  downloadOpsReportsInventoryNoMarketDataCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory-no-market-data.csv", "ops-inventory-no-market-data.csv");
+  },
+
+  downloadOpsReportsInventoryNoMarketDataJson(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory-no-market-data.json", "ops-inventory-no-market-data.json");
+  },
+
+  downloadOpsReportsInventoryFmvLowConfidenceCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory-fmv-low-confidence.csv", "ops-inventory-fmv-low-confidence.csv");
+  },
+
+  downloadOpsReportsInventoryFmvStaleCsv(): Promise<void> {
+    return downloadAuthenticatedReport("/ops/reports/inventory-fmv-stale.csv", "ops-inventory-fmv-stale.csv");
+  },
+
+  downloadOpsReportsMarketDeterministicSummaryJson(filters?: {
+    publisher?: string;
+    ownership_state?: string;
+  }): Promise<void> {
+    const q = filters ? buildQueryString(filters as Record<string, string | number | boolean | undefined>) : "";
+    return downloadAuthenticatedReport(
+      `/ops/reports/market-deterministic-summary.json${q}`,
+      "ops-market-deterministic-summary.json",
+    );
+  },
+
+  getListingRegistrySummary(): Promise<ListingDashboardSummary> {
+    return request<ListingDashboardSummary>("/listings/summary");
+  },
+
+  getListingRegistryList(params?: {
+    status?: ListingStatus;
+    inventory_copy_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingListResponse>(`/listings${q}`);
+  },
+
+  createListing(payload: {
+    inventory_copy_id: number;
+    canonical_comic_issue_id?: number | null;
+    source_type: ListingSourceType;
+    title: string;
+    description?: string | null;
+    asking_price_amount?: string | null;
+    asking_price_currency?: string | null;
+    replay_key?: string | null;
+  }): Promise<ListingRead> {
+    return request<ListingRead>("/listings", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  getOpsListingRegistryList(params?: {
+    owner_user_id?: number;
+    status?: ListingStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingListResponse>(`/ops/listings${q}`);
+  },
+
+  getOpsListingStatusDistribution(): Promise<ListingOpsStatusDistribution> {
+    return request<ListingOpsStatusDistribution>("/ops/listings/status-distribution");
+  },
+
+  getOpsListingLifecycleEvents(params?: {
+    listing_id?: number;
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<OpsListingLifecycleEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<OpsListingLifecycleEventListResponse>(`/ops/listing-events${q}`);
+  },
+
+  getOpsListingPriceHistory(params?: {
+    listing_id?: number;
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<OpsListingPriceHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<OpsListingPriceHistoryListResponse>(`/ops/listing-price-history${q}`);
   },
 
   fetchCoverImageBlob(path: string): Promise<Blob> {

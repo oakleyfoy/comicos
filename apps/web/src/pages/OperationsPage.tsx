@@ -122,6 +122,8 @@ import {
   type PhysicalIntakeListResponse,
   type PhysicalIntakeState,
   type PhysicalIntakeSummaryResponse,
+  type ListingOpsStatusDistribution,
+  type OpsListingLifecycleEventListResponse,
 } from "../api/client";
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { AppShell } from "../components/AppShell";
@@ -1335,6 +1337,12 @@ export function OperationsPage() {
   const [opsScanPipelineDashError, setOpsScanPipelineDashError] = useState<string | null>(null);
 
   const [opsMarketSalesRefreshTick, setOpsMarketSalesRefreshTick] = useState(0);
+  const [opsListingDistribution, setOpsListingDistribution] = useState<ListingOpsStatusDistribution | null>(null);
+  const [opsListingDistributionLoading, setOpsListingDistributionLoading] = useState(true);
+  const [opsListingDistributionError, setOpsListingDistributionError] = useState<string | null>(null);
+  const [opsListingEventsFeed, setOpsListingEventsFeed] = useState<OpsListingLifecycleEventListResponse | null>(null);
+  const [opsListingEventsFeedLoading, setOpsListingEventsFeedLoading] = useState(true);
+  const [opsListingEventsFeedError, setOpsListingEventsFeedError] = useState<string | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -1651,6 +1659,62 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketSalesRefreshTick]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsListingDistributionLoading(true);
+      setOpsListingDistributionError(null);
+      try {
+        const distribution = await apiClient.getOpsListingStatusDistribution();
+        if (!ignore) {
+          setOpsListingDistribution(distribution);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsListingDistribution(null);
+          setOpsListingDistributionError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load listing distribution.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsListingDistributionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsListingEventsFeedLoading(true);
+      setOpsListingEventsFeedError(null);
+      try {
+        const feed = await apiClient.getOpsListingLifecycleEvents({ limit: 40, offset: 0 });
+        if (!ignore) {
+          setOpsListingEventsFeed(feed);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsListingEventsFeed(null);
+          setOpsListingEventsFeedError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load listing lifecycle events.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsListingEventsFeedLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -4095,7 +4159,114 @@ export function OperationsPage() {
         </div>
       </details>
 
-      <details className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden">
+      <nav
+        id="market-ops-quicknav"
+        aria-label="Market workspace navigation"
+        className="mt-6 flex flex-wrap gap-2 rounded-2xl border border-emerald-500/25 bg-slate-950/45 p-4 text-[11px] text-slate-200"
+      >
+        <span className="font-semibold uppercase tracking-[0.12em] text-emerald-100/90">Market ops shortcuts</span>
+        {[
+          ["Sales ledger", "#ops-market-sales-anchor"],
+          ["Listings registry", "#listing-registry-ops"],
+          ["Review queue", "#market-sale-review-queue"],
+          ["Comp readiness", "#market-comp-eligibility"],
+          ["Grouped comps", "#market-comps"],
+          ["FMV snapshots", "#market-fmv"],
+          ["Trends", "#market-trends"],
+          ["Match suggestions", "#market-match-suggestions"],
+        ].map(([label, hash]) => (
+          <a key={hash} className="rounded-full border border-white/15 px-2 py-1 hover:border-emerald-300/55" href={hash}>
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <details
+        id="listing-registry-ops"
+        open
+        className="mt-4 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Listing registry explorer</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic status distribution plus the newest lifecycle spine rows — read-only bookkeeping for manual,
+                exporter, convention, Shopify, Whatnot lanes. Mutations remain owner-initiated endpoints only.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+              Ops / listings
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-amber-200/15 pt-4">
+          {opsListingDistributionLoading ? (
+            <p className="text-sm text-slate-400">Loading listing status counts…</p>
+          ) : opsListingDistributionError ? (
+            <StatusBanner tone="error">{opsListingDistributionError}</StatusBanner>
+          ) : opsListingDistribution ? (
+            <div className="flex flex-wrap gap-2">
+              {opsListingDistribution.rows.map((row) => (
+                <span
+                  key={row.status}
+                  className="rounded-full border border-white/15 bg-slate-950/55 px-3 py-1 text-[11px] text-slate-100"
+                >
+                  <span className="font-semibold text-amber-100">{row.status}</span>
+                  <span className="ml-2 font-mono text-slate-300">×{row.count}</span>
+                </span>
+              ))}
+              {opsListingDistribution.rows.length === 0 ? (
+                <span className="text-sm text-slate-500">No listings persisted yet.</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {opsListingEventsFeedLoading ? (
+            <p className="text-sm text-slate-400">Loading listing audit feed…</p>
+          ) : opsListingEventsFeedError ? (
+            <StatusBanner tone="error">{opsListingEventsFeedError}</StatusBanner>
+          ) : opsListingEventsFeed ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Listing</th>
+                    <th className="p-3 font-medium">Event</th>
+                    <th className="p-3 font-medium">Statuses</th>
+                    <th className="p-3 font-medium">Recorded</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsListingEventsFeed.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={4}>
+                        No lifecycle events recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsListingEventsFeed.items.map((evt) => (
+                      <tr key={evt.id}>
+                        <td className="p-3 font-mono text-[11px]">#{evt.listing_id}</td>
+                        <td className="p-3">{evt.event_type.replace(/_/g, " ")}</td>
+                        <td className="p-3 text-slate-400">
+                          {(evt.prior_status ?? "—")} → {(evt.new_status ?? "—")}
+                        </td>
+                        <td className="p-3 text-slate-400">{formatDateTime(evt.created_at)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="ops-market-sales-anchor"
+        className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
         <summary className="cursor-pointer list-none">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>

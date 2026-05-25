@@ -56,6 +56,23 @@ Resolved routes:
   - If snapshot volume grows, move FMV list filtering/aggregation from in-memory service passes to SQL-backed filtering while preserving the current stable sort contract (`snapshot_date`, scope rank, method rank, `id`).
   - If product wants broader graded comp partitioning later, document new scopes explicitly instead of overloading the existing `graded`, `graded_by_company`, and `graded_by_grade` semantics.
 
+## P35-10 — Market reporting / deterministic exports (2026-05-25)
+
+- Architecture note: consolidated in `docs/MARKET_FMV_ARCHITECTURE.md` (deterministic registry, comps, FMV/trend ledgers, attachments, reporting boundaries).
+- Owner and ops surfaces share parallel `/reports/market*` vs `/ops/reports/market*` export paths; JSON summaries use `dumps_report_json` for deterministic key ordering while CSV renders share `render_csv` column contracts.
+- **Known follow-ups**
+  - If portfolio-scale exports exceed comfortable row counts, introduce cursor pagination while preserving lexical sort guarantees on stable keys (`inventory_copy_id`).
+  - Consolidate SPA dashboard clustering for ops/owner previews when product finalizes telemetry density budgets (API contracts already stabilized).
+  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; extend the list when new market ops sections ship.
+
+## P36-01 — Listing registry foundation (2026-05-25)
+
+- Architecture note: canonical listing truth layer is documented in `docs/LISTING_REGISTRY_ARCHITECTURE.md` (lifecycle, append-only events/price ledger, replay keys, deterministic image ordering, owner vs ops guards).
+- Operational surfaces: Dashboard and Operations include lightweight listing panels only; they must stay read-only aggregates (no posting, no auto pricing, no inventory mutation from listing reads).
+- **Known follow-ups**
+  - If marketplace export feeds are added later, extend `source_type` enums and persistence through explicit migrations only; keep listing rows the system of record vs channel-specific shadow state.
+  - If multi-quantity allocation semantics grow beyond the current `listing_inventory_link` row, model explicit partial allocations as new append-only ledger rows rather than silent overwrites on existing links.
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

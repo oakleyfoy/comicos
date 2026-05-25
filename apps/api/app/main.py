@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import ValidationError
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Body, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import text
@@ -137,6 +137,19 @@ from app.schemas.inventory import (
     ReleaseCalendarPresence,
 )
 from app.schemas.inventory_fmv import InventoryFmvAttachmentRead, InventoryValuationScope, PortfolioValueSummaryResponse
+from app.schemas.listing_registry import (
+    ListingCreate,
+    ListingDashboardSummary,
+    ListingDetailRead,
+    ListingListResponse,
+    ListingOpsStatusCountRow,
+    ListingOpsStatusDistribution,
+    ListingRead,
+    ListingReplayBody,
+    ListingUpdate,
+    OpsListingLifecycleEventListResponse,
+    OpsListingPriceHistoryListResponse,
+)
 from app.schemas.inventory_risks import (
     InventoryRiskListResponse,
     InventoryRiskPriority,
@@ -586,6 +599,7 @@ from app.services.inventory_fmv import (
     inventory_fmv_inventory_response_for_scope,
     portfolio_value_summary_for_scope,
 )
+from app.services import listing_registry as listing_registry_service
 from app.services.physical_intake import (
     build_physical_intake_summary,
     create_physical_intake_scan_session,
@@ -681,6 +695,19 @@ from app.services.reports_export import (
     run_detection_series_rows,
     sanitize_report_filename,
     timeline_export_rows,
+)
+from app.services.market_reporting import (
+    dumps_market_deterministic_summary_bytes,
+    dumps_no_market_data_inventory_json,
+    render_low_confidence_inventory_csv,
+    render_market_eligible_comps_csv,
+    render_market_fmv_snapshots_csv,
+    render_market_sales_csv,
+    render_market_trends_csv,
+    render_no_market_data_inventory_csv,
+    render_normalization_issues_summary_csv,
+    render_portfolio_value_summary_csv,
+    render_stale_fmv_inventory_csv,
 )
 from app.services.orders import (
     create_order_for_user,
@@ -5546,6 +5573,435 @@ def export_ops_collection_summary_json_report(
     )
 
 
+@app.get("/reports/market-sales.csv")
+def export_reports_market_sales_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    publisher: Annotated[str | None, Query(description="Filter by normalized publisher.")] = None,
+    normalized_title: Annotated[str | None, Query(description="Filter by normalized title.")] = None,
+    normalized_issue: Annotated[str | None, Query(description="Filter by normalized issue.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    normalization_status: Annotated[str | None, Query(description="Filter by normalization status.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_market_sales_csv(
+        session,
+        source=source,
+        publisher=publisher,
+        normalized_title=normalized_title,
+        normalized_issue=normalized_issue,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        normalization_status=normalization_status,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="market-sales",
+        extension="csv",
+    )
+
+
+@app.get("/reports/market-eligible-comps.csv")
+def export_reports_market_eligible_comps_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_market_eligible_comps_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="market-eligible-comps",
+        extension="csv",
+    )
+
+
+@app.get("/reports/market-fmv-snapshots.csv")
+def export_reports_market_fmv_snapshots_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_market_fmv_snapshots_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="market-fmv-snapshots",
+        extension="csv",
+    )
+
+
+@app.get("/reports/market-trends.csv")
+def export_reports_market_trends_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_market_trends_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="market-trends",
+        extension="csv",
+    )
+
+
+@app.get("/reports/market-normalization-issues-summary.csv")
+def export_reports_market_normalization_issues_summary_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_normalization_issues_summary_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="market-normalization-issues-summary",
+        extension="csv",
+    )
+
+
+@app.get("/reports/portfolio-value-summary.csv")
+def export_reports_portfolio_value_summary_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_portfolio_value_summary_csv(
+        session,
+        owner_user_id=int(current_user.id),
+        publisher=publisher,
+        ownership_state=ownership_state,
+    )
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="portfolio-value-summary",
+        extension="csv",
+    )
+
+
+@app.get("/reports/inventory-no-market-data.csv")
+def export_reports_inventory_no_market_data_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_no_market_data_inventory_csv(session, owner_user_id=int(current_user.id))
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="inventory-no-market-data",
+        extension="csv",
+    )
+
+
+@app.get("/reports/inventory-no-market-data.json")
+def export_reports_inventory_no_market_data_json_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    return _reports_attachment_response(
+        dumps_no_market_data_inventory_json(session, owner_user_id=int(current_user.id)),
+        media_type="application/json; charset=utf-8",
+        stem="inventory-no-market-data",
+        extension="json",
+    )
+
+
+@app.get("/reports/inventory-fmv-low-confidence.csv")
+def export_reports_inventory_fmv_low_confidence_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_low_confidence_inventory_csv(session, owner_user_id=int(current_user.id))
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="inventory-fmv-low-confidence",
+        extension="csv",
+    )
+
+
+@app.get("/reports/inventory-fmv-stale.csv")
+def export_reports_inventory_fmv_stale_csv_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    assert current_user.id is not None
+    csv_text = render_stale_fmv_inventory_csv(session, owner_user_id=int(current_user.id))
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="inventory-fmv-stale",
+        extension="csv",
+    )
+
+
+@app.get("/reports/market-deterministic-summary.json")
+def export_reports_market_deterministic_summary_json_owner(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+) -> Response:
+    assert current_user.id is not None
+    blob = dumps_market_deterministic_summary_bytes(
+        session,
+        owner_user_id=int(current_user.id),
+        publisher=publisher,
+        ownership_state=ownership_state,
+    )
+    return _reports_attachment_response(
+        blob,
+        media_type="application/json; charset=utf-8",
+        stem="market-deterministic-summary",
+        extension="json",
+    )
+
+
+@app.get("/ops/reports/market-sales.csv", include_in_schema=False)
+def export_ops_reports_market_sales_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    source: Annotated[str | None, Query(description="Filter by market source name or type.")] = None,
+    publisher: Annotated[str | None, Query(description="Filter by normalized publisher.")] = None,
+    normalized_title: Annotated[str | None, Query(description="Filter by normalized title.")] = None,
+    normalized_issue: Annotated[str | None, Query(description="Filter by normalized issue.")] = None,
+    grading_company: Annotated[str | None, Query(description="Filter by grading company.")] = None,
+    is_graded: Annotated[bool | None, Query(description="Filter graded or raw sale records.")] = None,
+    normalization_status: Annotated[str | None, Query(description="Filter by normalization status.")] = None,
+    sale_date_from: Annotated[date | None, Query(description="Filter records sold on or after this date.")] = None,
+    sale_date_to: Annotated[date | None, Query(description="Filter records sold on or before this date.")] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_market_sales_csv(
+        session,
+        source=source,
+        publisher=publisher,
+        normalized_title=normalized_title,
+        normalized_issue=normalized_issue,
+        grading_company=grading_company,
+        is_graded=is_graded,
+        normalization_status=normalization_status,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-market-sales",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/market-eligible-comps.csv", include_in_schema=False)
+def export_ops_reports_market_eligible_comps_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_market_eligible_comps_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-market-eligible-comps",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/market-fmv-snapshots.csv", include_in_schema=False)
+def export_ops_reports_market_fmv_snapshots_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_market_fmv_snapshots_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-market-fmv-snapshots",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/market-trends.csv", include_in_schema=False)
+def export_ops_reports_market_trends_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_market_trends_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-market-trends",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/market-normalization-issues-summary.csv", include_in_schema=False)
+def export_ops_reports_market_normalization_issues_summary_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_normalization_issues_summary_csv(session)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-market-normalization-issues-summary",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/portfolio-value-summary.csv", include_in_schema=False)
+def export_ops_reports_portfolio_value_summary_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_portfolio_value_summary_csv(
+        session,
+        owner_user_id=None,
+        publisher=publisher,
+        ownership_state=ownership_state,
+    )
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-portfolio-value-summary",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/inventory-no-market-data.csv", include_in_schema=False)
+def export_ops_reports_inventory_no_market_data_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_no_market_data_inventory_csv(session, owner_user_id=None)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-inventory-no-market-data",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/inventory-no-market-data.json", include_in_schema=False)
+def export_ops_reports_inventory_no_market_data_json(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    return _reports_attachment_response(
+        dumps_no_market_data_inventory_json(session, owner_user_id=None),
+        media_type="application/json; charset=utf-8",
+        stem="ops-inventory-no-market-data",
+        extension="json",
+    )
+
+
+@app.get("/ops/reports/inventory-fmv-low-confidence.csv", include_in_schema=False)
+def export_ops_reports_inventory_fmv_low_confidence_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_low_confidence_inventory_csv(session, owner_user_id=None)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-inventory-fmv-low-confidence",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/inventory-fmv-stale.csv", include_in_schema=False)
+def export_ops_reports_inventory_fmv_stale_csv(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    csv_text = render_stale_fmv_inventory_csv(session, owner_user_id=None)
+    return _reports_attachment_response(
+        csv_text,
+        media_type="text/csv; charset=utf-8",
+        stem="ops-inventory-fmv-stale",
+        extension="csv",
+    )
+
+
+@app.get("/ops/reports/market-deterministic-summary.json", include_in_schema=False)
+def export_ops_reports_market_deterministic_summary_json(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    publisher: Annotated[str | None, Query(description="Filter by publisher name.")] = None,
+    ownership_state: Annotated[str | None, Query(description="Filter by normalized ownership state.")] = None,
+) -> Response:
+    ensure_ops_admin_access(current_user, settings)
+    blob = dumps_market_deterministic_summary_bytes(
+        session,
+        owner_user_id=None,
+        publisher=publisher,
+        ownership_state=ownership_state,
+    )
+    return _reports_attachment_response(
+        blob,
+        media_type="application/json; charset=utf-8",
+        stem="ops-market-deterministic-summary",
+        extension="json",
+    )
+
+
 OrderArrivalOrderStatusLiteral = Literal["ordered", "preordered", "shipped", "received", "cancelled"]
 
 
@@ -8010,4 +8466,252 @@ def post_inventory_mark_received(
         current_user,
         inventory_copy_id=inventory_copy_id,
         payload=payload,
+    )
+
+
+# --- Listing registry foundation (P36-01) ------------------------------------
+
+
+@app.get("/listings/summary", response_model=ListingDashboardSummary)
+def get_listing_registry_owner_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingDashboardSummary:
+    drafts, active, sold, recent = listing_registry_service.owner_dashboard_summary(
+        session,
+        owner_user_id=int(current_user.id),
+    )
+    return ListingDashboardSummary(
+        draft_count=drafts,
+        active_count=active,
+        sold_count=sold,
+        recent_events=[listing_registry_service.coerce_lifecycle_read(evt) for evt in recent],
+    )
+
+
+@app.get("/listings", response_model=ListingListResponse)
+def list_owner_listings(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    status_filter: str | None = Query(default=None, alias="status"),
+    inventory_copy_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingListResponse:
+    lim, off = listing_registry_service.clamp_list_pagination(limit=limit, offset=offset)
+    rows, total = listing_registry_service.list_listings_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=lim,
+        offset=off,
+        status=status_filter,
+        inventory_copy_id=inventory_copy_id,
+    )
+    return ListingListResponse(
+        items=[listing_registry_service.coerce_listing_read(r) for r in rows],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/listings", response_model=ListingRead, status_code=status.HTTP_201_CREATED)
+def post_owner_listing(
+    payload: ListingCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingRead:
+    row, created = listing_registry_service.create_listing(
+        session, owner_user_id=int(current_user.id), payload=payload
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return listing_registry_service.coerce_listing_read(row)
+
+
+@app.get("/listings/{listing_id}", response_model=ListingDetailRead)
+def get_owner_listing_detail(
+    listing_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingDetailRead:
+    listing = listing_registry_service.get_listing_owner(
+        session,
+        listing_id=listing_id,
+        owner_user_id=int(current_user.id),
+    )
+    return listing_registry_service.assemble_listing_detail(session, listing)
+
+
+@app.patch("/listings/{listing_id}", response_model=ListingRead)
+def patch_owner_listing(
+    listing_id: int,
+    payload: ListingUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingRead:
+    row = listing_registry_service.patch_listing(
+        session,
+        listing_id=listing_id,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    return listing_registry_service.coerce_listing_read(row)
+
+
+@app.post("/listings/{listing_id}/activate", response_model=ListingRead)
+def post_owner_listing_activate(
+    listing_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    body: ListingReplayBody | None = Body(default=None),
+) -> ListingRead:
+    replay = body.replay_key if body else None
+    row = listing_registry_service.activate_listing(
+        session,
+        listing_id=listing_id,
+        owner_user_id=int(current_user.id),
+        replay_key=replay,
+    )
+    return listing_registry_service.coerce_listing_read(row)
+
+
+@app.post("/listings/{listing_id}/cancel", response_model=ListingRead)
+def post_owner_listing_cancel(
+    listing_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    body: ListingReplayBody | None = Body(default=None),
+) -> ListingRead:
+    replay = body.replay_key if body else None
+    row = listing_registry_service.cancel_listing(
+        session,
+        listing_id=listing_id,
+        owner_user_id=int(current_user.id),
+        replay_key=replay,
+    )
+    return listing_registry_service.coerce_listing_read(row)
+
+
+@app.post("/listings/{listing_id}/archive", response_model=ListingRead)
+def post_owner_listing_archive(
+    listing_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    body: ListingReplayBody | None = Body(default=None),
+) -> ListingRead:
+    replay = body.replay_key if body else None
+    row = listing_registry_service.archive_listing(
+        session,
+        listing_id=listing_id,
+        owner_user_id=int(current_user.id),
+        replay_key=replay,
+    )
+    return listing_registry_service.coerce_listing_read(row)
+
+
+@app.get("/ops/listings", response_model=ListingListResponse)
+def ops_list_listings(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_registry_service.clamp_list_pagination(limit=limit, offset=offset)
+    rows, total = listing_registry_service.list_listings_ops(
+        session,
+        limit=lim,
+        offset=off,
+        owner_user_id=owner_user_id,
+        status_filter=status_filter,
+    )
+    return ListingListResponse(
+        items=[listing_registry_service.coerce_listing_read(r) for r in rows],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listings/status-distribution", response_model=ListingOpsStatusDistribution)
+def ops_listings_status_distribution_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ListingOpsStatusDistribution:
+    ensure_ops_admin_access(current_user, settings)
+    rows = listing_registry_service.ops_status_distribution(session)
+    return ListingOpsStatusDistribution(
+        rows=[ListingOpsStatusCountRow(status=st, count=cnt) for st, cnt in rows],
+    )
+
+
+@app.get("/ops/listings/{listing_id}", response_model=ListingDetailRead)
+def ops_get_listing_detail(
+    listing_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ListingDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    listing = listing_registry_service.get_listing_ops(session, listing_id=listing_id)
+    return listing_registry_service.assemble_listing_detail(session, listing)
+
+
+@app.get("/ops/listing-events", response_model=OpsListingLifecycleEventListResponse)
+def ops_list_listing_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    listing_id: int | None = Query(default=None),
+    owner_user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> OpsListingLifecycleEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_registry_service.clamp_list_pagination(limit=limit, offset=offset)
+    items, total = listing_registry_service.list_events_ops(
+        session,
+        limit=lim,
+        offset=off,
+        listing_id=listing_id,
+        owner_user_id_filter=owner_user_id,
+    )
+    return OpsListingLifecycleEventListResponse(
+        items=[listing_registry_service.coerce_lifecycle_read(evt) for evt in items],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-price-history", response_model=OpsListingPriceHistoryListResponse)
+def ops_list_listing_price_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    listing_id: int | None = Query(default=None),
+    owner_user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> OpsListingPriceHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_registry_service.clamp_list_pagination(limit=limit, offset=offset)
+    items, total = listing_registry_service.list_price_hist_ops(
+        session,
+        limit=lim,
+        offset=off,
+        listing_id=listing_id,
+        owner_user_id_filter=owner_user_id,
+    )
+    return OpsListingPriceHistoryListResponse(
+        items=[listing_registry_service.coerce_price_history_read(row) for row in items],
+        total_items=total,
+        limit=lim,
+        offset=off,
     )

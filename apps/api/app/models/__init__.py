@@ -59,6 +59,14 @@ from app.models.asset_ledger import (
     Variant,
 )
 
+from app.models.listing_registry import (
+    Listing,
+    ListingImage,
+    ListingInventoryLink,
+    ListingLifecycleEvent,
+    ListingPriceHistory,
+)
+
 __all__ = [
     "CanonicalCreator",
     "CanonicalIssueLinkSuggestion",
@@ -85,6 +93,11 @@ __all__ = [
     "GmailImportRecord",
     "HighResReviewRequest",
     "InventoryCopy",
+    "Listing",
+    "ListingImage",
+    "ListingInventoryLink",
+    "ListingLifecycleEvent",
+    "ListingPriceHistory",
     "InventoryFmvSnapshot",
     "MarketFmvCompReference",
     "MarketFmvSnapshot",

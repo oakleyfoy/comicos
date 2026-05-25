@@ -50,6 +50,7 @@ import {
   type ScanSessionSummary,
   type InventoryValuationScope,
   type PortfolioValueSummaryResponse,
+  type ListingDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -823,6 +824,9 @@ export function DashboardPage() {
   const [marketTrendSummary, setMarketTrendSummary] = useState<MarketTrendSnapshotListResponse | null>(null);
   const [marketTrendSummaryLoading, setMarketTrendSummaryLoading] = useState(true);
   const [marketTrendSummaryError, setMarketTrendSummaryError] = useState<string | null>(null);
+  const [listingRegistrySummary, setListingRegistrySummary] = useState<ListingDashboardSummary | null>(null);
+  const [listingRegistrySummaryLoading, setListingRegistrySummaryLoading] = useState(true);
+  const [listingRegistrySummaryError, setListingRegistrySummaryError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -1294,6 +1298,34 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setListingRegistrySummaryLoading(true);
+      setListingRegistrySummaryError(null);
+      try {
+        const summary = await apiClient.getListingRegistrySummary();
+        if (!ignore) {
+          setListingRegistrySummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setListingRegistrySummary(null);
+          setListingRegistrySummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load listing registry summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setListingRegistrySummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
     const nextHoldDrafts: Record<number, InventoryItem["hold_status"]> = {};
     const nextGradeDrafts: Record<number, InventoryItem["grade_status"]> = {};
@@ -1385,6 +1417,39 @@ export function DashboardPage() {
       setSelectedIds(inventory.map((item) => item.inventory_copy_id));
     }
   }
+
+  const marketWorkbenchRailsVisible =
+    marketSalesLoading ||
+    marketSalesError ||
+    marketSalesPreview.length > 0 ||
+    marketSaleReviewQueueSummaryLoading ||
+    marketSaleReviewQueueSummaryError ||
+    Boolean(marketSaleReviewQueueSummary) ||
+    marketCompEligibilitySummaryLoading ||
+    marketCompEligibilitySummaryError ||
+    Boolean(marketCompEligibilitySummary) ||
+    marketCompsSummaryLoading ||
+    marketCompsSummaryError ||
+    Boolean(marketCompsSummary) ||
+    marketFmvSummaryLoading ||
+    marketFmvSummaryError ||
+    Boolean(marketFmvSummary) ||
+    marketTrendSummaryLoading ||
+    marketTrendSummaryError ||
+    Boolean(marketTrendSummary) ||
+    marketMatchSuggestionsPendingLoading ||
+    marketMatchSuggestionsPendingError ||
+    listingRegistrySummaryLoading ||
+    listingRegistrySummaryError ||
+    Boolean(listingRegistrySummary);
+
+  const marketRegistryRailsVisible =
+    marketSourcesLoading ||
+    marketSourcesError ||
+    marketImportRunsLoading ||
+    marketImportRunsError ||
+    marketSources.length > 0 ||
+    marketImportRuns.length > 0;
 
   const portfolioValue = portfolioValueSummary?.items[0] ?? null;
   const portfolioHasMultipleCurrencies = (portfolioValueSummary?.items.length ?? 0) > 1;
@@ -1523,7 +1588,7 @@ export function DashboardPage() {
               Receiving intake
             </Link>
             <Link
-              to="/dashboard#market-sales"
+              to="/dashboard#market-intelligence"
               className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
             >
               Market sales
@@ -1557,8 +1622,8 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {physicalIntakeSummary || scanPipelineDash || marketSalesLoading || marketSalesPreview.length > 0 || marketSalesError ? (
-        <section className="mt-6 space-y-6" aria-label="Receiving and bulk scan pipeline">
+      {physicalIntakeSummary || scanPipelineDash || marketWorkbenchRailsVisible || marketRegistryRailsVisible ? (
+        <section className="mt-6 space-y-6" aria-label="Receiving, scan pipeline, and market intelligence">
           {physicalIntakeSummary ? (
             <section
               id="physical-intake"
@@ -1746,7 +1811,7 @@ export function DashboardPage() {
 
           {marketSalesLoading || marketSalesError || marketSalesPreview.length > 0 ? (
             <section
-              id="market-sales"
+              id="market-intelligence"
               className="rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2107,8 +2172,72 @@ export function DashboardPage() {
               )}
             </section>
           ) : null}
-        </section>
-      ) : null}
+
+          {listingRegistrySummaryLoading ||
+          listingRegistrySummaryError ||
+          listingRegistrySummary ? (
+            <section
+              id="listing-registry-dash"
+              className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">Listing registry</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Canonical listing truth (manual + exports)</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Read-only workbook snapshot: draft/ready roll-up, live and sold counts, and the most recent lifecycle audit
+                    spine. No marketplace posting, auto pricing, or inventory decrements on this path.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#listing-registry-ops"
+                  className="rounded-full border border-amber-400/35 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300/60 hover:bg-amber-500/10"
+                >
+                  Ops listing explorer
+                </Link>
+              </div>
+              {listingRegistrySummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading listing registry summary…</p>
+              ) : listingRegistrySummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{listingRegistrySummaryError}</StatusBanner>
+                </div>
+              ) : listingRegistrySummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Draft + ready listings" value={String(listingRegistrySummary.draft_count)} />
+                    <StatCard label="Active listings" value={String(listingRegistrySummary.active_count)} />
+                    <StatCard label="Sold listings (ledger)" value={String(listingRegistrySummary.sold_count)} />
+                    <StatCard label="Recent audit events shown" value={String(listingRegistrySummary.recent_events.length)} />
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Listing</th>
+                          <th className="p-3 font-medium">Event</th>
+                          <th className="p-3 font-medium">Statuses</th>
+                          <th className="p-3 font-medium">Recorded</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {listingRegistrySummary.recent_events.slice(0, 6).map((evt) => (
+                          <tr key={evt.id}>
+                            <td className="p-3 font-mono text-[11px] text-slate-300">#{evt.listing_id}</td>
+                            <td className="p-3">{evt.event_type.replace(/_/g, " ")}</td>
+                            <td className="p-3 text-slate-400">
+                              {(evt.prior_status ?? "—")} → {(evt.new_status ?? "—")}
+                            </td>
+                            <td className="p-3 text-slate-400">{formatDateTime(evt.created_at)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
 
       {marketSourcesLoading ||
       marketSourcesError ||
@@ -2208,13 +2337,17 @@ export function DashboardPage() {
         </section>
       ) : null}
 
+        </section>
+      ) : null}
+
       <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">
           <div>
             <h2 className="text-sm font-semibold text-white">Deterministic exports (CSV / JSON)</h2>
             <p className="mt-1 max-w-xl text-[11px] text-slate-400">
-              Read-only snapshots aligned with risk, action center, order/arrival, run gaps, timeline, and collection
-              summary. Omit FMV; filtered exports mirror the workbook controls below when you export from here.
+              Read-only snapshots aligned with risk, action center, order/arrival, run gaps, timeline, collection summary,
+              and market intelligence (eligible comps, FMV/trend CSVs, inventory FMV subsets, deterministic JSON rollup).
+              Filtered exports mirror the workbook controls below when exporting from filtered inventory grids.
             </p>
           </div>
           <span className="rounded-full border border-cyan-400/25 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/80">
@@ -2279,6 +2412,34 @@ export function DashboardPage() {
             onClick={() => void runInventoryExport(() => apiClient.downloadOwnerReportsTimelineCsv())}
           >
             Timeline CSV
+          </button>
+          <button
+            type="button"
+            className={exportChipClass}
+            onClick={() => void runInventoryExport(() => apiClient.downloadOwnerReportsMarketDeterministicSummaryJson())}
+          >
+            Market rollup JSON (summary)
+          </button>
+          <button
+            type="button"
+            className={exportChipClass}
+            onClick={() => void runInventoryExport(() => apiClient.downloadOwnerReportsMarketEligibleCompsCsv())}
+          >
+            Market eligible comps CSV
+          </button>
+          <button
+            type="button"
+            className={exportChipClass}
+            onClick={() =>
+              void runInventoryExport(() =>
+                apiClient.downloadOwnerReportsPortfolioValueSummaryCsv({
+                  publisher: publisher || undefined,
+                  ownership_state: ownershipIntelFilter || undefined,
+                }),
+              )
+            }
+          >
+            Portfolio value summary CSV (filters)
           </button>
           <button
             type="button"
