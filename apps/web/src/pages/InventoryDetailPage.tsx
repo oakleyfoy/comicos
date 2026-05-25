@@ -22,6 +22,10 @@ import {
   type InventoryFmvSnapshot,
   type MarketFmvSnapshotListResponse,
   type MarketFmvSnapshotRead,
+  type InventoryLiquiditySnapshotRead,
+  type ConventionAssignmentListResponse,
+  type ConventionMovementListResponse,
+  type ConventionPriceSnapshotListResponse,
   type MarketComparableListResponse,
   type MarketTrendSnapshotListResponse,
   type MarketTrendSnapshotRead,
@@ -990,6 +994,18 @@ export function InventoryDetailPage() {
   const [marketFmv, setMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [marketFmvLoading, setMarketFmvLoading] = useState(false);
   const [marketFmvError, setMarketFmvError] = useState<string | null>(null);
+  const [liquiditySnapshots, setLiquiditySnapshots] = useState<InventoryLiquiditySnapshotRead[]>([]);
+  const [liquidityLoading, setLiquidityLoading] = useState(false);
+  const [liquidityError, setLiquidityError] = useState<string | null>(null);
+  const [conventionAssignments, setConventionAssignments] = useState<ConventionAssignmentListResponse | null>(null);
+  const [conventionAssignmentsLoading, setConventionAssignmentsLoading] = useState(false);
+  const [conventionAssignmentsError, setConventionAssignmentsError] = useState<string | null>(null);
+  const [conventionMovements, setConventionMovements] = useState<ConventionMovementListResponse | null>(null);
+  const [conventionMovementsLoading, setConventionMovementsLoading] = useState(false);
+  const [conventionMovementsError, setConventionMovementsError] = useState<string | null>(null);
+  const [conventionPrices, setConventionPrices] = useState<ConventionPriceSnapshotListResponse | null>(null);
+  const [conventionPricesLoading, setConventionPricesLoading] = useState(false);
+  const [conventionPricesError, setConventionPricesError] = useState<string | null>(null);
   const [marketComps, setMarketComps] = useState<MarketComparableListResponse | null>(null);
   const [marketCompsLoading, setMarketCompsLoading] = useState(false);
   const [marketCompsError, setMarketCompsError] = useState<string | null>(null);
@@ -1194,6 +1210,97 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [detail?.metadata_identity_key]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.inventory_copy_id) {
+      setLiquiditySnapshots([]);
+      setLiquidityError(null);
+      setLiquidityLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setLiquidityLoading(true);
+      setLiquidityError(null);
+      try {
+        const response = await apiClient.getLiquidity({
+          inventory_item_id: detail.inventory_copy_id,
+          limit: 5,
+          offset: 0,
+        });
+        if (!ignore) {
+          setLiquiditySnapshots(response.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setLiquiditySnapshots([]);
+          setLiquidityError(loadErr instanceof ApiError ? loadErr.message : "Unable to load liquidity snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setLiquidityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.inventory_copy_id]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.inventory_copy_id) {
+      setConventionAssignments(null);
+      setConventionAssignmentsError(null);
+      setConventionAssignmentsLoading(false);
+      setConventionMovements(null);
+      setConventionMovementsError(null);
+      setConventionMovementsLoading(false);
+      setConventionPrices(null);
+      setConventionPricesError(null);
+      setConventionPricesLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setConventionAssignmentsLoading(true);
+      setConventionAssignmentsError(null);
+      setConventionMovementsLoading(true);
+      setConventionMovementsError(null);
+      setConventionPricesLoading(true);
+      setConventionPricesError(null);
+      try {
+        const [assignments, movements, prices] = await Promise.all([
+          apiClient.getConventionAssignments({ inventory_item_id: detail.inventory_copy_id, limit: 5, offset: 0 }),
+          apiClient.getConventionMovements({ inventory_item_id: detail.inventory_copy_id, limit: 5, offset: 0 }),
+          apiClient.getConventionPriceSnapshots({ inventory_item_id: detail.inventory_copy_id, limit: 5, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setConventionAssignments(assignments);
+          setConventionMovements(movements);
+          setConventionPrices(prices);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          const message = loadErr instanceof ApiError ? loadErr.message : "Unable to load convention detail.";
+          setConventionAssignments(null);
+          setConventionAssignmentsError(message);
+          setConventionMovements(null);
+          setConventionMovementsError(message);
+          setConventionPrices(null);
+          setConventionPricesError(message);
+        }
+      } finally {
+        if (!ignore) {
+          setConventionAssignmentsLoading(false);
+          setConventionMovementsLoading(false);
+          setConventionPricesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.inventory_copy_id]);
 
   useEffect(() => {
     let ignore = false;
@@ -3175,6 +3282,136 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               </div>
+            </section>
+          ) : null}
+
+          {liquidityLoading || liquidityError || liquiditySnapshots.length > 0 ? (
+            <section className="mt-6 rounded-3xl border border-sky-400/20 bg-sky-950/10 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-sky-100/75">Liquidity hint</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Inventory movement snapshot</h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                    Read-only liquidity evidence for this inventory copy. Snapshots are generated from listing velocity,
+                    stale thresholds, and actual sales, with no repricing or automatic status changes.
+                  </p>
+                </div>
+              </div>
+              {liquidityLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading liquidity snapshot…</p>
+              ) : liquidityError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{liquidityError}</StatusBanner>
+                </div>
+              ) : liquiditySnapshots.length > 0 ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  {liquiditySnapshots.slice(0, 1).map((snapshot) => (
+                    <div key={snapshot.id} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {[
+                        ["Status", snapshot.liquidity_status],
+                        ["Days to sale", snapshot.days_to_sale_median ? `${snapshot.days_to_sale_median} days` : "—"],
+                        ["Sell-through %", `${snapshot.sell_through_rate_pct}%`],
+                        ["Confidence", snapshot.liquidity_confidence],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                          <p className="mt-2 text-sm text-white">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Stale rate</p>
+                      <p className="mt-2 text-sm text-white">{liquiditySnapshots[0].stale_listing_rate_pct}%</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Relist rate</p>
+                      <p className="mt-2 text-sm text-white">{liquiditySnapshots[0].relist_rate_pct}%</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Evidence rows</p>
+                      <p className="mt-2 text-sm text-white">{liquiditySnapshots[0].evidence_count}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">No liquidity snapshot available yet for this inventory copy.</p>
+              )}
+            </section>
+          ) : null}
+
+          {detail?.inventory_copy_id ? (
+            <section className="mt-6 rounded-3xl border border-violet-400/20 bg-violet-950/10 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-violet-100/75">Convention teaser</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Temporary show placement and pricing</h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                    Read-only convention hints for this inventory copy: current assignment, latest temporary price, and the
+                    newest movement rows. No inventory quantities are decremented.
+                  </p>
+                </div>
+              </div>
+              {conventionAssignmentsLoading || conventionMovementsLoading || conventionPricesLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading convention teaser…</p>
+              ) : conventionAssignmentsError || conventionMovementsError || conventionPricesError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">
+                    {conventionAssignmentsError ?? conventionMovementsError ?? conventionPricesError}
+                  </StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Current assignment</p>
+                    {conventionAssignments?.items[0] ? (
+                      <div className="mt-2 text-sm text-white">
+                        <p>{conventionAssignments.items[0].assignment_type}</p>
+                        <p className="mt-1 text-slate-400">
+                          {conventionAssignments.items[0].display_location ?? "—"} · rank{" "}
+                          {conventionAssignments.items[0].priority_rank ?? "—"}
+                        </p>
+                        <p className="mt-1 text-slate-400">
+                          Event #{conventionAssignments.items[0].convention_event_id}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">No active convention assignment.</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Latest price override</p>
+                    {conventionPrices?.items[0] ? (
+                      <div className="mt-2 text-sm text-white">
+                        <p>
+                          {conventionPrices.items[0].currency} {conventionPrices.items[0].price_amount}
+                        </p>
+                        <p className="mt-1 text-slate-400">{conventionPrices.items[0].pricing_source}</p>
+                        <p className="mt-1 text-slate-400">
+                          Event #{conventionPrices.items[0].convention_event_id}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">No temporary convention price recorded.</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Latest movement</p>
+                    {conventionMovements?.items[0] ? (
+                      <div className="mt-2 text-sm text-white">
+                        <p>{conventionMovements.items[0].movement_type}</p>
+                        <p className="mt-1 text-slate-400">
+                          {conventionMovements.items[0].from_location ?? "—"} → {conventionMovements.items[0].to_location ?? "—"}
+                        </p>
+                        <p className="mt-1 text-slate-400">{formatDateTime(conventionMovements.items[0].created_at)}</p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">No convention movement recorded yet.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </section>
           ) : null}
 
@@ -5333,7 +5570,21 @@ export function InventoryDetailPage() {
           )}
         </section>
 
-        <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/10 p-6 shadow-xl shadow-black/20">
+        <section
+          id="inventory-deterministic-market"
+          aria-label="Deterministic market workbook"
+          className="mt-8 space-y-6 rounded-[2rem] border border-cyan-500/20 bg-slate-950/45 p-5 shadow-xl shadow-black/20 sm:p-6"
+        >
+          <header className="border-b border-white/10 pb-4">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">Deterministic workbook</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Market FMV snapshots, trends, and comparable sales</h2>
+            <p className="mt-2 max-w-4xl text-sm text-slate-400">
+              These read-only explorers sit next to the FMV attachment ribbon above — they elaborate on the anchored snapshot,
+              trend strip, and comp references without mutating inventory pricing fields.
+            </p>
+          </header>
+
+          <section className="rounded-3xl border border-cyan-400/25 bg-cyan-950/10 p-6 shadow-xl shadow-black/20">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-white">Market FMV Snapshots</h2>
@@ -5838,6 +6089,7 @@ export function InventoryDetailPage() {
               ))}
             </div>
           )}
+        </section>
         </section>
       </div>
     </AppShell>

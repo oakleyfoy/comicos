@@ -150,6 +150,51 @@ from app.schemas.listing_registry import (
     OpsListingLifecycleEventListResponse,
     OpsListingPriceHistoryListResponse,
 )
+from app.schemas.listing_export import (
+    ListingExportDashboardSummary,
+    ListingExportRunCreate,
+    ListingExportRunDetailRead,
+    ListingExportRunListResponse,
+    ListingExportTemplateRead,
+    OpsListingExportFileListResponse,
+)
+from app.schemas.convention_operations import (
+    ConventionAssignmentCreate,
+    ConventionAssignmentListResponse,
+    ConventionAssignmentRead,
+    ConventionDashboardSummary,
+    ConventionEventCreate,
+    ConventionEventListResponse,
+    ConventionEventPatch,
+    ConventionEventRead,
+    ConventionMovementCreate,
+    ConventionMovementListResponse,
+    ConventionMovementRead,
+    ConventionPriceSnapshotCreate,
+    ConventionPriceSnapshotListResponse,
+    ConventionPriceSnapshotRead,
+    ConventionReplayBody,
+    ConventionSaleSessionCreate,
+    ConventionSaleSessionListResponse,
+    ConventionSaleSessionRead,
+)
+from app.schemas.liquidity_engine import (
+    InventoryLiquidityEvidenceListResponse,
+    InventoryLiquidityListResponse,
+    InventoryLiquiditySnapshotRead,
+    LiquidityDashboardSummary,
+    ListingStalenessEventListResponse,
+    ListingVelocityListResponse,
+)
+from app.schemas.sales_ledger import (
+    SaleFinancialAdjustmentListResponse,
+    SaleLifecycleEventListResponse,
+    SaleRecordCreate,
+    SaleRecordDetailRead,
+    SaleRecordListResponse,
+    SaleRecordPatch,
+    SalesDashboardSummary,
+)
 from app.schemas.inventory_risks import (
     InventoryRiskListResponse,
     InventoryRiskPriority,
@@ -599,7 +644,11 @@ from app.services.inventory_fmv import (
     inventory_fmv_inventory_response_for_scope,
     portfolio_value_summary_for_scope,
 )
+from app.services import listing_export as listing_export_service
 from app.services import listing_registry as listing_registry_service
+from app.services import convention_operations as convention_operations_service
+from app.services import liquidity_engine as liquidity_engine_service
+from app.services import sales_ledger as sales_ledger_service
 from app.services.physical_intake import (
     build_physical_intake_summary,
     create_physical_intake_scan_session,
@@ -8711,6 +8760,1303 @@ def ops_list_listing_price_history(
     )
     return OpsListingPriceHistoryListResponse(
         items=[listing_registry_service.coerce_price_history_read(row) for row in items],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+# --- Listing export engine (P36-02: deterministic CSV; no marketplace APIs) -------------
+@app.get("/listing-export-runs/dashboard-summary", response_model=ListingExportDashboardSummary)
+def listing_export_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingExportDashboardSummary:
+    return listing_export_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/listing-export-templates", response_model=list[ListingExportTemplateRead])
+def list_owner_listing_export_templates(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[ListingExportTemplateRead]:
+    return listing_export_service.list_templates_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post(
+    "/listing-export-runs",
+    response_model=ListingExportRunDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_listing_export_run(
+    payload: ListingExportRunCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ListingExportRunDetailRead:
+    detail, replayed = listing_export_service.execute_export_run(
+        session,
+        owner_user_id=int(current_user.id),
+        settings=settings,
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/listing-export-runs", response_model=ListingExportRunListResponse)
+def list_owner_listing_export_runs(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingExportRunListResponse:
+    lim, off = listing_export_service.clamp_list_export_pagination(limit=limit, offset=offset)
+    rows, total = listing_export_service.list_runs_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=lim,
+        offset=off,
+    )
+    return ListingExportRunListResponse(
+        items=[listing_export_service.coerce_run_summary(r) for r in rows],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-export-runs/{export_run_id}/download")
+def download_owner_listing_export_csv(
+    export_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    abs_path, frow = listing_export_service.resolve_export_download_path_session(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        export_run_id=export_run_id,
+        file_id=file_id,
+        allow_ops_any_owner=False,
+    )
+    return FileResponse(
+        path=str(abs_path),
+        media_type="text/csv; charset=utf-8",
+        filename=frow.file_name,
+    )
+
+
+@app.get("/listing-export-runs/{export_run_id}", response_model=ListingExportRunDetailRead)
+def get_owner_listing_export_run(
+    export_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingExportRunDetailRead:
+    return listing_export_service.build_run_detail(
+        session,
+        owner_user_id=int(current_user.id),
+        export_run_id=export_run_id,
+    )
+
+
+@app.get("/ops/listing-export-runs", response_model=ListingExportRunListResponse)
+def ops_list_listing_export_runs(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingExportRunListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_export_service.clamp_list_export_pagination(limit=limit, offset=offset)
+    rows, total = listing_export_service.list_runs_ops(
+        session,
+        owner_user_id=owner_user_id,
+        limit=lim,
+        offset=off,
+    )
+    return ListingExportRunListResponse(
+        items=[listing_export_service.coerce_run_summary(r) for r in rows],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-export-runs/{export_run_id}/download")
+def ops_download_listing_export_csv(
+    export_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    ensure_ops_admin_access(current_user, settings)
+    abs_path, frow = listing_export_service.resolve_export_download_path_session(
+        session,
+        settings,
+        owner_user_id=0,
+        export_run_id=export_run_id,
+        file_id=file_id,
+        allow_ops_any_owner=True,
+    )
+    return FileResponse(
+        path=str(abs_path),
+        media_type="text/csv; charset=utf-8",
+        filename=frow.file_name,
+    )
+
+
+@app.get("/ops/listing-export-runs/{export_run_id}", response_model=ListingExportRunDetailRead)
+def ops_detail_listing_export_run(
+    export_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ListingExportRunDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return listing_export_service.build_run_detail(
+        session,
+        owner_user_id=0,
+        export_run_id=export_run_id,
+        allow_cross_owner_ops=True,
+    )
+
+
+@app.get("/ops/listing-export-files", response_model=OpsListingExportFileListResponse)
+def ops_list_listing_export_files(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    export_run_id: int | None = Query(default=None),
+    owner_user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> OpsListingExportFileListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_export_service.clamp_list_export_pagination(limit=limit, offset=offset)
+    rows, total = listing_export_service.list_export_files_ops(
+        session,
+        export_run_id=export_run_id,
+        owner_user_id=owner_user_id,
+        limit=lim,
+        offset=off,
+    )
+    return OpsListingExportFileListResponse(
+        items=[listing_export_service.coerce_file(r) for r in rows],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)
+def owner_sales_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SalesDashboardSummary:
+    return sales_ledger_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/sales", response_model=SaleRecordListResponse)
+def owner_list_sales(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    sale_date_from: date | None = Query(default=None),
+    sale_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> SaleRecordListResponse:
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = sales_ledger_service.list_sales_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=lim,
+        offset=off,
+        channel=channel,
+        status=status,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+    counts = sales_ledger_service._load_sale_counts(session, [int(row.id) for row in rows])  # noqa: SLF001
+    return SaleRecordListResponse(
+        items=[
+            sales_ledger_service._sale_read(  # noqa: SLF001
+                row,
+                event_count=counts.get(int(row.id), {}).get("event_count", 0),
+                line_item_count=counts.get(int(row.id), {}).get("line_item_count", 0),
+                adjustment_count=counts.get(int(row.id), {}).get("adjustment_count", 0),
+            )
+            for row in rows
+        ],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/sales", response_model=SaleRecordDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_create_sale(
+    payload: SaleRecordCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleRecordDetailRead:
+    detail, replayed = sales_ledger_service.create_sale(session, owner_user_id=int(current_user.id), payload=payload)
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/sales/{sale_id}", response_model=SaleRecordDetailRead)
+def owner_get_sale(
+    sale_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleRecordDetailRead:
+    return sales_ledger_service.build_sale_detail(session, owner_user_id=int(current_user.id), sale_id=sale_id)
+
+
+@app.patch("/sales/{sale_id}", response_model=SaleRecordDetailRead)
+def owner_patch_sale(
+    sale_id: int,
+    payload: SaleRecordPatch,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleRecordDetailRead:
+    return sales_ledger_service.update_sale(session, owner_user_id=int(current_user.id), sale_id=sale_id, payload=payload)
+
+
+@app.post("/sales/{sale_id}/record", response_model=SaleRecordDetailRead)
+def owner_record_sale(
+    sale_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleRecordDetailRead:
+    return sales_ledger_service.record_sale(session, owner_user_id=int(current_user.id), sale_id=sale_id)
+
+
+@app.post("/sales/{sale_id}/void", response_model=SaleRecordDetailRead)
+def owner_void_sale(
+    sale_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleRecordDetailRead:
+    return sales_ledger_service.void_sale(session, owner_user_id=int(current_user.id), sale_id=sale_id)
+
+
+@app.get("/sales/{sale_id}/events", response_model=SaleLifecycleEventListResponse)
+def owner_list_sale_events(
+    sale_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> SaleLifecycleEventListResponse:
+    detail = sales_ledger_service.build_sale_detail(session, owner_user_id=int(current_user.id), sale_id=sale_id)
+    return SaleLifecycleEventListResponse(
+        items=detail.events,
+        total_items=len(detail.events),
+        limit=len(detail.events),
+        offset=0,
+    )
+
+
+@app.get("/ops/sales", response_model=SaleRecordListResponse)
+def ops_list_sales(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    sale_date_from: date | None = Query(default=None),
+    sale_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> SaleRecordListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = sales_ledger_service.list_sales_ops(
+        session,
+        owner_user_id=owner_user_id,
+        limit=lim,
+        offset=off,
+        channel=channel,
+        status=status_filter,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+    )
+    counts = sales_ledger_service._load_sale_counts(session, [int(row.id) for row in rows])  # noqa: SLF001
+    return SaleRecordListResponse(
+        items=[
+            sales_ledger_service._sale_read(  # noqa: SLF001
+                row,
+                event_count=counts.get(int(row.id), {}).get("event_count", 0),
+                line_item_count=counts.get(int(row.id), {}).get("line_item_count", 0),
+                adjustment_count=counts.get(int(row.id), {}).get("adjustment_count", 0),
+            )
+            for row in rows
+        ],
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/sales/{sale_id}", response_model=SaleRecordDetailRead)
+def ops_get_sale(
+    sale_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> SaleRecordDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return sales_ledger_service.build_sale_detail(
+        session,
+        owner_user_id=0,
+        sale_id=sale_id,
+        allow_cross_owner_ops=True,
+    )
+
+
+@app.get("/ops/sale-events", response_model=SaleLifecycleEventListResponse)
+def ops_list_sale_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    sale_date_from: date | None = Query(default=None),
+    sale_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> SaleLifecycleEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = sales_ledger_service.list_sale_events_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        status=status_filter,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return SaleLifecycleEventListResponse(
+        items=[sales_ledger_service._event_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/sale-financial-adjustments", response_model=SaleFinancialAdjustmentListResponse)
+def ops_list_sale_financial_adjustments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    sale_date_from: date | None = Query(default=None),
+    sale_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> SaleFinancialAdjustmentListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = sales_ledger_service.list_sale_adjustments_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        status=status_filter,
+        sale_date_from=sale_date_from,
+        sale_date_to=sale_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return SaleFinancialAdjustmentListResponse(
+        items=[sales_ledger_service._adjustment_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/liquidity/dashboard-summary", response_model=LiquidityDashboardSummary)
+def owner_liquidity_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date: date | None = Query(default=None),
+) -> LiquidityDashboardSummary:
+    return liquidity_engine_service.dashboard_summary_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date=snapshot_date,
+    )
+
+
+@app.get("/liquidity", response_model=InventoryLiquidityListResponse)
+def owner_list_liquidity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    liquidity_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None),
+    evaluation_window_days: int = Query(default=365, ge=1, le=3650),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> InventoryLiquidityListResponse:
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_liquidity_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        channel=channel,
+        liquidity_status=liquidity_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+        snapshot_date=snapshot_date,
+        evaluation_window_days=evaluation_window_days,
+    )
+    return InventoryLiquidityListResponse(
+        items=[liquidity_engine_service._snapshot_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/liquidity/evidence", response_model=InventoryLiquidityEvidenceListResponse)
+def owner_list_liquidity_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    liquidity_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> InventoryLiquidityEvidenceListResponse:
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_liquidity_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        channel=channel,
+        liquidity_status=liquidity_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+        snapshot_date=snapshot_date,
+    )
+    return InventoryLiquidityEvidenceListResponse(
+        items=[liquidity_engine_service._evidence_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-velocity", response_model=ListingVelocityListResponse)
+def owner_list_listing_velocity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingVelocityListResponse:
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_velocity_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ListingVelocityListResponse(
+        items=[liquidity_engine_service._velocity_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-staleness-events", response_model=ListingStalenessEventListResponse)
+def owner_list_listing_staleness_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingStalenessEventListResponse:
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_staleness_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ListingStalenessEventListResponse(
+        items=[liquidity_engine_service._staleness_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/liquidity/{snapshot_id}", response_model=InventoryLiquiditySnapshotRead)
+def owner_get_liquidity(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> InventoryLiquiditySnapshotRead:
+    row = liquidity_engine_service.build_snapshot_detail_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+    )
+    return liquidity_engine_service._snapshot_read(row)  # noqa: SLF001
+
+
+@app.get("/ops/liquidity/dashboard-summary", response_model=LiquidityDashboardSummary)
+def ops_liquidity_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None),
+) -> LiquidityDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return liquidity_engine_service.dashboard_summary_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date=snapshot_date,
+    )
+
+
+@app.get("/ops/liquidity", response_model=InventoryLiquidityListResponse)
+def ops_list_liquidity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    liquidity_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> InventoryLiquidityListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_liquidity_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        liquidity_status=liquidity_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return InventoryLiquidityListResponse(
+        items=[liquidity_engine_service._snapshot_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/liquidity/{snapshot_id}", response_model=InventoryLiquiditySnapshotRead)
+def ops_get_liquidity(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> InventoryLiquiditySnapshotRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = liquidity_engine_service.build_snapshot_detail_ops(session, snapshot_id=snapshot_id)
+    return liquidity_engine_service._snapshot_read(row)  # noqa: SLF001
+
+
+@app.get("/ops/liquidity-evidence", response_model=InventoryLiquidityEvidenceListResponse)
+def ops_list_liquidity_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    liquidity_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> InventoryLiquidityEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_liquidity_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        liquidity_status=liquidity_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return InventoryLiquidityEvidenceListResponse(
+        items=[liquidity_engine_service._evidence_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/convention/dashboard-summary", response_model=ConventionDashboardSummary)
+def owner_convention_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionDashboardSummary:
+    return convention_operations_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/convention-events", response_model=ConventionEventListResponse)
+def owner_list_convention_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionEventListResponse:
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_events_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionEventListResponse(
+        items=[convention_operations_service._event_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/convention-events", response_model=ConventionEventRead, status_code=status.HTTP_201_CREATED)
+def owner_create_convention_event(
+    payload: ConventionEventCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionEventRead:
+    row, replayed = convention_operations_service.create_convention_event(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return convention_operations_service._event_read(row)  # noqa: SLF001
+
+
+@app.get("/convention-events/{convention_event_id}", response_model=ConventionEventRead)
+def owner_get_convention_event(
+    convention_event_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionEventRead:
+    row = convention_operations_service.get_convention_event_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        convention_event_id=convention_event_id,
+    )
+    return convention_operations_service._event_read(row)  # noqa: SLF001
+
+
+@app.patch("/convention-events/{convention_event_id}", response_model=ConventionEventRead)
+def owner_patch_convention_event(
+    convention_event_id: int,
+    payload: ConventionEventPatch,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionEventRead:
+    row = convention_operations_service.patch_convention_event(
+        session,
+        owner_user_id=int(current_user.id),
+        convention_event_id=convention_event_id,
+        payload=payload,
+    )
+    return convention_operations_service._event_read(row)  # noqa: SLF001
+
+
+@app.post("/convention-events/{convention_event_id}/activate", response_model=ConventionEventRead)
+def owner_activate_convention_event(
+    convention_event_id: int,
+    payload: ConventionReplayBody | None = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionEventRead:
+    row = convention_operations_service.activate_convention_event(
+        session,
+        owner_user_id=int(current_user.id),
+        convention_event_id=convention_event_id,
+        replay_key=payload.replay_key if payload else None,
+    )
+    return convention_operations_service._event_read(row)  # noqa: SLF001
+
+
+@app.post("/convention-events/{convention_event_id}/complete", response_model=ConventionEventRead)
+def owner_complete_convention_event(
+    convention_event_id: int,
+    payload: ConventionReplayBody | None = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionEventRead:
+    row = convention_operations_service.complete_convention_event(
+        session,
+        owner_user_id=int(current_user.id),
+        convention_event_id=convention_event_id,
+        replay_key=payload.replay_key if payload else None,
+    )
+    return convention_operations_service._event_read(row)  # noqa: SLF001
+
+
+@app.get("/convention-assignments", response_model=ConventionAssignmentListResponse)
+def owner_list_convention_assignments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionAssignmentListResponse:
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_assignments_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionAssignmentListResponse(
+        items=[convention_operations_service._assignment_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/convention-assignments", response_model=ConventionAssignmentRead, status_code=status.HTTP_201_CREATED)
+def owner_create_convention_assignment(
+    payload: ConventionAssignmentCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionAssignmentRead:
+    row, replayed = convention_operations_service.create_convention_assignment(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return convention_operations_service._assignment_read(row)  # noqa: SLF001
+
+
+@app.get("/convention-movements", response_model=ConventionMovementListResponse)
+def owner_list_convention_movements(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionMovementListResponse:
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_movements_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionMovementListResponse(
+        items=[convention_operations_service._movement_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/convention-movements", response_model=ConventionMovementRead, status_code=status.HTTP_201_CREATED)
+def owner_create_convention_movement(
+    payload: ConventionMovementCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionMovementRead:
+    row, replayed = convention_operations_service.create_convention_movement(
+        session,
+        owner_user_id=int(current_user.id),
+        created_by_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return convention_operations_service._movement_read(row)  # noqa: SLF001
+
+
+@app.get("/convention-price-snapshots", response_model=ConventionPriceSnapshotListResponse)
+def owner_list_convention_price_snapshots(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionPriceSnapshotListResponse:
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_price_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionPriceSnapshotListResponse(
+        items=[convention_operations_service._price_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/convention-price-snapshots", response_model=ConventionPriceSnapshotRead, status_code=status.HTTP_201_CREATED)
+def owner_create_convention_price_snapshot(
+    payload: ConventionPriceSnapshotCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionPriceSnapshotRead:
+    row, replayed = convention_operations_service.create_convention_price_snapshot(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return convention_operations_service._price_read(row)  # noqa: SLF001
+
+
+@app.get("/convention-sale-sessions", response_model=ConventionSaleSessionListResponse)
+def owner_list_convention_sale_sessions(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionSaleSessionListResponse:
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_sale_sessions_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionSaleSessionListResponse(
+        items=[convention_operations_service._session_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/convention-sale-sessions", response_model=ConventionSaleSessionRead, status_code=status.HTTP_201_CREATED)
+def owner_create_convention_sale_session(
+    payload: ConventionSaleSessionCreate,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionSaleSessionRead:
+    row, replayed = convention_operations_service.create_convention_sale_session(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return convention_operations_service._session_read(row)  # noqa: SLF001
+
+
+@app.post("/convention-sale-sessions/{convention_sale_session_id}/close", response_model=ConventionSaleSessionRead)
+def owner_close_convention_sale_session(
+    convention_sale_session_id: int,
+    payload: ConventionReplayBody | None = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConventionSaleSessionRead:
+    row = convention_operations_service.close_convention_sale_session(
+        session,
+        owner_user_id=int(current_user.id),
+        convention_sale_session_id=convention_sale_session_id,
+        replay_key=payload.replay_key if payload else None,
+    )
+    return convention_operations_service._session_read(row)  # noqa: SLF001
+
+
+@app.get("/ops/convention/dashboard-summary", response_model=ConventionDashboardSummary)
+def ops_convention_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> ConventionDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return convention_operations_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.get("/ops/convention-events", response_model=ConventionEventListResponse)
+def ops_list_convention_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_events_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionEventListResponse(
+        items=[convention_operations_service._event_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/convention-assignments", response_model=ConventionAssignmentListResponse)
+def ops_list_convention_assignments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionAssignmentListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_assignments_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionAssignmentListResponse(
+        items=[convention_operations_service._assignment_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/convention-movements", response_model=ConventionMovementListResponse)
+def ops_list_convention_movements(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionMovementListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_movements_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionMovementListResponse(
+        items=[convention_operations_service._movement_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/convention-price-snapshots", response_model=ConventionPriceSnapshotListResponse)
+def ops_list_convention_price_snapshots(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionPriceSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_price_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionPriceSnapshotListResponse(
+        items=[convention_operations_service._price_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/convention-sale-sessions", response_model=ConventionSaleSessionListResponse)
+def ops_list_convention_sale_sessions(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    convention_event_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConventionSaleSessionListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = convention_operations_service.clamp_convention_pagination(limit=limit, offset=offset)
+    rows, total = convention_operations_service.list_convention_sale_sessions_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        inventory_item_id=inventory_item_id,
+        convention_event_id=convention_event_id,
+        limit=lim,
+        offset=off,
+    )
+    return ConventionSaleSessionListResponse(
+        items=[convention_operations_service._session_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-velocity", response_model=ListingVelocityListResponse)
+def ops_list_listing_velocity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingVelocityListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_velocity_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ListingVelocityListResponse(
+        items=[liquidity_engine_service._velocity_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-staleness-events", response_model=ListingStalenessEventListResponse)
+def ops_list_listing_staleness_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingStalenessEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = sales_ledger_service.clamp_sale_pagination(limit=limit, offset=offset)
+    rows, total = liquidity_engine_service.list_staleness_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return ListingStalenessEventListResponse(
+        items=[liquidity_engine_service._staleness_read(row) for row in rows],  # noqa: SLF001
         total_items=total,
         limit=lim,
         offset=off,

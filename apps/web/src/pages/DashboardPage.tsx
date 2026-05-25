@@ -51,6 +51,10 @@ import {
   type InventoryValuationScope,
   type PortfolioValueSummaryResponse,
   type ListingDashboardSummary,
+  type ListingExportDashboardSummary,
+  type ConventionDashboardSummary,
+  type LiquidityDashboardSummary,
+  type SalesDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -99,6 +103,16 @@ function formatDateTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function shortenChecksum(value: string | null): string {
+  if (!value) {
+    return "—";
+  }
+  if (value.length <= 18) {
+    return value;
+  }
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
 function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {
@@ -827,6 +841,19 @@ export function DashboardPage() {
   const [listingRegistrySummary, setListingRegistrySummary] = useState<ListingDashboardSummary | null>(null);
   const [listingRegistrySummaryLoading, setListingRegistrySummaryLoading] = useState(true);
   const [listingRegistrySummaryError, setListingRegistrySummaryError] = useState<string | null>(null);
+  const [conventionSummary, setConventionSummary] = useState<ConventionDashboardSummary | null>(null);
+  const [conventionSummaryLoading, setConventionSummaryLoading] = useState(true);
+  const [conventionSummaryError, setConventionSummaryError] = useState<string | null>(null);
+  const [liquiditySummary, setLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
+  const [liquiditySummaryLoading, setLiquiditySummaryLoading] = useState(true);
+  const [liquiditySummaryError, setLiquiditySummaryError] = useState<string | null>(null);
+  const [salesLedgerSummary, setSalesLedgerSummary] = useState<SalesDashboardSummary | null>(null);
+  const [salesLedgerSummaryLoading, setSalesLedgerSummaryLoading] = useState(true);
+  const [salesLedgerSummaryError, setSalesLedgerSummaryError] = useState<string | null>(null);
+
+  const [listingExportDash, setListingExportDash] = useState<ListingExportDashboardSummary | null>(null);
+  const [listingExportDashLoading, setListingExportDashLoading] = useState(true);
+  const [listingExportDashError, setListingExportDashError] = useState<string | null>(null);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -1326,6 +1353,118 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setSalesLedgerSummaryLoading(true);
+      setSalesLedgerSummaryError(null);
+      try {
+        const summary = await apiClient.getSalesDashboardSummary();
+        if (!ignore) {
+          setSalesLedgerSummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setSalesLedgerSummary(null);
+          setSalesLedgerSummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load sales ledger summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setSalesLedgerSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setLiquiditySummaryLoading(true);
+      setLiquiditySummaryError(null);
+      try {
+        const summary = await apiClient.getLiquidityDashboardSummary();
+        if (!ignore) {
+          setLiquiditySummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setLiquiditySummary(null);
+          setLiquiditySummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load liquidity summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLiquiditySummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setConventionSummaryLoading(true);
+      setConventionSummaryError(null);
+      try {
+        const summary = await apiClient.getConventionDashboardSummary();
+        if (!ignore) {
+          setConventionSummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setConventionSummary(null);
+          setConventionSummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load convention summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setConventionSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setListingExportDashLoading(true);
+      setListingExportDashError(null);
+      try {
+        const summary = await apiClient.getListingExportDashboardSummary();
+        if (!ignore) {
+          setListingExportDash(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setListingExportDash(null);
+          setListingExportDashError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load marketplace export summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setListingExportDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
     const nextHoldDrafts: Record<number, InventoryItem["hold_status"]> = {};
     const nextGradeDrafts: Record<number, InventoryItem["grade_status"]> = {};
@@ -1439,9 +1578,21 @@ export function DashboardPage() {
     Boolean(marketTrendSummary) ||
     marketMatchSuggestionsPendingLoading ||
     marketMatchSuggestionsPendingError ||
+    conventionSummaryLoading ||
+    conventionSummaryError ||
+    Boolean(conventionSummary) ||
+    liquiditySummaryLoading ||
+    liquiditySummaryError ||
+    Boolean(liquiditySummary) ||
+    salesLedgerSummaryLoading ||
+    salesLedgerSummaryError ||
+    Boolean(salesLedgerSummary) ||
     listingRegistrySummaryLoading ||
     listingRegistrySummaryError ||
-    Boolean(listingRegistrySummary);
+    Boolean(listingRegistrySummary) ||
+    listingExportDashLoading ||
+    listingExportDashError ||
+    Boolean(listingExportDash);
 
   const marketRegistryRailsVisible =
     marketSourcesLoading ||
@@ -2231,6 +2382,319 @@ export function DashboardPage() {
                             <td className="p-3 text-slate-400">{formatDateTime(evt.created_at)}</td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {liquiditySummaryLoading || liquiditySummaryError || liquiditySummary ? (
+            <section
+              id="liquidity-dash"
+              className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Liquidity engine</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Evidence-backed inventory liquidity snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic snapshots derived from listing velocity, stale thresholds, and actual sales. This panel is
+                    descriptive only and never reprices, predicts, or auto-closes inventory.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#liquidity-ops"
+                  className="rounded-full border border-sky-400/35 px-3 py-1.5 text-xs font-semibold text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-500/10"
+                >
+                  Open ops liquidity
+                </Link>
+              </div>
+              {liquiditySummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading liquidity summary…</p>
+              ) : liquiditySummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{liquiditySummaryError}</StatusBanner>
+                </div>
+              ) : liquiditySummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="High liquidity snapshots" value={String(liquiditySummary.high_liquidity_count)} />
+                    <StatCard label="Stale inventory snapshots" value={String(liquiditySummary.stale_inventory_count)} />
+                    <StatCard
+                      label="Median days to sale"
+                      value={liquiditySummary.median_days_to_sale ? `${liquiditySummary.median_days_to_sale} days` : "—"}
+                    />
+                    <StatCard label="Sell-through %" value={`${liquiditySummary.sell_through_pct}%`} />
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Event</th>
+                          <th className="p-3 font-medium">Threshold</th>
+                          <th className="p-3 font-medium">Days active</th>
+                          <th className="p-3 font-medium">Listing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {liquiditySummary.recent_stale_events.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={4}>
+                              No stale events recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          liquiditySummary.recent_stale_events.slice(0, 6).map((event) => (
+                            <tr key={event.id}>
+                              <td className="p-3 text-slate-200">{event.event_type.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-300">{event.threshold_days}+ days</td>
+                              <td className="p-3 text-slate-300">{event.days_active} days</td>
+                              <td className="p-3 font-mono text-[11px] text-slate-300">#{event.listing_id}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {conventionSummaryLoading || conventionSummaryError || conventionSummary ? (
+            <section
+              id="convention-dash"
+              className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/80">Convention ops</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Dealer workflow and show inventory snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic convention assignments, movement history, temporary pricing, and active sale sessions.
+                    This panel stays operational and never mutates inventory quantities or posts payments.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#convention-ops"
+                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                >
+                  Open ops convention
+                </Link>
+              </div>
+              {conventionSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading convention summary…</p>
+              ) : conventionSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{conventionSummaryError}</StatusBanner>
+                </div>
+              ) : conventionSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <StatCard label="Active conventions" value={String(conventionSummary.active_convention_count)} />
+                    <StatCard label="Assigned inventory" value={String(conventionSummary.assigned_inventory_count)} />
+                    <StatCard label="Wall books" value={String(conventionSummary.wall_book_count)} />
+                    <StatCard label="Showcases" value={String(conventionSummary.showcase_count)} />
+                    <StatCard label="Active sale sessions" value={String(conventionSummary.active_sale_session_count)} />
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Event</th>
+                          <th className="p-3 font-medium">Type</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Window</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {conventionSummary.recent_events.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={4}>
+                              No convention events recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          conventionSummary.recent_events.slice(0, 5).map((event) => (
+                            <tr key={event.id}>
+                              <td className="p-3 text-slate-200">{event.name}</td>
+                              <td className="p-3 text-slate-300">{event.event_type.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-300">{event.status}</td>
+                              <td className="p-3 text-slate-300">
+                                {formatDate(event.start_date)} - {formatDate(event.end_date)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {salesLedgerSummaryLoading || salesLedgerSummaryError || salesLedgerSummary ? (
+            <section
+              id="sales-ledger-dash"
+              className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/80">Sales ledger</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Realized sale truth and profit snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Recorded sales only. This ledger captures realized outcomes, linked listing transitions, and stable money
+                    math without marketplace posting, inventory decrements, or hidden mutation.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#sales-ledger-ops"
+                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                >
+                  Open ops sales ledger
+                </Link>
+              </div>
+              {salesLedgerSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading sales ledger summary…</p>
+              ) : salesLedgerSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{salesLedgerSummaryError}</StatusBanner>
+                </div>
+              ) : salesLedgerSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Recorded sales" value={String(salesLedgerSummary.completed_sale_count)} />
+                    <StatCard label="Gross sales" value={formatCurrency(salesLedgerSummary.gross_sales_total)} />
+                    <StatCard label="Net proceeds" value={formatCurrency(salesLedgerSummary.net_proceeds_total)} />
+                    <StatCard label="Realized profit" value={formatCurrency(salesLedgerSummary.realized_profit_total)} />
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {salesLedgerSummary.sales_count_by_channel.map((row) => (
+                      <span
+                        key={row.channel}
+                        className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-100"
+                      >
+                        {row.channel.replace(/_/g, " ")} · {row.count}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Sale</th>
+                          <th className="p-3 font-medium">Channel</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Gross</th>
+                          <th className="p-3 font-medium">Net</th>
+                          <th className="p-3 font-medium">Profit</th>
+                          <th className="p-3 font-medium">Date</th>
+                          <th className="p-3 font-medium">Linked listing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {salesLedgerSummary.recent_sales.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={8}>
+                              No recorded sales yet for this collector.
+                            </td>
+                          </tr>
+                        ) : (
+                          salesLedgerSummary.recent_sales.slice(0, 6).map((sale) => (
+                            <tr key={sale.id}>
+                              <td className="p-3 font-mono text-[11px] text-slate-300">#{sale.id}</td>
+                              <td className="p-3 text-slate-200">{sale.channel.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-200">{sale.status}</td>
+                              <td className="p-3 text-slate-300">{formatCurrency(sale.gross_sale_amount)}</td>
+                              <td className="p-3 text-slate-300">{formatCurrency(sale.net_proceeds_amount)}</td>
+                              <td className="p-3 text-slate-300">{formatCurrency(sale.realized_profit_amount)}</td>
+                              <td className="p-3 text-slate-400">{formatDate(sale.sale_date)}</td>
+                              <td className="p-3 text-slate-400">{sale.listing_id ? `#${sale.listing_id}` : "—"}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {listingExportDashLoading || listingExportDashError || listingExportDash ? (
+            <section
+              id="listing-export-dash"
+              className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/75">Marketplace exports</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic CSV ledger (read-only)</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Channel-shaped listing files with checksums and append-only run history. Exports never post to marketplaces,
+                    mutate listing status, or touch inventory balances. Bulk multi-select in the SPA is deferred; use the API for
+                    batch <span className="font-mono text-[11px] text-cyan-100/90">POST /listing-export-runs</span> calls.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#listing-export-ops"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                >
+                  Ops export runs
+                </Link>
+              </div>
+              {listingExportDashLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading marketplace export summary…</p>
+              ) : listingExportDashError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{listingExportDashError}</StatusBanner>
+                </div>
+              ) : listingExportDash ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Completed export runs" value={String(listingExportDash.completed_run_count)} />
+                    <StatCard label="Skipped rows (lifetime)" value={String(listingExportDash.skipped_rows_lifetime_sum)} />
+                    <StatCard label="Latest completed checksum" value={shortenChecksum(listingExportDash.latest_completed_checksum)} />
+                    <StatCard label="Recent runs shown" value={String(listingExportDash.recent_runs.length)} />
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Run</th>
+                          <th className="p-3 font-medium">Channel</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Exported</th>
+                          <th className="p-3 font-medium">Skipped</th>
+                          <th className="p-3 font-medium">Checksum</th>
+                          <th className="p-3 font-medium">Completed</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {listingExportDash.recent_runs.length === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={7}>
+                              No export attempts recorded yet for this collector.
+                            </td>
+                          </tr>
+                        ) : (
+                          listingExportDash.recent_runs.slice(0, 6).map((run) => (
+                            <tr key={run.id}>
+                              <td className="p-3 font-mono text-[11px] text-slate-300">#{run.id}</td>
+                              <td className="p-3 text-slate-200">{run.channel}</td>
+                              <td className="p-3 text-slate-200">{run.status}</td>
+                              <td className="p-3 text-slate-300">{run.exported_listing_count}</td>
+                              <td className="p-3 text-slate-300">{run.skipped_listing_count}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">{shortenChecksum(run.checksum)}</td>
+                              <td className="p-3 text-slate-400">
+                                {run.completed_at ? formatDateTime(run.completed_at) : "—"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>

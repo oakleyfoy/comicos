@@ -2788,6 +2788,536 @@ export interface ListingDashboardSummary {
   recent_events: ListingLifecycleEventRead[];
 }
 
+export type SaleChannel =
+  | "manual"
+  | "ebay"
+  | "whatnot"
+  | "shopify"
+  | "hipcomic"
+  | "shortboxed"
+  | "convention"
+  | "private_sale";
+
+export type SaleStatus = "DRAFT" | "RECORDED" | "VOIDED";
+
+export type SaleAdjustmentType =
+  | "platform_fee"
+  | "payment_fee"
+  | "shipping_cost"
+  | "tax_collected"
+  | "shipping_charged"
+  | "discount"
+  | "refund"
+  | "other";
+
+export type SaleLifecycleEventType = "CREATED" | "RECORDED" | "UPDATED" | "VOIDED" | "FINANCIAL_RECALCULATED";
+
+export interface SaleRecordLineItemRead {
+  id: number;
+  sale_record_id: number;
+  listing_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  quantity_sold: number;
+  unit_sale_amount: string;
+  line_subtotal_amount: string;
+  cost_basis_amount: string | null;
+  realized_profit_amount: string | null;
+  created_at: string;
+}
+
+export interface SaleFinancialAdjustmentRead {
+  id: number;
+  sale_record_id: number;
+  adjustment_type: SaleAdjustmentType;
+  amount: string;
+  currency: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface SaleLifecycleEventRead {
+  id: number;
+  sale_record_id: number;
+  event_type: SaleLifecycleEventType;
+  prior_status: string | null;
+  new_status: string | null;
+  metadata_json: Record<string, unknown>;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export interface SaleRecordRead {
+  id: number;
+  owner_user_id: number;
+  listing_id: number | null;
+  channel: SaleChannel | string;
+  status: SaleStatus | string;
+  sale_date: string;
+  buyer_reference: string | null;
+  currency: string;
+  gross_sale_amount: string;
+  item_subtotal_amount: string;
+  shipping_charged_amount: string;
+  tax_collected_amount: string;
+  platform_fee_amount: string;
+  payment_fee_amount: string;
+  shipping_cost_amount: string;
+  other_cost_amount: string;
+  net_proceeds_amount: string;
+  acquisition_cost_basis_amount: string | null;
+  realized_profit_amount: string | null;
+  realized_margin_pct: string | null;
+  replay_key: string | null;
+  created_at: string;
+  updated_at: string;
+  recorded_at: string | null;
+  voided_at: string | null;
+  event_count: number;
+  line_item_count: number;
+  adjustment_count: number;
+}
+
+export interface SaleRecordDetailRead extends SaleRecordRead {
+  line_items: SaleRecordLineItemRead[];
+  financial_adjustments: SaleFinancialAdjustmentRead[];
+  events: SaleLifecycleEventRead[];
+}
+
+export interface SaleRecordListResponse {
+  items: SaleRecordRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SaleLifecycleEventListResponse {
+  items: SaleLifecycleEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SaleFinancialAdjustmentListResponse {
+  items: SaleFinancialAdjustmentRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SaleChannelCountRow {
+  channel: SaleChannel | string;
+  count: number;
+}
+
+export interface SalesDashboardSummary {
+  completed_sale_count: number;
+  gross_sales_total: string;
+  net_proceeds_total: string;
+  realized_profit_total: string;
+  recent_sales: SaleRecordRead[];
+  sales_count_by_channel: SaleChannelCountRow[];
+}
+
+export type LiquidityStatus = "HIGH" | "MODERATE" | "LOW" | "ILLIQUID" | "INSUFFICIENT_DATA";
+export type LiquidityConfidence = "HIGH" | "MEDIUM" | "LOW";
+export type LiquidityEvidenceType = "SALE" | "ACTIVE_LISTING" | "FAILED_LISTING" | "RELIST" | "STALE";
+export type ListingStalenessEventType = "STALE_WARNING" | "STALE_CONFIRMED" | "LONG_RUNNING";
+
+export interface InventoryLiquiditySnapshotRead {
+  id: number;
+  owner_user_id: number;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  channel: string | null;
+  liquidity_status: LiquidityStatus | string;
+  days_on_market_median: string | null;
+  days_to_sale_median: string | null;
+  sell_through_rate_pct: string;
+  stale_listing_rate_pct: string;
+  relist_rate_pct: string;
+  successful_sale_count: number;
+  failed_listing_count: number;
+  active_listing_count: number;
+  liquidity_confidence: LiquidityConfidence | string;
+  evaluation_window_days: number;
+  snapshot_date: string;
+  checksum: string;
+  evidence_count: number;
+  created_at: string;
+}
+
+export interface InventoryLiquidityEvidenceRead {
+  id: number;
+  liquidity_snapshot_id: number;
+  evidence_type: LiquidityEvidenceType | string;
+  source_listing_id: number | null;
+  source_sale_id: number | null;
+  source_export_run_id: number | null;
+  days_on_market: string | null;
+  evidence_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ListingVelocitySnapshotRead {
+  id: number;
+  listing_id: number;
+  owner_user_id: number;
+  first_activated_at: string | null;
+  sold_at: string | null;
+  days_active: string | null;
+  relist_count: number;
+  price_change_count: number;
+  final_status: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ListingStalenessEventRead {
+  id: number;
+  listing_id: number;
+  owner_user_id: number;
+  event_type: ListingStalenessEventType | string;
+  threshold_days: number;
+  days_active: string;
+  created_at: string;
+}
+
+export interface InventoryLiquidityListResponse {
+  items: InventoryLiquiditySnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InventoryLiquidityEvidenceListResponse {
+  items: InventoryLiquidityEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingVelocityListResponse {
+  items: ListingVelocitySnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingStalenessEventListResponse {
+  items: ListingStalenessEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LiquidityDashboardSummary {
+  high_liquidity_count: number;
+  stale_inventory_count: number;
+  recent_stale_events: ListingStalenessEventRead[];
+  median_days_to_sale: string | null;
+  sell_through_pct: string;
+  recent_snapshots: InventoryLiquiditySnapshotRead[];
+}
+
+export type ConventionEventType = "convention" | "local_show" | "trade_night" | "private_event" | "popup";
+export type ConventionEventStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+export type ConventionAssignmentType = "wall" | "showcase" | "bin" | "featured" | "reserve";
+export type ConventionMovementType = "ASSIGNED" | "MOVED" | "REMOVED" | "SOLD" | "RETURNED" | "HOLD";
+export type ConventionPricingSource = "default_inventory" | "convention_override" | "negotiated";
+export type ConventionSaleSessionStatus = "OPEN" | "CLOSED";
+
+export interface ConventionReplayBody {
+  replay_key?: string | null;
+}
+
+export interface ConventionEventCreatePayload {
+  name: string;
+  venue?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  start_date: string;
+  end_date: string;
+  event_type: ConventionEventType;
+  notes?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ConventionEventPatchPayload {
+  name?: string | null;
+  venue?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  event_type?: ConventionEventType | null;
+  notes?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ConventionEventRead {
+  id: number;
+  owner_user_id: number;
+  replay_key: string | null;
+  name: string;
+  venue: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  start_date: string;
+  end_date: string;
+  event_type: ConventionEventType | string;
+  status: ConventionEventStatus | string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+  completed_at: string | null;
+}
+
+export interface ConventionAssignmentCreatePayload {
+  convention_event_id: number;
+  inventory_item_id: number;
+  assignment_type: ConventionAssignmentType;
+  local_price_amount?: string | null;
+  local_price_currency?: string | null;
+  display_location?: string | null;
+  priority_rank?: number | null;
+  replay_key?: string | null;
+}
+
+export interface ConventionAssignmentRead {
+  id: number;
+  convention_event_id: number;
+  inventory_item_id: number;
+  replay_key: string | null;
+  assignment_type: ConventionAssignmentType | string;
+  local_price_amount: string | null;
+  local_price_currency: string | null;
+  display_location: string | null;
+  priority_rank: number | null;
+  assigned_at: string;
+  removed_at: string | null;
+  created_at: string;
+}
+
+export interface ConventionMovementCreatePayload {
+  convention_event_id: number;
+  inventory_item_id: number;
+  movement_type: ConventionMovementType;
+  from_location?: string | null;
+  to_location?: string | null;
+  notes?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ConventionMovementRead {
+  id: number;
+  convention_event_id: number;
+  inventory_item_id: number;
+  replay_key: string | null;
+  movement_type: ConventionMovementType | string;
+  from_location: string | null;
+  to_location: string | null;
+  notes: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface ConventionPriceSnapshotCreatePayload {
+  convention_event_id: number;
+  inventory_item_id: number;
+  price_amount: string;
+  currency: string;
+  pricing_source: ConventionPricingSource;
+  replay_key?: string | null;
+}
+
+export interface ConventionPriceSnapshotRead {
+  id: number;
+  convention_event_id: number;
+  inventory_item_id: number;
+  replay_key: string | null;
+  price_amount: string;
+  currency: string;
+  pricing_source: ConventionPricingSource | string;
+  created_at: string;
+}
+
+export interface ConventionSaleSessionCreatePayload {
+  convention_event_id: number;
+  notes?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ConventionSaleSessionRead {
+  id: number;
+  convention_event_id: number;
+  owner_user_id: number;
+  replay_key: string | null;
+  status: ConventionSaleSessionStatus | string;
+  opened_at: string;
+  closed_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ConventionDashboardSummary {
+  active_convention_count: number;
+  assigned_inventory_count: number;
+  wall_book_count: number;
+  showcase_count: number;
+  active_sale_session_count: number;
+  recent_events: ConventionEventRead[];
+}
+
+export interface ConventionEventListResponse {
+  items: ConventionEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConventionAssignmentListResponse {
+  items: ConventionAssignmentRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConventionMovementListResponse {
+  items: ConventionMovementRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConventionPriceSnapshotListResponse {
+  items: ConventionPriceSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConventionSaleSessionListResponse {
+  items: ConventionSaleSessionRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SaleRecordLineItemCreatePayload {
+  listing_id?: number | null;
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  quantity_sold: number;
+  unit_sale_amount: string;
+  line_subtotal_amount?: string | null;
+  cost_basis_amount?: string | null;
+}
+
+export interface SaleFinancialAdjustmentCreatePayload {
+  adjustment_type: SaleAdjustmentType;
+  amount: string;
+  currency: string;
+  description?: string | null;
+}
+
+export interface SaleRecordCreatePayload {
+  listing_id?: number | null;
+  channel: SaleChannel | string;
+  sale_date: string;
+  currency: string;
+  buyer_reference?: string | null;
+  line_items: SaleRecordLineItemCreatePayload[];
+  financial_adjustments?: SaleFinancialAdjustmentCreatePayload[];
+  replay_key?: string | null;
+}
+
+export interface SaleRecordPatchPayload {
+  listing_id?: number | null;
+  channel?: SaleChannel | string | null;
+  sale_date?: string | null;
+  currency?: string | null;
+  buyer_reference?: string | null;
+}
+
+export type ListingExportChannel =
+  | "ebay"
+  | "whatnot"
+  | "shopify"
+  | "hipcomic"
+  | "shortboxed"
+  | "generic_csv";
+
+export interface ListingExportRunRead {
+  id: number;
+  owner_user_id: number;
+  template_id: number;
+  channel: ListingExportChannel | string;
+  status: string;
+  requested_listing_count: number;
+  exported_listing_count: number;
+  skipped_listing_count: number;
+  error_count: number;
+  replay_key: string | null;
+  checksum: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface ListingExportDashboardSummary {
+  completed_run_count: number;
+  skipped_rows_lifetime_sum: number;
+  latest_completed_checksum: string | null;
+  recent_runs: ListingExportRunRead[];
+}
+
+export interface ListingExportRunListResponse {
+  items: ListingExportRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingExportRunItemRead {
+  id: number;
+  export_run_id: number;
+  listing_id: number | null;
+  status: string;
+  skip_reason: string | null;
+  error_message: string | null;
+  row_number: number;
+  row_checksum: string | null;
+  created_at: string;
+}
+
+export interface ListingExportFileRead {
+  id: number;
+  export_run_id: number;
+  file_name: string;
+  file_type: string;
+  storage_path: string;
+  checksum: string;
+  row_count: number;
+  created_at: string;
+}
+
+export interface ListingExportRunDetailRead extends ListingExportRunRead {
+  items: ListingExportRunItemRead[];
+  files: ListingExportFileRead[];
+}
+
+export interface ListingExportRunCreatePayload {
+  template_id?: number | null;
+  channel?: ListingExportChannel | string | null;
+  listing_ids: number[];
+  replay_key?: string | null;
+}
+
 export interface ListingRead {
   id: number;
   owner_user_id: number;
@@ -6488,8 +7018,536 @@ export const apiClient = {
     );
   },
 
+  getListingExportDashboardSummary(): Promise<ListingExportDashboardSummary> {
+    return request<ListingExportDashboardSummary>("/listing-export-runs/dashboard-summary");
+  },
+
+  getOpsListingExportRuns(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingExportRunListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingExportRunListResponse>(`/ops/listing-export-runs${q}`);
+  },
+
+  downloadOpsListingExportCsv(exportRunId: number): Promise<void> {
+    return downloadAuthenticatedReport(
+      `/ops/listing-export-runs/${exportRunId}/download`,
+      `ops-listing-export-run-${exportRunId}.csv`,
+    );
+  },
+
+  createListingExportRun(payload: ListingExportRunCreatePayload): Promise<ListingExportRunDetailRead> {
+    return request<ListingExportRunDetailRead>("/listing-export-runs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   getListingRegistrySummary(): Promise<ListingDashboardSummary> {
     return request<ListingDashboardSummary>("/listings/summary");
+  },
+
+  getSalesDashboardSummary(): Promise<SalesDashboardSummary> {
+    return request<SalesDashboardSummary>("/sales/dashboard-summary");
+  },
+
+  getSales(params?: {
+    channel?: SaleChannel | string;
+    status?: SaleStatus | string;
+    sale_date_from?: string;
+    sale_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<SaleRecordListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<SaleRecordListResponse>(`/sales${q}`);
+  },
+
+  getSale(saleId: number): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>(`/sales/${saleId}`);
+  },
+
+  createSale(payload: SaleRecordCreatePayload): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>("/sales", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  patchSale(saleId: number, payload: SaleRecordPatchPayload): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>(`/sales/${saleId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+
+  recordSale(saleId: number): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>(`/sales/${saleId}/record`, { method: "POST" });
+  },
+
+  voidSale(saleId: number): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>(`/sales/${saleId}/void`, { method: "POST" });
+  },
+
+  getSaleEvents(saleId: number): Promise<SaleLifecycleEventListResponse> {
+    return request<SaleLifecycleEventListResponse>(`/sales/${saleId}/events`);
+  },
+
+  getOpsSales(params?: {
+    owner_user_id?: number;
+    channel?: SaleChannel | string;
+    status?: SaleStatus | string;
+    sale_date_from?: string;
+    sale_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<SaleRecordListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<SaleRecordListResponse>(`/ops/sales${q}`);
+  },
+
+  getOpsSale(saleId: number): Promise<SaleRecordDetailRead> {
+    return request<SaleRecordDetailRead>(`/ops/sales/${saleId}`);
+  },
+
+  getOpsSaleEvents(params?: {
+    owner_user_id?: number;
+    channel?: SaleChannel | string;
+    status?: SaleStatus | string;
+    sale_date_from?: string;
+    sale_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<SaleLifecycleEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<SaleLifecycleEventListResponse>(`/ops/sale-events${q}`);
+  },
+
+  getOpsSaleFinancialAdjustments(params?: {
+    owner_user_id?: number;
+    channel?: SaleChannel | string;
+    status?: SaleStatus | string;
+    sale_date_from?: string;
+    sale_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<SaleFinancialAdjustmentListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<SaleFinancialAdjustmentListResponse>(`/ops/sale-financial-adjustments${q}`);
+  },
+
+  getLiquidityDashboardSummary(params?: { snapshot_date?: string }): Promise<LiquidityDashboardSummary> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<LiquidityDashboardSummary>(`/liquidity/dashboard-summary${q}`);
+  },
+
+  getLiquidity(params?: {
+    channel?: string;
+    liquidity_status?: LiquidityStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    snapshot_date?: string;
+    evaluation_window_days?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<InventoryLiquidityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<InventoryLiquidityListResponse>(`/liquidity${q}`);
+  },
+
+  getLiquiditySnapshot(snapshotId: number): Promise<InventoryLiquiditySnapshotRead> {
+    return request<InventoryLiquiditySnapshotRead>(`/liquidity/${snapshotId}`);
+  },
+
+  getLiquidityEvidence(params?: {
+    channel?: string;
+    liquidity_status?: LiquidityStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    snapshot_date?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<InventoryLiquidityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<InventoryLiquidityEvidenceListResponse>(`/liquidity/evidence${q}`);
+  },
+
+  getListingVelocity(params?: {
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingVelocityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingVelocityListResponse>(`/listing-velocity${q}`);
+  },
+
+  getListingStalenessEvents(params?: {
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingStalenessEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingStalenessEventListResponse>(`/listing-staleness-events${q}`);
+  },
+
+  getOpsLiquidityDashboardSummary(params?: { owner_user_id?: number; snapshot_date?: string }): Promise<LiquidityDashboardSummary> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<LiquidityDashboardSummary>(`/ops/liquidity/dashboard-summary${q}`);
+  },
+
+  getOpsLiquidity(params?: {
+    owner_user_id?: number;
+    channel?: string;
+    liquidity_status?: LiquidityStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<InventoryLiquidityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<InventoryLiquidityListResponse>(`/ops/liquidity${q}`);
+  },
+
+  getOpsLiquiditySnapshot(snapshotId: number): Promise<InventoryLiquiditySnapshotRead> {
+    return request<InventoryLiquiditySnapshotRead>(`/ops/liquidity/${snapshotId}`);
+  },
+
+  getOpsLiquidityEvidence(params?: {
+    owner_user_id?: number;
+    channel?: string;
+    liquidity_status?: LiquidityStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<InventoryLiquidityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<InventoryLiquidityEvidenceListResponse>(`/ops/liquidity-evidence${q}`);
+  },
+
+  getOpsListingVelocity(params?: {
+    owner_user_id?: number;
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingVelocityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingVelocityListResponse>(`/ops/listing-velocity${q}`);
+  },
+
+  getOpsListingStalenessEvents(params?: {
+    owner_user_id?: number;
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingStalenessEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ListingStalenessEventListResponse>(`/ops/listing-staleness-events${q}`);
+  },
+
+  getConventionDashboardSummary(): Promise<ConventionDashboardSummary> {
+    return request<ConventionDashboardSummary>("/convention/dashboard-summary");
+  },
+
+  getOpsConventionDashboardSummary(params?: { owner_user_id?: number }): Promise<ConventionDashboardSummary> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionDashboardSummary>(`/ops/convention/dashboard-summary${q}`);
+  },
+
+  getConventionEvents(params?: {
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionEventListResponse>(`/convention-events${q}`);
+  },
+
+  createConventionEvent(payload: ConventionEventCreatePayload): Promise<ConventionEventRead> {
+    return request<ConventionEventRead>("/convention-events", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  getConventionEvent(conventionEventId: number): Promise<ConventionEventRead> {
+    return request<ConventionEventRead>(`/convention-events/${conventionEventId}`);
+  },
+
+  patchConventionEvent(conventionEventId: number, payload: ConventionEventPatchPayload): Promise<ConventionEventRead> {
+    return request<ConventionEventRead>(`/convention-events/${conventionEventId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  activateConventionEvent(conventionEventId: number, payload?: ConventionReplayBody): Promise<ConventionEventRead> {
+    return request<ConventionEventRead>(`/convention-events/${conventionEventId}/activate`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  completeConventionEvent(conventionEventId: number, payload?: ConventionReplayBody): Promise<ConventionEventRead> {
+    return request<ConventionEventRead>(`/convention-events/${conventionEventId}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getConventionAssignments(params?: {
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionAssignmentListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionAssignmentListResponse>(`/convention-assignments${q}`);
+  },
+
+  createConventionAssignment(payload: ConventionAssignmentCreatePayload): Promise<ConventionAssignmentRead> {
+    return request<ConventionAssignmentRead>("/convention-assignments", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  getConventionMovements(params?: {
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionMovementListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionMovementListResponse>(`/convention-movements${q}`);
+  },
+
+  createConventionMovement(payload: ConventionMovementCreatePayload): Promise<ConventionMovementRead> {
+    return request<ConventionMovementRead>("/convention-movements", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  getConventionPriceSnapshots(params?: {
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionPriceSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionPriceSnapshotListResponse>(`/convention-price-snapshots${q}`);
+  },
+
+  createConventionPriceSnapshot(payload: ConventionPriceSnapshotCreatePayload): Promise<ConventionPriceSnapshotRead> {
+    return request<ConventionPriceSnapshotRead>("/convention-price-snapshots", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getConventionSaleSessions(params?: {
+    event_type?: ConventionEventType | string;
+    status?: ConventionSaleSessionStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionSaleSessionListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionSaleSessionListResponse>(`/convention-sale-sessions${q}`);
+  },
+
+  createConventionSaleSession(payload: ConventionSaleSessionCreatePayload): Promise<ConventionSaleSessionRead> {
+    return request<ConventionSaleSessionRead>("/convention-sale-sessions", { method: "POST", body: JSON.stringify(payload) });
+  },
+
+  closeConventionSaleSession(conventionSaleSessionId: number, payload?: ConventionReplayBody): Promise<ConventionSaleSessionRead> {
+    return request<ConventionSaleSessionRead>(`/convention-sale-sessions/${conventionSaleSessionId}/close`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getOpsConventionEvents(params?: {
+    owner_user_id?: number;
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionEventListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionEventListResponse>(`/ops/convention-events${q}`);
+  },
+
+  getOpsConventionAssignments(params?: {
+    owner_user_id?: number;
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionAssignmentListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionAssignmentListResponse>(`/ops/convention-assignments${q}`);
+  },
+
+  getOpsConventionMovements(params?: {
+    owner_user_id?: number;
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionMovementListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionMovementListResponse>(`/ops/convention-movements${q}`);
+  },
+
+  getOpsConventionPriceSnapshots(params?: {
+    owner_user_id?: number;
+    event_type?: ConventionEventType | string;
+    status?: ConventionEventStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionPriceSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionPriceSnapshotListResponse>(`/ops/convention-price-snapshots${q}`);
+  },
+
+  getOpsConventionSaleSessions(params?: {
+    owner_user_id?: number;
+    event_type?: ConventionEventType | string;
+    status?: ConventionSaleSessionStatus | string;
+    date_from?: string;
+    date_to?: string;
+    inventory_item_id?: number;
+    convention_event_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConventionSaleSessionListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | undefined>)
+        : "";
+    return request<ConventionSaleSessionListResponse>(`/ops/convention-sale-sessions${q}`);
   },
 
   getListingRegistryList(params?: {

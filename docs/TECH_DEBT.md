@@ -63,15 +63,71 @@ Resolved routes:
 - **Known follow-ups**
   - If portfolio-scale exports exceed comfortable row counts, introduce cursor pagination while preserving lexical sort guarantees on stable keys (`inventory_copy_id`).
   - Consolidate SPA dashboard clustering for ops/owner previews when product finalizes telemetry density budgets (API contracts already stabilized).
-  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; extend the list when new market ops sections ship.
+  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; `#listing-export-ops` accompanies listing registry/export surfaces — extend the list when new market ops sections ship.
 
 ## P36-01 — Listing registry foundation (2026-05-25)
 
 - Architecture note: canonical listing truth layer is documented in `docs/LISTING_REGISTRY_ARCHITECTURE.md` (lifecycle, append-only events/price ledger, replay keys, deterministic image ordering, owner vs ops guards).
 - Operational surfaces: Dashboard and Operations include lightweight listing panels only; they must stay read-only aggregates (no posting, no auto pricing, no inventory mutation from listing reads).
 - **Known follow-ups**
-  - If marketplace export feeds are added later, extend `source_type` enums and persistence through explicit migrations only; keep listing rows the system of record vs channel-specific shadow state.
+  - P36-02 seeded deterministic CSV exports documented in `docs/LISTING_EXPORTS_ARCHITECTURE.md`; extending `source_type` enums still requires explicit migrations and must keep canonical listing rows the system of record vs channel-specific shadow state.
   - If multi-quantity allocation semantics grow beyond the current `listing_inventory_link` row, model explicit partial allocations as new append-only ledger rows rather than silent overwrites on existing links.
+
+## P36-02 — Deterministic marketplace export engine (2026-05-25)
+
+- Architecture note: deterministic CSV ledger + replay semantics lives in `docs/LISTING_EXPORTS_ARCHITECTURE.md` (`ListingExport*` models, seeded templates per channel, `replay_key`, eligibility reasons, checksum contracts).
+- Owner routes materialize synchronous exports; ops routes expose cross-owner read-only inspection plus mirrored CSV downloads. Generation never touches listing status or invokes external retailer APIs.
+
+### Deferred scope (intentionally not P36-02)
+
+- Live marketplace OAuth/posting integrations (Whatnot/Shopify/eBay uploads, webhook callbacks, webhook-driven status sync).
+- Bulk listing-selection surfaces in the SPA (multi-ID workbooks tied to exporter actions); collectors should drive `POST /listing-export-runs` via API clients until UX lands.
+- Deeper channel-specific validation (taxonomy enforcement, fulfillment profile binding, SKU schemas).
+- Dedicated marketplace credential lockers and KMS-backed secret rotation.
+- Async worker offload for heavyweight exports beyond the synchronous FastAPI envelope.
+- Rich image packaging pipelines (beyond deterministic cover/scan tokens in CSV placeholders).
+
+## P36-03 — Sales recording system (2026-05-25)
+
+- Architecture note: the realized-sales truth layer lives in `docs/SALES_LEDGER_ARCHITECTURE.md` (`SaleRecord`, `SaleRecordLineItem`, `SaleFinancialAdjustment`, `SaleLifecycleEvent`, deterministic cent rounding, owner vs ops read surfaces).
+- Owner routes own the write paths; ops routes stay read-only and can inspect aggregate or event history without mutating the ledger.
+
+### Deferred scope (intentionally not P36-03)
+
+- Inventory quantity decrementing / lot consumption on sale record.
+- Partial lot cost allocation beyond the current single-sale / single-listing pattern.
+- Marketplace payment imports, refunds/returns workflows, and settlement reconciliation.
+- Tax reporting and accounting export pipelines.
+- Any live marketplace posting or payment integration.
+- Liquidity scoring, recommendations, grading ROI, or sell/hold intelligence.
+
+## P36-04 — Inventory liquidity engine (2026-05-25)
+
+- Architecture note: descriptive liquidity snapshots live in `docs/LIQUIDITY_ENGINE_ARCHITECTURE.md` and are derived from deterministic listing velocity, stale thresholds, and realized sales evidence.
+- Owner routes may materialize the current snapshot signature set; ops routes remain read-only mirrors over persisted snapshots, evidence, velocity rows, and stale events.
+
+### Deferred scope (intentionally not P36-04)
+
+- Predictive liquidity scoring or sell-through forecasting.
+- Automated repricing or recommendation generation.
+- Marketplace-wide intelligence beyond the current owner/item/canonical/channel scopes.
+- ML-based sell-through prediction or dynamic threshold tuning.
+- Portfolio strategy integration and any automatic liquidation workflow.
+- Automatic stale-listing closure or any hidden inventory mutation.
+
+## P36-05 — Convention / show operations (2026-05-25)
+
+- Architecture note: convention operations live in `docs/CONVENTION_OPERATIONS_ARCHITECTURE.md` and track event lifecycles, assignments, movement history, temporary pricing, and sale sessions as an append-safe operational ledger.
+- Owner routes own the write paths; ops routes mirror the same data read-only so dealer workflows stay visible without hidden mutation.
+
+### Deferred scope (intentionally not P36-05)
+
+- POS/payment integration and checkout tooling.
+- Barcode scanning or offline sync workflows.
+- Live dealer dashboards beyond the current lightweight summary panels.
+- Quick-sale checkout automation or auto-selling inventory.
+- Inventory decrementing or hidden movement state changes.
+- Convention analytics, staffing workflows, and settlement reconciliation.
 
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 

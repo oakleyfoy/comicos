@@ -122,8 +122,24 @@ import {
   type PhysicalIntakeListResponse,
   type PhysicalIntakeState,
   type PhysicalIntakeSummaryResponse,
+  type InventoryLiquidityEvidenceRead,
+  type InventoryLiquidityListResponse,
+  type InventoryLiquiditySnapshotRead,
+  type ConventionDashboardSummary,
+  type ConventionEventListResponse,
+  type ConventionAssignmentListResponse,
+  type ConventionMovementListResponse,
+  type ConventionPriceSnapshotListResponse,
+  type ConventionSaleSessionListResponse,
+  type LiquidityDashboardSummary,
+  type ListingStalenessEventListResponse,
+  type ListingStalenessEventRead,
+  type ListingVelocityListResponse,
+  type ListingVelocitySnapshotRead,
   type ListingOpsStatusDistribution,
   type OpsListingLifecycleEventListResponse,
+  type ListingExportRunListResponse,
+  type SaleRecordRead,
 } from "../api/client";
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { AppShell } from "../components/AppShell";
@@ -167,6 +183,16 @@ function formatDateTime(value: string | null): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function abbrevExportChecksum(value: string | null): string {
+  if (!value) {
+    return "—";
+  }
+  if (value.length <= 18) {
+    return value;
+  }
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
 function formatDate(value: string): string {
@@ -1343,6 +1369,37 @@ export function OperationsPage() {
   const [opsListingEventsFeed, setOpsListingEventsFeed] = useState<OpsListingLifecycleEventListResponse | null>(null);
   const [opsListingEventsFeedLoading, setOpsListingEventsFeedLoading] = useState(true);
   const [opsListingEventsFeedError, setOpsListingEventsFeedError] = useState<string | null>(null);
+  const [opsListingExportRuns, setOpsListingExportRuns] = useState<ListingExportRunListResponse | null>(null);
+  const [opsListingExportRunsLoading, setOpsListingExportRunsLoading] = useState(true);
+  const [opsListingExportRunsError, setOpsListingExportRunsError] = useState<string | null>(null);
+  const [opsListingExportDownloadError, setOpsListingExportDownloadError] = useState<string | null>(null);
+  const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
+  const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
+  const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
+  const [opsConventionEvents, setOpsConventionEvents] = useState<ConventionEventListResponse | null>(null);
+  const [opsConventionEventsLoading, setOpsConventionEventsLoading] = useState(true);
+  const [opsConventionEventsError, setOpsConventionEventsError] = useState<string | null>(null);
+  const [opsConventionAssignments, setOpsConventionAssignments] = useState<ConventionAssignmentListResponse | null>(null);
+  const [opsConventionAssignmentsLoading, setOpsConventionAssignmentsLoading] = useState(true);
+  const [opsConventionAssignmentsError, setOpsConventionAssignmentsError] = useState<string | null>(null);
+  const [opsConventionMovements, setOpsConventionMovements] = useState<ConventionMovementListResponse | null>(null);
+  const [opsConventionMovementsLoading, setOpsConventionMovementsLoading] = useState(true);
+  const [opsConventionMovementsError, setOpsConventionMovementsError] = useState<string | null>(null);
+  const [opsConventionPriceSnapshots, setOpsConventionPriceSnapshots] = useState<ConventionPriceSnapshotListResponse | null>(null);
+  const [opsConventionPriceSnapshotsLoading, setOpsConventionPriceSnapshotsLoading] = useState(true);
+  const [opsConventionPriceSnapshotsError, setOpsConventionPriceSnapshotsError] = useState<string | null>(null);
+  const [opsConventionSaleSessions, setOpsConventionSaleSessions] = useState<ConventionSaleSessionListResponse | null>(null);
+  const [opsConventionSaleSessionsLoading, setOpsConventionSaleSessionsLoading] = useState(true);
+  const [opsConventionSaleSessionsError, setOpsConventionSaleSessionsError] = useState<string | null>(null);
+  const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
+  const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
+  const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
+  const [opsLiquiditySnapshots, setOpsLiquiditySnapshots] = useState<InventoryLiquiditySnapshotRead[]>([]);
+  const [opsLiquiditySnapshotsLoading, setOpsLiquiditySnapshotsLoading] = useState(true);
+  const [opsLiquiditySnapshotsError, setOpsLiquiditySnapshotsError] = useState<string | null>(null);
+  const [opsSalesLedger, setOpsSalesLedger] = useState<SaleRecordRead[]>([]);
+  const [opsSalesLedgerLoading, setOpsSalesLedgerLoading] = useState(true);
+  const [opsSalesLedgerError, setOpsSalesLedgerError] = useState<string | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -1635,6 +1692,32 @@ export function OperationsPage() {
   useEffect(() => {
     let ignore = false;
     void (async () => {
+      setOpsSalesLedgerLoading(true);
+      setOpsSalesLedgerError(null);
+      try {
+        const list = await apiClient.getOpsSales({ limit: 100 });
+        if (!ignore) {
+          setOpsSalesLedger(list.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsSalesLedger([]);
+          setOpsSalesLedgerError(loadErr instanceof ApiError ? loadErr.message : "Unable to load sales ledger.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsSalesLedgerLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
       setOpsMarketSalesLoading(true);
       setOpsMarketSalesError(null);
       try {
@@ -1708,6 +1791,150 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsListingEventsFeedLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsConventionSummaryLoading(true);
+      setOpsConventionSummaryError(null);
+      setOpsConventionEventsLoading(true);
+      setOpsConventionEventsError(null);
+      setOpsConventionAssignmentsLoading(true);
+      setOpsConventionAssignmentsError(null);
+      setOpsConventionMovementsLoading(true);
+      setOpsConventionMovementsError(null);
+      setOpsConventionPriceSnapshotsLoading(true);
+      setOpsConventionPriceSnapshotsError(null);
+      setOpsConventionSaleSessionsLoading(true);
+      setOpsConventionSaleSessionsError(null);
+      try {
+        const [summary, events, assignments, movements, prices, sessions] = await Promise.all([
+          apiClient.getOpsConventionDashboardSummary(),
+          apiClient.getOpsConventionEvents({ limit: 25, offset: 0 }),
+          apiClient.getOpsConventionAssignments({ limit: 25, offset: 0 }),
+          apiClient.getOpsConventionMovements({ limit: 25, offset: 0 }),
+          apiClient.getOpsConventionPriceSnapshots({ limit: 25, offset: 0 }),
+          apiClient.getOpsConventionSaleSessions({ limit: 25, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsConventionSummary(summary);
+          setOpsConventionEvents(events);
+          setOpsConventionAssignments(assignments);
+          setOpsConventionMovements(movements);
+          setOpsConventionPriceSnapshots(prices);
+          setOpsConventionSaleSessions(sessions);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          const errorMessage = loadErr instanceof ApiError ? loadErr.message : "Unable to load convention operations.";
+          setOpsConventionSummary(null);
+          setOpsConventionSummaryError(errorMessage);
+          setOpsConventionEvents(null);
+          setOpsConventionEventsError(errorMessage);
+          setOpsConventionAssignments(null);
+          setOpsConventionAssignmentsError(errorMessage);
+          setOpsConventionMovements(null);
+          setOpsConventionMovementsError(errorMessage);
+          setOpsConventionPriceSnapshots(null);
+          setOpsConventionPriceSnapshotsError(errorMessage);
+          setOpsConventionSaleSessions(null);
+          setOpsConventionSaleSessionsError(errorMessage);
+        }
+      } finally {
+        if (!ignore) {
+          setOpsConventionSummaryLoading(false);
+          setOpsConventionEventsLoading(false);
+          setOpsConventionAssignmentsLoading(false);
+          setOpsConventionMovementsLoading(false);
+          setOpsConventionPriceSnapshotsLoading(false);
+          setOpsConventionSaleSessionsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsLiquiditySummaryLoading(true);
+      setOpsLiquiditySummaryError(null);
+      try {
+        const summary = await apiClient.getOpsLiquidityDashboardSummary();
+        if (!ignore) {
+          setOpsLiquiditySummary(summary);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsLiquiditySummary(null);
+          setOpsLiquiditySummaryError(loadErr instanceof ApiError ? loadErr.message : "Unable to load liquidity summary.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsLiquiditySummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsLiquiditySnapshotsLoading(true);
+      setOpsLiquiditySnapshotsError(null);
+      try {
+        const list = await apiClient.getOpsLiquidity({ limit: 100, offset: 0 });
+        if (!ignore) {
+          setOpsLiquiditySnapshots(list.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsLiquiditySnapshots([]);
+          setOpsLiquiditySnapshotsError(loadErr instanceof ApiError ? loadErr.message : "Unable to load liquidity snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsLiquiditySnapshotsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsListingExportRunsLoading(true);
+      setOpsListingExportRunsError(null);
+      try {
+        const rsp = await apiClient.getOpsListingExportRuns({ limit: 75, offset: 0 });
+        if (!ignore) {
+          setOpsListingExportRuns(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsListingExportRuns(null);
+          setOpsListingExportRunsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load listing export runs.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsListingExportRunsLoading(false);
         }
       }
     })();
@@ -4166,8 +4393,12 @@ export function OperationsPage() {
       >
         <span className="font-semibold uppercase tracking-[0.12em] text-emerald-100/90">Market ops shortcuts</span>
         {[
-          ["Sales ledger", "#ops-market-sales-anchor"],
+          ["Convention", "#convention-ops"],
+          ["Liquidity", "#liquidity-ops"],
+          ["Realized sales", "#sales-ledger-ops"],
+          ["Market sale evidence", "#ops-market-sales-anchor"],
           ["Listings registry", "#listing-registry-ops"],
+          ["Listing exports", "#listing-export-ops"],
           ["Review queue", "#market-sale-review-queue"],
           ["Comp readiness", "#market-comp-eligibility"],
           ["Grouped comps", "#market-comps"],
@@ -4262,6 +4493,532 @@ export function OperationsPage() {
           ) : null}
         </div>
       </details>
+
+      <details
+        id="listing-export-ops"
+        open
+        className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/10 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Marketplace listing exports</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only audit of deterministic CSV artifacts. Rows include owner scope, counters, replay keys, checksums,
+                and stable skip reasons — no inventory decrements or live marketplace posting occurs on this ledger.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / exports
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/15 pt-4">
+          {opsListingExportDownloadError ? (
+            <div className="mb-3">
+              <StatusBanner tone="error">{opsListingExportDownloadError}</StatusBanner>
+            </div>
+          ) : null}
+          {opsListingExportRunsLoading ? (
+            <p className="text-sm text-slate-400">Loading listing export runs…</p>
+          ) : opsListingExportRunsError ? (
+            <StatusBanner tone="error">{opsListingExportRunsError}</StatusBanner>
+          ) : opsListingExportRuns ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Run</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Channel</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Exported</th>
+                    <th className="p-3 font-medium">Skipped</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                    <th className="p-3 font-medium">Created</th>
+                    <th className="p-3 font-medium">Completed</th>
+                    <th className="p-3 font-medium">Artifacts</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsListingExportRuns.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={10}>
+                        No export attempts recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsListingExportRuns.items.map((run) => (
+                      <tr key={run.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{run.id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{run.owner_user_id}</td>
+                        <td className="p-3">{run.channel}</td>
+                        <td className="p-3">{run.status}</td>
+                        <td className="p-3">{run.exported_listing_count}</td>
+                        <td className="p-3">{run.skipped_listing_count}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(run.checksum)}</td>
+                        <td className="p-3 text-slate-400">{formatDateTime(run.created_at)}</td>
+                        <td className="p-3 text-slate-400">{run.completed_at ? formatDateTime(run.completed_at) : "—"}</td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            className="rounded-full border border-cyan-400/35 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10 disabled:opacity-40"
+                            disabled={run.status !== "COMPLETED"}
+                            onClick={() => {
+                              void (async () => {
+                                setOpsListingExportDownloadError(null);
+                                try {
+                                  await apiClient.downloadOpsListingExportCsv(run.id);
+                                } catch (err) {
+                                  setOpsListingExportDownloadError(
+                                    err instanceof ApiError ? err.message : "Unable to download export CSV.",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            CSV
+                          </button>
+                          <div className="mt-2 text-[10px] text-slate-500">
+                            Replay:
+                            <span className="ml-1 font-mono text-slate-400">{run.replay_key ?? "—"}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <section
+        id="convention-ops"
+        className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/12 p-5 shadow-xl shadow-black/15"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Convention / show operations</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Read-only operator view of convention events, assignments, movement history, temporary pricing, and sale
+              sessions. The surface is descriptive only and preserves append-only operational history.
+            </p>
+          </div>
+          <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+            Ops / convention
+          </span>
+        </div>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          {opsConventionSummaryLoading ? (
+            <p className="text-sm text-slate-400">Loading convention summary…</p>
+          ) : opsConventionSummaryError ? (
+            <StatusBanner tone="error">{opsConventionSummaryError}</StatusBanner>
+          ) : opsConventionSummary ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Active conventions" value={String(opsConventionSummary.active_convention_count)} />
+                <StatCard label="Assigned inventory" value={String(opsConventionSummary.assigned_inventory_count)} />
+                <StatCard label="Wall books" value={String(opsConventionSummary.wall_book_count)} />
+                <StatCard label="Showcases" value={String(opsConventionSummary.showcase_count)} />
+                <StatCard label="Active sale sessions" value={String(opsConventionSummary.active_sale_session_count)} />
+              </div>
+              <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Event</th>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Window</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsConventionSummary.recent_events.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          No convention events recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsConventionSummary.recent_events.slice(0, 5).map((event) => (
+                        <tr key={event.id}>
+                          <td className="p-3 text-slate-200">{event.name}</td>
+                          <td className="p-3 text-slate-300">{event.event_type.replace(/_/g, " ")}</td>
+                          <td className="p-3 text-slate-300">{event.status}</td>
+                          <td className="p-3 text-slate-300">
+                            {formatDate(event.start_date)} - {formatDate(event.end_date)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Assignments</p>
+              {opsConventionAssignmentsLoading ? (
+                <p className="mt-3 text-sm text-slate-400">Loading convention assignments…</p>
+              ) : opsConventionAssignmentsError ? (
+                <div className="mt-3">
+                  <StatusBanner tone="error">{opsConventionAssignmentsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-3 overflow-auto rounded-xl border border-white/10 bg-slate-900/55">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Event</th>
+                        <th className="p-3 font-medium">Inventory</th>
+                        <th className="p-3 font-medium">Type</th>
+                        <th className="p-3 font-medium">Location</th>
+                        <th className="p-3 font-medium">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsConventionAssignments?.items.length ? (
+                        opsConventionAssignments.items.slice(0, 6).map((assignment) => (
+                          <tr key={assignment.id}>
+                            <td className="p-3 font-mono text-[11px]">#{assignment.convention_event_id}</td>
+                            <td className="p-3 font-mono text-[11px]">#{assignment.inventory_item_id}</td>
+                            <td className="p-3 text-slate-300">{assignment.assignment_type}</td>
+                            <td className="p-3 text-slate-300">{assignment.display_location ?? "—"}</td>
+                            <td className="p-3 text-slate-300">
+                              {assignment.local_price_amount ? `${assignment.local_price_currency ?? ""} ${assignment.local_price_amount}` : "—"}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={5}>
+                            No convention assignments recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Movement history</p>
+              {opsConventionMovementsLoading ? (
+                <p className="mt-3 text-sm text-slate-400">Loading movement history…</p>
+              ) : opsConventionMovementsError ? (
+                <div className="mt-3">
+                  <StatusBanner tone="error">{opsConventionMovementsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-3 overflow-auto rounded-xl border border-white/10 bg-slate-900/55">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Event</th>
+                        <th className="p-3 font-medium">Inventory</th>
+                        <th className="p-3 font-medium">Type</th>
+                        <th className="p-3 font-medium">From</th>
+                        <th className="p-3 font-medium">To</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsConventionMovements?.items.length ? (
+                        opsConventionMovements.items.slice(0, 6).map((movement) => (
+                          <tr key={movement.id}>
+                            <td className="p-3 font-mono text-[11px]">#{movement.convention_event_id}</td>
+                            <td className="p-3 font-mono text-[11px]">#{movement.inventory_item_id}</td>
+                            <td className="p-3 text-slate-300">{movement.movement_type}</td>
+                            <td className="p-3 text-slate-300">{movement.from_location ?? "—"}</td>
+                            <td className="p-3 text-slate-300">{movement.to_location ?? "—"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={5}>
+                            No movement history recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Temporary pricing</p>
+              {opsConventionPriceSnapshotsLoading ? (
+                <p className="mt-3 text-sm text-slate-400">Loading convention pricing…</p>
+              ) : opsConventionPriceSnapshotsError ? (
+                <div className="mt-3">
+                  <StatusBanner tone="error">{opsConventionPriceSnapshotsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-3 overflow-auto rounded-xl border border-white/10 bg-slate-900/55">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Event</th>
+                        <th className="p-3 font-medium">Inventory</th>
+                        <th className="p-3 font-medium">Price</th>
+                        <th className="p-3 font-medium">Source</th>
+                        <th className="p-3 font-medium">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsConventionPriceSnapshots?.items.length ? (
+                        opsConventionPriceSnapshots.items.slice(0, 6).map((price) => (
+                          <tr key={price.id}>
+                            <td className="p-3 font-mono text-[11px]">#{price.convention_event_id}</td>
+                            <td className="p-3 font-mono text-[11px]">#{price.inventory_item_id}</td>
+                            <td className="p-3 text-slate-300">
+                              {price.currency} {price.price_amount}
+                            </td>
+                            <td className="p-3 text-slate-300">{price.pricing_source}</td>
+                            <td className="p-3 text-slate-400">{formatDateTime(price.created_at)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={5}>
+                            No convention price snapshots recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Active sessions</p>
+              {opsConventionSaleSessionsLoading ? (
+                <p className="mt-3 text-sm text-slate-400">Loading sale sessions…</p>
+              ) : opsConventionSaleSessionsError ? (
+                <div className="mt-3">
+                  <StatusBanner tone="error">{opsConventionSaleSessionsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-3 overflow-auto rounded-xl border border-white/10 bg-slate-900/55">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Session</th>
+                        <th className="p-3 font-medium">Event</th>
+                        <th className="p-3 font-medium">Status</th>
+                        <th className="p-3 font-medium">Opened</th>
+                        <th className="p-3 font-medium">Closed</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsConventionSaleSessions?.items.length ? (
+                        opsConventionSaleSessions.items.slice(0, 6).map((sessionRow) => (
+                          <tr key={sessionRow.id}>
+                            <td className="p-3 font-mono text-[11px]">#{sessionRow.id}</td>
+                            <td className="p-3 font-mono text-[11px]">#{sessionRow.convention_event_id}</td>
+                            <td className="p-3 text-slate-300">{sessionRow.status}</td>
+                            <td className="p-3 text-slate-400">{formatDateTime(sessionRow.opened_at)}</td>
+                            <td className="p-3 text-slate-400">{sessionRow.closed_at ? formatDateTime(sessionRow.closed_at) : "—"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={5}>
+                            No convention sale sessions recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="liquidity-ops"
+        className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/12 p-5 shadow-xl shadow-black/15"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Inventory liquidity engine</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Deterministic liquidity snapshots derived from listing velocity, stale thresholds, and actual sales. The
+              panel is read-only and explains every result through persisted evidence rows.
+            </p>
+          </div>
+          <span className="rounded-full border border-sky-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-100/90">
+            Ops / liquidity
+          </span>
+        </div>
+        <div className="mt-5 border-t border-sky-200/15 pt-4">
+          {opsLiquiditySummaryLoading ? (
+            <p className="text-sm text-slate-400">Loading liquidity summary…</p>
+          ) : opsLiquiditySummaryError ? (
+            <StatusBanner tone="error">{opsLiquiditySummaryError}</StatusBanner>
+          ) : opsLiquiditySummary ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="High liquidity snapshots" value={String(opsLiquiditySummary.high_liquidity_count)} />
+                <StatCard label="Stale inventory snapshots" value={String(opsLiquiditySummary.stale_inventory_count)} />
+                <StatCard
+                  label="Median days to sale"
+                  value={opsLiquiditySummary.median_days_to_sale ? `${opsLiquiditySummary.median_days_to_sale} days` : "—"}
+                />
+                <StatCard label="Sell-through %" value={`${opsLiquiditySummary.sell_through_pct}%`} />
+              </div>
+              <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Event</th>
+                      <th className="p-3 font-medium">Threshold</th>
+                      <th className="p-3 font-medium">Days active</th>
+                      <th className="p-3 font-medium">Listing</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsLiquiditySummary.recent_stale_events.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          No stale events recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsLiquiditySummary.recent_stale_events.slice(0, 6).map((evt) => (
+                        <tr key={evt.id}>
+                          <td className="p-3 text-slate-200">{evt.event_type.replace(/_/g, " ")}</td>
+                          <td className="p-3 text-slate-300">{evt.threshold_days}+ days</td>
+                          <td className="p-3 text-slate-300">{evt.days_active} days</td>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">#{evt.listing_id}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+          <div className="mt-5">
+            {opsLiquiditySnapshotsLoading ? (
+              <p className="text-sm text-slate-400">Loading liquidity snapshots…</p>
+            ) : opsLiquiditySnapshotsError ? (
+              <StatusBanner tone="error">{opsLiquiditySnapshotsError}</StatusBanner>
+            ) : (
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Snapshot</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Channel</th>
+                      <th className="p-3 font-medium">Sell-through</th>
+                      <th className="p-3 font-medium">Stale</th>
+                      <th className="p-3 font-medium">Relist</th>
+                      <th className="p-3 font-medium">Confidence</th>
+                      <th className="p-3 font-medium">Evidence</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsLiquiditySnapshots.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={9}>
+                          No liquidity snapshots recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsLiquiditySnapshots.map((snapshot) => (
+                        <tr key={snapshot.id}>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">#{snapshot.id}</td>
+                          <td className="p-3 text-slate-200">{snapshot.liquidity_status}</td>
+                          <td className="p-3 text-slate-200">{snapshot.channel ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{snapshot.sell_through_rate_pct}%</td>
+                          <td className="p-3 text-slate-300">{snapshot.stale_listing_rate_pct}%</td>
+                          <td className="p-3 text-slate-300">{snapshot.relist_rate_pct}%</td>
+                          <td className="p-3 text-slate-300">{snapshot.liquidity_confidence}</td>
+                          <td className="p-3 text-slate-300">{snapshot.evidence_count}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{snapshot.checksum.slice(0, 10)}…</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="sales-ledger-ops"
+        className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/15"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Realized sales ledger</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Append-only realized sale truth with deterministic money math, linked listing transitions, and no inventory
+              decrements. This is the economic ledger used for ops review and downstream profitability analysis.
+            </p>
+          </div>
+          <span className="rounded-full border border-emerald-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/90">
+            Ops / realized sales
+          </span>
+        </div>
+        <div className="mt-5 border-t border-emerald-200/15 pt-4">
+          {opsSalesLedgerLoading ? (
+            <p className="text-sm text-slate-400">Loading realized sales…</p>
+          ) : opsSalesLedgerError ? (
+            <StatusBanner tone="error">{opsSalesLedgerError}</StatusBanner>
+          ) : (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Sale</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Channel</th>
+                    <th className="p-3 font-medium">Gross</th>
+                    <th className="p-3 font-medium">Net</th>
+                    <th className="p-3 font-medium">Profit</th>
+                    <th className="p-3 font-medium">Sale date</th>
+                    <th className="p-3 font-medium">Linked listing</th>
+                    <th className="p-3 font-medium">Events</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsSalesLedger.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={9}>
+                        No realized sales recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsSalesLedger.map((sale) => (
+                      <tr key={sale.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{sale.id}</td>
+                        <td className="p-3 text-slate-200">{sale.status}</td>
+                        <td className="p-3 text-slate-200">{sale.channel.replace(/_/g, " ")}</td>
+                        <td className="p-3 text-slate-300">{formatCurrency(sale.gross_sale_amount)}</td>
+                        <td className="p-3 text-slate-300">{formatCurrency(sale.net_proceeds_amount)}</td>
+                        <td className="p-3 text-slate-300">{formatCurrency(sale.realized_profit_amount)}</td>
+                        <td className="p-3 text-slate-400">{formatDate(sale.sale_date)}</td>
+                        <td className="p-3 text-slate-400">{sale.listing_id ? `#${sale.listing_id}` : "—"}</td>
+                        <td className="p-3 text-slate-400">{sale.event_count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
 
       <details
         id="ops-market-sales-anchor"
