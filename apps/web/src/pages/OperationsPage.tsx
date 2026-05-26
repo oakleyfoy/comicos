@@ -109,6 +109,11 @@ import {
   type ScanPipelineDashboardResponse,
   type ScanSessionDetail,
   type ScanSessionSummary,
+  type PortfolioAllocationSnapshotListResponse,
+  type PortfolioExposureEvidenceListResponse,
+  type PortfolioExposureSnapshotListResponse,
+  type PortfolioItemListResponse,
+  type PortfolioListResponse,
   type PortfolioValueSummaryResponse,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
@@ -1483,6 +1488,17 @@ export function OperationsPage() {
   const [opsDealerGradingAlerts, setOpsDealerGradingAlerts] = useState<DealerGradingDashboardAlertRead[]>([]);
   const [opsDealerGradingFeed, setOpsDealerGradingFeed] = useState<DealerGradingDashboardFeedEventRead[]>([]);
   const [opsDealerGradingMetrics, setOpsDealerGradingMetrics] = useState<DealerGradingDashboardMetricRead[]>([]);
+  const [opsPortfolioOwnerDraft, setOpsPortfolioOwnerDraft] = useState("");
+  const [opsPortfolioOwnerApplied, setOpsPortfolioOwnerApplied] = useState<number | undefined>(undefined);
+  const [opsPortfolioList, setOpsPortfolioList] = useState<PortfolioListResponse | null>(null);
+  const [opsPortfolioItems, setOpsPortfolioItems] = useState<PortfolioItemListResponse | null>(null);
+  const [opsPortfolioExposures, setOpsPortfolioExposures] = useState<PortfolioExposureSnapshotListResponse | null>(null);
+  const [opsPortfolioEvidence, setOpsPortfolioEvidence] = useState<PortfolioExposureEvidenceListResponse | null>(null);
+  const [opsPortfolioAllocations, setOpsPortfolioAllocations] = useState<PortfolioAllocationSnapshotListResponse | null>(
+    null,
+  );
+  const [opsPortfolioLoading, setOpsPortfolioLoading] = useState(true);
+  const [opsPortfolioError, setOpsPortfolioError] = useState<string | null>(null);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -2026,6 +2042,49 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsDealerGradingOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsPortfolioLoading(true);
+      setOpsPortfolioError(null);
+      try {
+        const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+        const [portfolios, items, exposures, evidence, allocations] = await Promise.all([
+          apiClient.listOpsPortfolios({ ...scoped, limit: 75, offset: 0 }),
+          apiClient.listOpsPortfolioItems({ ...scoped, limit: 150, offset: 0 }),
+          apiClient.listOpsPortfolioExposures({ ...scoped, latest_batch: true, limit: 250, offset: 0 }),
+          apiClient.listOpsPortfolioExposureEvidence({ ...scoped, limit: 200, offset: 0 }),
+          apiClient.listOpsPortfolioAllocations({ ...scoped, limit: 75, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsPortfolioList(portfolios);
+          setOpsPortfolioItems(items);
+          setOpsPortfolioExposures(exposures);
+          setOpsPortfolioEvidence(evidence);
+          setOpsPortfolioAllocations(allocations);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsPortfolioList(null);
+          setOpsPortfolioItems(null);
+          setOpsPortfolioExposures(null);
+          setOpsPortfolioEvidence(null);
+          setOpsPortfolioAllocations(null);
+          setOpsPortfolioError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio registry ops payloads.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsPortfolioLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -4905,6 +4964,7 @@ export function OperationsPage() {
         {[
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
+          ["Portfolio registry", "#portfolio-registry-ops"],
           ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
@@ -5368,6 +5428,249 @@ export function OperationsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      </details>
+
+      <details
+        id="portfolio-registry-ops"
+        open
+        className="mt-6 rounded-3xl border border-amber-500/35 bg-slate-950/80 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Portfolio registry ops</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only portfolio, exposure snapshots, deterministic evidence joins, allocation rollups, and checksum fields.
+                Scoped with optional owner filter; aligns with `/ops/portfolios*`.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+              Ops / portfolio
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-amber-200/15 pt-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsPortfolioOwnerDraft}
+                onChange={(e) => setOpsPortfolioOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = all owners"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-amber-400/45 px-3 py-2 text-xs font-semibold text-amber-50"
+              onClick={() => {
+                const trimmed = opsPortfolioOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsPortfolioOwnerApplied(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsPortfolioOwnerApplied(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+
+          {opsPortfolioLoading ? (
+            <p className="text-sm text-slate-400">Loading portfolio ops telescope…</p>
+          ) : opsPortfolioError ? (
+            <StatusBanner tone="error">{opsPortfolioError}</StatusBanner>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Portfolios ({opsPortfolioList?.total_items ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Id</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Name</th>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioList?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          No portfolios in this scope yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioList?.items.map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-mono text-[11px]">{row.id}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.owner_user_id}</td>
+                          <td className="p-3">{row.name}</td>
+                          <td className="p-3 text-slate-400">{row.portfolio_type}</td>
+                          <td className="p-3">{row.status}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Portfolio items ({opsPortfolioItems?.total_items ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Id</th>
+                      <th className="p-3 font-medium">Portfolio</th>
+                      <th className="p-3 font-medium">Inventory</th>
+                      <th className="p-3 font-medium">Role</th>
+                      <th className="p-3 font-medium">Removed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioItems?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Portfolio membership rows hydrate after owners create portfolios/items.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioItems?.items.map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-mono text-[11px]">{row.id}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.portfolio_id}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.inventory_item_id}</td>
+                          <td className="p-3">{row.allocation_role}</td>
+                          <td className="p-3 text-slate-400">{row.removed_at ? formatDateTime(row.removed_at) : "active"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Exposure snapshots ({opsPortfolioExposures?.total_items ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Key</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Batch</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioExposures?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Generate exposures from owner dashboard refresh or API to fill this grid.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioExposures?.items.slice(0, 40).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3">{row.exposure_type}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{row.exposure_key}</td>
+                          <td className="p-3">{row.exposure_status}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">
+                            {abbrevExportChecksum(row.generation_batch_checksum)}
+                          </td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Allocation snapshots ({opsPortfolioAllocations?.total_items ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Date</th>
+                      <th className="p-3 font-medium">Items</th>
+                      <th className="p-3 font-medium">Graded/Raw</th>
+                      <th className="p-3 font-medium">Liquidity Hi/Lo</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioAllocations?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Allocation snapshots show descriptive posture counts only.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioAllocations?.items.slice(0, 25).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 whitespace-nowrap">{row.snapshot_date}</td>
+                          <td className="p-3">{row.total_item_count}</td>
+                          <td className="p-3">
+                            {row.graded_item_count} · {row.raw_item_count}
+                          </td>
+                          <td className="p-3">
+                            {row.high_liquidity_count} · {row.low_liquidity_count}
+                          </td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Exposure evidence rows ({opsPortfolioEvidence?.total_items ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">When</th>
+                      <th className="p-3 font-medium">Snapshot</th>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Payload</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioEvidence?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          Evidence materializes alongside exposure snapshots.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioEvidence?.items.slice(0, 35).map((row) => (
+                        <tr key={row.id}>
+                          <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(row.created_at)}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.portfolio_exposure_snapshot_id}</td>
+                          <td className="p-3">{row.evidence_type}</td>
+                          <td className="p-3 text-[10px] text-slate-400">
+                            {JSON.stringify(row.evidence_value_json).slice(0, 160)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </details>
 

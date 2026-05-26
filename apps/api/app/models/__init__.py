@@ -93,6 +93,14 @@ from app.models.grading_operational_reporting import (
     GradingOperationalReportItem,
     GradingOperationalReportRun,
 )
+from app.models.portfolio import (
+    Portfolio,
+    PortfolioAllocationSnapshot,
+    PortfolioExposureEvidence,
+    PortfolioExposureSnapshot,
+    PortfolioItem,
+    PortfolioLifecycleEvent,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -278,6 +286,12 @@ __all__ = [
     "GradingOperationalReportFile",
     "GradingOperationalReportItem",
     "GradingOperationalReportRun",
+    "Portfolio",
+    "PortfolioAllocationSnapshot",
+    "PortfolioExposureEvidence",
+    "PortfolioExposureSnapshot",
+    "PortfolioItem",
+    "PortfolioLifecycleEvent",
     "Order",
     "OrderItem",
     "Publisher",

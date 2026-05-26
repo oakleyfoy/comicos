@@ -272,6 +272,22 @@ Resolved routes:
   - Automatic FMV, pricing, liquidity, or inventory mutation from grading outputs
   - Background workers, websocket status streaming, or external BI sink automation unless replay/checksum invariants are preserved
 
+## P38-01 — Portfolio registry & exposure engine (2026-05-27)
+
+- Architecture note: deterministic portfolio grouping, exposure/allocation snapshots, evidence, lifecycle events, replay keys, checksums, and owner vs `/ops/portfolio*` separation are documented in `docs/PORTFOLIO_REGISTRY_ARCHITECTURE.md`. Engines are descriptive only — they never mutate inventory, FMV, listings, or sales ledgers automatically.
+- SPA surfaces intentionally stay lightweight (dashboard summary cards, ops tables, inventory detail teaser). Character/creator exposure dimensions remain keyed as `unknown` until canonical attribution exists on inventory/issue graphs.
+
+### Deferred scope (beyond P38-01 / explicitly not shipped)
+
+| Track | Deferred item |
+| --- | --- |
+| Optimization | Automated duplicate rollup / merging across portfolios |
+| Recommendations | Sell/hold guidance, acquisition advice, market timing |
+| Predictive | ML portfolio strategy, forecasting, scenario simulation |
+| Automation | Automated portfolio rebalancing or target allocation enforcement |
+| Tax / accounting | Tax-aware optimization, wash-sale logic, accounting exports |
+| AI | AI-driven portfolio construction or dynamic strategy |
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

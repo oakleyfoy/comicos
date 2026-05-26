@@ -36,6 +36,7 @@ import {
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
   type PhysicalIntakeSummaryResponse,
+  type PortfolioIntelligenceSummary,
   type MarketSourceImportRunSummaryRead,
   type MarketSourceRead,
   type MarketSaleMatchSuggestionOpsListResponse,
@@ -910,6 +911,9 @@ export function DashboardPage() {
   const [gradingRoiSummary, setGradingRoiSummary] = useState<GradingRoiDashboardSummary | null>(null);
   const [gradingRoiLoading, setGradingRoiLoading] = useState(true);
   const [gradingRoiError, setGradingRoiError] = useState<string | null>(null);
+  const [gradingRiskSummary, setGradingRiskSummary] = useState<GradingRiskDashboardSummary | null>(null);
+  const [gradingRiskLoading, setGradingRiskLoading] = useState(true);
+  const [gradingRiskError, setGradingRiskError] = useState<string | null>(null);
   const [gradingSubmissionSummary, setGradingSubmissionSummary] = useState<GradingSubmissionDashboardSummary | null>(
     null,
   );
@@ -923,9 +927,10 @@ export function DashboardPage() {
     useState<GradingRecommendationDashboardSummary | null>(null);
   const [gradingRecommendationLoading, setGradingRecommendationLoading] = useState(true);
   const [gradingRecommendationError, setGradingRecommendationError] = useState<string | null>(null);
-  const [gradingRiskSummary, setGradingRiskSummary] = useState<GradingRiskDashboardSummary | null>(null);
-  const [gradingRiskLoading, setGradingRiskLoading] = useState(true);
-  const [gradingRiskError, setGradingRiskError] = useState<string | null>(null);
+  const [portfolioIntelSummary, setPortfolioIntelSummary] = useState<PortfolioIntelligenceSummary | null>(null);
+  const [portfolioIntelLoading, setPortfolioIntelLoading] = useState(true);
+  const [portfolioIntelError, setPortfolioIntelError] = useState<string | null>(null);
+  const [portfolioIntelGenBusy, setPortfolioIntelGenBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const dealerGradingMetricMap = useMemo(
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
@@ -1706,6 +1711,42 @@ export function DashboardPage() {
     void (async () => {
       if (!user) {
         if (!ignore) {
+          setPortfolioIntelSummary(null);
+          setPortfolioIntelLoading(false);
+          setPortfolioIntelError(null);
+        }
+        return;
+      }
+      setPortfolioIntelLoading(true);
+      setPortfolioIntelError(null);
+      try {
+        const summary = await apiClient.getPortfolioIntelligenceSummary();
+        if (!ignore) {
+          setPortfolioIntelSummary(summary);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setPortfolioIntelSummary(null);
+          setPortfolioIntelError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio intelligence rollup.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setPortfolioIntelLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
           setGradingRiskSummary(null);
           setGradingRiskLoading(false);
           setGradingRiskError(null);
@@ -2055,6 +2096,24 @@ export function DashboardPage() {
       setDealerGradingDashError(err instanceof ApiError ? err.message : "Unable to generate grading dashboard snapshot.");
     } finally {
       setDealerGradingGenBusy(false);
+    }
+  }
+
+  async function refreshPortfolioIntelligenceSnapshots(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setPortfolioIntelGenBusy(true);
+    setPortfolioIntelError(null);
+    try {
+      const rk = `web-portfolio-dash-${Date.now()}`;
+      await apiClient.generatePortfolioExposures({ replay_key: rk });
+      await apiClient.generatePortfolioAllocations({ replay_key: rk });
+      setPortfolioIntelSummary(await apiClient.getPortfolioIntelligenceSummary());
+    } catch (err) {
+      setPortfolioIntelError(err instanceof ApiError ? err.message : "Unable to refresh portfolio intelligence.");
+    } finally {
+      setPortfolioIntelGenBusy(false);
     }
   }
 
@@ -3184,6 +3243,82 @@ export function DashboardPage() {
                     );
                   })()}
                 </div>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="portfolio-intelligence-dash"
+              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Portfolio intelligence</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic exposure & allocation truth</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                    Registry-grade rollups: portfolio counts, FMV and cost basis anchors (when present), concentration flags,
+                    liquidity split, graded vs raw posture. Observational — no trades, acquisitions, predictive signals, or
+                    hidden inventory mutation.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void refreshPortfolioIntelligenceSnapshots()}
+                    disabled={portfolioIntelGenBusy}
+                    className="rounded-xl border border-amber-400/45 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-50 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {portfolioIntelGenBusy ? "Refreshing…" : "Refresh exposures & allocation"}
+                  </button>
+                  <Link
+                    to="/ops#portfolio-registry-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-amber-300/45 hover:bg-white/5"
+                  >
+                    Ops portfolio tables
+                  </Link>
+                </div>
+              </div>
+
+              {portfolioIntelLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading portfolio rollup…</p>
+              ) : portfolioIntelError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{portfolioIntelError}</StatusBanner>
+                </div>
+              ) : portfolioIntelSummary ? (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard label="Active portfolios" value={String(portfolioIntelSummary.active_portfolio_count)} />
+                  <StatCard label="Items in scope" value={String(portfolioIntelSummary.total_item_count ?? "—")} />
+                  <StatCard label="Total FMV (scope)" value={formatMaybeCurrency(portfolioIntelSummary.total_fmv_amount)} />
+                  <StatCard label="Cost basis (scope)" value={formatMaybeCurrency(portfolioIntelSummary.total_cost_basis_amount)} />
+                  <StatCard
+                    label="Graded / raw"
+                    value={`${portfolioIntelSummary.graded_item_count ?? "—"} · ${portfolioIntelSummary.raw_item_count ?? "—"}`}
+                  />
+                  <StatCard
+                    label="Liquidity high · low"
+                    value={`${portfolioIntelSummary.high_liquidity_count ?? "—"} · ${portfolioIntelSummary.low_liquidity_count ?? "—"}`}
+                  />
+                  <StatCard
+                    label="Concentrated / overexposed"
+                    value={
+                      portfolioIntelSummary.overexposed_rows.length
+                        ? `${portfolioIntelSummary.overexposed_rows.length} buckets (see Ops for detail)`
+                        : "—"
+                    }
+                  />
+                  <StatCard
+                    label="Exposure batch checksum"
+                    value={
+                      portfolioIntelSummary.latest_generation_batch_checksum
+                        ? shortenChecksum(portfolioIntelSummary.latest_generation_batch_checksum)
+                        : "—"
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">No portfolio intelligence loaded.</p>
               )}
             </section>
           ) : null}

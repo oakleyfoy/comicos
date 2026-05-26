@@ -30,6 +30,7 @@ from app.schemas.inventory import (
     ReleaseCalendarPresence,
 )
 from app.services.inventory_fmv import build_inventory_fmv_attachment, summarize_inventory_fmv
+from app.services.portfolio_registry import inventory_portfolio_teaser
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.ops import (
     OpsInventoryDuplicateCandidateGroup,
@@ -863,6 +864,12 @@ def get_inventory_copy_detail(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,
+    )
+    merged["portfolio_intelligence"] = inventory_portfolio_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_copy_id=inventory_copy_id,
+        publisher_display_name=str(merged.get("publisher") or ""),
     )
     return InventoryDetailResponse.model_validate(merged)
 

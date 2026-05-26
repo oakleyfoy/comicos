@@ -199,6 +199,22 @@ from app.schemas.grading_operational_reporting import (
     GradingOperationalReportRunDetailRead,
     GradingOperationalReportRunListResponse,
 )
+from app.schemas.portfolio import (
+    PortfolioAllocationGenerateResponse,
+    PortfolioAllocationSnapshotListResponse,
+    PortfolioCreatePayload,
+    PortfolioExposureEvidenceListResponse,
+    PortfolioExposureGenerateResponse,
+    PortfolioExposureSnapshotListResponse,
+    PortfolioGenerateScopePayload,
+    PortfolioIntelligenceSummary,
+    PortfolioItemCreatePayload,
+    PortfolioItemListResponse,
+    PortfolioItemRead,
+    PortfolioListResponse,
+    PortfolioRead,
+    PortfolioUpdatePayload,
+)
 from app.schemas.grading_candidate import (
     GradingCandidateCreatePayload,
     GradingCandidateDashboardSummary,
@@ -752,6 +768,7 @@ from app.services.inventory_fmv import (
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import dealer_grading_dashboard as dealer_grading_dashboard_service
 from app.services import grading_reporting as grading_reporting_service
+from app.services import portfolio_registry as portfolio_registry_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
@@ -9785,6 +9802,338 @@ def ops_list_dealer_grading_dashboard_feed(
         event_type=event_type,
         created_from=created_from,
         created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+# ——— P38-01 portfolio registry & exposure ———
+
+
+@app.get("/portfolios", response_model=PortfolioListResponse)
+def owner_list_portfolios(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioListResponse:
+    return portfolio_registry_service.list_portfolios_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        status_filter=status_filter.upper() if status_filter else None,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/portfolios", response_model=PortfolioRead, status_code=status.HTTP_201_CREATED)
+def owner_create_portfolio(
+    payload: PortfolioCreatePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRead:
+    detail, replayed = portfolio_registry_service.create_portfolio(
+        session, owner_user_id=int(current_user.id), payload=payload
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/portfolios/{portfolio_id}", response_model=PortfolioRead)
+def owner_get_portfolio(
+    portfolio_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRead:
+    return portfolio_registry_service.get_portfolio_owner(
+        session, owner_user_id=int(current_user.id), portfolio_id=portfolio_id
+    )
+
+
+@app.patch("/portfolios/{portfolio_id}", response_model=PortfolioRead)
+def owner_patch_portfolio(
+    portfolio_id: int,
+    payload: PortfolioUpdatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRead:
+    return portfolio_registry_service.update_portfolio_owner(
+        session, owner_user_id=int(current_user.id), portfolio_id=portfolio_id, payload=payload
+    )
+
+
+@app.post("/portfolios/{portfolio_id}/archive", response_model=PortfolioRead)
+def owner_archive_portfolio(
+    portfolio_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRead:
+    return portfolio_registry_service.archive_portfolio_owner(
+        session, owner_user_id=int(current_user.id), portfolio_id=portfolio_id
+    )
+
+
+@app.get("/portfolios/{portfolio_id}/items", response_model=PortfolioItemListResponse)
+def owner_list_portfolio_items(
+    portfolio_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    include_removed: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioItemListResponse:
+    return portfolio_registry_service.list_portfolio_items_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        include_removed=include_removed,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/portfolios/{portfolio_id}/items", response_model=PortfolioItemRead, status_code=status.HTTP_201_CREATED)
+def owner_add_portfolio_item(
+    portfolio_id: int,
+    payload: PortfolioItemCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioItemRead:
+    return portfolio_registry_service.add_portfolio_item(
+        session, owner_user_id=int(current_user.id), portfolio_id=portfolio_id, payload=payload
+    )
+
+
+@app.post("/portfolios/{portfolio_id}/items/{portfolio_item_id}/remove", response_model=PortfolioItemRead)
+def owner_remove_portfolio_item(
+    portfolio_id: int,
+    portfolio_item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioItemRead:
+    return portfolio_registry_service.remove_portfolio_item(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        portfolio_item_id=portfolio_item_id,
+    )
+
+
+@app.get("/portfolio-intelligence/summary", response_model=PortfolioIntelligenceSummary)
+def owner_portfolio_intelligence_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioIntelligenceSummary:
+    return portfolio_registry_service.portfolio_intelligence_summary(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/portfolio-exposures", response_model=PortfolioExposureSnapshotListResponse)
+def owner_list_portfolio_exposures(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    generation_batch_checksum: str | None = Query(default=None),
+    latest_batch: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioExposureSnapshotListResponse:
+    return portfolio_registry_service.list_exposure_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        generation_batch_checksum=generation_batch_checksum,
+        latest_batch=latest_batch,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-exposure-evidence", response_model=PortfolioExposureEvidenceListResponse)
+def owner_list_portfolio_exposure_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_exposure_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioExposureEvidenceListResponse:
+    return portfolio_registry_service.list_exposure_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_exposure_snapshot_id=portfolio_exposure_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post(
+    "/portfolio-exposures/generate",
+    response_model=PortfolioExposureGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_portfolio_exposures(
+    payload: PortfolioGenerateScopePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioExposureGenerateResponse:
+    body = portfolio_registry_service.generate_exposure_snapshots(session, owner_user_id=int(current_user.id), payload=payload)
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/portfolio-allocations", response_model=PortfolioAllocationSnapshotListResponse)
+def owner_list_portfolio_allocations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioAllocationSnapshotListResponse:
+    return portfolio_registry_service.list_allocation_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post(
+    "/portfolio-allocations/generate",
+    response_model=PortfolioAllocationGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_portfolio_allocations(
+    payload: PortfolioGenerateScopePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioAllocationGenerateResponse:
+    body = portfolio_registry_service.generate_allocation_snapshot(session, owner_user_id=int(current_user.id), payload=payload)
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/ops/portfolios", response_model=PortfolioListResponse)
+def ops_list_portfolios(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.list_portfolios_ops(
+        session,
+        owner_user_id=owner_user_id,
+        status_filter=status_filter.upper() if status_filter else None,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolios/{portfolio_id}", response_model=PortfolioRead)
+def ops_get_portfolio_detail(
+    portfolio_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> PortfolioRead:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.get_portfolio_ops(session, portfolio_id=portfolio_id, owner_user_id=owner_user_id)
+
+
+@app.get("/ops/portfolio-items", response_model=PortfolioItemListResponse)
+def ops_list_portfolio_items(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    include_removed: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioItemListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.list_portfolio_items_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        include_removed=include_removed,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-exposures", response_model=PortfolioExposureSnapshotListResponse)
+def ops_list_portfolio_exposures_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    generation_batch_checksum: str | None = Query(default=None),
+    latest_batch: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioExposureSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.list_exposure_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        generation_batch_checksum=generation_batch_checksum,
+        latest_batch=latest_batch,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-exposure-evidence", response_model=PortfolioExposureEvidenceListResponse)
+def ops_list_portfolio_exposure_evidence_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_exposure_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioExposureEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.list_exposure_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_exposure_snapshot_id=portfolio_exposure_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-allocations", response_model=PortfolioAllocationSnapshotListResponse)
+def ops_list_portfolio_allocations_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioAllocationSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_registry_service.list_allocation_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
         limit=limit,
         offset=offset,
     )

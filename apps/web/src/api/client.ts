@@ -5190,6 +5190,19 @@ export interface HighResReviewRequestStatsRead {
   by_status: Record<string, number>;
 }
 
+export interface InventoryPortfolioMembershipRead {
+  portfolio_id: number;
+  portfolio_name: string;
+  portfolio_type: string;
+  allocation_role: string;
+}
+
+export interface InventoryPortfolioIntelligenceTeaser {
+  memberships: InventoryPortfolioMembershipRead[];
+  publisher_exposure_status: string | null;
+  publisher_exposure_pct_value: string | null;
+}
+
 export interface InventoryDetail extends InventoryItem {
   copy_number: number;
   metadata_identity_key?: string | null;
@@ -5208,6 +5221,7 @@ export interface InventoryDetail extends InventoryItem {
   grading_reconciliation?: InventoryGradingReconciliationBadge | null;
   grading_recommendation?: InventoryGradingRecommendationBadge | null;
   grading_risk?: InventoryGradingRiskBadge | null;
+  portfolio_intelligence?: InventoryPortfolioIntelligenceTeaser | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -5907,6 +5921,165 @@ function buildOcrReviewQueueQueryString(params: OcrReviewQueueQueryParams): stri
 function encodeOptionalReasonQuery(reason?: string): string {
   const trimmed = reason?.trim();
   return trimmed ? `?reason=${encodeURIComponent(trimmed)}` : "";
+}
+
+/** P38-01 deterministic portfolio intelligence (truth layer only). */
+
+export interface PortfolioRead {
+  id: number;
+  owner_user_id: number;
+  name: string;
+  description: string | null;
+  portfolio_type: string;
+  status: string;
+  replay_key: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface PortfolioListResponse {
+  items: PortfolioRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioExposureSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  generation_scope_key: string;
+  replay_key: string | null;
+  generation_batch_checksum: string;
+  exposure_type: string;
+  exposure_key: string;
+  item_count: number;
+  total_fmv_amount: string | null;
+  total_cost_basis_amount: string | null;
+  total_realized_sales_amount: string | null;
+  percentage_of_portfolio_value: string | null;
+  percentage_of_portfolio_count: string | null;
+  exposure_status: string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioExposureEvidenceRead {
+  id: number;
+  portfolio_exposure_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PortfolioExposureEvidenceListResponse {
+  items: PortfolioExposureEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioExposureSnapshotListResponse {
+  items: PortfolioExposureSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioExposureGenerateResponse {
+  generation_batch_checksum: string;
+  snapshot_date: string;
+  snapshots: PortfolioExposureSnapshotRead[];
+  replayed: boolean;
+}
+
+export interface PortfolioAllocationSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  generation_scope_key: string;
+  replay_key: string | null;
+  total_item_count: number;
+  total_fmv_amount: string | null;
+  total_cost_basis_amount: string | null;
+  total_realized_sales_amount: string | null;
+  graded_item_count: number;
+  raw_item_count: number;
+  listed_item_count: number;
+  sold_item_count: number;
+  high_liquidity_count: number;
+  low_liquidity_count: number;
+  grading_candidate_count: number;
+  sale_candidate_count: number;
+  duplicate_count: number;
+  convention_assigned_count: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioAllocationSnapshotListResponse {
+  items: PortfolioAllocationSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioAllocationGenerateResponse {
+  snapshot_date: string;
+  allocation: PortfolioAllocationSnapshotRead | null;
+  replayed: boolean;
+}
+
+export interface PortfolioIntelligenceExposureTeaser {
+  exposure_type: string;
+  exposure_key: string;
+  exposure_status: string;
+  percentage_of_portfolio_value: string | null;
+}
+
+export interface PortfolioIntelligenceSummary {
+  active_portfolio_count: number;
+  latest_allocation_scope_key: string | null;
+  latest_allocation_checksum: string | null;
+  latest_generation_batch_checksum: string | null;
+  total_item_count: number | null;
+  total_fmv_amount: string | null;
+  total_cost_basis_amount: string | null;
+  graded_item_count: number | null;
+  raw_item_count: number | null;
+  low_liquidity_count: number | null;
+  high_liquidity_count: number | null;
+  overexposed_rows: PortfolioIntelligenceExposureTeaser[];
+}
+
+export interface PortfolioGenerateScopePayload {
+  portfolio_id?: number | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface PortfolioItemRead {
+  id: number;
+  portfolio_id: number;
+  inventory_item_id: number;
+  allocation_role: string;
+  allocated_value_amount: string | null;
+  allocated_value_source: string | null;
+  added_at: string;
+  removed_at: string | null;
+  created_at: string;
+}
+
+export interface PortfolioItemListResponse {
+  items: PortfolioItemRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
 }
 
 function buildQueryString(
@@ -10056,6 +10229,83 @@ export const apiClient = {
 
   fetchCoverImageBlob(path: string): Promise<Blob> {
     return fetchBinary(path);
+  },
+
+  /** P38-01 portfolio registry */
+  getPortfolioIntelligenceSummary(): Promise<PortfolioIntelligenceSummary> {
+    return request<PortfolioIntelligenceSummary>("/portfolio-intelligence/summary");
+  },
+
+  generatePortfolioExposures(payload: PortfolioGenerateScopePayload): Promise<PortfolioExposureGenerateResponse> {
+    return request<PortfolioExposureGenerateResponse>("/portfolio-exposures/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generatePortfolioAllocations(payload: PortfolioGenerateScopePayload): Promise<PortfolioAllocationGenerateResponse> {
+    return request<PortfolioAllocationGenerateResponse>("/portfolio-allocations/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOpsPortfolios(params?: {
+    owner_user_id?: number;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PortfolioListResponse>(`/ops/portfolios${q}`);
+  },
+
+  listOpsPortfolioItems(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    include_removed?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioItemListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | number | undefined>) : "";
+    return request<PortfolioItemListResponse>(`/ops/portfolio-items${q}`);
+  },
+
+  listOpsPortfolioExposures(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    generation_batch_checksum?: string;
+    latest_batch?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioExposureSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<PortfolioExposureSnapshotListResponse>(`/ops/portfolio-exposures${q}`);
+  },
+
+  listOpsPortfolioExposureEvidence(params?: {
+    owner_user_id?: number;
+    portfolio_exposure_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioExposureEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<PortfolioExposureEvidenceListResponse>(`/ops/portfolio-exposure-evidence${q}`);
+  },
+
+  listOpsPortfolioAllocations(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioAllocationSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<PortfolioAllocationSnapshotListResponse>(`/ops/portfolio-allocations${q}`);
   },
 };
 

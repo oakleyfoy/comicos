@@ -2783,6 +2783,36 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.portfolio_intelligence &&
+              (detail.portfolio_intelligence.memberships.length > 0 ||
+                detail.portfolio_intelligence.publisher_exposure_status) ? (
+                <div className="rounded-2xl border border-amber-400/35 bg-amber-950/25 px-4 py-3 text-[11px] text-amber-50">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-amber-100/90">Portfolio intelligence</p>
+                  {detail.portfolio_intelligence.memberships.length ? (
+                    <p className="mt-1 flex flex-wrap gap-2 text-xs text-slate-100">
+                      {detail.portfolio_intelligence.memberships.map((membership) => (
+                        <span
+                          key={`${membership.portfolio_id}-${membership.allocation_role}`}
+                          className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px]"
+                        >
+                          {membership.portfolio_name} · {membership.allocation_role}
+                        </span>
+                      ))}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">No explicit portfolio memberships recorded.</p>
+                  )}
+                  {detail.portfolio_intelligence.publisher_exposure_status ? (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Publisher bucket {detail.portfolio_intelligence.publisher_exposure_status}
+                      {detail.portfolio_intelligence.publisher_exposure_pct_value
+                        ? ` · basis ${detail.portfolio_intelligence.publisher_exposure_pct_value}%`
+                        : ""}{" "}
+                      (latest ALL_INVENTORY exposure batch)
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {detail.grading_spread ? (
                 <div className="rounded-2xl border border-violet-400/35 bg-violet-950/30 px-4 py-3 text-[11px] text-violet-100">
                   <p className="font-semibold uppercase tracking-[0.12em] text-violet-200/90">Grading spread</p>
