@@ -213,6 +213,16 @@ from app.schemas.grading_roi import (
     GradingRoiHistoryListResponse,
     GradingRoiListResponse,
 )
+from app.schemas.grading_submission import (
+    GradingSubmissionCreatePayload,
+    GradingSubmissionDashboardSummary,
+    GradingSubmissionDetailRead,
+    GradingSubmissionEventListResponse,
+    GradingSubmissionListResponse,
+    GradingSubmissionPatchPayload,
+    GradingSubmissionShipmentCreatePayload,
+    GradingSubmissionShipmentListResponse,
+)
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
     ConventionAssignmentListResponse,
@@ -703,6 +713,7 @@ from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
 from app.services import grading_spread as grading_spread_service
 from app.services import grading_roi as grading_roi_service
+from app.services import grading_submission as grading_submission_service
 from app.services import operational_reporting as operational_reporting_service
 from app.services import listing_export as listing_export_service
 from app.services import listing_intelligence as listing_intelligence_service
@@ -10490,6 +10501,258 @@ def ops_list_grading_roi_history(
         offset=off,
     )
     return grading_roi_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-submission-batches/dashboard-summary", response_model=GradingSubmissionDashboardSummary)
+def owner_grading_submission_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDashboardSummary:
+    return grading_submission_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get(
+    "/ops/grading-submission-batches/dashboard-summary",
+    response_model=GradingSubmissionDashboardSummary,
+    include_in_schema=False,
+)
+def ops_grading_submission_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingSubmissionDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_submission_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.post("/grading-submission-batches", response_model=GradingSubmissionDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_create_grading_submission_batch(
+    payload: GradingSubmissionCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.create_batch_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/grading-submission-batches", response_model=GradingSubmissionListResponse)
+def owner_list_grading_submission_batches(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    target_grader: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    submission_date_from: date | None = Query(default=None),
+    submission_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSubmissionListResponse:
+    lim, off = grading_submission_service.clamp_grading_submission_pagination(limit, offset)
+    rows, total = grading_submission_service.list_batches_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        target_grader=target_grader,
+        status=status,
+        submission_date_from=submission_date_from,
+        submission_date_to=submission_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_submission_service.batch_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-submission-batches/{batch_id}", response_model=GradingSubmissionDetailRead)
+def owner_get_grading_submission_batch(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    batch = grading_submission_service.get_batch_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+    return grading_submission_service._detail_read(session, batch)
+
+
+@app.patch("/grading-submission-batches/{batch_id}", response_model=GradingSubmissionDetailRead)
+def owner_patch_grading_submission_batch(
+    batch_id: int,
+    payload: GradingSubmissionPatchPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.patch_batch_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        batch_id=batch_id,
+        payload=payload,
+    )
+
+
+@app.post("/grading-submission-batches/{batch_id}/ready", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_ready(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_ready_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/ship", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_shipped(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_shipped_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/receive", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_received(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_received_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/grading", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_grading(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_grading_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/return-ship", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_return_shipped(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_return_shipped_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        batch_id=batch_id,
+    )
+
+
+@app.post("/grading-submission-batches/{batch_id}/complete", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_completed(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_complete_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/cancel", response_model=GradingSubmissionDetailRead)
+def owner_mark_grading_submission_cancelled(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.mark_cancelled_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.post("/grading-submission-batches/{batch_id}/shipments", response_model=GradingSubmissionDetailRead)
+def owner_add_grading_submission_shipment(
+    batch_id: int,
+    payload: GradingSubmissionShipmentCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSubmissionDetailRead:
+    return grading_submission_service.add_shipment_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        batch_id=batch_id,
+        payload=payload,
+    )
+
+
+@app.get("/ops/grading-submission-batches", response_model=GradingSubmissionListResponse, include_in_schema=False)
+def ops_list_grading_submission_batches(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    submission_date_from: date | None = Query(default=None),
+    submission_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSubmissionListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_submission_service.clamp_grading_submission_pagination(limit, offset)
+    rows, total = grading_submission_service.list_batches_ops(
+        session,
+        owner_user_id=owner_user_id,
+        target_grader=target_grader,
+        status=status,
+        submission_date_from=submission_date_from,
+        submission_date_to=submission_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_submission_service.batch_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-submission-batches/{batch_id}", response_model=GradingSubmissionDetailRead, include_in_schema=False)
+def ops_get_grading_submission_batch(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingSubmissionDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    batch = grading_submission_service.get_batch_ops(session, batch_id=batch_id)
+    return grading_submission_service._detail_read(session, batch)
+
+
+@app.get("/ops/grading-submission-events", response_model=GradingSubmissionEventListResponse, include_in_schema=False)
+def ops_list_grading_submission_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    batch_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSubmissionEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_submission_service.clamp_grading_submission_pagination(limit, offset)
+    rows, total = grading_submission_service.list_events_ops(
+        session,
+        owner_user_id=owner_user_id,
+        batch_id=batch_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_submission_service.event_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-submission-shipments", response_model=GradingSubmissionShipmentListResponse, include_in_schema=False)
+def ops_list_grading_submission_shipments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    batch_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSubmissionShipmentListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_submission_service.clamp_grading_submission_pagination(limit, offset)
+    rows, total = grading_submission_service.list_shipments_ops(
+        session,
+        owner_user_id=owner_user_id,
+        batch_id=batch_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_submission_service.shipment_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

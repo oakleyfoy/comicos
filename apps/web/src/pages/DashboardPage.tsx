@@ -63,6 +63,7 @@ import {
   type GradingCandidateDashboardSummary,
   type GradingSpreadDashboardSummary,
   type GradingRoiDashboardSummary,
+  type GradingSubmissionDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -885,6 +886,11 @@ export function DashboardPage() {
   const [gradingRoiSummary, setGradingRoiSummary] = useState<GradingRoiDashboardSummary | null>(null);
   const [gradingRoiLoading, setGradingRoiLoading] = useState(true);
   const [gradingRoiError, setGradingRoiError] = useState<string | null>(null);
+  const [gradingSubmissionSummary, setGradingSubmissionSummary] = useState<GradingSubmissionDashboardSummary | null>(
+    null,
+  );
+  const [gradingSubmissionLoading, setGradingSubmissionLoading] = useState(true);
+  const [gradingSubmissionError, setGradingSubmissionError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1558,6 +1564,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingSubmissionSummary(null);
+          setGradingSubmissionLoading(false);
+          setGradingSubmissionError(null);
+        }
+        return;
+      }
+      setGradingSubmissionLoading(true);
+      setGradingSubmissionError(null);
+      try {
+        const rsp = await apiClient.getGradingSubmissionDashboardSummary();
+        if (!ignore) {
+          setGradingSubmissionSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingSubmissionSummary(null);
+          setGradingSubmissionError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading submission summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setGradingSubmissionLoading(false);
         }
       }
     })();
@@ -2980,6 +3022,50 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading ROI rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-submission-dash"
+              className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/85">Submission workflow</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 submission batch operations</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic submission batches track grading groups, shipment states, lifecycle milestones, and
+                    estimated turnaround without any carrier or grader integrations.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-submission-ops"
+                  className="rounded-xl border border-sky-300/35 px-4 py-2 text-xs font-semibold text-sky-100 transition hover:border-sky-200/60 hover:bg-white/5"
+                >
+                  Ops batches
+                </Link>
+              </div>
+              {gradingSubmissionLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading submissions…</p>
+              ) : gradingSubmissionError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingSubmissionError}</StatusBanner>
+                </div>
+              ) : gradingSubmissionSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Active batches" value={String(gradingSubmissionSummary.active_batch_count)} />
+                  <StatCard label="Shipped batches" value={String(gradingSubmissionSummary.shipped_batch_count)} />
+                  <StatCard label="Grading batches" value={String(gradingSubmissionSummary.grading_batch_count)} />
+                  <StatCard label="Completed batches" value={String(gradingSubmissionSummary.completed_batch_count)} />
+                  <StatCard
+                    label="Avg turnaround"
+                    value={gradingSubmissionSummary.average_turnaround_days ?? "—"}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading submission rollup unavailable.</p>
               )}
             </section>
           ) : null}

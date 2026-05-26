@@ -203,6 +203,17 @@ Resolved routes:
   - Monte Carlo simulation or any probabilistic ROI forecasting
   - Hidden FMV, inventory, grading-candidate, or liquidity mutations
 
+## P37-04 — Grading submission batch operations (2026-05-26)
+
+- Architecture note: deterministic submission batches, lifecycle events, shipment rows, and cost snapshots live in `docs/GRADING_SUBMISSION_BATCH_ARCHITECTURE.md`. The lane groups grading candidates into append-safe workflow records with replay-safe creation and deterministic cost math.
+- Owner routes can create and advance batches; `/ops/grading-submission*` mirrors stay read-only and can filter by owner, grader, batch status, and time range.
+- **Deferred scope (beyond P37-04):**
+  - Grader API integrations or automatic submission posting
+  - Automated grade import or reconciliation
+  - Webhook systems or live carrier tracking
+  - Invoice reconciliation, label printing, packing workflows, or bulk scan intake
+  - Any automatic inventory mutation or grade assignment beyond the explicit completion transition
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

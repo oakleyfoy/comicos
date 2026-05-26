@@ -131,6 +131,14 @@ from app.models.grading_roi import (
     GradingRoiSnapshot,
 )
 
+from app.models.grading_submission import (
+    GradingSubmissionBatch,
+    GradingSubmissionCostSnapshot,
+    GradingSubmissionItem,
+    GradingSubmissionLifecycleEvent,
+    GradingSubmissionShipment,
+)
+
 __all__ = [
     "CanonicalCreator",
     "CanonicalIssueLinkSuggestion",
@@ -167,6 +175,11 @@ __all__ = [
     "GradingRoiHistory",
     "GradingRoiScenario",
     "GradingRoiSnapshot",
+    "GradingSubmissionBatch",
+    "GradingSubmissionCostSnapshot",
+    "GradingSubmissionItem",
+    "GradingSubmissionLifecycleEvent",
+    "GradingSubmissionShipment",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

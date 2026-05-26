@@ -148,6 +148,7 @@ import {
   type GradingCandidateListResponse,
   type GradingSpreadListResponse,
   type GradingRoiListResponse,
+  type GradingSubmissionListResponse,
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
@@ -1403,6 +1404,9 @@ export function OperationsPage() {
   const [opsGradingRoi, setOpsGradingRoi] = useState<GradingRoiListResponse | null>(null);
   const [opsGradingRoiLoading, setOpsGradingRoiLoading] = useState(true);
   const [opsGradingRoiError, setOpsGradingRoiError] = useState<string | null>(null);
+  const [opsGradingSubmission, setOpsGradingSubmission] = useState<GradingSubmissionListResponse | null>(null);
+  const [opsGradingSubmissionLoading, setOpsGradingSubmissionLoading] = useState(true);
+  const [opsGradingSubmissionError, setOpsGradingSubmissionError] = useState<string | null>(null);
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2210,6 +2214,38 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsGradingRoiLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingSubmissionLoading(true);
+      setOpsGradingSubmissionError(null);
+      try {
+        const rsp = await apiClient.listOpsGradingSubmissionBatches({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingSubmission(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingSubmission(null);
+          setOpsGradingSubmissionError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading submission batches.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingSubmissionLoading(false);
         }
       }
     })();
@@ -5359,6 +5395,99 @@ export function OperationsPage() {
                           <div className="text-[10px] text-slate-500">{row.estimated_spread_amount ?? "—"} spread</div>
                         </td>
                         <td className="p-3">{row.confidence_level}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-submission-ops"
+        className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading submission batches</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic batch lifecycle reads for submission groups, shipment state, and turnaround estimates.
+                No grader APIs or live carrier tracking.
+              </p>
+            </div>
+            <span className="rounded-full border border-sky-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-100/90">
+              Ops / submissions
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-sky-200/15 pt-4">
+          {opsGradingSubmissionLoading ? (
+            <p className="text-sm text-slate-400">Loading grading submission batches…</p>
+          ) : opsGradingSubmissionError ? (
+            <StatusBanner tone="error">{opsGradingSubmissionError}</StatusBanner>
+          ) : opsGradingSubmission ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Batch</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Grader</th>
+                    <th className="p-3 font-medium">Items</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Estimated cost</th>
+                    <th className="p-3 font-medium">Shipment</th>
+                    <th className="p-3 font-medium">Lifecycle</th>
+                    <th className="p-3 font-medium">Turnaround</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingSubmission.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={10}>
+                        No grading submission batches for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingSubmission.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">{row.batch_name}</div>
+                          <div className="text-[10px] text-slate-500">#{row.id}</div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                        <td className="p-3 text-slate-300">{row.target_grader}</td>
+                        <td className="p-3 text-slate-300">{row.item_count}</td>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">{row.status}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {row.shipped_date ?? "—"} / {row.completed_date ?? "—"}
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.estimated_total_cost ?? "—"}
+                          <span className="block text-[10px] text-slate-500">
+                            actual {row.actual_total_cost ?? "—"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.shipped_date ?? "—"}
+                          <span className="block text-[10px] text-slate-500">
+                            return {row.return_shipped_date ?? "—"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          submission {row.submission_date ?? "—"}
+                          <span className="block text-[10px] text-slate-500">
+                            received {row.grader_received_date ?? "—"} · grading {row.grading_started_date ?? "—"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">{row.estimated_turnaround_days ?? "—"}</td>
                         <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
                       </tr>
                     ))

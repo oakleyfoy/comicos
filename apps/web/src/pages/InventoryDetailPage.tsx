@@ -2811,6 +2811,19 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.grading_submission ? (
+                <div className="rounded-2xl border border-sky-400/35 bg-sky-950/30 px-4 py-3 text-[11px] text-sky-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-sky-200/90">Submission batch</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_submission.grading_submission_batch_id} · {detail.grading_submission.status} ·{" "}
+                    {detail.grading_submission.target_grader}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    {detail.grading_submission.batch_name} · items {detail.grading_submission.item_count}
+                    {detail.grading_submission.shipment_state ? ` · shipment ${detail.grading_submission.shipment_state}` : ""}
+                  </p>
+                </div>
+              ) : null}
             </>
           }
         />

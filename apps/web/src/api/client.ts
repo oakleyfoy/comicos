@@ -3136,6 +3136,155 @@ export interface InventoryGradingRoiBadge {
   checksum: string;
 }
 
+export interface InventoryGradingSubmissionBadge {
+  grading_submission_batch_id: number;
+  status: string;
+  target_grader: string;
+  batch_name: string;
+  shipment_state: string | null;
+  item_count: number;
+}
+
+export interface GradingSubmissionDashboardSummary {
+  active_batch_count: number;
+  shipped_batch_count: number;
+  grading_batch_count: number;
+  completed_batch_count: number;
+  average_turnaround_days: string | null;
+}
+
+export interface GradingSubmissionCreatePayload {
+  grading_candidate_ids: number[];
+  target_grader: "PSA" | "CGC" | "CBCS";
+  batch_name: string;
+  submission_date?: string | null;
+  estimated_turnaround_days?: number | null;
+  replay_key?: string | null;
+  notes?: string | null;
+}
+
+export interface GradingSubmissionPatchPayload {
+  batch_name?: string | null;
+  notes?: string | null;
+  estimated_turnaround_days?: number | null;
+}
+
+export interface GradingSubmissionShipmentCreatePayload {
+  shipment_direction: "OUTBOUND" | "RETURN";
+  carrier?: string | null;
+  tracking_number?: string | null;
+  shipped_date?: string | null;
+  delivered_date?: string | null;
+  insured_amount?: string | null;
+  shipping_cost?: string | null;
+  notes?: string | null;
+}
+
+export interface GradingSubmissionItemRead {
+  id: number;
+  grading_submission_batch_id: number;
+  grading_candidate_id: number;
+  inventory_item_id: number;
+  declared_value: string | null;
+  estimated_grade: string | null;
+  final_grade: string | null;
+  submission_fee: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GradingSubmissionShipmentRead {
+  id: number;
+  grading_submission_batch_id: number;
+  shipment_direction: string;
+  carrier: string | null;
+  tracking_number: string | null;
+  shipped_date: string | null;
+  delivered_date: string | null;
+  insured_amount: string | null;
+  shipping_cost: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface GradingSubmissionLifecycleEventRead {
+  id: number;
+  grading_submission_batch_id: number;
+  event_type: string;
+  prior_status: string | null;
+  new_status: string | null;
+  metadata_json: Record<string, unknown>;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export interface GradingSubmissionCostSnapshotRead {
+  id: number;
+  grading_submission_batch_id: number;
+  estimated_grading_fees: string;
+  estimated_shipping_cost: string;
+  estimated_insurance_cost: string;
+  actual_grading_fees: string | null;
+  actual_shipping_cost: string | null;
+  actual_insurance_cost: string | null;
+  checksum: string;
+  created_at: string;
+}
+
+export interface GradingSubmissionBatchRead {
+  id: number;
+  owner_user_id: number;
+  target_grader: string;
+  batch_name: string;
+  status: string;
+  submission_date: string | null;
+  shipped_date: string | null;
+  grader_received_date: string | null;
+  grading_started_date: string | null;
+  return_shipped_date: string | null;
+  completed_date: string | null;
+  estimated_turnaround_days: number | null;
+  actual_turnaround_days: number | null;
+  estimated_total_cost: string | null;
+  actual_total_cost: string | null;
+  item_count: number;
+  replay_key: string | null;
+  checksum: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GradingSubmissionDetailRead {
+  batch: GradingSubmissionBatchRead;
+  items: GradingSubmissionItemRead[];
+  shipments: GradingSubmissionShipmentRead[];
+  lifecycle_events: GradingSubmissionLifecycleEventRead[];
+  cost_snapshots: GradingSubmissionCostSnapshotRead[];
+}
+
+export interface GradingSubmissionListResponse {
+  items: GradingSubmissionBatchRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingSubmissionShipmentListResponse {
+  items: GradingSubmissionShipmentRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingSubmissionEventListResponse {
+  items: GradingSubmissionLifecycleEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export interface GradingCandidateDashboardSummary {
   total_candidates: number;
   pipeline_active_count: number;
@@ -4511,6 +4660,7 @@ export interface InventoryDetail extends InventoryItem {
   grading_candidate?: InventoryGradingCandidateBadge | null;
   grading_spread?: InventoryGradingSpreadBadge | null;
   grading_roi?: InventoryGradingRoiBadge | null;
+  grading_submission?: InventoryGradingSubmissionBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -7942,6 +8092,117 @@ export const apiClient = {
   }): Promise<GradingCandidateListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GradingCandidateListResponse>(`/ops/grading-candidates${q}`);
+  },
+
+  getGradingSubmissionDashboardSummary(): Promise<GradingSubmissionDashboardSummary> {
+    return request<GradingSubmissionDashboardSummary>("/grading-submission-batches/dashboard-summary");
+  },
+
+  generateGradingSubmissionBatch(payload: GradingSubmissionCreatePayload): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>("/grading-submission-batches", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingSubmissionBatches(params?: {
+    target_grader?: string;
+    status?: string;
+    submission_date_from?: string;
+    submission_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSubmissionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSubmissionListResponse>(`/grading-submission-batches${q}`);
+  },
+
+  getGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}`);
+  },
+
+  patchGradingSubmissionBatch(batchId: number, payload: GradingSubmissionPatchPayload): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  readyGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/ready`, { method: "POST" });
+  },
+
+  shipGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/ship`, { method: "POST" });
+  },
+
+  receiveGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/receive`, { method: "POST" });
+  },
+
+  gradingGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/grading`, { method: "POST" });
+  },
+
+  returnShipGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/return-ship`, { method: "POST" });
+  },
+
+  completeGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/complete`, { method: "POST" });
+  },
+
+  cancelGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/cancel`, { method: "POST" });
+  },
+
+  addGradingSubmissionShipment(batchId: number, payload: GradingSubmissionShipmentCreatePayload): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/grading-submission-batches/${batchId}/shipments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getOpsGradingSubmissionDashboardSummary(ownerUserId?: number): Promise<GradingSubmissionDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingSubmissionDashboardSummary>(`/ops/grading-submission-batches/dashboard-summary${q}`);
+  },
+
+  listOpsGradingSubmissionBatches(params?: {
+    owner_user_id?: number;
+    target_grader?: string;
+    status?: string;
+    submission_date_from?: string;
+    submission_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSubmissionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSubmissionListResponse>(`/ops/grading-submission-batches${q}`);
+  },
+
+  getOpsGradingSubmissionBatch(batchId: number): Promise<GradingSubmissionDetailRead> {
+    return request<GradingSubmissionDetailRead>(`/ops/grading-submission-batches/${batchId}`);
+  },
+
+  listOpsGradingSubmissionEvents(params?: {
+    owner_user_id?: number;
+    batch_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSubmissionEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSubmissionEventListResponse>(`/ops/grading-submission-events${q}`);
+  },
+
+  listOpsGradingSubmissionShipments(params?: {
+    owner_user_id?: number;
+    batch_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSubmissionShipmentListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSubmissionShipmentListResponse>(`/ops/grading-submission-shipments${q}`);
   },
 
   getGradingSpreadDashboardSummary(): Promise<GradingSpreadDashboardSummary> {
