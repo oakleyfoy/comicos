@@ -3032,6 +3032,116 @@ export interface DealerDashboardMetricListResponse {
   offset: number;
 }
 
+export type DealerGradingDashboardAlertType =
+  | "NEGATIVE_ROI"
+  | "HIGH_RISK"
+  | "LOW_CONFIDENCE"
+  | "SUBMISSION_DELAY"
+  | "RECONCILIATION_FAILURE"
+  | "WEAK_LIQUIDITY"
+  | "MISSING_EVIDENCE";
+export type DealerGradingDashboardSeverity = "info" | "warning" | "critical";
+export type DealerGradingDashboardFeedEventType =
+  | "CANDIDATE_CREATED"
+  | "RECOMMENDATION_GENERATED"
+  | "SUBMISSION_BATCH_CREATED"
+  | "SUBMISSION_SHIPPED"
+  | "GRADES_RETURNED"
+  | "RECONCILIATION_COMPLETED"
+  | "HIGH_RISK_DETECTED"
+  | "ELITE_OPPORTUNITY_DETECTED";
+
+export interface DealerGradingDashboardGeneratePayload {
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface DealerGradingDashboardSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  replay_key?: string | null;
+  active_candidate_count: number;
+  ready_for_submission_count: number;
+  submitted_candidate_count: number;
+  graded_candidate_count: number;
+  elite_recommendation_count: number;
+  high_risk_candidate_count: number;
+  low_confidence_candidate_count: number;
+  average_estimated_roi?: string | null;
+  average_risk_adjusted_roi?: string | null;
+  active_submission_batch_count: number;
+  grading_pipeline_value?: string | null;
+  estimated_total_submission_cost?: string | null;
+  expected_total_profit?: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface DealerGradingDashboardGetResponse {
+  snapshot: DealerGradingDashboardSnapshotRead | null;
+}
+
+export interface DealerGradingDashboardGenerateResponse {
+  snapshot: DealerGradingDashboardSnapshotRead;
+}
+
+export interface DealerGradingDashboardMetricRead {
+  id: number;
+  dashboard_snapshot_id: number;
+  metric_key: string;
+  metric_value_decimal?: string | null;
+  metric_value_text?: string | null;
+  metric_metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface DealerGradingDashboardAlertRead {
+  id: number;
+  owner_user_id: number;
+  dashboard_snapshot_id: number;
+  alert_type: DealerGradingDashboardAlertType | string;
+  severity: DealerGradingDashboardSeverity | string;
+  source_candidate_id?: number | null;
+  source_submission_batch_id?: number | null;
+  source_recommendation_id?: number | null;
+  message: string;
+  acknowledged_at?: string | null;
+  created_at: string;
+}
+
+export interface DealerGradingDashboardFeedEventRead {
+  id: number;
+  owner_user_id: number;
+  dashboard_snapshot_id?: number | null;
+  event_type: DealerGradingDashboardFeedEventType | string;
+  source_id?: number | null;
+  summary: string;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface DealerGradingDashboardMetricListResponse {
+  items: DealerGradingDashboardMetricRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface DealerGradingDashboardAlertListResponse {
+  items: DealerGradingDashboardAlertRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface DealerGradingDashboardFeedListResponse {
+  items: DealerGradingDashboardFeedEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -3104,6 +3214,73 @@ export interface OperationalReportRunListResponse {
 export interface OperationalReportingDashboardRollup {
   recent_runs: OperationalReportRunRead[];
   failed_runs: OperationalReportRunRead[];
+}
+
+export type GradingOperationalReportType =
+  | "grading_candidate_summary"
+  | "grading_roi_summary"
+  | "grading_submission_summary"
+  | "grading_reconciliation_summary"
+  | "grading_recommendation_summary"
+  | "grading_risk_summary"
+  | "grading_dashboard_summary"
+  | "grader_performance_summary";
+
+export interface GradingOperationalReportGenerationParamsPayload {}
+
+export interface GradingOperationalReportGeneratePayloadInput {
+  report_type: GradingOperationalReportType;
+  replay_key?: string | null;
+  generation_params?: GradingOperationalReportGenerationParamsPayload;
+}
+
+export interface GradingOperationalReportFileRead {
+  id: number;
+  grading_operational_report_run_id: number;
+  file_name: string;
+  file_type: string;
+  storage_path: string;
+  checksum: string;
+  row_count: number;
+  created_at: string;
+}
+
+export interface GradingOperationalReportItemRead {
+  id: number;
+  grading_operational_report_run_id: number;
+  row_number: number;
+  lineage_domain: string;
+  lineage_key: string;
+  lineage_json: Record<string, unknown>;
+  row_checksum: string | null;
+  created_at: string;
+}
+
+export interface GradingOperationalReportRunRead {
+  id: number;
+  owner_user_id: number;
+  report_type: string;
+  status: string;
+  replay_key: string | null;
+  generation_params_json: Record<string, unknown>;
+  checksum: string | null;
+  csv_row_count: number;
+  failure_reason: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface GradingOperationalReportRunDetailRead extends GradingOperationalReportRunRead {
+  items: GradingOperationalReportItemRead[];
+  files: GradingOperationalReportFileRead[];
+}
+
+export interface GradingOperationalReportRunListResponse {
+  items: GradingOperationalReportRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
 }
 
 export interface InventoryGradingCandidateBadge {
@@ -8259,6 +8436,96 @@ export const apiClient = {
     return request<DealerDashboardFeedListResponse>(`/ops/dealer-dashboard/feed${q}`);
   },
 
+  getDealerGradingDashboard(): Promise<DealerGradingDashboardGetResponse> {
+    return request<DealerGradingDashboardGetResponse>("/dealer-grading-dashboard");
+  },
+
+  generateDealerGradingDashboard(
+    payload: DealerGradingDashboardGeneratePayload,
+  ): Promise<DealerGradingDashboardGenerateResponse> {
+    return request<DealerGradingDashboardGenerateResponse>("/dealer-grading-dashboard/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listDealerGradingDashboardMetrics(params?: {
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerGradingDashboardMetricListResponse>(`/dealer-grading-dashboard/metrics${q}`);
+  },
+
+  listDealerGradingDashboardAlerts(params?: {
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerGradingDashboardAlertListResponse>(`/dealer-grading-dashboard/alerts${q}`);
+  },
+
+  listDealerGradingDashboardFeed(params?: {
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerGradingDashboardFeedListResponse>(`/dealer-grading-dashboard/feed${q}`);
+  },
+
+  getOpsDealerGradingDashboard(params?: { owner_user_id?: number }): Promise<DealerGradingDashboardGetResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerGradingDashboardGetResponse>(`/ops/dealer-grading-dashboard${q}`);
+  },
+
+  listOpsDealerGradingDashboardMetrics(params?: {
+    owner_user_id?: number;
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerGradingDashboardMetricListResponse>(`/ops/dealer-grading-dashboard/metrics${q}`);
+  },
+
+  listOpsDealerGradingDashboardAlerts(params?: {
+    owner_user_id?: number;
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerGradingDashboardAlertListResponse>(`/ops/dealer-grading-dashboard/alerts${q}`);
+  },
+
+  listOpsDealerGradingDashboardFeed(params?: {
+    owner_user_id?: number;
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerGradingDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerGradingDashboardFeedListResponse>(`/ops/dealer-grading-dashboard/feed${q}`);
+  },
+
   getListingIntelligence(params?: {
     listing_id?: number;
     inventory_item_id?: number;
@@ -8437,6 +8704,54 @@ export const apiClient = {
         ? buildQueryString({ owner_user_id: ownerUserId })
         : "";
     return request<OperationalReportingDashboardRollup>(`/ops/reports/dashboard-rollups${q}`);
+  },
+
+  generateGradingReport(payload: GradingOperationalReportGeneratePayloadInput): Promise<GradingOperationalReportRunDetailRead> {
+    return request<GradingOperationalReportRunDetailRead>("/grading-reports/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getGradingReport(reportId: number): Promise<GradingOperationalReportRunDetailRead> {
+    return request<GradingOperationalReportRunDetailRead>(`/grading-reports/${reportId}`);
+  },
+
+  listGradingReports(params?: {
+    report_type?: GradingOperationalReportType | string;
+    status?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingOperationalReportRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingOperationalReportRunListResponse>(`/grading-reports${q}`);
+  },
+
+  downloadGradingReportCsv(reportId: number): Promise<void> {
+    return downloadAuthenticatedReport(`/grading-reports/${reportId}/download`, `grading-report-${reportId}.csv`);
+  },
+
+  getOpsGradingReports(params?: {
+    owner_user_id?: number;
+    report_type?: GradingOperationalReportType | string;
+    status?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingOperationalReportRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingOperationalReportRunListResponse>(`/ops/grading-reports${q}`);
+  },
+
+  getOpsGradingReport(reportId: number): Promise<GradingOperationalReportRunDetailRead> {
+    return request<GradingOperationalReportRunDetailRead>(`/ops/grading-reports/${reportId}`);
+  },
+
+  downloadOpsGradingReportCsv(reportId: number): Promise<void> {
+    return downloadAuthenticatedReport(`/ops/grading-reports/${reportId}/download`, `ops-grading-report-${reportId}.csv`);
   },
 
   getGradingCandidateDashboardSummary(): Promise<GradingCandidateDashboardSummary> {

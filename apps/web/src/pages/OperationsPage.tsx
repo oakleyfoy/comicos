@@ -145,6 +145,7 @@ import {
   type OpsListingLifecycleEventListResponse,
   type ListingExportRunListResponse,
   type OperationalReportRunListResponse,
+  type GradingOperationalReportRunListResponse,
   type GradingCandidateListResponse,
   type GradingRecommendationListResponse,
   type GradingRiskListResponse,
@@ -156,6 +157,10 @@ import {
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
   type DealerDashboardMetricRead,
+  type DealerGradingDashboardAlertRead,
+  type DealerGradingDashboardFeedEventRead,
+  type DealerGradingDashboardGetResponse,
+  type DealerGradingDashboardMetricRead,
   type SaleRecordRead,
 } from "../api/client";
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -1396,6 +1401,12 @@ export function OperationsPage() {
   const [opsOperationalOwnerDraft, setOpsOperationalOwnerDraft] = useState("");
   const [opsOperationalOwnerFilter, setOpsOperationalOwnerFilter] = useState<number | undefined>();
   const [opsOperationalDownloadError, setOpsOperationalDownloadError] = useState<string | null>(null);
+  const [opsGradingReports, setOpsGradingReports] = useState<GradingOperationalReportRunListResponse | null>(null);
+  const [opsGradingReportsLoading, setOpsGradingReportsLoading] = useState(true);
+  const [opsGradingReportsError, setOpsGradingReportsError] = useState<string | null>(null);
+  const [opsGradingReportsOwnerDraft, setOpsGradingReportsOwnerDraft] = useState("");
+  const [opsGradingReportsOwnerFilter, setOpsGradingReportsOwnerFilter] = useState<number | undefined>();
+  const [opsGradingReportsDownloadError, setOpsGradingReportsDownloadError] = useState<string | null>(null);
   const [opsGradingCandidates, setOpsGradingCandidates] = useState<GradingCandidateListResponse | null>(null);
   const [opsGradingCandidatesLoading, setOpsGradingCandidatesLoading] = useState(true);
   const [opsGradingCandidatesError, setOpsGradingCandidatesError] = useState<string | null>(null);
@@ -1464,6 +1475,14 @@ export function OperationsPage() {
   const [opsDealerAlerts, setOpsDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
   const [opsDealerFeed, setOpsDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
   const [opsDealerMetrics, setOpsDealerMetrics] = useState<DealerDashboardMetricRead[]>([]);
+  const [opsDealerGradingDash, setOpsDealerGradingDash] = useState<DealerGradingDashboardGetResponse | null>(null);
+  const [opsDealerGradingDashLoading, setOpsDealerGradingDashLoading] = useState(true);
+  const [opsDealerGradingDashError, setOpsDealerGradingDashError] = useState<string | null>(null);
+  const [opsDealerGradingOwnerDraft, setOpsDealerGradingOwnerDraft] = useState("");
+  const [opsDealerGradingOwnerApplied, setOpsDealerGradingOwnerApplied] = useState<number | undefined>(undefined);
+  const [opsDealerGradingAlerts, setOpsDealerGradingAlerts] = useState<DealerGradingDashboardAlertRead[]>([]);
+  const [opsDealerGradingFeed, setOpsDealerGradingFeed] = useState<DealerGradingDashboardFeedEventRead[]>([]);
+  const [opsDealerGradingMetrics, setOpsDealerGradingMetrics] = useState<DealerGradingDashboardMetricRead[]>([]);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -1971,6 +1990,46 @@ export function OperationsPage() {
   useEffect(() => {
     let ignore = false;
     void (async () => {
+      setOpsDealerGradingDashLoading(true);
+      setOpsDealerGradingDashError(null);
+      try {
+        const scoped = opsDealerGradingOwnerApplied === undefined ? {} : { owner_user_id: opsDealerGradingOwnerApplied };
+        const [dash, alerts, feed, metrics] = await Promise.all([
+          apiClient.getOpsDealerGradingDashboard(scoped),
+          apiClient.listOpsDealerGradingDashboardAlerts({ ...scoped, limit: 50, offset: 0 }),
+          apiClient.listOpsDealerGradingDashboardFeed({ ...scoped, limit: 50, offset: 0 }),
+          apiClient.listOpsDealerGradingDashboardMetrics({ ...scoped, limit: 100, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsDealerGradingDash(dash);
+          setOpsDealerGradingAlerts(alerts.items);
+          setOpsDealerGradingFeed(feed.items);
+          setOpsDealerGradingMetrics(metrics.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsDealerGradingDash(null);
+          setOpsDealerGradingAlerts([]);
+          setOpsDealerGradingFeed([]);
+          setOpsDealerGradingMetrics([]);
+          setOpsDealerGradingDashError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading dashboard ops telescope.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsDealerGradingDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsDealerGradingOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
       setOpsConventionSummaryLoading(true);
       setOpsConventionSummaryError(null);
       setOpsConventionEventsLoading(true);
@@ -2143,6 +2202,36 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsOperationalOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingReportsLoading(true);
+      setOpsGradingReportsError(null);
+      try {
+        const rsp = await apiClient.getOpsGradingReports({
+          owner_user_id: opsGradingReportsOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingReports(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingReports(null);
+          setOpsGradingReportsError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading reports.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingReportsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingReportsOwnerFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -4815,6 +4904,8 @@ export function OperationsPage() {
         <span className="font-semibold uppercase tracking-[0.12em] text-emerald-100/90">Market ops shortcuts</span>
         {[
           ["Dealer dashboard", "#dealer-dashboard-ops"],
+          ["Grading dashboard", "#dealer-grading-dashboard-ops"],
+          ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
           ["Grading spreads", "#grading-spread-ops"],
@@ -5094,6 +5185,317 @@ export function OperationsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      </details>
+
+      <details
+        id="dealer-grading-dashboard-ops"
+        open
+        className="mt-6 rounded-3xl border border-cyan-500/35 bg-slate-950/80 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Dealer grading dashboard ops telescope</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Mirrors owner `/dealer-grading-dashboard*` payloads with deterministic grading snapshots, observational alerts,
+                append-safe feed rows, and derived grading KPI metrics under optional `owner_user_id` scope.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / grading
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-cyan-200/15 pt-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsDealerGradingOwnerDraft}
+                onChange={(e) => setOpsDealerGradingOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = aggregate"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-cyan-400/45 px-3 py-2 text-xs font-semibold text-cyan-100"
+              onClick={() => {
+                const trimmed = opsDealerGradingOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsDealerGradingOwnerApplied(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsDealerGradingOwnerApplied(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+
+          {opsDealerGradingDashLoading ? (
+            <p className="text-sm text-slate-400">Loading grading dashboard snapshots…</p>
+          ) : opsDealerGradingDashError ? (
+            <StatusBanner tone="error">{opsDealerGradingDashError}</StatusBanner>
+          ) : opsDealerGradingDash?.snapshot ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5 text-xs">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Snapshot date</p>
+                <p className="mt-2 text-sm text-white">{opsDealerGradingDash.snapshot.snapshot_date}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Owner user</p>
+                <p className="mt-2 font-mono text-sm text-white">#{opsDealerGradingDash.snapshot.owner_user_id}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Candidates active / graded</p>
+                <p className="mt-2 text-sm text-white">
+                  {opsDealerGradingDash.snapshot.active_candidate_count} · {opsDealerGradingDash.snapshot.graded_candidate_count}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Risk / confidence flags</p>
+                <p className="mt-2 text-sm text-white">
+                  {opsDealerGradingDash.snapshot.high_risk_candidate_count} high risk ·{" "}
+                  {opsDealerGradingDash.snapshot.low_confidence_candidate_count} low confidence
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Checksum</p>
+                <p className="mt-2 break-all font-mono text-[11px] text-slate-300">
+                  {abbrevExportChecksum(opsDealerGradingDash.snapshot.checksum)}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No grading snapshots materialized.</p>
+          )}
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Alerts</p>
+              <table className="mt-3 w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">When</th>
+                    <th className="p-3 font-medium">Severity</th>
+                    <th className="p-3 font-medium">Type</th>
+                    <th className="p-3 font-medium">Evidence</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsDealerGradingAlerts.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={4}>
+                        No grading alerts in this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsDealerGradingAlerts.map((row) => (
+                      <tr key={row.id}>
+                        <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(row.created_at)}</td>
+                        <td className="p-3 font-semibold">{row.severity}</td>
+                        <td className="p-3">{row.alert_type}</td>
+                        <td className="p-3 text-slate-400">{row.message}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Feed</p>
+              <table className="mt-3 w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">When</th>
+                    <th className="p-3 font-medium">Type</th>
+                    <th className="p-3 font-medium">Summary</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsDealerGradingFeed.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={3}>
+                        Append-only grading feed waits for grading snapshot generation.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsDealerGradingFeed.map((row) => (
+                      <tr key={row.id}>
+                        <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(row.created_at)}</td>
+                        <td className="p-3">{row.event_type}</td>
+                        <td className="p-3 text-slate-400">{row.summary}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+            <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Metrics / grading KPIs
+            </p>
+            <table className="mt-3 w-full border-collapse text-left text-xs">
+              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="p-3 font-medium">Metric key</th>
+                  <th className="p-3 font-medium">Decimal</th>
+                  <th className="p-3 font-medium">Text</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-slate-200">
+                {opsDealerGradingMetrics.length === 0 ? (
+                  <tr>
+                    <td className="p-4 text-slate-500" colSpan={3}>
+                      Metrics hydrate when grading snapshots persist.
+                    </td>
+                  </tr>
+                ) : (
+                  opsDealerGradingMetrics.map((row) => (
+                    <tr key={row.id}>
+                      <td className="p-3 font-mono text-[11px] text-slate-300">{row.metric_key}</td>
+                      <td className="p-3 text-slate-400">{row.metric_value_decimal ?? "—"}</td>
+                      <td className="p-3 text-slate-400">{row.metric_value_text ?? "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <details
+        id="grading-reporting-ops"
+        className="mt-6 rounded-3xl border border-indigo-400/35 bg-indigo-950/15 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading reporting</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Append-safe P37 closeout CSV registry for grading candidates, economics, submissions, reconciliation,
+                recommendations, risk, dashboard summaries, and grader performance. Downloads stay read-only and scoped.
+              </p>
+            </div>
+            <span className="rounded-full border border-indigo-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-100/90">
+              Ops / grading reports
+            </span>
+          </div>
+        </summary>
+        <div className="mt-4">
+          <div className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsGradingReportsOwnerDraft}
+                onChange={(e) => setOpsGradingReportsOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = all owners"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-indigo-400/45 px-3 py-2 text-xs font-semibold text-indigo-100"
+              onClick={() => {
+                const trimmed = opsGradingReportsOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsGradingReportsOwnerFilter(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsGradingReportsOwnerFilter(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+          {opsGradingReportsDownloadError ? (
+            <div className="mb-3">
+              <StatusBanner tone="error">{opsGradingReportsDownloadError}</StatusBanner>
+            </div>
+          ) : null}
+          {opsGradingReportsLoading ? (
+            <p className="text-sm text-slate-400">Loading grading report runs…</p>
+          ) : opsGradingReportsError ? (
+            <StatusBanner tone="error">{opsGradingReportsError}</StatusBanner>
+          ) : opsGradingReports ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Run</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Report type</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">CSV rows</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                    <th className="p-3 font-medium">Replay</th>
+                    <th className="p-3 font-medium">Created</th>
+                    <th className="p-3 font-medium">Download</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingReports.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={9}>
+                        No grading report runs recorded for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingReports.items.map((run) => (
+                      <tr key={run.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{run.id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{run.owner_user_id}</td>
+                        <td className="p-3 text-slate-300">{run.report_type.replace(/_/g, " ")}</td>
+                        <td className="p-3">
+                          <div>{run.status}</div>
+                          {run.failure_reason ? (
+                            <div className="mt-1 max-w-[14rem] truncate text-[10px] text-rose-300" title={run.failure_reason}>
+                              {run.failure_reason}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="p-3 text-slate-400">{run.csv_row_count}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(run.checksum)}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-500">{run.replay_key ?? "—"}</td>
+                        <td className="p-3 text-slate-400">{formatDateTime(run.created_at)}</td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            disabled={run.status !== "COMPLETED"}
+                            className="rounded-full border border-indigo-300/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            onClick={() => {
+                              void (async () => {
+                                setOpsGradingReportsDownloadError(null);
+                                try {
+                                  await apiClient.downloadOpsGradingReportCsv(run.id);
+                                } catch (err) {
+                                  setOpsGradingReportsDownloadError(
+                                    err instanceof ApiError ? err.message : "Unable to download grading report CSV.",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            CSV
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Grading reporting registry unavailable.</p>
+          )}
         </div>
       </details>
 

@@ -25,7 +25,7 @@ from app.api.report_params import (
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_session
-from app.models import InventoryCopy, OperationalReportRun, User
+from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
 
@@ -180,11 +180,24 @@ from app.schemas.dealer_dashboard import (
     DealerDashboardGetResponse,
     DealerDashboardMetricListResponse,
 )
+from app.schemas.dealer_grading_dashboard import (
+    DealerGradingDashboardAlertListResponse,
+    DealerGradingDashboardFeedListResponse,
+    DealerGradingDashboardGeneratePayload,
+    DealerGradingDashboardGenerateResponse,
+    DealerGradingDashboardGetResponse,
+    DealerGradingDashboardMetricListResponse,
+)
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
     OperationalReportRunDetailRead,
     OperationalReportRunListResponse,
     OperationalReportingDashboardRollup,
+)
+from app.schemas.grading_operational_reporting import (
+    GradingOperationalReportGeneratePayload,
+    GradingOperationalReportRunDetailRead,
+    GradingOperationalReportRunListResponse,
 )
 from app.schemas.grading_candidate import (
     GradingCandidateCreatePayload,
@@ -737,6 +750,8 @@ from app.services.inventory_fmv import (
     portfolio_value_summary_for_scope,
 )
 from app.services import dealer_dashboard as dealer_dashboard_service
+from app.services import dealer_grading_dashboard as dealer_grading_dashboard_service
+from app.services import grading_reporting as grading_reporting_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
@@ -9608,6 +9623,173 @@ def ops_list_dealer_dashboard_feed(
     )
 
 
+@app.get("/dealer-grading-dashboard", response_model=DealerGradingDashboardGetResponse)
+def owner_dealer_grading_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DealerGradingDashboardGetResponse:
+    return dealer_grading_dashboard_service.get_dashboard_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post(
+    "/dealer-grading-dashboard/generate",
+    response_model=DealerGradingDashboardGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_dealer_grading_dashboard_generate(
+    payload: DealerGradingDashboardGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DealerGradingDashboardGenerateResponse:
+    return dealer_grading_dashboard_service.generate_dealer_grading_dashboard(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/dealer-grading-dashboard/metrics", response_model=DealerGradingDashboardMetricListResponse)
+def owner_list_dealer_grading_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardMetricListResponse:
+    return dealer_grading_dashboard_service.list_metrics_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/dealer-grading-dashboard/alerts", response_model=DealerGradingDashboardAlertListResponse)
+def owner_list_dealer_grading_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardAlertListResponse:
+    return dealer_grading_dashboard_service.list_alerts_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/dealer-grading-dashboard/feed", response_model=DealerGradingDashboardFeedListResponse)
+def owner_list_dealer_grading_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardFeedListResponse:
+    return dealer_grading_dashboard_service.list_feed_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-grading-dashboard", response_model=DealerGradingDashboardGetResponse)
+def ops_dealer_grading_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> DealerGradingDashboardGetResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_grading_dashboard_service.get_dashboard_ops(session, owner_user_id=owner_user_id)
+
+
+@app.get("/ops/dealer-grading-dashboard/metrics", response_model=DealerGradingDashboardMetricListResponse)
+def ops_list_dealer_grading_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardMetricListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_grading_dashboard_service.list_metrics_ops(
+        session,
+        owner_user_id=owner_user_id,
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-grading-dashboard/alerts", response_model=DealerGradingDashboardAlertListResponse)
+def ops_list_dealer_grading_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardAlertListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_grading_dashboard_service.list_alerts_ops(
+        session,
+        owner_user_id=owner_user_id,
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-grading-dashboard/feed", response_model=DealerGradingDashboardFeedListResponse)
+def ops_list_dealer_grading_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerGradingDashboardFeedListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_grading_dashboard_service.list_feed_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @app.get("/reports/dashboard-rollups", response_model=OperationalReportingDashboardRollup)
 def owner_operational_reports_dashboard_rollups(
     session: Session = Depends(get_session),
@@ -9707,6 +9889,91 @@ def owner_get_operational_report(
     )
 
 
+@app.post(
+    "/grading-reports/generate",
+    response_model=GradingOperationalReportRunDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_grading_report(
+    payload: GradingOperationalReportGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingOperationalReportRunDetailRead:
+    detail, replayed = grading_reporting_service.generate_grading_report(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/grading-reports", response_model=GradingOperationalReportRunListResponse)
+def owner_list_grading_reports(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    report_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingOperationalReportRunListResponse:
+    lim, off = grading_reporting_service.clamp_grading_report_pagination(limit=limit, offset=offset)
+    rows, total = grading_reporting_service.list_runs_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        report_type=report_type,
+        status_filter=status_filter,
+        created_from=created_from,
+        created_to=created_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reporting_service.list_response_from_rows(rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-reports/{report_id}/download")
+def download_owner_grading_report_csv(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    row = session.get(GradingOperationalReportRun, report_id)
+    if row is None or int(row.owner_user_id) != int(current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="grading report run not found")
+    if str(row.status) != "COMPLETED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="grading report not ready for download")
+    abs_path, frow = grading_reporting_service.resolve_grading_report_download_path(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        grading_operational_report_run_id=report_id,
+        grading_operational_report_file_id=file_id,
+        allow_ops_any_owner=False,
+    )
+    return FileResponse(path=str(abs_path), media_type="text/csv; charset=utf-8", filename=frow.file_name)
+
+
+@app.get("/grading-reports/{report_id}", response_model=GradingOperationalReportRunDetailRead)
+def owner_get_grading_report(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingOperationalReportRunDetailRead:
+    return grading_reporting_service.build_run_detail(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_operational_report_run_id=report_id,
+    )
+
+
 @app.get("/ops/reports/dashboard-rollups", response_model=OperationalReportingDashboardRollup, include_in_schema=False)
 def ops_operational_reports_dashboard_rollups(
     session: Session = Depends(get_session),
@@ -9767,6 +10034,78 @@ def ops_get_operational_report(
         operational_report_run_id=report_id,
         allow_cross_owner_ops=True,
     )
+
+
+@app.get("/ops/grading-reports", response_model=GradingOperationalReportRunListResponse, include_in_schema=False)
+def ops_list_grading_reports(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    report_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingOperationalReportRunListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_reporting_service.clamp_grading_report_pagination(limit=limit, offset=offset)
+    rows, total = grading_reporting_service.list_runs_ops(
+        session,
+        owner_user_id=owner_user_id,
+        report_type=report_type,
+        status_filter=status_filter,
+        created_from=created_from,
+        created_to=created_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reporting_service.list_response_from_rows(rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-reports/{report_id}", response_model=GradingOperationalReportRunDetailRead, include_in_schema=False)
+def ops_get_grading_report(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingOperationalReportRunDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = session.get(GradingOperationalReportRun, report_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="grading report run not found")
+    return grading_reporting_service.build_run_detail(
+        session,
+        owner_user_id=int(row.owner_user_id),
+        grading_operational_report_run_id=report_id,
+        allow_cross_owner_ops=True,
+    )
+
+
+@app.get("/ops/grading-reports/{report_id}/download", include_in_schema=False)
+def ops_download_grading_report_csv(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    ensure_ops_admin_access(current_user, settings)
+    row = session.get(GradingOperationalReportRun, report_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="grading report run not found")
+    if str(row.status) != "COMPLETED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="grading report not ready for download")
+    abs_path, frow = grading_reporting_service.resolve_grading_report_download_path(
+        session,
+        settings,
+        owner_user_id=int(row.owner_user_id),
+        grading_operational_report_run_id=report_id,
+        grading_operational_report_file_id=file_id,
+        allow_ops_any_owner=True,
+    )
+    return FileResponse(path=str(abs_path), media_type="text/csv; charset=utf-8", filename=frow.file_name)
 
 
 @app.get("/ops/reports/{report_id}/download", include_in_schema=False)

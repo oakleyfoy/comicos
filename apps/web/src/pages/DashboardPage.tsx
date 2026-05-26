@@ -56,6 +56,11 @@ import {
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
+  type DealerGradingDashboardAlertRead,
+  type DealerGradingDashboardFeedEventRead,
+  type DealerGradingDashboardGetResponse,
+  type DealerGradingDashboardMetricRead,
+  type GradingOperationalReportRunListResponse,
   type ConventionDashboardSummary,
   type LiquidityDashboardSummary,
   type SalesDashboardSummary,
@@ -97,6 +102,10 @@ function formatCurrencyWithCode(value: string | null, currencyCode: string): str
     style: "currency",
     currency: currencyCode || "USD",
   }).format(amount);
+}
+
+function formatMaybeCurrency(value?: string | null): string {
+  return value ? formatCurrency(value) : "—";
 }
 
 function formatDate(value: string): string {
@@ -876,10 +885,22 @@ export function DashboardPage() {
   const [dealerAlerts, setDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
   const [dealerFeed, setDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
   const [dealerGenBusy, setDealerGenBusy] = useState(false);
+  const [dealerGradingDashResp, setDealerGradingDashResp] = useState<DealerGradingDashboardGetResponse | null>(null);
+  const [dealerGradingDashLoading, setDealerGradingDashLoading] = useState(true);
+  const [dealerGradingDashError, setDealerGradingDashError] = useState<string | null>(null);
+  const [dealerGradingAlerts, setDealerGradingAlerts] = useState<DealerGradingDashboardAlertRead[]>([]);
+  const [dealerGradingFeed, setDealerGradingFeed] = useState<DealerGradingDashboardFeedEventRead[]>([]);
+  const [dealerGradingMetrics, setDealerGradingMetrics] = useState<DealerGradingDashboardMetricRead[]>([]);
+  const [dealerGradingGenBusy, setDealerGradingGenBusy] = useState(false);
   const [opReportRollups, setOpReportRollups] = useState<OperationalReportingDashboardRollup | null>(null);
   const [opReportRollupsLoading, setOpReportRollupsLoading] = useState(true);
   const [opReportRollupsError, setOpReportRollupsError] = useState<string | null>(null);
   const [opReportBusy, setOpReportBusy] = useState(false);
+  const [gradingReportsRecent, setGradingReportsRecent] = useState<GradingOperationalReportRunListResponse | null>(null);
+  const [gradingReportsFailed, setGradingReportsFailed] = useState<GradingOperationalReportRunListResponse | null>(null);
+  const [gradingReportsLoading, setGradingReportsLoading] = useState(true);
+  const [gradingReportsError, setGradingReportsError] = useState<string | null>(null);
+  const [gradingReportBusy, setGradingReportBusy] = useState(false);
   const [gradingDashSummary, setGradingDashSummary] = useState<GradingCandidateDashboardSummary | null>(null);
   const [gradingDashLoading, setGradingDashLoading] = useState(true);
   const [gradingDashError, setGradingDashError] = useState<string | null>(null);
@@ -906,6 +927,10 @@ export function DashboardPage() {
   const [gradingRiskLoading, setGradingRiskLoading] = useState(true);
   const [gradingRiskError, setGradingRiskError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const dealerGradingMetricMap = useMemo(
+    () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
+    [dealerGradingMetrics],
+  );
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1591,6 +1616,96 @@ export function DashboardPage() {
     void (async () => {
       if (!user) {
         if (!ignore) {
+          setGradingReportsRecent(null);
+          setGradingReportsFailed(null);
+          setGradingReportsLoading(false);
+          setGradingReportsError(null);
+        }
+        return;
+      }
+      setGradingReportsLoading(true);
+      setGradingReportsError(null);
+      try {
+        const [recentRsp, failedRsp] = await Promise.all([
+          apiClient.listGradingReports({ limit: 8, offset: 0 }),
+          apiClient.listGradingReports({ status: "FAILED", limit: 5, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setGradingReportsRecent(recentRsp);
+          setGradingReportsFailed(failedRsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingReportsRecent(null);
+          setGradingReportsFailed(null);
+          setGradingReportsError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading reports.");
+        }
+      } finally {
+        if (!ignore) {
+          setGradingReportsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setDealerGradingDashResp(null);
+          setDealerGradingAlerts([]);
+          setDealerGradingFeed([]);
+          setDealerGradingMetrics([]);
+          setDealerGradingDashLoading(false);
+          setDealerGradingDashError(null);
+        }
+        return;
+      }
+      setDealerGradingDashLoading(true);
+      setDealerGradingDashError(null);
+      try {
+        const [dash, alerts, feed, metrics] = await Promise.all([
+          apiClient.getDealerGradingDashboard(),
+          apiClient.listDealerGradingDashboardAlerts({ limit: 24, offset: 0 }),
+          apiClient.listDealerGradingDashboardFeed({ limit: 28, offset: 0 }),
+          apiClient.listDealerGradingDashboardMetrics({ limit: 40, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setDealerGradingDashResp(dash);
+          setDealerGradingAlerts(alerts.items);
+          setDealerGradingFeed(feed.items);
+          setDealerGradingMetrics(metrics.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setDealerGradingDashResp(null);
+          setDealerGradingAlerts([]);
+          setDealerGradingFeed([]);
+          setDealerGradingMetrics([]);
+          setDealerGradingDashError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading command center.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setDealerGradingDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
           setGradingRiskSummary(null);
           setGradingRiskLoading(false);
           setGradingRiskError(null);
@@ -1918,6 +2033,31 @@ export function DashboardPage() {
     }
   }
 
+  async function generateDealerGradingDashboardSnapshot(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setDealerGradingDashError(null);
+    setDealerGradingGenBusy(true);
+    try {
+      await apiClient.generateDealerGradingDashboard({ replay_key: `web-grading-dash-${Date.now()}` });
+      const [dash, alerts, feed, metrics] = await Promise.all([
+        apiClient.getDealerGradingDashboard(),
+        apiClient.listDealerGradingDashboardAlerts({ limit: 24, offset: 0 }),
+        apiClient.listDealerGradingDashboardFeed({ limit: 28, offset: 0 }),
+        apiClient.listDealerGradingDashboardMetrics({ limit: 40, offset: 0 }),
+      ]);
+      setDealerGradingDashResp(dash);
+      setDealerGradingAlerts(alerts.items);
+      setDealerGradingFeed(feed.items);
+      setDealerGradingMetrics(metrics.items);
+    } catch (err) {
+      setDealerGradingDashError(err instanceof ApiError ? err.message : "Unable to generate grading dashboard snapshot.");
+    } finally {
+      setDealerGradingGenBusy(false);
+    }
+  }
+
   async function generateQuickListingOperationalReport(): Promise<void> {
     if (!user) {
       return;
@@ -1937,6 +2077,30 @@ export function DashboardPage() {
     }
   }
 
+  async function generateQuickGradingReport(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setGradingReportBusy(true);
+    setGradingReportsError(null);
+    try {
+      await apiClient.generateGradingReport({
+        report_type: "grading_dashboard_summary",
+        replay_key: `dash-grading-${Date.now()}`,
+      });
+      const [recentRsp, failedRsp] = await Promise.all([
+        apiClient.listGradingReports({ limit: 8, offset: 0 }),
+        apiClient.listGradingReports({ status: "FAILED", limit: 5, offset: 0 }),
+      ]);
+      setGradingReportsRecent(recentRsp);
+      setGradingReportsFailed(failedRsp);
+    } catch (err) {
+      setGradingReportsError(err instanceof ApiError ? err.message : "Unable to generate grading report.");
+    } finally {
+      setGradingReportBusy(false);
+    }
+  }
+
   async function downloadOperationalReportCsvClient(reportId: number): Promise<void> {
     try {
       setError(null);
@@ -1945,6 +2109,17 @@ export function DashboardPage() {
       const message =
         err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Operational report download failed.";
       setError(`Operational report: ${message}`);
+    }
+  }
+
+  async function downloadGradingReportCsvClient(reportId: number): Promise<void> {
+    try {
+      setError(null);
+      await apiClient.downloadGradingReportCsv(reportId);
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Grading report download failed.";
+      setError(`Grading report: ${message}`);
     }
   }
 
@@ -3008,6 +3183,320 @@ export function DashboardPage() {
                       </>
                     );
                   })()}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="dealer-grading-command-center"
+              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/12 p-5 shadow-xl shadow-black/20"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">Dealer grading dashboard</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Unified grading intelligence cockpit</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                    Dense dealer-grade grading operations only: candidate posture, recommendation quality, submission flow,
+                    reconciliation outcomes, risk overlays, alerts, and append-safe feed evidence. No scan AI, autonomous
+                    grading, or hidden mutation.
+                  </p>
+                  {dealerGradingDashResp?.snapshot ? (
+                    <p className="mt-2 text-[11px] font-mono text-slate-500">
+                      snapshot #{dealerGradingDashResp.snapshot.id} · {dealerGradingDashResp.snapshot.snapshot_date} · checksum{" "}
+                      {shortenChecksum(dealerGradingDashResp.snapshot.checksum)}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[11px] font-mono text-slate-500">No persisted grading snapshot yet — generate to materialize.</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void generateDealerGradingDashboardSnapshot()}
+                    disabled={dealerGradingGenBusy}
+                    className="rounded-xl border border-cyan-400/45 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {dealerGradingGenBusy ? "Generating…" : "Generate grading snapshot"}
+                  </button>
+                  <Link
+                    to="/ops#dealer-grading-dashboard-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/45 hover:bg-white/5"
+                  >
+                    Ops grading tables
+                  </Link>
+                </div>
+              </div>
+
+              {dealerGradingDashLoading ? (
+                <p className="mt-6 text-sm text-slate-400">Loading grading command center…</p>
+              ) : dealerGradingDashError ? (
+                <div className="mt-6">
+                  <StatusBanner tone="error">{dealerGradingDashError}</StatusBanner>
+                </div>
+              ) : (
+                (() => {
+                  const snap = dealerGradingDashResp?.snapshot;
+                  const metricValue = (key: string) => dealerGradingMetricMap.get(key)?.metric_value_decimal ?? "—";
+                  const graderRollup = Array.isArray(
+                    (dealerGradingMetricMap.get("grader_performance_rollup")?.metric_metadata_json as { graders?: unknown } | undefined)
+                      ?.graders,
+                  )
+                    ? (
+                        dealerGradingMetricMap.get("grader_performance_rollup")?.metric_metadata_json as {
+                          graders?: Array<Record<string, unknown>>;
+                        }
+                      ).graders ?? []
+                    : [];
+                  return (
+                    <div className="mt-6 space-y-5">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          A · Grading pipeline overview
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                          <StatCard label="Active candidates" value={snap ? String(snap.active_candidate_count) : "—"} />
+                          <StatCard label="Submitted candidates" value={snap ? String(snap.submitted_candidate_count) : "—"} />
+                          <StatCard label="Graded candidates" value={snap ? String(snap.graded_candidate_count) : "—"} />
+                          <StatCard label="Pipeline value" value={formatMaybeCurrency(snap?.grading_pipeline_value)} />
+                          <StatCard label="Expected profit" value={formatMaybeCurrency(snap?.expected_total_profit)} />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            B · Recommendation summary
+                          </p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <StatCard label="Grade recommendations" value={metricValue("grade_recommendation_count")} />
+                            <StatCard label="Elite opportunities" value={metricValue("elite_opportunity_count")} />
+                            <StatCard label="Hold raw" value={metricValue("hold_raw_count")} />
+                            <StatCard label="Review manually" value={metricValue("review_manually_count")} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            C · Risk / confidence summary
+                          </p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <StatCard label="Low-risk candidates" value={metricValue("low_risk_count")} />
+                            <StatCard label="High-risk candidates" value={snap ? String(snap.high_risk_candidate_count) : "—"} />
+                            <StatCard label="Low-confidence" value={snap ? String(snap.low_confidence_candidate_count) : "—"} />
+                            <StatCard label="Avg risk-adjusted ROI" value={snap?.average_risk_adjusted_roi ?? "—"} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            D · Submission operations
+                          </p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <StatCard label="Active batches" value={snap ? String(snap.active_submission_batch_count) : "—"} />
+                            <StatCard label="Shipped batches" value={metricValue("shipped_batch_count")} />
+                            <StatCard label="Delayed batches" value={metricValue("delayed_batch_count")} />
+                            <StatCard label="Turnaround metric" value={metricValue("average_turnaround_days")} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            E · Reconciliation summary
+                          </p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <StatCard label="Above expectation" value={metricValue("above_expectation_count")} />
+                            <StatCard label="Below expectation" value={metricValue("below_expectation_count")} />
+                            <StatCard label="Avg ROI delta" value={metricValue("average_roi_delta")} />
+                            <StatCard label="Avg estimated ROI" value={snap?.average_estimated_roi ?? "—"} />
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {graderRollup.length === 0 ? (
+                              <p className="text-sm text-slate-500">No grader performance rollups on this snapshot.</p>
+                            ) : (
+                              graderRollup.slice(0, 4).map((row) => (
+                                <div key={String(row.grader ?? Math.random())} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
+                                  <p className="text-sm font-semibold text-white">{String(row.grader ?? "Unknown grader")}</p>
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    submissions {String(row.submission_count ?? "—")} · below {String(row.below_expectation_count ?? "—")}
+                                  </p>
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    ROI delta {String(row.average_roi_delta ?? "—")} · turnaround {String(row.average_turnaround_days ?? "—")}
+                                  </p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">F · Alerts panel</p>
+                          <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                            <table className="w-full border-collapse text-left text-xs">
+                              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                <tr>
+                                  <th className="p-3 font-medium">Severity</th>
+                                  <th className="p-3 font-medium">Type</th>
+                                  <th className="p-3 font-medium">Evidence</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/10 text-slate-200">
+                                {dealerGradingAlerts.length === 0 ? (
+                                  <tr>
+                                    <td className="p-3 text-slate-500" colSpan={3}>
+                                      No grading alerts loaded.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  dealerGradingAlerts.slice(0, 12).map((row) => (
+                                    <tr key={row.id}>
+                                      <td className="p-3 font-semibold text-cyan-200/90">{row.severity}</td>
+                                      <td className="p-3 text-slate-100">{row.alert_type}</td>
+                                      <td className="p-3 text-slate-400">{row.message}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">G · Grading feed</p>
+                          <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                            <table className="w-full border-collapse text-left text-xs">
+                              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                <tr>
+                                  <th className="p-3 font-medium">Time</th>
+                                  <th className="p-3 font-medium">Signal</th>
+                                  <th className="p-3 font-medium">Summary</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/10 text-slate-200">
+                                {dealerGradingFeed.length === 0 ? (
+                                  <tr>
+                                    <td className="p-3 text-slate-500" colSpan={3}>
+                                      Feed is append-only across grading snapshot generations.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  dealerGradingFeed.slice(0, 14).map((evt) => (
+                                    <tr key={evt.id}>
+                                      <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(evt.created_at)}</td>
+                                      <td className="p-3 font-semibold text-slate-100">{evt.event_type}</td>
+                                      <td className="p-3 text-slate-400">{evt.summary}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-reporting-dash"
+              className="mt-6 rounded-3xl border border-indigo-400/35 bg-indigo-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-200/85">Grading reporting</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 closeout CSV registry</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                    Deterministic grading closeout reports for candidates, economics, submissions, reconciliation,
+                    recommendations, risk, the grading dashboard, and grader performance. Reports are observational only
+                    and keep replay-safe checksums plus append-safe history.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void generateQuickGradingReport()}
+                    disabled={gradingReportBusy}
+                    className="rounded-xl border border-indigo-400/45 bg-indigo-500/12 px-4 py-2 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-400/18 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {gradingReportBusy ? "Generating…" : "Generate grading dashboard CSV"}
+                  </button>
+                  <Link
+                    to="/ops#grading-reporting-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-indigo-300/55 hover:bg-white/5"
+                  >
+                    Ops grading reports
+                  </Link>
+                </div>
+              </div>
+
+              {gradingReportsLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading report registry…</p>
+              ) : gradingReportsError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingReportsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recent grading reports</p>
+                    {gradingReportsRecent && gradingReportsRecent.items.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-xs text-slate-200">
+                        {gradingReportsRecent.items.map((run) => (
+                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
+                            <div>
+                              <p className="font-semibold text-white">{run.report_type}</p>
+                              <p className="font-mono text-[10px] text-slate-500">
+                                #{run.id} · {run.status} · rows {run.csv_row_count}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-300">
+                                {shortenChecksum(run.checksum)}
+                              </span>
+                              {run.status === "COMPLETED" ? (
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-indigo-300/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-100"
+                                  onClick={() => void downloadGradingReportCsvClient(run.id)}
+                                >
+                                  Download CSV
+                                </button>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">No grading reports recorded yet.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-400/35 bg-rose-950/20 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-200/80">Failed reports</p>
+                    {gradingReportsFailed && gradingReportsFailed.items.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-xs text-rose-100">
+                        {gradingReportsFailed.items.map((run) => (
+                          <li key={run.id} className="border-b border-white/10 pb-2">
+                            <p className="font-semibold">{run.report_type}</p>
+                            <p className="font-mono text-[10px] text-rose-200/80">
+                              #{run.id} · {shortenChecksum(run.checksum)} · {(run.failure_reason ?? "UNKNOWN").slice(0, 120)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-rose-200/70">No failed grading report generations on record.</p>
+                    )}
+                  </div>
                 </div>
               )}
             </section>

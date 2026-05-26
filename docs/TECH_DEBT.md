@@ -247,6 +247,31 @@ Resolved routes:
   - Autonomous grading decisions or automatic recommendation action changes
   - Hidden portfolio, FMV, pricing, or inventory mutations driven by confidence/risk outputs
 
+## P37-08 — Dealer grading dashboard (2026-05-26)
+
+- Architecture note: deterministic grading command-center snapshots, metrics, observational alerts, and append-safe feed events live in `docs/DEALER_GRADING_DASHBOARD_ARCHITECTURE.md`. The lane aggregates grading candidates, recommendation/risk posture, submission ops, reconciliation outcomes, and liquidity evidence into a replay-safe grading cockpit.
+- Owner routes explicitly generate grading dashboard snapshots; `/ops/dealer-grading-dashboard*` remains read-only with optional owner scoping and should never mutate candidates, recommendations, submissions, reconciliation rows, FMV, pricing, or inventory.
+- **Deferred scope (beyond P37-08):**
+  - Real-time websocket updates, push refresh, or background dashboard fan-out
+  - Mobile-specific grading dashboards or offline dashboard packaging
+  - Scan AI, defect overlays, image grading, or OCR-driven slab interpretation
+  - Live grader APIs, webhook callbacks, carrier sync, or automatic submission-state mutation
+  - Autonomous grading decisions, predictive grading models, or automatic recommendation changes
+  - Notification routing, staffing workflows, or task orchestration layered onto dashboard alerts
+
+## P37-09 — Grading reporting / production closeout (2026-05-26)
+
+- Architecture note: deterministic grading closeout reporting plus final stabilization lives in `docs/GRADING_CLOSEOUT_ARCHITECTURE.md` (`GradingOperationalReportRun|File|Item`, UTF-8 CSV checksums, row-level lineage, replay-safe generation, owner vs `/ops/grading-reports` parity, deterministic filename rules).
+- The closeout lane must remain read-only over the P37 grading stack. Report generation may describe candidate, economics, submission, reconciliation, recommendation, risk, dashboard, and grader-performance state, but it must never fix or mutate them.
+- **Deferred scope (post-P37):**
+  - Scan AI and image-based defect detection
+  - Slab OCR and broader vision systems
+  - Autonomous grading or automatic recommendation execution
+  - Probabilistic ML, Monte Carlo simulation, or predictive grading models
+  - Live grader API integrations, webhook sync, or automatic submission systems
+  - Automatic FMV, pricing, liquidity, or inventory mutation from grading outputs
+  - Background workers, websocket status streaming, or external BI sink automation unless replay/checksum invariants are preserved
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.
