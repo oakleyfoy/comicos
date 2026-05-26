@@ -2783,6 +2783,20 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.grading_spread ? (
+                <div className="rounded-2xl border border-violet-400/35 bg-violet-950/30 px-4 py-3 text-[11px] text-violet-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-violet-200/90">Grading spread</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_spread.grading_spread_snapshot_id} · {detail.grading_spread.spread_status} ·{" "}
+                    {detail.grading_spread.target_grader}
+                    {detail.grading_spread.target_grade ? ` ${detail.grading_spread.target_grade}` : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Estimated upside {detail.grading_spread.estimated_net_upside ?? "—"} · liquidity-adjusted{" "}
+                    {detail.grading_spread.liquidity_adjusted_upside ?? "—"}
+                  </p>
+                </div>
+              ) : null}
             </>
           }
         />

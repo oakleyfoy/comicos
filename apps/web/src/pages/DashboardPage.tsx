@@ -61,6 +61,7 @@ import {
   type SalesDashboardSummary,
   type OperationalReportingDashboardRollup,
   type GradingCandidateDashboardSummary,
+  type GradingSpreadDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -877,6 +878,9 @@ export function DashboardPage() {
   const [gradingDashSummary, setGradingDashSummary] = useState<GradingCandidateDashboardSummary | null>(null);
   const [gradingDashLoading, setGradingDashLoading] = useState(true);
   const [gradingDashError, setGradingDashError] = useState<string | null>(null);
+  const [gradingSpreadSummary, setGradingSpreadSummary] = useState<GradingSpreadDashboardSummary | null>(null);
+  const [gradingSpreadLoading, setGradingSpreadLoading] = useState(true);
+  const [gradingSpreadError, setGradingSpreadError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1622,6 +1626,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setGradingDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingSpreadSummary(null);
+          setGradingSpreadLoading(false);
+          setGradingSpreadError(null);
+        }
+        return;
+      }
+      setGradingSpreadLoading(true);
+      setGradingSpreadError(null);
+      try {
+        const rsp = await apiClient.getGradingSpreadDashboardSummary();
+        if (!ignore) {
+          setGradingSpreadSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingSpreadSummary(null);
+          setGradingSpreadError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading spread summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setGradingSpreadLoading(false);
         }
       }
     })();
@@ -2811,6 +2851,53 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-spreads-dash"
+              className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/85">Grading economics</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 raw-vs-graded spread engine</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic spread checks compare raw FMV, graded FMV, grading cost assumptions, and liquidity
+                    weighting. No prediction, recommendation, or scan AI enters this lane.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-spread-ops"
+                  className="rounded-xl border border-violet-300/35 px-4 py-2 text-xs font-semibold text-violet-100 transition hover:border-violet-200/60 hover:bg-white/5"
+                >
+                  Ops spread table
+                </Link>
+              </div>
+              {gradingSpreadLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading spread rollup…</p>
+              ) : gradingSpreadError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingSpreadError}</StatusBanner>
+                </div>
+              ) : gradingSpreadSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Strong spreads" value={String(gradingSpreadSummary.strong_spread_count)} />
+                  <StatCard label="Elite spreads" value={String(gradingSpreadSummary.elite_spread_count)} />
+                  <StatCard label="Negative spreads" value={String(gradingSpreadSummary.negative_spread_count)} />
+                  <StatCard
+                    label="Average upside"
+                    value={gradingSpreadSummary.average_estimated_upside ?? "—"}
+                  />
+                  <StatCard
+                    label="Liquidity-adjusted total"
+                    value={gradingSpreadSummary.liquidity_adjusted_upside_total ?? "—"}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading spread rollup unavailable.</p>
               )}
             </section>
           ) : null}

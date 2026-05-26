@@ -178,6 +178,18 @@ Resolved routes:
   - Recommendation engines tying grading to acquisition or liquidation workflows
   - SLA tracking across physical shipments to graders, webhook callbacks from slabbers, insurance workflows
 
+## P37-02 — Raw-vs-graded spread engine (2026-05-25)
+
+- Architecture note: deterministic grading spread snapshots, evidence rows, and append-safe history are documented in `docs/GRADING_SPREAD_ENGINE_ARCHITECTURE.md`. The lane compares raw FMV, graded FMV, grading cost assumptions, and liquidity-adjusted upside only.
+- Owner routes may generate and inspect spreads; `/ops/grading-spreads*` mirrors stay read-only and can filter by owner, issue, inventory, grader, grade, confidence, and spread status.
+- **Deferred scope (beyond P37-02):**
+  - Grade prediction or AI grading pipelines
+  - Scan AI, defect scoring, image-based grading heuristics
+  - Recommendation engines, sell/hold guidance, or portfolio optimization
+  - Dynamic market forecasting or probabilistic pricing
+  - Grader API integrations and automated market posting
+  - Hidden FMV/inventory/liquidity mutations
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

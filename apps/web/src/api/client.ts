@@ -3114,6 +3114,16 @@ export interface InventoryGradingCandidateBadge {
   is_pipeline_active: boolean;
 }
 
+export interface InventoryGradingSpreadBadge {
+  grading_spread_snapshot_id: number;
+  spread_status: string;
+  target_grader: string;
+  target_grade: string | null;
+  estimated_net_upside: string | null;
+  liquidity_adjusted_upside: string | null;
+  checksum: string;
+}
+
 export interface GradingCandidateDashboardSummary {
   total_candidates: number;
   pipeline_active_count: number;
@@ -3150,6 +3160,98 @@ export interface GradingCandidateRead {
 
 export interface GradingCandidateListResponse {
   items: GradingCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingSpreadDashboardSummary {
+  strong_spread_count: number;
+  elite_spread_count: number;
+  negative_spread_count: number;
+  average_estimated_upside: string | null;
+  liquidity_adjusted_upside_total: string | null;
+}
+
+export interface GradingSpreadGeneratePayload {
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  target_grader: "PSA" | "CGC" | "CBCS";
+  target_grade?: string | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface GradingSpreadEvidenceRead {
+  id: number;
+  grading_spread_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingSpreadHistoryRead {
+  id: number;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  target_grader: string;
+  target_grade: string | null;
+  spread_amount: string | null;
+  spread_pct: string | null;
+  snapshot_date: string;
+  checksum: string;
+  created_at: string;
+}
+
+export interface GradingSpreadRead {
+  id: number;
+  owner_user_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  target_grader: string;
+  target_grade: string | null;
+  raw_fmv_amount: string | null;
+  graded_fmv_amount: string | null;
+  grading_cost_amount: string | null;
+  estimated_spread_amount: string | null;
+  estimated_spread_pct: string | null;
+  estimated_net_upside: string | null;
+  liquidity_adjusted_upside: string | null;
+  spread_status: string;
+  liquidity_modifier: string;
+  confidence_level: string;
+  evidence_count: number;
+  checksum: string;
+  snapshot_date: string;
+  replay_key: string | null;
+  generation_params_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingSpreadDetailRead {
+  snapshot: GradingSpreadRead;
+  evidence: GradingSpreadEvidenceRead[];
+  history: GradingSpreadHistoryRead[];
+}
+
+export interface GradingSpreadListResponse {
+  items: GradingSpreadRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingSpreadEvidenceListResponse {
+  items: GradingSpreadEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingSpreadHistoryListResponse {
+  items: GradingSpreadHistoryRead[];
   total_items: number;
   limit: number;
   offset: number;
@@ -4283,6 +4385,7 @@ export interface InventoryDetail extends InventoryItem {
   cover_images: InventoryCoverImage[];
   originating_scan_session?: InventoryScanSessionOrigin | null;
   grading_candidate?: InventoryGradingCandidateBadge | null;
+  grading_spread?: InventoryGradingSpreadBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -7714,6 +7817,109 @@ export const apiClient = {
   }): Promise<GradingCandidateListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GradingCandidateListResponse>(`/ops/grading-candidates${q}`);
+  },
+
+  getGradingSpreadDashboardSummary(): Promise<GradingSpreadDashboardSummary> {
+    return request<GradingSpreadDashboardSummary>("/grading-spreads/dashboard-summary");
+  },
+
+  generateGradingSpread(payload: GradingSpreadGeneratePayload): Promise<GradingSpreadDetailRead> {
+    return request<GradingSpreadDetailRead>("/grading-spreads/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingSpreads(params?: {
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    spread_status?: string;
+    confidence_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadListResponse>(`/grading-spreads${q}`);
+  },
+
+  getGradingSpread(spreadId: number): Promise<GradingSpreadDetailRead> {
+    return request<GradingSpreadDetailRead>(`/grading-spreads/${spreadId}`);
+  },
+
+  getGradingSpreadEvidence(params?: {
+    spread_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadEvidenceListResponse>(`/grading-spreads/evidence${q}`);
+  },
+
+  getGradingSpreadHistory(params?: {
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadHistoryListResponse>(`/grading-spread-history${q}`);
+  },
+
+  getOpsGradingSpreadDashboardSummary(ownerUserId?: number): Promise<GradingSpreadDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingSpreadDashboardSummary>(`/ops/grading-spreads/dashboard-summary${q}`);
+  },
+
+  getOpsGradingSpreads(params?: {
+    owner_user_id?: number;
+    canonical_comic_issue_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    spread_status?: string;
+    confidence_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadListResponse>(`/ops/grading-spreads${q}`);
+  },
+
+  getOpsGradingSpread(spreadId: number): Promise<GradingSpreadDetailRead> {
+    return request<GradingSpreadDetailRead>(`/ops/grading-spreads/${spreadId}`);
+  },
+
+  getOpsGradingSpreadEvidence(params?: {
+    owner_user_id?: number;
+    spread_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadEvidenceListResponse>(`/ops/grading-spread-evidence${q}`);
+  },
+
+  getOpsGradingSpreadHistory(params?: {
+    owner_user_id?: number;
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingSpreadHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingSpreadHistoryListResponse>(`/ops/grading-spread-history${q}`);
   },
 
   getListingExportDashboardSummary(): Promise<ListingExportDashboardSummary> {

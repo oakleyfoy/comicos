@@ -146,6 +146,7 @@ import {
   type ListingExportRunListResponse,
   type OperationalReportRunListResponse,
   type GradingCandidateListResponse,
+  type GradingSpreadListResponse,
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
@@ -1395,6 +1396,9 @@ export function OperationsPage() {
   const [opsGradingCandidatesError, setOpsGradingCandidatesError] = useState<string | null>(null);
   const [opsGradingOwnerDraft, setOpsGradingOwnerDraft] = useState("");
   const [opsGradingOwnerFilter, setOpsGradingOwnerFilter] = useState<number | undefined>();
+  const [opsGradingSpreads, setOpsGradingSpreads] = useState<GradingSpreadListResponse | null>(null);
+  const [opsGradingSpreadsLoading, setOpsGradingSpreadsLoading] = useState(true);
+  const [opsGradingSpreadsError, setOpsGradingSpreadsError] = useState<string | null>(null);
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2140,6 +2144,38 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsGradingCandidatesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingSpreadsLoading(true);
+      setOpsGradingSpreadsError(null);
+      try {
+        const rsp = await apiClient.getOpsGradingSpreads({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingSpreads(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingSpreads(null);
+          setOpsGradingSpreadsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading spreads.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingSpreadsLoading(false);
         }
       }
     })();
@@ -4601,6 +4637,7 @@ export function OperationsPage() {
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
+          ["Grading spreads", "#grading-spread-ops"],
           ["Listing intelligence", "#listing-intelligence-ops"],
           ["Convention", "#convention-ops"],
           ["Liquidity", "#liquidity-ops"],
@@ -5097,6 +5134,114 @@ export function OperationsPage() {
                         <td className="p-3 text-slate-400">{row.estimated_roi ?? "—"}</td>
                         <td className="p-3">{row.evidence_count}</td>
                         <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.latest_snapshot_checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-spread-ops"
+        className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading spread engine</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only spread economics for raw FMV, graded FMV, liquidity modifiers, and deterministic upside
+                checks. This lane explains grading economics without prediction or recommendation logic.
+              </p>
+            </div>
+            <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+              Ops / spread
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          <div className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsGradingOwnerDraft}
+                onChange={(e) => setOpsGradingOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = all owners"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-violet-400/45 px-3 py-2 text-xs font-semibold text-violet-100"
+              onClick={() => {
+                const trimmed = opsGradingOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsGradingOwnerFilter(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsGradingOwnerFilter(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+          {opsGradingSpreadsLoading ? (
+            <p className="text-sm text-slate-400">Loading grading spreads…</p>
+          ) : opsGradingSpreadsError ? (
+            <StatusBanner tone="error">{opsGradingSpreadsError}</StatusBanner>
+          ) : opsGradingSpreads ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Spread</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Inventory</th>
+                    <th className="p-3 font-medium">Target</th>
+                    <th className="p-3 font-medium">Raw / Graded</th>
+                    <th className="p-3 font-medium">Spread %</th>
+                    <th className="p-3 font-medium">Liquidity</th>
+                    <th className="p-3 font-medium">Confidence</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingSpreads.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={9}>
+                        No grading spreads for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingSpreads.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">{row.spread_status}</div>
+                          <div className="text-[10px] text-slate-500">#{row.id}</div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id ?? "—"}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">inv {row.inventory_item_id ?? "—"}</td>
+                        <td className="p-3">
+                          {row.target_grader}
+                          {row.target_grade ? <span className="block text-[10px] text-slate-500">{row.target_grade}</span> : null}
+                        </td>
+                        <td className="p-3 text-slate-400">
+                          {row.raw_fmv_amount ?? "—"} / {row.graded_fmv_amount ?? "—"}
+                          <span className="block text-[10px] text-slate-500">
+                            {row.estimated_net_upside ?? "—"} net
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">{row.estimated_spread_pct ?? "—"}</td>
+                        <td className="p-3">
+                          <div>{row.liquidity_modifier}</div>
+                          <div className="text-[10px] text-slate-500">{row.liquidity_adjusted_upside ?? "—"}</div>
+                        </td>
+                        <td className="p-3">{row.confidence_level}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
                       </tr>
                     ))
                   )}

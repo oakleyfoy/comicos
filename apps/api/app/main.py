@@ -197,6 +197,14 @@ from app.schemas.grading_candidate import (
     GradingCandidatePatchPayload,
     GradingCandidateRejectPayload,
 )
+from app.schemas.grading_spread import (
+    GradingSpreadDashboardSummary,
+    GradingSpreadDetailRead,
+    GradingSpreadEvidenceListResponse,
+    GradingSpreadGeneratePayload,
+    GradingSpreadHistoryListResponse,
+    GradingSpreadListResponse,
+)
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
     ConventionAssignmentListResponse,
@@ -685,6 +693,7 @@ from app.services.inventory_fmv import (
 )
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
+from app.services import grading_spread as grading_spread_service
 from app.services import operational_reporting as operational_reporting_service
 from app.services import listing_export as listing_export_service
 from app.services import listing_intelligence as listing_intelligence_service
@@ -10010,6 +10019,235 @@ def ops_list_grading_candidate_evidence(
         limit=lim,
         offset=off,
     )
+
+
+@app.get("/grading-spreads/dashboard-summary", response_model=GradingSpreadDashboardSummary)
+def owner_grading_spreads_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSpreadDashboardSummary:
+    return grading_spread_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/ops/grading-spreads/dashboard-summary", response_model=GradingSpreadDashboardSummary, include_in_schema=False)
+def ops_grading_spreads_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingSpreadDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_spread_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.post(
+    "/grading-spreads/generate",
+    response_model=GradingSpreadDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_grading_spread(
+    payload: GradingSpreadGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSpreadDetailRead:
+    detail, replayed = grading_spread_service.generate_grading_spread(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/grading-spreads", response_model=GradingSpreadListResponse)
+def owner_list_grading_spreads(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    spread_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadListResponse:
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_spreads_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        spread_status=spread_status,
+        confidence_level=confidence_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.list_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-spreads/{spread_id}", response_model=GradingSpreadDetailRead)
+def owner_get_grading_spread(
+    spread_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingSpreadDetailRead:
+    row = grading_spread_service.get_spread_owner(session, owner_user_id=int(current_user.id), spread_id=spread_id)
+    return grading_spread_service._detail_read(session, row)
+
+
+@app.get("/grading-spreads/evidence", response_model=GradingSpreadEvidenceListResponse)
+def owner_list_grading_spread_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    spread_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadEvidenceListResponse:
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        spread_id=spread_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-spread-history", response_model=GradingSpreadHistoryListResponse)
+def owner_list_grading_spread_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadHistoryListResponse:
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-spreads", response_model=GradingSpreadListResponse, include_in_schema=False)
+def ops_list_grading_spreads(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    spread_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_spreads_ops(
+        session,
+        owner_user_id=owner_user_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        spread_status=spread_status,
+        confidence_level=confidence_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.list_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-spreads/{spread_id}", response_model=GradingSpreadDetailRead, include_in_schema=False)
+def ops_get_grading_spread(
+    spread_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingSpreadDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_spread_service.get_spread_ops(session, spread_id=spread_id)
+    return grading_spread_service._detail_read(session, row)
+
+
+@app.get("/ops/grading-spread-evidence", response_model=GradingSpreadEvidenceListResponse, include_in_schema=False)
+def ops_list_grading_spread_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    spread_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        spread_id=spread_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-spread-history", response_model=GradingSpreadHistoryListResponse, include_in_schema=False)
+def ops_list_grading_spread_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingSpreadHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_spread_service.clamp_grading_spread_pagination(limit, offset)
+    rows, total = grading_spread_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_spread_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

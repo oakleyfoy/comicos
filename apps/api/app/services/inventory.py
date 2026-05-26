@@ -49,6 +49,7 @@ from app.services.order_arrival_intelligence import (
     classifications_for_inventory_copy,
 )
 from app.services.order_states import derive_asset_state
+from app.services.grading_spread import inventory_grading_spread_badge
 from app.services.run_detection import run_detection_inventory_context_for_owner
 from app.services.scan_sessions import originating_scan_session_for_inventory_copy
 from app.services.grading_candidate_service import inventory_grading_badge
@@ -824,6 +825,11 @@ def get_inventory_copy_detail(
         inventory_copy_id=inventory_copy_id,
     )
     merged["grading_candidate"] = inventory_grading_badge(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["grading_spread"] = inventory_grading_spread_badge(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,
