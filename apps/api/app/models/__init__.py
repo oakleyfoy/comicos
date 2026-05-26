@@ -144,6 +144,12 @@ from app.models.grading_reconciliation import (
     GradingReconciliationHistory,
     GradingReconciliationRecord,
 )
+from app.models.grading_recommendation import (
+    GradingRecommendation,
+    GradingRecommendationEvidence,
+    GradingRecommendationHistory,
+    GradingRecommendationScenario,
+)
 
 __all__ = [
     "CanonicalCreator",
@@ -190,6 +196,10 @@ __all__ = [
     "GradingReconciliationEvidence",
     "GradingReconciliationHistory",
     "GradingReconciliationRecord",
+    "GradingRecommendation",
+    "GradingRecommendationEvidence",
+    "GradingRecommendationHistory",
+    "GradingRecommendationScenario",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

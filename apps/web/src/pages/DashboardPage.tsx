@@ -61,6 +61,7 @@ import {
   type SalesDashboardSummary,
   type OperationalReportingDashboardRollup,
   type GradingCandidateDashboardSummary,
+  type GradingRecommendationDashboardSummary,
   type GradingReconciliationDashboardSummary,
   type GradingSpreadDashboardSummary,
   type GradingRoiDashboardSummary,
@@ -896,6 +897,10 @@ export function DashboardPage() {
     useState<GradingReconciliationDashboardSummary | null>(null);
   const [gradingReconciliationLoading, setGradingReconciliationLoading] = useState(true);
   const [gradingReconciliationError, setGradingReconciliationError] = useState<string | null>(null);
+  const [gradingRecommendationSummary, setGradingRecommendationSummary] =
+    useState<GradingRecommendationDashboardSummary | null>(null);
+  const [gradingRecommendationLoading, setGradingRecommendationLoading] = useState(true);
+  const [gradingRecommendationError, setGradingRecommendationError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1569,6 +1574,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingRecommendationSummary(null);
+          setGradingRecommendationLoading(false);
+          setGradingRecommendationError(null);
+        }
+        return;
+      }
+      setGradingRecommendationLoading(true);
+      setGradingRecommendationError(null);
+      try {
+        const rsp = await apiClient.getGradingRecommendationDashboardSummary();
+        if (!ignore) {
+          setGradingRecommendationSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingRecommendationSummary(null);
+          setGradingRecommendationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading recommendation summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setGradingRecommendationLoading(false);
         }
       }
     })();
@@ -3173,6 +3214,56 @@ export function DashboardPage() {
                 </>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading reconciliation rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-recommendation-dash"
+              className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/85">Recommendation engine</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading decision support</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Explainable grading recommendations built from ROI, spread, liquidity, reconciliation, grader
+                    performance, and listing-intelligence evidence.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-recommendation-ops"
+                  className="rounded-xl border border-fuchsia-300/35 px-4 py-2 text-xs font-semibold text-fuchsia-100 transition hover:border-fuchsia-200/60 hover:bg-white/5"
+                >
+                  Ops recommendations
+                </Link>
+              </div>
+              {gradingRecommendationLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading recommendations…</p>
+              ) : gradingRecommendationError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingRecommendationError}</StatusBanner>
+                </div>
+              ) : gradingRecommendationSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard
+                    label="Grade recommendations"
+                    value={String(gradingRecommendationSummary.grade_recommendation_count)}
+                  />
+                  <StatCard label="Hold raw" value={String(gradingRecommendationSummary.hold_raw_count)} />
+                  <StatCard
+                    label="Elite opportunities"
+                    value={String(gradingRecommendationSummary.elite_opportunity_count)}
+                  />
+                  <StatCard label="High risk" value={String(gradingRecommendationSummary.high_risk_count)} />
+                  <StatCard
+                    label="Average expected ROI"
+                    value={gradingRecommendationSummary.average_expected_roi ?? "—"}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading recommendation rollup unavailable.</p>
               )}
             </section>
           ) : null}

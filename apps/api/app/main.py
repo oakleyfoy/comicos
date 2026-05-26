@@ -1,6 +1,7 @@
 from urllib.parse import quote
 
 from datetime import date, datetime
+from decimal import Decimal
 import json
 from typing import Annotated, Literal
 
@@ -221,6 +222,14 @@ from app.schemas.grading_reconciliation import (
     GradingReconciliationHistoryListResponse,
     GradingReconciliationListResponse,
     GradingReconciliationReconcilePayload,
+)
+from app.schemas.grading_recommendation import (
+    GradingRecommendationDashboardSummary,
+    GradingRecommendationDetailRead,
+    GradingRecommendationEvidenceListResponse,
+    GradingRecommendationGeneratePayload,
+    GradingRecommendationHistoryListResponse,
+    GradingRecommendationListResponse,
 )
 from app.schemas.grading_submission import (
     GradingSubmissionCreatePayload,
@@ -721,6 +730,7 @@ from app.services.inventory_fmv import (
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
+from app.services import grading_recommendation as grading_recommendation_service
 from app.services import grading_spread as grading_spread_service
 from app.services import grading_roi as grading_roi_service
 from app.services import grading_submission as grading_submission_service
@@ -11037,6 +11047,243 @@ def ops_list_grader_performance(
         offset=off,
     )
     return grading_reconciliation_service.performance_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-recommendations/dashboard-summary", response_model=GradingRecommendationDashboardSummary)
+def owner_grading_recommendation_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRecommendationDashboardSummary:
+    return grading_recommendation_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get(
+    "/ops/grading-recommendations/dashboard-summary",
+    response_model=GradingRecommendationDashboardSummary,
+    include_in_schema=False,
+)
+def ops_grading_recommendation_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingRecommendationDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_recommendation_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.post("/grading-recommendations/generate", response_model=GradingRecommendationDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_generate_grading_recommendation(
+    payload: GradingRecommendationGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRecommendationDetailRead:
+    return grading_recommendation_service.generate_grading_recommendation(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/grading-recommendations", response_model=GradingRecommendationListResponse)
+def owner_list_grading_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommended_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_score: Decimal | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    recommended_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationListResponse:
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_recommendations_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        recommended_action=recommended_action,
+        recommendation_strength=recommendation_strength,
+        confidence_score=confidence_score,
+        risk_level=risk_level,
+        recommended_grader=recommended_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.recommendations_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-recommendations/evidence", response_model=GradingRecommendationEvidenceListResponse)
+def owner_list_grading_recommendation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    recommendation_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationEvidenceListResponse:
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_id=recommendation_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-recommendations/history", response_model=GradingRecommendationHistoryListResponse)
+def owner_list_grading_recommendation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommended_action: str | None = Query(default=None),
+    recommended_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationHistoryListResponse:
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        recommended_action=recommended_action,
+        recommended_grader=recommended_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-recommendations/{recommendation_id}", response_model=GradingRecommendationDetailRead)
+def owner_get_grading_recommendation(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRecommendationDetailRead:
+    row = grading_recommendation_service.get_recommendation_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_id=recommendation_id,
+    )
+    return grading_recommendation_service._detail_read(session, row)
+
+
+@app.get("/ops/grading-recommendations", response_model=GradingRecommendationListResponse, include_in_schema=False)
+def ops_list_grading_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommended_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_score: Decimal | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    recommended_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_recommendations_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        recommended_action=recommended_action,
+        recommendation_strength=recommendation_strength,
+        confidence_score=confidence_score,
+        risk_level=risk_level,
+        recommended_grader=recommended_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.recommendations_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-recommendation-evidence", response_model=GradingRecommendationEvidenceListResponse, include_in_schema=False)
+def ops_list_grading_recommendation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    recommendation_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        recommendation_id=recommendation_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-recommendation-history", response_model=GradingRecommendationHistoryListResponse, include_in_schema=False)
+def ops_list_grading_recommendation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommended_action: str | None = Query(default=None),
+    recommended_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRecommendationHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_recommendation_service.clamp_grading_recommendation_pagination(limit, offset)
+    rows, total = grading_recommendation_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        recommended_action=recommended_action,
+        recommended_grader=recommended_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_recommendation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-recommendations/{recommendation_id}", response_model=GradingRecommendationDetailRead, include_in_schema=False)
+def ops_get_grading_recommendation(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingRecommendationDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_recommendation_service.get_recommendation_ops(session, recommendation_id=recommendation_id)
+    return grading_recommendation_service._detail_read(session, row)
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

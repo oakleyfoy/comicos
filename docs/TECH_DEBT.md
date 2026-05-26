@@ -225,6 +225,17 @@ Resolved routes:
   - Automatic FMV, pricing, or inventory mutation based on reconciliation results
   - Probabilistic grading models or forecasting
 
+## P37-06 — Grading recommendation engine (2026-05-26)
+
+- Architecture note: deterministic recommendation snapshots, evidence rows, scenario rows, and append-safe history live in `docs/GRADING_RECOMMENDATION_ENGINE_ARCHITECTURE.md`. The lane translates existing grading ROI, spread, liquidity, reconciliation, grader performance, and listing-intelligence ledgers into explicit recommendation actions.
+- Owner routes may generate and inspect recommendations; `/ops/grading-recommendations*` mirrors stay read-only and support explicit owner filtering without mutating FMV, inventory, listings, or submission workflows.
+- **Deferred scope (beyond P37-06):**
+  - Scan AI, defect prediction, image grading, or vision-model recommendation inputs
+  - Probabilistic ML, forecasting, Monte Carlo scenario generation, or hidden scoring models
+  - Live grader APIs, webhook ingest, or automatic submission / return orchestration
+  - Autonomous repricing, FMV mutation, inventory mutation, or portfolio auto-actions
+  - Fully automated grading decisions without explicit human review
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

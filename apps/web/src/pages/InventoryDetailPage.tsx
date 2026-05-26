@@ -2838,6 +2838,24 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.grading_recommendation ? (
+                <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-fuchsia-200/90">Recommendation</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_recommendation.grading_recommendation_id} ·{" "}
+                    {detail.grading_recommendation.recommended_action} ·{" "}
+                    {detail.grading_recommendation.recommended_grader ?? "No preferred grader"}
+                    {detail.grading_recommendation.recommended_grade_target
+                      ? ` ${detail.grading_recommendation.recommended_grade_target}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Confidence {detail.grading_recommendation.confidence_score} · risk{" "}
+                    {detail.grading_recommendation.risk_level} · {detail.grading_recommendation.recommendation_strength}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">{detail.grading_recommendation.rationale_summary}</p>
+                </div>
+              ) : null}
             </>
           }
         />

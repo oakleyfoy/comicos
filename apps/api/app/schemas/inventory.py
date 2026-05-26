@@ -9,6 +9,7 @@ from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
 from app.schemas.grading_candidate import InventoryGradingCandidateBadge
 from app.schemas.grading_roi import InventoryGradingRoiBadge
 from app.schemas.grading_reconciliation import InventoryGradingReconciliationBadge
+from app.schemas.grading_recommendation import InventoryGradingRecommendationBadge
 from app.schemas.grading_submission import InventoryGradingSubmissionBadge
 from app.schemas.grading_spread import InventoryGradingSpreadBadge
 from app.schemas.inventory_action_center import InventoryActionCenterAttachment
@@ -150,6 +151,7 @@ class InventoryDetailResponse(BaseModel):
     grading_roi: InventoryGradingRoiBadge | None = None
     grading_submission: InventoryGradingSubmissionBadge | None = None
     grading_reconciliation: InventoryGradingReconciliationBadge | None = None
+    grading_recommendation: InventoryGradingRecommendationBadge | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

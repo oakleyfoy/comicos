@@ -3154,6 +3154,17 @@ export interface InventoryGradingReconciliationBadge {
   reconciliation_status: string;
 }
 
+export interface InventoryGradingRecommendationBadge {
+  grading_recommendation_id: number;
+  recommended_action: string;
+  recommended_grader: string | null;
+  recommended_grade_target: string | null;
+  confidence_score: string;
+  risk_level: string;
+  recommendation_strength: string;
+  rationale_summary: string;
+}
+
 export interface GradingReconciliationEvidenceRead {
   id: number;
   grading_reconciliation_record_id: number;
@@ -3266,6 +3277,111 @@ export interface GradingReconciliationReconcilePayload {
   realized_graded_value?: string | null;
   reconciled_at?: string | null;
   confidence_level?: "HIGH" | "MEDIUM" | "LOW" | null;
+}
+
+export interface GradingRecommendationEvidenceRead {
+  id: number;
+  grading_recommendation_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingRecommendationScenarioRead {
+  id: number;
+  grading_recommendation_id: number;
+  scenario_name: string;
+  target_grade: string | null;
+  estimated_value: string | null;
+  estimated_roi: string | null;
+  confidence_modifier: string | null;
+  created_at: string;
+}
+
+export interface GradingRecommendationHistoryRead {
+  id: number;
+  owner_user_id: number | null;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  recommended_action: string;
+  recommended_grader: string | null;
+  recommendation_strength: string;
+  confidence_score: string;
+  snapshot_date: string;
+  checksum: string;
+  created_at: string;
+}
+
+export interface GradingRecommendationRead {
+  id: number;
+  owner_user_id: number;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  recommended_action: string;
+  recommended_grader: string | null;
+  recommended_grade_target: string | null;
+  expected_roi: string | null;
+  liquidity_adjusted_roi: string | null;
+  estimated_net_profit: string | null;
+  estimated_total_cost: string | null;
+  confidence_score: string;
+  recommendation_strength: string;
+  risk_level: string;
+  recommendation_status: string;
+  rationale_summary: string;
+  warning_flags_json: unknown[];
+  evidence_count: number;
+  checksum: string;
+  replay_key: string | null;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface GradingRecommendationDetailRead {
+  recommendation: GradingRecommendationRead;
+  evidence: GradingRecommendationEvidenceRead[];
+  scenarios: GradingRecommendationScenarioRead[];
+  history: GradingRecommendationHistoryRead[];
+}
+
+export interface GradingRecommendationListResponse {
+  items: GradingRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRecommendationEvidenceListResponse {
+  items: GradingRecommendationEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRecommendationHistoryListResponse {
+  items: GradingRecommendationHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRecommendationDashboardSummary {
+  grade_recommendation_count: number;
+  hold_raw_count: number;
+  elite_opportunity_count: number;
+  high_risk_count: number;
+  average_expected_roi: string | null;
+}
+
+export interface GradingRecommendationGeneratePayload {
+  grading_candidate_id?: number | null;
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
 }
 
 export interface GradingSubmissionDashboardSummary {
@@ -4785,6 +4901,7 @@ export interface InventoryDetail extends InventoryItem {
   grading_roi?: InventoryGradingRoiBadge | null;
   grading_submission?: InventoryGradingSubmissionBadge | null;
   grading_reconciliation?: InventoryGradingReconciliationBadge | null;
+  grading_recommendation?: InventoryGradingRecommendationBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -8453,6 +8570,113 @@ export const apiClient = {
   }): Promise<GraderPerformanceSnapshotListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GraderPerformanceSnapshotListResponse>(`/ops/grader-performance${q}`);
+  },
+
+  getGradingRecommendationDashboardSummary(): Promise<GradingRecommendationDashboardSummary> {
+    return request<GradingRecommendationDashboardSummary>("/grading-recommendations/dashboard-summary");
+  },
+
+  generateGradingRecommendation(payload: GradingRecommendationGeneratePayload): Promise<GradingRecommendationDetailRead> {
+    return request<GradingRecommendationDetailRead>("/grading-recommendations/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingRecommendations(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    recommended_action?: string;
+    recommendation_strength?: string;
+    confidence_score?: string | number;
+    risk_level?: string;
+    recommended_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationListResponse>(`/grading-recommendations${q}`);
+  },
+
+  getGradingRecommendation(recommendationId: number): Promise<GradingRecommendationDetailRead> {
+    return request<GradingRecommendationDetailRead>(`/grading-recommendations/${recommendationId}`);
+  },
+
+  getGradingRecommendationEvidence(params?: {
+    recommendation_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationEvidenceListResponse>(`/grading-recommendations/evidence${q}`);
+  },
+
+  getGradingRecommendationHistory(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    recommended_action?: string;
+    recommended_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationHistoryListResponse>(`/grading-recommendations/history${q}`);
+  },
+
+  getOpsGradingRecommendationDashboardSummary(ownerUserId?: number): Promise<GradingRecommendationDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingRecommendationDashboardSummary>(`/ops/grading-recommendations/dashboard-summary${q}`);
+  },
+
+  listOpsGradingRecommendations(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    recommended_action?: string;
+    recommendation_strength?: string;
+    confidence_score?: string | number;
+    risk_level?: string;
+    recommended_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationListResponse>(`/ops/grading-recommendations${q}`);
+  },
+
+  getOpsGradingRecommendation(recommendationId: number): Promise<GradingRecommendationDetailRead> {
+    return request<GradingRecommendationDetailRead>(`/ops/grading-recommendations/${recommendationId}`);
+  },
+
+  getOpsGradingRecommendationEvidence(params?: {
+    owner_user_id?: number;
+    recommendation_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationEvidenceListResponse>(`/ops/grading-recommendation-evidence${q}`);
+  },
+
+  getOpsGradingRecommendationHistory(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    recommended_action?: string;
+    recommended_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRecommendationHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRecommendationHistoryListResponse>(`/ops/grading-recommendation-history${q}`);
   },
 
   getGradingSpreadDashboardSummary(): Promise<GradingSpreadDashboardSummary> {
