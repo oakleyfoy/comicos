@@ -18,8 +18,10 @@ from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
 from app.schemas.inventory_fmv import InventoryFmvAttachmentRead, InventoryValuationScope
 from app.schemas.scan_sessions import InventoryScanSessionOriginRead
 from app.schemas.inventory_risks import InventoryRiskRead
+from app.schemas.duplicate_consolidation import InventoryDuplicateIntelligenceTeaser
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.portfolio import InventoryPortfolioIntelligenceTeaser
+from app.schemas.portfolio_liquidity import InventoryPortfolioLiquidityTeaser
 from app.schemas.run_detection import RunDetectionCopyAttachment
 
 ReleaseCalendarPresence = Literal["present", "missing"]
@@ -156,6 +158,8 @@ class InventoryDetailResponse(BaseModel):
     grading_recommendation: InventoryGradingRecommendationBadge | None = None
     grading_risk: InventoryGradingRiskBadge | None = None
     portfolio_intelligence: InventoryPortfolioIntelligenceTeaser | None = None
+    duplicate_intelligence: InventoryDuplicateIntelligenceTeaser | None = None
+    portfolio_liquidity: InventoryPortfolioLiquidityTeaser | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

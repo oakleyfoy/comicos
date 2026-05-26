@@ -2813,6 +2813,58 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {detail.duplicate_intelligence ? (
+                <div className="rounded-2xl border border-rose-400/35 bg-rose-950/25 px-4 py-3 text-[11px] text-rose-50">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-rose-100/90">Duplicate intelligence</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    {detail.duplicate_intelligence.cluster_types_present.length ? (
+                      <span>{detail.duplicate_intelligence.cluster_types_present.join(", ")}</span>
+                    ) : (
+                      <span className="text-slate-500">No duplicate cluster hits in latest batch.</span>
+                    )}
+                  </p>
+                  {detail.duplicate_intelligence.worst_duplication_status ? (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Worst posture {detail.duplicate_intelligence.worst_duplication_status} · strongest copy{" "}
+                      {detail.duplicate_intelligence.is_strongest_copy_in_clusters ? "likely this row" : "another duplicate"}
+                    </p>
+                  ) : null}
+                  {detail.duplicate_intelligence.primary_consolidation_action ? (
+                    <p className="mt-1 text-[11px] text-slate-300">
+                      Observational note: {detail.duplicate_intelligence.primary_consolidation_action}
+                      {detail.duplicate_intelligence.consolidation_teaser
+                        ? ` — ${detail.duplicate_intelligence.consolidation_teaser}`
+                        : ""}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {detail.portfolio_liquidity ? (
+                <div className="rounded-2xl border border-teal-500/35 bg-teal-950/25 px-4 py-3 text-[11px] text-teal-50">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-teal-100/90">Portfolio liquidity</p>
+                    <span className="rounded-full border border-teal-300/45 bg-teal-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-teal-100">
+                      {detail.portfolio_liquidity.portfolio_liquidity_bucket}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Engine {detail.portfolio_liquidity.liquidity_engine_status ?? "—"}
+                    {detail.portfolio_liquidity.portfolio_liquidity_snapshot_id ? (
+                      <span className="ml-2 font-mono text-[10px] text-slate-400">
+                        snapshot #{detail.portfolio_liquidity.portfolio_liquidity_snapshot_id}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Latest ALL_INVENTORY rollup — efficiency score {detail.portfolio_liquidity.liquidity_efficiency_score ?? "—"}
+                    {" · "}dead-capital estimate {formatCurrency(detail.portfolio_liquidity.dead_capital_estimate)}{" · "}balance{" "}
+                    <span className="text-teal-100">{detail.portfolio_liquidity.liquidity_balance_status ?? "—"}</span>
+                  </p>
+                  {detail.portfolio_liquidity.dead_capital_teaser ? (
+                    <p className="mt-1 text-[11px] text-amber-200/90">{detail.portfolio_liquidity.dead_capital_teaser}</p>
+                  ) : null}
+                </div>
+              ) : null}
               {detail.grading_spread ? (
                 <div className="rounded-2xl border border-violet-400/35 bg-violet-950/30 px-4 py-3 text-[11px] text-violet-100">
                   <p className="font-semibold uppercase tracking-[0.12em] text-violet-200/90">Grading spread</p>

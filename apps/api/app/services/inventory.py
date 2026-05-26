@@ -40,7 +40,7 @@ from app.services.duplicate_candidate_reviews import (
     load_reviews_for_keys,
     reviewer_email_map,
 )
-from app.services.cover_images import list_cover_reads_for_inventory
+from app.services.duplicate_consolidation import inventory_duplicate_teaser
 from app.services.duplicate_ownership_intelligence import duplicate_ownership_inventory_context_for_owner
 from app.services.inventory_action_center import attachment_from_items, build_inventory_action_items
 from app.services.inventory_intelligence import compute_inventory_intelligence
@@ -59,6 +59,7 @@ from app.services.grading_spread import inventory_grading_spread_badge
 from app.services.run_detection import run_detection_inventory_context_for_owner
 from app.services.scan_sessions import originating_scan_session_for_inventory_copy
 from app.services.grading_candidate_service import inventory_grading_badge
+from app.services.portfolio_liquidity import inventory_portfolio_liquidity_teaser
 
 SORTABLE_FIELDS = {
     "title",
@@ -870,6 +871,16 @@ def get_inventory_copy_detail(
         owner_user_id=int(current_user.id),
         inventory_copy_id=inventory_copy_id,
         publisher_display_name=str(merged.get("publisher") or ""),
+    )
+    merged["duplicate_intelligence"] = inventory_duplicate_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["portfolio_liquidity"] = inventory_portfolio_liquidity_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
     )
     return InventoryDetailResponse.model_validate(merged)
 

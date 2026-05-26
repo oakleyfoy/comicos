@@ -199,6 +199,24 @@ from app.schemas.grading_operational_reporting import (
     GradingOperationalReportRunDetailRead,
     GradingOperationalReportRunListResponse,
 )
+from app.schemas.duplicate_consolidation import (
+    DuplicateClusterGeneratePayload,
+    DuplicateClusterGenerateResponse,
+    DuplicateClusterItemListResponse,
+    DuplicateClusterListResponse,
+    DuplicateClusterRead,
+    DuplicateConsolidationRecommendationListResponse,
+    DuplicateHistoryListResponse,
+    DuplicateIntelligenceSummary,
+)
+from app.schemas.portfolio_liquidity import (
+    PortfolioLiquidityEvidenceListResponse,
+    PortfolioLiquidityGeneratePayload,
+    PortfolioLiquidityGenerateResponse,
+    PortfolioLiquidityHistoryListResponse,
+    PortfolioLiquiditySnapshotDetailResponse,
+    PortfolioLiquiditySnapshotListResponse,
+)
 from app.schemas.portfolio import (
     PortfolioAllocationGenerateResponse,
     PortfolioAllocationSnapshotListResponse,
@@ -769,6 +787,8 @@ from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import dealer_grading_dashboard as dealer_grading_dashboard_service
 from app.services import grading_reporting as grading_reporting_service
 from app.services import portfolio_registry as portfolio_registry_service
+from app.services import duplicate_consolidation as duplicate_consolidation_service
+from app.services import portfolio_liquidity as portfolio_liquidity_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
@@ -10134,6 +10154,490 @@ def ops_list_portfolio_allocations_route(
         session,
         owner_user_id=owner_user_id,
         portfolio_id=portfolio_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/duplicate-intelligence/summary", response_model=DuplicateIntelligenceSummary)
+def owner_duplicate_intelligence_summary_route(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DuplicateIntelligenceSummary:
+    return duplicate_consolidation_service.duplicate_intelligence_summary(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/duplicate-clusters", response_model=DuplicateClusterListResponse)
+def owner_list_duplicate_clusters(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    cluster_type: str | None = Query(default=None),
+    duplication_status: str | None = Query(default=None),
+    liquidity_profile: str | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateClusterListResponse:
+    return duplicate_consolidation_service.list_clusters_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        cluster_type=cluster_type,
+        duplication_status=duplication_status,
+        liquidity_profile=liquidity_profile,
+        recommendation_action=recommendation_action,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/duplicate-clusters/{cluster_id}", response_model=DuplicateClusterRead)
+def owner_get_duplicate_cluster(
+    cluster_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DuplicateClusterRead:
+    return duplicate_consolidation_service.get_cluster_owner(
+        session, owner_user_id=int(current_user.id), cluster_id=cluster_id
+    )
+
+
+@app.get("/duplicate-cluster-items", response_model=DuplicateClusterItemListResponse)
+def owner_list_duplicate_cluster_items(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    duplicate_cluster_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateClusterItemListResponse:
+    return duplicate_consolidation_service.list_cluster_items_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        duplicate_cluster_id=duplicate_cluster_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        inventory_item_id=inventory_item_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/duplicate-consolidation-recommendations",
+    response_model=DuplicateConsolidationRecommendationListResponse,
+)
+def owner_list_duplicate_consolidation_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_status: str | None = Query(default=None, alias="status"),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateConsolidationRecommendationListResponse:
+    return duplicate_consolidation_service.list_consolidation_recommendations_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_action=recommendation_action,
+        recommendation_status=recommendation_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/duplicate-history", response_model=DuplicateHistoryListResponse)
+def owner_duplicate_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    cluster_key_prefix: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateHistoryListResponse:
+    return duplicate_consolidation_service.list_duplicate_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        cluster_key_prefix=cluster_key_prefix,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post(
+    "/duplicate-clusters/generate",
+    response_model=DuplicateClusterGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_duplicate_clusters(
+    payload: DuplicateClusterGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DuplicateClusterGenerateResponse:
+    body = duplicate_consolidation_service.generate_duplicate_clusters(
+        session, owner_user_id=int(current_user.id), payload=payload
+    )
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/portfolio-liquidity", response_model=PortfolioLiquiditySnapshotListResponse)
+def owner_list_portfolio_liquidity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    liquidity_balance_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquiditySnapshotListResponse:
+    return portfolio_liquidity_service.list_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        liquidity_balance_status=liquidity_balance_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-liquidity/{snapshot_id}", response_model=PortfolioLiquiditySnapshotDetailResponse)
+def owner_get_portfolio_liquidity_snapshot(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioLiquiditySnapshotDetailResponse:
+    snap, buckets = portfolio_liquidity_service.get_snapshot_detail_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+    )
+    return PortfolioLiquiditySnapshotDetailResponse(snapshot=snap, buckets=buckets)
+
+
+@app.get("/portfolio-liquidity-evidence", response_model=PortfolioLiquidityEvidenceListResponse)
+def owner_list_portfolio_liquidity_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_liquidity_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquidityEvidenceListResponse:
+    return portfolio_liquidity_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_liquidity_snapshot_id=portfolio_liquidity_snapshot_id,
+        evidence_type=evidence_type,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-liquidity-history", response_model=PortfolioLiquidityHistoryListResponse)
+def owner_portfolio_liquidity_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    liquidity_balance_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquidityHistoryListResponse:
+    return portfolio_liquidity_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        liquidity_balance_status=liquidity_balance_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post(
+    "/portfolio-liquidity/generate",
+    response_model=PortfolioLiquidityGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_portfolio_liquidity(
+    payload: PortfolioLiquidityGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioLiquidityGenerateResponse:
+    body = portfolio_liquidity_service.generate_portfolio_liquidity(
+        session, owner_user_id=int(current_user.id), payload=payload
+    )
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/ops/duplicate-clusters", response_model=DuplicateClusterListResponse, include_in_schema=False)
+def ops_list_duplicate_clusters(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    cluster_type: str | None = Query(default=None),
+    duplication_status: str | None = Query(default=None),
+    liquidity_profile: str | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateClusterListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return duplicate_consolidation_service.list_clusters_ops(
+        session,
+        owner_user_id=owner_user_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        cluster_type=cluster_type,
+        duplication_status=duplication_status,
+        liquidity_profile=liquidity_profile,
+        recommendation_action=recommendation_action,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/duplicate-clusters/{cluster_id}", response_model=DuplicateClusterRead, include_in_schema=False)
+def ops_get_duplicate_cluster(
+    cluster_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> DuplicateClusterRead:
+    ensure_ops_admin_access(current_user, settings)
+    return duplicate_consolidation_service.get_cluster_ops(
+        session, owner_user_id=owner_user_id, cluster_id=cluster_id
+    )
+
+
+@app.get("/ops/duplicate-cluster-items", response_model=DuplicateClusterItemListResponse, include_in_schema=False)
+def ops_list_duplicate_cluster_items(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    duplicate_cluster_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateClusterItemListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return duplicate_consolidation_service.list_cluster_items_ops(
+        session,
+        owner_user_id=owner_user_id,
+        duplicate_cluster_id=duplicate_cluster_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        inventory_item_id=inventory_item_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/ops/duplicate-consolidation-recommendations",
+    response_model=DuplicateConsolidationRecommendationListResponse,
+    include_in_schema=False,
+)
+def ops_duplicate_consolidation_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_status: str | None = Query(default=None, alias="status"),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateConsolidationRecommendationListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return duplicate_consolidation_service.list_consolidation_recommendations_ops(
+        session,
+        owner_user_id=owner_user_id,
+        recommendation_action=recommendation_action,
+        recommendation_status=recommendation_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/duplicate-history", response_model=DuplicateHistoryListResponse, include_in_schema=False)
+def ops_duplicate_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    cluster_key_prefix: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return duplicate_consolidation_service.list_duplicate_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        cluster_key_prefix=cluster_key_prefix,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-liquidity", response_model=PortfolioLiquiditySnapshotListResponse, include_in_schema=False)
+def ops_list_portfolio_liquidity(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    liquidity_balance_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    latest_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquiditySnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_liquidity_service.list_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        liquidity_balance_status=liquidity_balance_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        latest_only=latest_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/ops/portfolio-liquidity/{snapshot_id}",
+    response_model=PortfolioLiquiditySnapshotDetailResponse,
+    include_in_schema=False,
+)
+def ops_get_portfolio_liquidity_snapshot(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> PortfolioLiquiditySnapshotDetailResponse:
+    ensure_ops_admin_access(current_user, settings)
+    snap, buckets = portfolio_liquidity_service.get_snapshot_detail_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_id=snapshot_id,
+    )
+    return PortfolioLiquiditySnapshotDetailResponse(snapshot=snap, buckets=buckets)
+
+
+@app.get(
+    "/ops/portfolio-liquidity-evidence",
+    response_model=PortfolioLiquidityEvidenceListResponse,
+    include_in_schema=False,
+)
+def ops_list_portfolio_liquidity_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_liquidity_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquidityEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_liquidity_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_liquidity_snapshot_id=portfolio_liquidity_snapshot_id,
+        evidence_type=evidence_type,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/ops/portfolio-liquidity-history",
+    response_model=PortfolioLiquidityHistoryListResponse,
+    include_in_schema=False,
+)
+def ops_portfolio_liquidity_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    liquidity_balance_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioLiquidityHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_liquidity_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        liquidity_balance_status=liquidity_balance_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
         limit=limit,
         offset=offset,
     )

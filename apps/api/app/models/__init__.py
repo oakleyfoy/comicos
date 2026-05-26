@@ -101,6 +101,18 @@ from app.models.portfolio import (
     PortfolioItem,
     PortfolioLifecycleEvent,
 )
+from app.models.duplicate_consolidation import (
+    DuplicateCluster,
+    DuplicateClusterItem,
+    DuplicateConsolidationRecommendation,
+    DuplicateHistorySnapshot,
+)
+from app.models.portfolio_liquidity import (
+    PortfolioLiquidityBucket,
+    PortfolioLiquidityEvidence,
+    PortfolioLiquidityHistory,
+    PortfolioLiquiditySnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -286,6 +298,14 @@ __all__ = [
     "GradingOperationalReportFile",
     "GradingOperationalReportItem",
     "GradingOperationalReportRun",
+    "DuplicateCluster",
+    "DuplicateClusterItem",
+    "DuplicateConsolidationRecommendation",
+    "DuplicateHistorySnapshot",
+    "PortfolioLiquidityBucket",
+    "PortfolioLiquidityEvidence",
+    "PortfolioLiquidityHistory",
+    "PortfolioLiquiditySnapshot",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

@@ -5203,6 +5203,17 @@ export interface InventoryPortfolioIntelligenceTeaser {
   publisher_exposure_pct_value: string | null;
 }
 
+/** P38-03 deterministic portfolio liquidity bucket overlay (inventory detail teaser). */
+export interface InventoryPortfolioLiquidityTeaser {
+  portfolio_liquidity_bucket: "HIGH" | "MEDIUM" | "LOW" | "ILLIQUID";
+  liquidity_engine_status: string | null;
+  portfolio_liquidity_snapshot_id: number | null;
+  liquidity_efficiency_score: string | null;
+  dead_capital_estimate: string | null;
+  liquidity_balance_status: string | null;
+  dead_capital_teaser: string | null;
+}
+
 export interface InventoryDetail extends InventoryItem {
   copy_number: number;
   metadata_identity_key?: string | null;
@@ -5222,6 +5233,8 @@ export interface InventoryDetail extends InventoryItem {
   grading_recommendation?: InventoryGradingRecommendationBadge | null;
   grading_risk?: InventoryGradingRiskBadge | null;
   portfolio_intelligence?: InventoryPortfolioIntelligenceTeaser | null;
+  duplicate_intelligence?: InventoryDuplicateIntelligenceTeaser | null;
+  portfolio_liquidity?: InventoryPortfolioLiquidityTeaser | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -6055,6 +6068,233 @@ export interface PortfolioIntelligenceSummary {
   low_liquidity_count: number | null;
   high_liquidity_count: number | null;
   overexposed_rows: PortfolioIntelligenceExposureTeaser[];
+}
+
+export interface DuplicateOpportunityBrief {
+  cluster_id: number;
+  cluster_key: string;
+  cluster_type: string;
+  duplication_status: string;
+  total_cost_basis_amount: string | null;
+  graded_item_count: number;
+  raw_item_count: number;
+}
+
+export interface DuplicateIntelligenceSummary {
+  generation_batch_checksum: string | null;
+  snapshot_date: string | null;
+  cluster_count: number;
+  overexposed_cluster_count: number;
+  redundant_capital_amount: string | null;
+  graded_overlap_cluster_count: number;
+  raw_graded_overlap_cluster_count: number;
+  graded_duplicate_units: number;
+  raw_duplicate_units: number;
+  strongest_opportunities: DuplicateOpportunityBrief[];
+}
+
+export interface DuplicateClusterGeneratePayload {
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface DuplicateClusterRead {
+  id: number;
+  owner_user_id: number;
+  canonical_comic_issue_id: number | null;
+  cluster_key: string;
+  cluster_type: string;
+  generation_batch_checksum: string;
+  replay_key: string;
+  total_item_count: number;
+  graded_item_count: number;
+  raw_item_count: number;
+  total_fmv_amount: string | null;
+  total_cost_basis_amount: string | null;
+  liquidity_profile: string;
+  duplication_status: string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface DuplicateClusterListResponse {
+  generation_batch_checksum: string | null;
+  snapshot_date: string | null;
+  items: DuplicateClusterRead[];
+}
+
+export interface DuplicateClusterItemRead {
+  id: number;
+  duplicate_cluster_id: number;
+  inventory_item_id: number;
+  portfolio_id: number | null;
+  grading_status: string;
+  estimated_strength_score: string | null;
+  liquidity_score: string | null;
+  current_fmv: string | null;
+  acquisition_cost: string | null;
+  recommendation_priority: string;
+  created_at: string;
+}
+
+export interface DuplicateClusterItemListResponse {
+  items: DuplicateClusterItemRead[];
+}
+
+export interface DuplicateConsolidationRecommendationRead {
+  id: number;
+  owner_user_id: number;
+  duplicate_cluster_id: number;
+  generation_batch_checksum: string;
+  recommendation_action: string;
+  rationale_summary: string;
+  expected_capital_reduction: string | null;
+  estimated_liquidity_improvement: string | null;
+  estimated_portfolio_efficiency_gain: string | null;
+  confidence_level: string;
+  recommendation_status: string;
+  checksum: string;
+  snapshot_date: string;
+  replay_key: string;
+  created_at: string;
+}
+
+export interface DuplicateConsolidationRecommendationListResponse {
+  items: DuplicateConsolidationRecommendationRead[];
+}
+
+export interface DuplicateHistorySnapshotRead {
+  id: number;
+  owner_user_id: number;
+  cluster_key: string;
+  cluster_type: string;
+  total_item_count: number;
+  total_fmv_amount: string | null;
+  duplication_status: string;
+  checksum: string;
+  generation_batch_checksum: string;
+  snapshot_date: string;
+  replay_key: string;
+  created_at: string;
+}
+
+export interface DuplicateHistoryListResponse {
+  items: DuplicateHistorySnapshotRead[];
+}
+
+export interface DuplicateClusterGenerateResponse {
+  replayed: boolean;
+  generation_batch_checksum: string;
+  snapshot_date: string;
+  snapshot_date_replay_source?: "explicit" | "inferred_prior_batch" | null;
+  clusters: DuplicateClusterRead[];
+  consolidation_recommendations: DuplicateConsolidationRecommendationRead[];
+  duplicate_history_snapshots_written: number;
+}
+
+export interface InventoryDuplicateIntelligenceTeaser {
+  generation_batch_checksum: string | null;
+  cluster_types_present: string[];
+  worst_duplication_status: string | null;
+  is_strongest_copy_in_clusters: boolean;
+  primary_consolidation_action: string | null;
+  consolidation_teaser: string | null;
+}
+
+/** P38-03 deterministic portfolio liquidity intelligence (capital allocation rollup). */
+export interface PortfolioLiquidityBucketRead {
+  id: number;
+  portfolio_liquidity_snapshot_id: number;
+  liquidity_bucket: "HIGH" | "MEDIUM" | "LOW" | "ILLIQUID";
+  item_count: number;
+  total_fmv: string | null;
+  weighted_liquidity_value: string | null;
+  percentage_of_portfolio: string | null;
+  created_at: string;
+}
+
+export interface PortfolioLiquiditySnapshotRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  generation_scope_key: string;
+  replay_key: string;
+  total_portfolio_fmv: string | null;
+  liquid_portfolio_value: string | null;
+  illiquid_portfolio_value: string | null;
+  liquidity_weighted_value: string | null;
+  liquidity_efficiency_score: string | null;
+  liquidity_drag_score: string | null;
+  concentration_risk_score: string | null;
+  dead_capital_estimate: string | null;
+  liquidity_balance_status: "HEALTHY" | "WATCH" | "IMBALANCED" | "CRITICAL" | "INSUFFICIENT_DATA";
+  high_liquidity_count: number;
+  medium_liquidity_count: number;
+  low_liquidity_count: number;
+  illiquid_count: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioLiquiditySnapshotListResponse {
+  items: PortfolioLiquiditySnapshotRead[];
+  total: number;
+}
+
+export interface PortfolioLiquiditySnapshotDetailResponse {
+  snapshot: PortfolioLiquiditySnapshotRead;
+  buckets: PortfolioLiquidityBucketRead[];
+}
+
+export interface PortfolioLiquidityGeneratePayload {
+  portfolio_id?: number | null;
+  replay_key?: string | null;
+  snapshot_date?: string | null;
+}
+
+export interface PortfolioLiquidityGenerateResponse {
+  replayed: boolean;
+  snapshot: PortfolioLiquiditySnapshotRead;
+  buckets: PortfolioLiquidityBucketRead[];
+  history_appended: boolean;
+}
+
+export interface PortfolioLiquidityEvidenceRead {
+  id: number;
+  portfolio_liquidity_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PortfolioLiquidityEvidenceListResponse {
+  items: PortfolioLiquidityEvidenceRead[];
+  total: number;
+}
+
+export interface PortfolioLiquidityHistoryRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  generation_scope_key: string;
+  replay_key: string;
+  liquidity_efficiency_score: string | null;
+  liquidity_drag_score: string | null;
+  concentration_risk_score: string | null;
+  dead_capital_estimate: string | null;
+  liquidity_balance_status: "HEALTHY" | "WATCH" | "IMBALANCED" | "CRITICAL" | "INSUFFICIENT_DATA";
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioLiquidityHistoryListResponse {
+  items: PortfolioLiquidityHistoryRead[];
+  total: number;
 }
 
 export interface PortfolioGenerateScopePayload {
@@ -10306,6 +10546,198 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return request<PortfolioAllocationSnapshotListResponse>(`/ops/portfolio-allocations${q}`);
+  },
+
+  /** P38-02 duplicate & consolidation intelligence */
+  getDuplicateIntelligenceSummary(): Promise<DuplicateIntelligenceSummary> {
+    return request<DuplicateIntelligenceSummary>("/duplicate-intelligence/summary");
+  },
+
+  generateDuplicateClusters(payload: DuplicateClusterGeneratePayload): Promise<DuplicateClusterGenerateResponse> {
+    return request<DuplicateClusterGenerateResponse>("/duplicate-clusters/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOpsDuplicateClusters(params?: {
+    owner_user_id?: number;
+    canonical_comic_issue_id?: number;
+    cluster_type?: string;
+    duplication_status?: string;
+    liquidity_profile?: string;
+    recommendation_action?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<DuplicateClusterListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<DuplicateClusterListResponse>(`/ops/duplicate-clusters${q}`);
+  },
+
+  listOpsDuplicateClusterItems(params?: {
+    owner_user_id?: number;
+    duplicate_cluster_id?: number;
+    inventory_item_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<DuplicateClusterItemListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<DuplicateClusterItemListResponse>(`/ops/duplicate-cluster-items${q}`);
+  },
+
+  listOpsDuplicateConsolidationRecommendations(params?: {
+    owner_user_id?: number;
+    recommendation_action?: string;
+    status?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<DuplicateConsolidationRecommendationListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<DuplicateConsolidationRecommendationListResponse>(`/ops/duplicate-consolidation-recommendations${q}`);
+  },
+
+  listOpsDuplicateHistory(params?: {
+    owner_user_id?: number;
+    cluster_key_prefix?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<DuplicateHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<DuplicateHistoryListResponse>(`/ops/duplicate-history${q}`);
+  },
+
+  generatePortfolioLiquidity(payload: PortfolioLiquidityGeneratePayload): Promise<PortfolioLiquidityGenerateResponse> {
+    return request<PortfolioLiquidityGenerateResponse>("/portfolio-liquidity/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listPortfolioLiquidity(params?: {
+    portfolio_id?: number;
+    liquidity_balance_status?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquiditySnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquiditySnapshotListResponse>(`/portfolio-liquidity${q}`);
+  },
+
+  getPortfolioLiquiditySnapshot(snapshotId: number): Promise<PortfolioLiquiditySnapshotDetailResponse> {
+    return request<PortfolioLiquiditySnapshotDetailResponse>(`/portfolio-liquidity/${snapshotId}`);
+  },
+
+  listPortfolioLiquidityEvidence(params?: {
+    portfolio_liquidity_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquidityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquidityEvidenceListResponse>(`/portfolio-liquidity-evidence${q}`);
+  },
+
+  listPortfolioLiquidityHistory(params?: {
+    portfolio_id?: number;
+    liquidity_balance_status?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquidityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquidityHistoryListResponse>(`/portfolio-liquidity-history${q}`);
+  },
+
+  listOpsPortfolioLiquidity(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    liquidity_balance_status?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    latest_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquiditySnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquiditySnapshotListResponse>(`/ops/portfolio-liquidity${q}`);
+  },
+
+  getOpsPortfolioLiquiditySnapshot(snapshotId: number, params?: { owner_user_id?: number }): Promise<PortfolioLiquiditySnapshotDetailResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, number | undefined>)
+        : "";
+    return request<PortfolioLiquiditySnapshotDetailResponse>(`/ops/portfolio-liquidity/${snapshotId}${q}`);
+  },
+
+  listOpsPortfolioLiquidityEvidence(params?: {
+    owner_user_id?: number;
+    portfolio_liquidity_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquidityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquidityEvidenceListResponse>(`/ops/portfolio-liquidity-evidence${q}`);
+  },
+
+  listOpsPortfolioLiquidityHistory(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    liquidity_balance_status?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioLiquidityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioLiquidityHistoryListResponse>(`/ops/portfolio-liquidity-history${q}`);
   },
 };
 

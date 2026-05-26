@@ -19,6 +19,7 @@ import {
   type RunDetectionSeriesStatus,
   type PortfolioPerformance,
   type PortfolioPerformanceItem,
+  type PortfolioLiquiditySnapshotDetailResponse,
   type InventoryIntelligenceHealthRollup,
   type InventoryIntelligenceRollupSummary,
   type CollectionAnalyticsSummary,
@@ -37,6 +38,7 @@ import {
   type OrderArrivalIntelSummary,
   type PhysicalIntakeSummaryResponse,
   type PortfolioIntelligenceSummary,
+  type DuplicateIntelligenceSummary,
   type MarketSourceImportRunSummaryRead,
   type MarketSourceRead,
   type MarketSaleMatchSuggestionOpsListResponse,
@@ -931,6 +933,14 @@ export function DashboardPage() {
   const [portfolioIntelLoading, setPortfolioIntelLoading] = useState(true);
   const [portfolioIntelError, setPortfolioIntelError] = useState<string | null>(null);
   const [portfolioIntelGenBusy, setPortfolioIntelGenBusy] = useState(false);
+  const [dupIntelSummary, setDupIntelSummary] = useState<DuplicateIntelligenceSummary | null>(null);
+  const [dupIntelLoading, setDupIntelLoading] = useState(true);
+  const [dupIntelError, setDupIntelError] = useState<string | null>(null);
+  const [dupIntelGenBusy, setDupIntelGenBusy] = useState(false);
+  const [portfolioLiquidityDetail, setPortfolioLiquidityDetail] = useState<PortfolioLiquiditySnapshotDetailResponse | null>(null);
+  const [portfolioLiquidityLoading, setPortfolioLiquidityLoading] = useState(true);
+  const [portfolioLiquidityError, setPortfolioLiquidityError] = useState<string | null>(null);
+  const [portfolioLiquidityGenBusy, setPortfolioLiquidityGenBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const dealerGradingMetricMap = useMemo(
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
@@ -1747,6 +1757,84 @@ export function DashboardPage() {
     void (async () => {
       if (!user) {
         if (!ignore) {
+          setDupIntelSummary(null);
+          setDupIntelLoading(false);
+          setDupIntelError(null);
+        }
+        return;
+      }
+      setDupIntelLoading(true);
+      setDupIntelError(null);
+      try {
+        const summary = await apiClient.getDuplicateIntelligenceSummary();
+        if (!ignore) {
+          setDupIntelSummary(summary);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setDupIntelSummary(null);
+          setDupIntelError(loadErr instanceof ApiError ? loadErr.message : "Unable to load duplicate intelligence rollup.");
+        }
+      } finally {
+        if (!ignore) {
+          setDupIntelLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setPortfolioLiquidityDetail(null);
+          setPortfolioLiquidityLoading(false);
+          setPortfolioLiquidityError(null);
+        }
+        return;
+      }
+      setPortfolioLiquidityLoading(true);
+      setPortfolioLiquidityError(null);
+      try {
+        const list = await apiClient.listPortfolioLiquidity({ latest_only: true });
+        const first = list.items[0];
+        if (!first) {
+          if (!ignore) {
+            setPortfolioLiquidityDetail(null);
+          }
+        } else {
+          const detail = await apiClient.getPortfolioLiquiditySnapshot(first.id);
+          if (!ignore) {
+            setPortfolioLiquidityDetail(detail);
+          }
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setPortfolioLiquidityDetail(null);
+          setPortfolioLiquidityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio liquidity rollup.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setPortfolioLiquidityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
           setGradingRiskSummary(null);
           setGradingRiskLoading(false);
           setGradingRiskError(null);
@@ -2114,6 +2202,42 @@ export function DashboardPage() {
       setPortfolioIntelError(err instanceof ApiError ? err.message : "Unable to refresh portfolio intelligence.");
     } finally {
       setPortfolioIntelGenBusy(false);
+    }
+  }
+
+  async function refreshDuplicateIntelligenceSnapshots(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setDupIntelGenBusy(true);
+    setDupIntelError(null);
+    try {
+      const rk = `web-dup-dash-${Date.now()}`;
+      await apiClient.generateDuplicateClusters({ replay_key: rk });
+      setDupIntelSummary(await apiClient.getDuplicateIntelligenceSummary());
+    } catch (err) {
+      setDupIntelError(err instanceof ApiError ? err.message : "Unable to refresh duplicate intelligence.");
+    } finally {
+      setDupIntelGenBusy(false);
+    }
+  }
+
+  async function refreshPortfolioLiquiditySnapshots(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setPortfolioLiquidityGenBusy(true);
+    setPortfolioLiquidityError(null);
+    try {
+      const rk = `web-plq-dash-${Date.now()}`;
+      await apiClient.generatePortfolioLiquidity({ replay_key: rk });
+      const list = await apiClient.listPortfolioLiquidity({ latest_only: true });
+      const first = list.items[0];
+      setPortfolioLiquidityDetail(first ? await apiClient.getPortfolioLiquiditySnapshot(first.id) : null);
+    } catch (err) {
+      setPortfolioLiquidityError(err instanceof ApiError ? err.message : "Unable to refresh portfolio liquidity.");
+    } finally {
+      setPortfolioLiquidityGenBusy(false);
     }
   }
 
@@ -3248,8 +3372,9 @@ export function DashboardPage() {
           ) : null}
 
           {user ? (
-            <section
-              id="portfolio-intelligence-dash"
+            <>
+              <section
+                id="portfolio-intelligence-dash"
               className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-black/15"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -3321,6 +3446,166 @@ export function DashboardPage() {
                 <p className="mt-4 text-sm text-slate-500">No portfolio intelligence loaded.</p>
               )}
             </section>
+
+            <section
+              id="portfolio-liquidity-dash"
+              className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-teal-100/90">Portfolio liquidity allocation</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic capital &amp; liquidity posture</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                    Portfolio-wide liquidity buckets, weighted FMV posture, observational dead-capital estimate, balance status,
+                    and explicit checksum fingerprints. Inputs are read-only liquidity engine, FMV, listings, sales ledger,
+                    allocations, and convention assignments — no liquidation, predictive timing, or FMV/portfolio mutation.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void refreshPortfolioLiquiditySnapshots()}
+                    disabled={portfolioLiquidityGenBusy}
+                    className="rounded-xl border border-teal-400/45 bg-teal-500/10 px-4 py-2 text-xs font-semibold text-teal-50 transition hover:bg-teal-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {portfolioLiquidityGenBusy ? "Generating…" : "Generate liquidity snapshot"}
+                  </button>
+                  <Link
+                    to="/ops#portfolio-liquidity-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-teal-300/45 hover:bg-white/5"
+                  >
+                    Ops liquidity tables
+                  </Link>
+                </div>
+              </div>
+              {portfolioLiquidityLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading portfolio liquidity rollup…</p>
+              ) : portfolioLiquidityError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{portfolioLiquidityError}</StatusBanner>
+                </div>
+              ) : portfolioLiquidityDetail ? (
+                <div className="mt-6 space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard
+                      label="Liquid FMV (HIGH bucket)"
+                      value={formatMaybeCurrency(portfolioLiquidityDetail.snapshot.liquid_portfolio_value)}
+                    />
+                    <StatCard
+                      label="Illiquid FMV"
+                      value={formatMaybeCurrency(portfolioLiquidityDetail.snapshot.illiquid_portfolio_value)}
+                    />
+                    <StatCard
+                      label="Liquidity efficiency"
+                      value={portfolioLiquidityDetail.snapshot.liquidity_efficiency_score ?? "—"}
+                    />
+                    <StatCard
+                      label="Dead capital estimate"
+                      value={formatMaybeCurrency(portfolioLiquidityDetail.snapshot.dead_capital_estimate)}
+                    />
+                    <StatCard label="Liquidity imbalance" value={portfolioLiquidityDetail.snapshot.liquidity_balance_status} />
+                    <StatCard
+                      label="Checksum"
+                      value={shortenChecksum(portfolioLiquidityDetail.snapshot.checksum)}
+                    />
+                    <StatCard
+                      label="HIGH · MED buckets"
+                      value={`${portfolioLiquidityDetail.snapshot.high_liquidity_count} · ${portfolioLiquidityDetail.snapshot.medium_liquidity_count}`}
+                    />
+                    <StatCard
+                      label="LOW · ILLIQ buckets"
+                      value={`${portfolioLiquidityDetail.snapshot.low_liquidity_count} · ${portfolioLiquidityDetail.snapshot.illiquid_count}`}
+                    />
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-xs text-slate-300">
+                    <p className="font-semibold uppercase tracking-[0.14em] text-slate-500">Liquidity buckets (% of FMV)</p>
+                    <ul className="mt-2 space-y-1">
+                      {portfolioLiquidityDetail.buckets.map((b) => (
+                        <li key={b.id} className="flex justify-between gap-4">
+                          <span>{b.liquidity_bucket}</span>
+                          <span className="text-slate-400">
+                            {(b.percentage_of_portfolio ?? "—").toString()}% · counts {b.item_count}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Generate a portfolio liquidity snapshot to populate this panel.</p>
+              )}
+            </section>
+
+            <section
+              id="duplicate-intelligence-dash"
+              className="mt-6 rounded-3xl border border-rose-400/30 bg-rose-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-rose-100/90">Duplicate intelligence</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic overlaps & consolidation posture</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                    Observational duplicate clusters, deterministic strength tiers, liquidity-aware profiles, and consolidation
+                    captions only. No auto-selling, acquisitions, predictive AI, FMV mutation, or hidden inventory changes.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void refreshDuplicateIntelligenceSnapshots()}
+                    disabled={dupIntelGenBusy}
+                    className="rounded-xl border border-rose-400/45 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-50 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {dupIntelGenBusy ? "Generating…" : "Generate duplicate snapshot"}
+                  </button>
+                  <Link
+                    to="/ops#duplicate-consolidation-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-rose-300/45 hover:bg-white/5"
+                  >
+                    Ops duplicate tables
+                  </Link>
+                </div>
+              </div>
+              {dupIntelLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading duplicate rollup…</p>
+              ) : dupIntelError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{dupIntelError}</StatusBanner>
+                </div>
+              ) : dupIntelSummary ? (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard label="Clusters (latest)" value={String(dupIntelSummary.cluster_count)} />
+                  <StatCard label="Overexposed clusters" value={String(dupIntelSummary.overexposed_cluster_count)} />
+                  <StatCard
+                    label="Redundant tail capital"
+                    value={
+                      dupIntelSummary.redundant_capital_amount
+                        ? formatCurrency(dupIntelSummary.redundant_capital_amount)
+                        : "—"
+                    }
+                  />
+                  <StatCard
+                    label="Graded/raw overlap buckets"
+                    value={`${dupIntelSummary.graded_overlap_cluster_count} · ${dupIntelSummary.raw_graded_overlap_cluster_count}`}
+                  />
+                  <StatCard
+                    label="Duplicate unit rollups"
+                    value={`${dupIntelSummary.graded_duplicate_units} graded cols · ${dupIntelSummary.raw_duplicate_units} raw/pipe`}
+                  />
+                  <StatCard
+                    label="Batch checksum"
+                    value={
+                      dupIntelSummary.generation_batch_checksum
+                        ? shortenChecksum(dupIntelSummary.generation_batch_checksum)
+                        : "—"
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Generate a duplicate snapshot to populate this panel.</p>
+              )}
+            </section>
+            </>
           ) : null}
 
           {user ? (

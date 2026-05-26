@@ -63,7 +63,7 @@ Resolved routes:
 - **Known follow-ups**
   - If portfolio-scale exports exceed comfortable row counts, introduce cursor pagination while preserving lexical sort guarantees on stable keys (`inventory_copy_id`).
   - Consolidate SPA dashboard clustering for ops/owner previews when product finalizes telemetry density budgets (API contracts already stabilized).
-  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; `#listing-export-ops` accompanies listing registry/export surfaces — extend the list when new market ops sections ship.
+  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; `#listing-export-ops` accompanies listing registry/export surfaces — extend the list when new market ops sections ship (including `#portfolio-liquidity-ops` for P38-03 rollup tables).
 
 ## P36-01 — Listing registry foundation (2026-05-25)
 
@@ -287,6 +287,38 @@ Resolved routes:
 | Automation | Automated portfolio rebalancing or target allocation enforcement |
 | Tax / accounting | Tax-aware optimization, wash-sale logic, accounting exports |
 | AI | AI-driven portfolio construction or dynamic strategy |
+
+## P38-02 — Duplicate & consolidation intelligence (2026-05-27)
+
+- Architecture note: deterministic duplicate clustering, strength scoring, observational consolidation captions, append-safe history checkpoints, salted batch replay semantics (`generation_batch_checksum` salted with `{snapshot_date, replay_key}`) and deterministic supersede semantics for ACTIVE recommendations are documented in `docs/DUPLICATE_CONSOLIDATION_ARCHITECTURE.md`.
+- Owner routes generate and summarize duplicate intelligence; `/ops/duplicate*` routes stay read-only and align with Portfolio ops scope controls (shared owner filtering contract). Engines never mutate FMV automatically, silently retarget portfolios, auto-list duplicates, touch sales ledgers for optimization, or perform autonomous liquidation.
+
+### Deferred scope (beyond P38-02 / explicitly not shipped)
+
+| Track | Deferred item |
+| --- | --- |
+| Execution | Automated selling, liquidation, marketplace auto-posting |
+| Acquisition | Acquisition buy-list modeling, speculative arbitrage, timing advice |
+| ML / stochastic | Probabilistic duplicate scoring or ML clustering |
+| Tax / treasury | Capital gains/tax-aware disposal sequencing |
+| Rebalancing | Autonomous trimming, mandate-based portfolio resizing |
+| Continuous optimization | Duplicate-aware supply chain automation |
+
+## P38-03 — Portfolio liquidity allocation engine (2026-05-27)
+
+- Architecture note: deterministic portfolio-level liquidity rollups, bucket rows, evidence spine, append-only history, replay checksums, and owner vs `/ops/portfolio-liquidity*` parity are documented in `docs/PORTFOLIO_LIQUIDITY_ARCHITECTURE.md`. Generation consumes liquidity engine snapshots, FMV, sales lines, listings, latest allocation checksums, and convention assignments — strictly read-only toward inventory and FMV.
+- SPA: dashboard summary card, Operations **Portfolio liquidity** panel (snapshots, buckets, evidence, history), inventory detail teaser for bucket + rollup pointers.
+
+### Deferred scope (beyond P38-03 / explicitly not shipped)
+
+| Track | Deferred item |
+| --- | --- |
+| Execution | Autonomous liquidation, auto-listing, or sell automation |
+| Forecasting | Predictive liquidity forecasting, stochastic exit modeling |
+| Rebalancing | Automated portfolio balancing or mandate enforcement |
+| Tax / treasury | Tax-aware disposal sequencing or wash-sale optimization |
+| Timing | Market timing, regime detection, momentum allocation |
+| AI | ML / AI-driven allocation systems or hidden scoring |
 
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 

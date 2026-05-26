@@ -114,6 +114,14 @@ import {
   type PortfolioExposureSnapshotListResponse,
   type PortfolioItemListResponse,
   type PortfolioListResponse,
+  type DuplicateClusterItemListResponse,
+  type DuplicateClusterListResponse,
+  type DuplicateConsolidationRecommendationListResponse,
+  type DuplicateHistoryListResponse,
+  type PortfolioLiquidityEvidenceListResponse,
+  type PortfolioLiquidityHistoryListResponse,
+  type PortfolioLiquiditySnapshotDetailResponse,
+  type PortfolioLiquiditySnapshotListResponse,
   type PortfolioValueSummaryResponse,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
@@ -1499,6 +1507,19 @@ export function OperationsPage() {
   );
   const [opsPortfolioLoading, setOpsPortfolioLoading] = useState(true);
   const [opsPortfolioError, setOpsPortfolioError] = useState<string | null>(null);
+  const [opsDuplicateClusters, setOpsDuplicateClusters] = useState<DuplicateClusterListResponse | null>(null);
+  const [opsDuplicateClusterItems, setOpsDuplicateClusterItems] = useState<DuplicateClusterItemListResponse | null>(null);
+  const [opsDuplicateRecos, setOpsDuplicateRecos] = useState<DuplicateConsolidationRecommendationListResponse | null>(
+    null,
+  );
+  const [opsDuplicateHistory, setOpsDuplicateHistory] = useState<DuplicateHistoryListResponse | null>(null);
+  const [opsPortfolioLiquidityList, setOpsPortfolioLiquidityList] = useState<PortfolioLiquiditySnapshotListResponse | null>(null);
+  const [opsPortfolioLiquidityDetail, setOpsPortfolioLiquidityDetail] =
+    useState<PortfolioLiquiditySnapshotDetailResponse | null>(null);
+  const [opsPortfolioLiquidityEvidence, setOpsPortfolioLiquidityEvidence] =
+    useState<PortfolioLiquidityEvidenceListResponse | null>(null);
+  const [opsPortfolioLiquidityHistory, setOpsPortfolioLiquidityHistory] =
+    useState<PortfolioLiquidityHistoryListResponse | null>(null);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -2050,19 +2071,52 @@ export function OperationsPage() {
       setOpsPortfolioError(null);
       try {
         const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
-        const [portfolios, items, exposures, evidence, allocations] = await Promise.all([
-          apiClient.listOpsPortfolios({ ...scoped, limit: 75, offset: 0 }),
-          apiClient.listOpsPortfolioItems({ ...scoped, limit: 150, offset: 0 }),
-          apiClient.listOpsPortfolioExposures({ ...scoped, latest_batch: true, limit: 250, offset: 0 }),
-          apiClient.listOpsPortfolioExposureEvidence({ ...scoped, limit: 200, offset: 0 }),
-          apiClient.listOpsPortfolioAllocations({ ...scoped, limit: 75, offset: 0 }),
-        ]);
+        const dupScoped = {
+          ...scoped,
+          latest_only: opsPortfolioOwnerApplied !== undefined,
+          limit: 200,
+          offset: 0,
+        };
+        const [portfolios, items, exposures, evidence, allocations, dupClusters, dupItems, dupRecos, dupHist, liqList, liqHist] =
+          await Promise.all([
+            apiClient.listOpsPortfolios({ ...scoped, limit: 75, offset: 0 }),
+            apiClient.listOpsPortfolioItems({ ...scoped, limit: 150, offset: 0 }),
+            apiClient.listOpsPortfolioExposures({ ...scoped, latest_batch: true, limit: 250, offset: 0 }),
+            apiClient.listOpsPortfolioExposureEvidence({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsPortfolioAllocations({ ...scoped, limit: 75, offset: 0 }),
+            apiClient.listOpsDuplicateClusters(dupScoped),
+            apiClient.listOpsDuplicateClusterItems(dupScoped),
+            apiClient.listOpsDuplicateConsolidationRecommendations(dupScoped),
+            apiClient.listOpsDuplicateHistory(dupScoped),
+            apiClient.listOpsPortfolioLiquidity(dupScoped),
+            apiClient.listOpsPortfolioLiquidityHistory({ ...scoped, limit: 120, offset: 0 }),
+          ]);
+        let liqDetail: PortfolioLiquiditySnapshotDetailResponse | null = null;
+        let liqEvidence: PortfolioLiquidityEvidenceListResponse | null = null;
+        const firstLiq = liqList.items[0];
+        if (firstLiq) {
+          liqDetail = await apiClient.getOpsPortfolioLiquiditySnapshot(firstLiq.id, scoped);
+          liqEvidence = await apiClient.listOpsPortfolioLiquidityEvidence({
+            ...scoped,
+            portfolio_liquidity_snapshot_id: firstLiq.id,
+            limit: 120,
+            offset: 0,
+          });
+        }
         if (!ignore) {
           setOpsPortfolioList(portfolios);
           setOpsPortfolioItems(items);
           setOpsPortfolioExposures(exposures);
           setOpsPortfolioEvidence(evidence);
           setOpsPortfolioAllocations(allocations);
+          setOpsDuplicateClusters(dupClusters);
+          setOpsDuplicateClusterItems(dupItems);
+          setOpsDuplicateRecos(dupRecos);
+          setOpsDuplicateHistory(dupHist);
+          setOpsPortfolioLiquidityList(liqList);
+          setOpsPortfolioLiquidityDetail(liqDetail);
+          setOpsPortfolioLiquidityEvidence(liqEvidence);
+          setOpsPortfolioLiquidityHistory(liqHist);
         }
       } catch (loadErr) {
         if (!ignore) {
@@ -2071,6 +2125,14 @@ export function OperationsPage() {
           setOpsPortfolioExposures(null);
           setOpsPortfolioEvidence(null);
           setOpsPortfolioAllocations(null);
+          setOpsDuplicateClusters(null);
+          setOpsDuplicateClusterItems(null);
+          setOpsDuplicateRecos(null);
+          setOpsDuplicateHistory(null);
+          setOpsPortfolioLiquidityList(null);
+          setOpsPortfolioLiquidityDetail(null);
+          setOpsPortfolioLiquidityEvidence(null);
+          setOpsPortfolioLiquidityHistory(null);
           setOpsPortfolioError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio registry ops payloads.",
           );
@@ -4965,6 +5027,8 @@ export function OperationsPage() {
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
+          ["Duplicate consolidation", "#duplicate-consolidation-ops"],
+          ["Portfolio liquidity", "#portfolio-liquidity-ops"],
           ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
@@ -5663,6 +5727,381 @@ export function OperationsPage() {
                           <td className="p-3 text-[10px] text-slate-400">
                             {JSON.stringify(row.evidence_value_json).slice(0, 160)}
                           </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="duplicate-consolidation-ops"
+        open
+        className="mt-6 rounded-3xl border border-rose-500/35 bg-slate-950/80 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Duplicate consolidation ops</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Mirrors `/ops/duplicate-*` deterministic duplicate clusters, per-copy strength tiers, consolidation
+                recommendations (observational), and append-only history fingerprints. Shares owner scope controls with portfolio
+                registry above.
+              </p>
+            </div>
+            <span className="rounded-full border border-rose-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-100/90">
+              Ops / duplicates
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-rose-200/15 pt-4">
+          {opsPortfolioLoading ? (
+            <p className="text-sm text-slate-400">Hydrating duplicate telescope…</p>
+          ) : opsPortfolioError ? (
+            <StatusBanner tone="error">{opsPortfolioError}</StatusBanner>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Duplicate clusters ({opsDuplicateClusters?.items.length ?? 0}) · batch{" "}
+                  {abbrevExportChecksum(opsDuplicateClusters?.generation_batch_checksum ?? "")}
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Issue</th>
+                      <th className="p-3 font-medium">Liquidity</th>
+                      <th className="p-3 font-medium">Dup status</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsDuplicateClusters?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Generate duplicate snapshots from dashboard or `/duplicate-clusters/generate`.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsDuplicateClusters?.items.slice(0, 40).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3">{row.cluster_type}</td>
+                          <td className="p-3 font-mono text-[11px] text-slate-400">{String(row.canonical_comic_issue_id ?? "—")}</td>
+                          <td className="p-3">{row.liquidity_profile}</td>
+                          <td className="p-3">{row.duplication_status}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Duplicate cluster items ({opsDuplicateClusterItems?.items.length ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inventory</th>
+                      <th className="p-3 font-medium">Cluster</th>
+                      <th className="p-3 font-medium">Grading</th>
+                      <th className="p-3 font-medium">Strength</th>
+                      <th className="p-3 font-medium">Priority</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsDuplicateClusterItems?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Rows appear after clustering runs persist.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsDuplicateClusterItems?.items.slice(0, 35).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-mono text-[11px]">{row.inventory_item_id}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.duplicate_cluster_id}</td>
+                          <td className="p-3">{row.grading_status}</td>
+                          <td className="p-3">{row.estimated_strength_score ?? "—"}</td>
+                          <td className="p-3">{row.recommendation_priority}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Consolidation recommendations ({opsDuplicateRecos?.items.length ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Action</th>
+                      <th className="p-3 font-medium">Confidence</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Cluster</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsDuplicateRecos?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Recommendation rows hydrate per duplicate cluster snapshot.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsDuplicateRecos?.items.slice(0, 35).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3">{row.recommendation_action}</td>
+                          <td className="p-3">{row.confidence_level}</td>
+                          <td className="p-3">{row.recommendation_status}</td>
+                          <td className="p-3 font-mono text-[11px]">{row.duplicate_cluster_id}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Duplicate history ({opsDuplicateHistory?.items.length ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Cluster key</th>
+                      <th className="p-3 font-medium">Items</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Batch</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsDuplicateHistory?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          History increments with each deterministic generation batch.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsDuplicateHistory?.items.slice(0, 35).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{row.cluster_key}</td>
+                          <td className="p-3">{row.total_item_count}</td>
+                          <td className="p-3">{row.duplication_status}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">
+                            {abbrevExportChecksum(row.generation_batch_checksum)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="portfolio-liquidity-ops"
+        open
+        className="mt-6 rounded-3xl border border-teal-500/40 bg-teal-950/15 p-5 shadow-xl shadow-teal-950/30 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Portfolio liquidity operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only `/ops/portfolio-liquidity*` mirrors. Deterministic capital-allocation rollups (buckets, scores, dead
+                capital estimate, balance status) generated from liquidity engine rows, FMV, sales, listings, allocations, and
+                convention activity — no auto-liquidation and no FMV mutation.
+              </p>
+            </div>
+            <span className="rounded-full border border-teal-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-100/95">
+              Ops / liquidity
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-teal-200/15 pt-4">
+          {opsPortfolioLoading ? (
+            <p className="text-sm text-slate-400">Loading portfolio liquidity snapshots…</p>
+          ) : opsPortfolioError ? (
+            <StatusBanner tone="error">{opsPortfolioError}</StatusBanner>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Liquidity snapshots ({opsPortfolioLiquidityList?.total ?? 0}) · uses same owner scope as portfolio registry
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Id</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Scope</th>
+                      <th className="p-3 font-medium">Date</th>
+                      <th className="p-3 font-medium">Liquid FMV</th>
+                      <th className="p-3 font-medium">Illiquid FMV</th>
+                      <th className="p-3 font-medium">Efficiency</th>
+                      <th className="p-3 font-medium">Drag</th>
+                      <th className="p-3 font-medium">Concentration</th>
+                      <th className="p-3 font-medium">Dead $</th>
+                      <th className="p-3 font-medium">Balance</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioLiquidityList?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={12}>
+                          No snapshots yet. Owners run `POST /portfolio-liquidity/generate` from the dashboard.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioLiquidityList!.items.slice(0, 30).map((row) => (
+                        <tr key={row.id}>
+                          <td className="whitespace-nowrap p-3 font-mono text-[11px]">{row.id}</td>
+                          <td className="p-3">{row.owner_user_id}</td>
+                          <td className="max-w-[9rem] truncate p-3 font-mono text-[10px] text-slate-400">{row.generation_scope_key}</td>
+                          <td className="whitespace-nowrap p-3 text-slate-400">{formatDate(row.snapshot_date)}</td>
+                          <td className="whitespace-nowrap p-3">{formatCurrency(row.liquid_portfolio_value)}</td>
+                          <td className="whitespace-nowrap p-3">{formatCurrency(row.illiquid_portfolio_value)}</td>
+                          <td className="p-3">{row.liquidity_efficiency_score ?? "—"}</td>
+                          <td className="p-3">{row.liquidity_drag_score ?? "—"}</td>
+                          <td className="p-3">{row.concentration_risk_score ?? "—"}</td>
+                          <td className="whitespace-nowrap p-3">{formatCurrency(row.dead_capital_estimate)}</td>
+                          <td className="whitespace-nowrap p-3 text-teal-100">{row.liquidity_balance_status}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Bucket distribution (latest row in scoped list snapshot #{opsPortfolioLiquidityDetail?.snapshot.id ?? "—"})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Bucket</th>
+                      <th className="p-3 font-medium">Items</th>
+                      <th className="p-3 font-medium">FMV</th>
+                      <th className="p-3 font-medium">Weighted LQ</th>
+                      <th className="p-3 font-medium">% portfolio</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {!opsPortfolioLiquidityDetail?.buckets?.length ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          Hydrated from the newest snapshot matching the scoped list (needs at least one snapshot).
+                        </td>
+                      </tr>
+                    ) : (
+                      [...opsPortfolioLiquidityDetail.buckets]
+                        .sort((a, b) => a.liquidity_bucket.localeCompare(b.liquidity_bucket))
+                        .map((b) => (
+                          <tr key={b.id}>
+                            <td className="p-3 font-semibold text-teal-100">{b.liquidity_bucket}</td>
+                            <td className="p-3">{b.item_count}</td>
+                            <td className="whitespace-nowrap p-3">{formatCurrency(b.total_fmv)}</td>
+                            <td className="whitespace-nowrap p-3">{formatCurrency(b.weighted_liquidity_value)}</td>
+                            <td className="p-3">{b.percentage_of_portfolio ?? "—"}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Evidence spine ({opsPortfolioLiquidityEvidence?.total ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Recorded</th>
+                      <th className="p-3 font-medium">Snapshot</th>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Payload</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioLiquidityEvidence?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          Rows attach when liquidity snapshots regenerate (first scoped snapshot preview).
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioLiquidityEvidence!.items.slice(0, 30).map((ev) => (
+                        <tr key={ev.id}>
+                          <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(ev.created_at)}</td>
+                          <td className="p-3 font-mono text-[11px]">{ev.portfolio_liquidity_snapshot_id}</td>
+                          <td className="p-3">{ev.evidence_type}</td>
+                          <td className="p-3 text-[10px] text-slate-400">
+                            {JSON.stringify(ev.evidence_value_json).slice(0, 200)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Append-only history ({opsPortfolioLiquidityHistory?.total ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Date</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Scope</th>
+                      <th className="p-3 font-medium">Efficiency</th>
+                      <th className="p-3 font-medium">Drag</th>
+                      <th className="p-3 font-medium">Concentration</th>
+                      <th className="p-3 font-medium">Dead $</th>
+                      <th className="p-3 font-medium">Balance</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioLiquidityHistory?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={9}>
+                          History rows append once per new checksum for a generation tuple.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioLiquidityHistory!.items.slice(0, 35).map((h) => (
+                        <tr key={h.id}>
+                          <td className="whitespace-nowrap p-3 text-slate-400">{formatDate(h.snapshot_date)}</td>
+                          <td className="p-3">{h.owner_user_id}</td>
+                          <td className="max-w-[8rem] truncate p-3 font-mono text-[10px] text-slate-500">{h.generation_scope_key}</td>
+                          <td className="p-3">{h.liquidity_efficiency_score ?? "—"}</td>
+                          <td className="p-3">{h.liquidity_drag_score ?? "—"}</td>
+                          <td className="p-3">{h.concentration_risk_score ?? "—"}</td>
+                          <td className="whitespace-nowrap p-3">{formatCurrency(h.dead_capital_estimate)}</td>
+                          <td className="p-3 text-teal-100">{h.liquidity_balance_status}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(h.checksum)}</td>
                         </tr>
                       ))
                     )}
