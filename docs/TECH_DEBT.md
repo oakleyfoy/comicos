@@ -259,6 +259,19 @@ Resolved routes:
   - Autonomous grading decisions, predictive grading models, or automatic recommendation changes
   - Notification routing, staffing workflows, or task orchestration layered onto dashboard alerts
 
+## P38-05 — Concentration risk modeling (2026-05-26)
+
+- Architecture note: deterministic concentration snapshots, evidence rows, weighted factor rows, and append-safe history live in `docs/CONCENTRATION_RISK_ARCHITECTURE.md`. The lane translates current portfolio exposure into explicit concentration posture without mutating FMV, inventory, listings, or portfolios.
+- Owner routes may generate and inspect concentration rows; `/ops/concentration-risk*` mirrors remain read-only with optional owner scoping.
+
+### Deferred scope (beyond P38-05)
+
+- Real character / creator attribution beyond the current `unknown` placeholder contract.
+- Predictive diversification guidance, portfolio optimization, or AI/ML concentration scoring.
+- Auto-rebalancing workflows, sell execution, or portfolio mutation driven by concentration posture.
+- Cross-owner benchmarking, market-relative diversification ranks, or benchmark-index modeling.
+- Trendline forecasting / scenario simulation beyond the current deterministic snapshot-and-history ledger.
+
 ## P37-09 — Grading reporting / production closeout (2026-05-26)
 
 - Architecture note: deterministic grading closeout reporting plus final stabilization lives in `docs/GRADING_CLOSEOUT_ARCHITECTURE.md` (`GradingOperationalReportRun|File|Item`, UTF-8 CSV checksums, row-level lineage, replay-safe generation, owner vs `/ops/grading-reports` parity, deterministic filename rules).

@@ -2865,6 +2865,24 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {detail.concentration_risk ? (
+                <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-fuchsia-200/90">Concentration risk</p>
+                    <span className="rounded-full border border-fuchsia-300/45 bg-fuchsia-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-fuchsia-100">
+                      {detail.concentration_risk.exposure_status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    {detail.concentration_risk.concentration_type} · {detail.concentration_risk.concentration_key}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Score {detail.concentration_risk.concentration_score ?? "—"} · diversification{" "}
+                    {detail.concentration_risk.diversification_score ?? "—"} · portfolio share{" "}
+                    {detail.concentration_risk.percentage_of_portfolio ?? "—"}
+                  </p>
+                </div>
+              ) : null}
               {detail.portfolio_recommendation ? (
                 <div className="rounded-2xl border border-amber-400/35 bg-amber-950/30 px-4 py-3 text-[11px] text-amber-100">
                   <div className="flex flex-wrap items-center gap-2">

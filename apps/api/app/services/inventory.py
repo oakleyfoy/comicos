@@ -30,6 +30,7 @@ from app.schemas.inventory import (
     ReleaseCalendarPresence,
 )
 from app.services.inventory_fmv import build_inventory_fmv_attachment, summarize_inventory_fmv
+from app.services.cover_images import list_cover_reads_for_inventory
 from app.services.portfolio_registry import inventory_portfolio_teaser
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.ops import (
@@ -60,6 +61,7 @@ from app.services.run_detection import run_detection_inventory_context_for_owner
 from app.services.scan_sessions import originating_scan_session_for_inventory_copy
 from app.services.grading_candidate_service import inventory_grading_badge
 from app.services.portfolio_liquidity import inventory_portfolio_liquidity_teaser
+from app.services.concentration_risk import inventory_concentration_risk_teaser
 from app.services.portfolio_recommendation import inventory_portfolio_recommendation_teaser
 
 SORTABLE_FIELDS = {
@@ -879,6 +881,11 @@ def get_inventory_copy_detail(
         inventory_item_id=inventory_copy_id,
     )
     merged["portfolio_liquidity"] = inventory_portfolio_liquidity_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["concentration_risk"] = inventory_concentration_risk_teaser(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,

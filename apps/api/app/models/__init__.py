@@ -119,6 +119,12 @@ from app.models.portfolio_recommendation import (
     PortfolioRecommendationHistory,
     PortfolioRecommendationScenario,
 )
+from app.models.concentration_risk import (
+    ConcentrationRiskEvidence,
+    ConcentrationRiskFactor,
+    ConcentrationRiskHistory,
+    ConcentrationRiskSnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -316,6 +322,10 @@ __all__ = [
     "PortfolioRecommendationEvidence",
     "PortfolioRecommendationHistory",
     "PortfolioRecommendationScenario",
+    "ConcentrationRiskSnapshot",
+    "ConcentrationRiskEvidence",
+    "ConcentrationRiskFactor",
+    "ConcentrationRiskHistory",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

@@ -126,6 +126,11 @@ import {
   type PortfolioRecommendationEvidenceListResponse,
   type PortfolioRecommendationHistoryListResponse,
   type PortfolioRecommendationListResponse,
+  type ConcentrationRiskDetailRead,
+  type ConcentrationRiskEvidenceListResponse,
+  type ConcentrationRiskFactorListResponse,
+  type ConcentrationRiskHistoryListResponse,
+  type ConcentrationRiskListResponse,
   type PortfolioValueSummaryResponse,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
@@ -1534,6 +1539,16 @@ export function OperationsPage() {
     useState<PortfolioRecommendationHistoryListResponse | null>(null);
   const [opsPortfolioRecommendationLoading, setOpsPortfolioRecommendationLoading] = useState(true);
   const [opsPortfolioRecommendationError, setOpsPortfolioRecommendationError] = useState<string | null>(null);
+  const [opsConcentrationRiskList, setOpsConcentrationRiskList] = useState<ConcentrationRiskListResponse | null>(null);
+  const [opsConcentrationRiskDetail, setOpsConcentrationRiskDetail] = useState<ConcentrationRiskDetailRead | null>(null);
+  const [opsConcentrationRiskEvidence, setOpsConcentrationRiskEvidence] =
+    useState<ConcentrationRiskEvidenceListResponse | null>(null);
+  const [opsConcentrationRiskFactors, setOpsConcentrationRiskFactors] =
+    useState<ConcentrationRiskFactorListResponse | null>(null);
+  const [opsConcentrationRiskHistory, setOpsConcentrationRiskHistory] =
+    useState<ConcentrationRiskHistoryListResponse | null>(null);
+  const [opsConcentrationRiskLoading, setOpsConcentrationRiskLoading] = useState(true);
+  const [opsConcentrationRiskError, setOpsConcentrationRiskError] = useState<string | null>(null);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -2085,6 +2100,8 @@ export function OperationsPage() {
       setOpsPortfolioError(null);
       setOpsPortfolioRecommendationLoading(true);
       setOpsPortfolioRecommendationError(null);
+      setOpsConcentrationRiskLoading(true);
+      setOpsConcentrationRiskError(null);
       try {
         const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
         const dupScoped = {
@@ -2107,6 +2124,8 @@ export function OperationsPage() {
           liqHist,
           recList,
           recHist,
+          concList,
+          concHist,
         ] =
           await Promise.all([
             apiClient.listOpsPortfolios({ ...scoped, limit: 75, offset: 0 }),
@@ -2122,6 +2141,8 @@ export function OperationsPage() {
             apiClient.listOpsPortfolioLiquidityHistory({ ...scoped, limit: 120, offset: 0 }),
             apiClient.listOpsPortfolioRecommendations({ ...scoped, limit: 200, offset: 0 }),
             apiClient.listOpsPortfolioRecommendationHistory({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsConcentrationRisk({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsConcentrationRiskHistory({ ...scoped, limit: 200, offset: 0 }),
           ]);
         let liqDetail: PortfolioLiquiditySnapshotDetailResponse | null = null;
         let liqEvidence: PortfolioLiquidityEvidenceListResponse | null = null;
@@ -2147,6 +2168,25 @@ export function OperationsPage() {
             offset: 0,
           });
         }
+        let concDetail: ConcentrationRiskDetailRead | null = null;
+        let concEvidence: ConcentrationRiskEvidenceListResponse | null = null;
+        let concFactors: ConcentrationRiskFactorListResponse | null = null;
+        const firstConc = concList.items[0];
+        if (firstConc) {
+          concDetail = await apiClient.getOpsConcentrationRisk(firstConc.id, scoped);
+          concEvidence = await apiClient.listOpsConcentrationRiskEvidence({
+            ...scoped,
+            concentration_risk_snapshot_id: firstConc.id,
+            limit: 120,
+            offset: 0,
+          });
+          concFactors = await apiClient.listOpsConcentrationRiskFactors({
+            ...scoped,
+            concentration_risk_snapshot_id: firstConc.id,
+            limit: 120,
+            offset: 0,
+          });
+        }
         if (!ignore) {
           setOpsPortfolioList(portfolios);
           setOpsPortfolioItems(items);
@@ -2165,6 +2205,11 @@ export function OperationsPage() {
           setOpsPortfolioRecommendationDetail(recDetail);
           setOpsPortfolioRecommendationEvidence(recEvidence);
           setOpsPortfolioRecommendationHistory(recHist);
+          setOpsConcentrationRiskList(concList);
+          setOpsConcentrationRiskDetail(concDetail);
+          setOpsConcentrationRiskEvidence(concEvidence);
+          setOpsConcentrationRiskFactors(concFactors);
+          setOpsConcentrationRiskHistory(concHist);
         }
       } catch (loadErr) {
         if (!ignore) {
@@ -2185,17 +2230,26 @@ export function OperationsPage() {
           setOpsPortfolioRecommendationDetail(null);
           setOpsPortfolioRecommendationEvidence(null);
           setOpsPortfolioRecommendationHistory(null);
+          setOpsConcentrationRiskList(null);
+          setOpsConcentrationRiskDetail(null);
+          setOpsConcentrationRiskEvidence(null);
+          setOpsConcentrationRiskFactors(null);
+          setOpsConcentrationRiskHistory(null);
           setOpsPortfolioError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio registry ops payloads.",
           );
           setOpsPortfolioRecommendationError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio recommendation ops payloads.",
           );
+          setOpsConcentrationRiskError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load concentration risk ops payloads.",
+          );
         }
       } finally {
         if (!ignore) {
           setOpsPortfolioLoading(false);
           setOpsPortfolioRecommendationLoading(false);
+          setOpsConcentrationRiskLoading(false);
         }
       }
     })();
@@ -5086,6 +5140,7 @@ export function OperationsPage() {
           ["Duplicate consolidation", "#duplicate-consolidation-ops"],
           ["Portfolio liquidity", "#portfolio-liquidity-ops"],
           ["Portfolio recommendations", "#portfolio-recommendation-ops"],
+          ["Concentration risk", "#concentration-risk-ops"],
           ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
@@ -6166,6 +6221,187 @@ export function OperationsPage() {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="concentration-risk-ops"
+        open
+        className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Concentration risk operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only `/ops/concentration-risk*` mirrors. Deterministic concentration snapshots with explicit scores,
+                evidence, factor weights, and append-safe history.
+              </p>
+            </div>
+            <span className="rounded-full border border-fuchsia-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100/95">
+              Ops / concentration
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-fuchsia-200/15 pt-4">
+          {opsConcentrationRiskLoading ? (
+            <p className="text-sm text-slate-400">Loading concentration risk…</p>
+          ) : opsConcentrationRiskError ? (
+            <StatusBanner tone="error">{opsConcentrationRiskError}</StatusBanner>
+          ) : (
+            <>
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Concentration table ({opsConcentrationRiskList?.total ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Key</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Score</th>
+                      <th className="p-3 font-medium">Diversification</th>
+                      <th className="p-3 font-medium">Liquidity weighted</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsConcentrationRiskList?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={8}>
+                          No concentration-risk rows for this scope yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsConcentrationRiskList!.items.slice(0, 30).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 text-slate-300">{row.concentration_type}</td>
+                          <td className="p-3 text-slate-300">{row.concentration_key}</td>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                          <td className="p-3">{row.exposure_status}</td>
+                          <td className="p-3 text-slate-300">{row.concentration_score ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.diversification_score ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.liquidity_weighted_concentration ?? "—"}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsConcentrationRiskDetail ? (
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 xl:col-span-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Selected concentration snapshot</p>
+                    <p className="mt-2 text-sm text-slate-100">
+                      {opsConcentrationRiskDetail.snapshot.concentration_type} · {opsConcentrationRiskDetail.snapshot.concentration_key}
+                      {" · "}{opsConcentrationRiskDetail.snapshot.exposure_status}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-300">
+                      Score {opsConcentrationRiskDetail.snapshot.concentration_score ?? "—"} · diversification{" "}
+                      {opsConcentrationRiskDetail.snapshot.diversification_score ?? "—"} · liquidity weighted{" "}
+                      {opsConcentrationRiskDetail.snapshot.liquidity_weighted_concentration ?? "—"}
+                    </p>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Evidence list ({opsConcentrationRiskEvidence?.total ?? 0})
+                    </p>
+                    <table className="mt-3 w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Type</th>
+                          <th className="p-3 font-medium">Source</th>
+                          <th className="p-3 font-medium">Payload</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {(opsConcentrationRiskEvidence?.items.length ?? 0) === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={3}>
+                              Evidence rows attach to each concentration snapshot.
+                            </td>
+                          </tr>
+                        ) : (
+                          opsConcentrationRiskEvidence!.items.slice(0, 20).map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3">{row.evidence_type}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {row.source_table ?? "—"} #{row.source_id ?? "—"}
+                              </td>
+                              <td className="p-3 text-[10px] text-slate-400">{JSON.stringify(row.evidence_value_json).slice(0, 200)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Factors / history
+                    </p>
+                    <div className="mt-3 space-y-4">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Factor</th>
+                            <th className="p-3 font-medium">Score</th>
+                            <th className="p-3 font-medium">Weight</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsConcentrationRiskFactors?.items.slice(0, 10).length ? (
+                            opsConcentrationRiskFactors!.items.slice(0, 10).map((row) => (
+                              <tr key={row.id}>
+                                <td className="p-3">{row.factor_key}</td>
+                                <td className="p-3">{row.factor_score ?? "—"}</td>
+                                <td className="p-3">{row.weighting ?? "—"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="p-4 text-slate-500" colSpan={3}>
+                                Factor rows are persisted with explicit weights.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Date</th>
+                            <th className="p-3 font-medium">Status</th>
+                            <th className="p-3 font-medium">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsConcentrationRiskHistory?.items.slice(0, 15).length ? (
+                            opsConcentrationRiskHistory!.items.slice(0, 15).map((row) => (
+                              <tr key={row.id}>
+                                <td className="p-3 text-slate-400">{formatDate(row.snapshot_date)}</td>
+                                <td className="p-3">{row.exposure_status}</td>
+                                <td className="p-3">{row.concentration_score ?? "—"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="p-4 text-slate-500" colSpan={3}>
+                                History appends only when a new checksum appears for the same concentration key.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </details>

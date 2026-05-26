@@ -225,6 +225,15 @@ from app.schemas.portfolio_recommendation import (
     PortfolioRecommendationHistoryListResponse,
     PortfolioRecommendationListResponse,
 )
+from app.schemas.concentration_risk import (
+    ConcentrationRiskDetailRead,
+    ConcentrationRiskEvidenceListResponse,
+    ConcentrationRiskFactorListResponse,
+    ConcentrationRiskGeneratePayload,
+    ConcentrationRiskGenerateResponse,
+    ConcentrationRiskHistoryListResponse,
+    ConcentrationRiskListResponse,
+)
 from app.schemas.portfolio import (
     PortfolioAllocationGenerateResponse,
     PortfolioAllocationSnapshotListResponse,
@@ -798,6 +807,7 @@ from app.services import portfolio_registry as portfolio_registry_service
 from app.services import duplicate_consolidation as duplicate_consolidation_service
 from app.services import portfolio_liquidity as portfolio_liquidity_service
 from app.services import portfolio_recommendation as portfolio_recommendation_service
+from app.services import concentration_risk as concentration_risk_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
@@ -12980,6 +12990,253 @@ def ops_list_portfolio_recommendation_history(
         recommendation_strength=recommendation_strength,
         confidence_level=confidence_level,
         risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/concentration-risk/generate", response_model=ConcentrationRiskGenerateResponse, status_code=status.HTTP_201_CREATED)
+def owner_generate_concentration_risk(
+    payload: ConcentrationRiskGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConcentrationRiskGenerateResponse:
+    body = concentration_risk_service.generate_concentration_risk(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/concentration-risk", response_model=ConcentrationRiskListResponse)
+def owner_list_concentration_risk(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    concentration_type: str | None = Query(default=None),
+    concentration_key: str | None = Query(default=None),
+    exposure_status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskListResponse:
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_concentration_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        concentration_type=concentration_type,
+        concentration_key=concentration_key,
+        exposure_status=exposure_status,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/concentration-risk/{snapshot_id}", response_model=ConcentrationRiskDetailRead)
+def owner_get_concentration_risk(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ConcentrationRiskDetailRead:
+    row = concentration_risk_service.get_concentration_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+    )
+    return concentration_risk_service._detail_read(session, row)
+
+
+@app.get("/concentration-risk-evidence", response_model=ConcentrationRiskEvidenceListResponse)
+def owner_list_concentration_risk_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    concentration_risk_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskEvidenceListResponse:
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        concentration_risk_snapshot_id=concentration_risk_snapshot_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/concentration-risk-factors", response_model=ConcentrationRiskFactorListResponse)
+def owner_list_concentration_risk_factors(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    concentration_risk_snapshot_id: int | None = Query(default=None),
+    factor_key: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskFactorListResponse:
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_factors_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        concentration_risk_snapshot_id=concentration_risk_snapshot_id,
+        factor_key=factor_key,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/concentration-risk-history", response_model=ConcentrationRiskHistoryListResponse)
+def owner_list_concentration_risk_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    concentration_type: str | None = Query(default=None),
+    concentration_key: str | None = Query(default=None),
+    exposure_status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskHistoryListResponse:
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        concentration_type=concentration_type,
+        concentration_key=concentration_key,
+        exposure_status=exposure_status,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/concentration-risk", response_model=ConcentrationRiskListResponse, include_in_schema=False)
+def ops_list_concentration_risk(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    concentration_type: str | None = Query(default=None),
+    concentration_key: str | None = Query(default=None),
+    exposure_status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_concentration_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        concentration_type=concentration_type,
+        concentration_key=concentration_key,
+        exposure_status=exposure_status,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/concentration-risk/{snapshot_id}", response_model=ConcentrationRiskDetailRead, include_in_schema=False)
+def ops_get_concentration_risk(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ConcentrationRiskDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = concentration_risk_service.get_concentration_ops(session, snapshot_id=snapshot_id)
+    return concentration_risk_service._detail_read(session, row)
+
+
+@app.get("/ops/concentration-risk-evidence", response_model=ConcentrationRiskEvidenceListResponse, include_in_schema=False)
+def ops_list_concentration_risk_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    concentration_risk_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        concentration_risk_snapshot_id=concentration_risk_snapshot_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/concentration-risk-factors", response_model=ConcentrationRiskFactorListResponse, include_in_schema=False)
+def ops_list_concentration_risk_factors(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    concentration_risk_snapshot_id: int | None = Query(default=None),
+    factor_key: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskFactorListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_factors_ops(
+        session,
+        owner_user_id=owner_user_id,
+        concentration_risk_snapshot_id=concentration_risk_snapshot_id,
+        factor_key=factor_key,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/concentration-risk-history", response_model=ConcentrationRiskHistoryListResponse, include_in_schema=False)
+def ops_list_concentration_risk_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    concentration_type: str | None = Query(default=None),
+    concentration_key: str | None = Query(default=None),
+    exposure_status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConcentrationRiskHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = concentration_risk_service.clamp_pagination(limit=limit, offset=offset)
+    return concentration_risk_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        concentration_type=concentration_type,
+        concentration_key=concentration_key,
+        exposure_status=exposure_status,
         date_from=date_from,
         date_to=date_to,
         limit=lim,

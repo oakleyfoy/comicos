@@ -5214,6 +5214,16 @@ export interface InventoryPortfolioLiquidityTeaser {
   dead_capital_teaser: string | null;
 }
 
+/** P38-05 deterministic concentration-risk teaser for inventory detail. */
+export interface InventoryConcentrationRiskTeaser {
+  concentration_type: string;
+  concentration_key: string;
+  exposure_status: "HEALTHY" | "WATCH" | "CONCENTRATED" | "OVEREXPOSED" | "CRITICAL";
+  concentration_score: string | null;
+  diversification_score: string | null;
+  percentage_of_portfolio: string | null;
+}
+
 /** P38-04 deterministic portfolio recommendation teaser for inventory detail. */
 export interface InventoryPortfolioRecommendationTeaser {
   recommendation_action: "HOLD" | "SELL" | "REDUCE_EXPOSURE" | "GRADE_THEN_SELL" | "CONSOLIDATE" | "WATCH";
@@ -5249,6 +5259,7 @@ export interface InventoryDetail extends InventoryItem {
   portfolio_intelligence?: InventoryPortfolioIntelligenceTeaser | null;
   duplicate_intelligence?: InventoryDuplicateIntelligenceTeaser | null;
   portfolio_liquidity?: InventoryPortfolioLiquidityTeaser | null;
+  concentration_risk?: InventoryConcentrationRiskTeaser | null;
   portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
 }
 
@@ -6402,6 +6413,99 @@ export interface PortfolioRecommendationEvidenceListResponse {
 
 export interface PortfolioRecommendationHistoryListResponse {
   items: PortfolioRecommendationHistoryRead[];
+  total: number;
+}
+
+/** P38-05 deterministic portfolio concentration intelligence. */
+export interface ConcentrationRiskSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  concentration_type: string;
+  concentration_key: string;
+  total_item_count: number;
+  total_fmv_amount: string | null;
+  percentage_of_portfolio: string | null;
+  concentration_score: string | null;
+  liquidity_weighted_concentration: string | null;
+  exposure_status: "HEALTHY" | "WATCH" | "CONCENTRATED" | "OVEREXPOSED" | "CRITICAL";
+  diversification_score: string | null;
+  checksum: string;
+  replay_key: string | null;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ConcentrationRiskEvidenceRead {
+  id: number;
+  concentration_risk_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConcentrationRiskFactorRead {
+  id: number;
+  concentration_risk_snapshot_id: number;
+  factor_key: string;
+  factor_score: string | null;
+  weighting: string | null;
+  created_at: string;
+}
+
+export interface ConcentrationRiskHistoryRead {
+  id: number;
+  owner_user_id: number;
+  portfolio_id: number | null;
+  concentration_type: string;
+  concentration_key: string;
+  exposure_status: string;
+  concentration_score: string | null;
+  diversification_score: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ConcentrationRiskDetailRead {
+  snapshot: ConcentrationRiskSnapshotRead;
+  evidence: ConcentrationRiskEvidenceRead[];
+  factors: ConcentrationRiskFactorRead[];
+  history: ConcentrationRiskHistoryRead[];
+}
+
+export interface ConcentrationRiskListResponse {
+  items: ConcentrationRiskSnapshotRead[];
+  total: number;
+}
+
+export interface ConcentrationRiskGeneratePayload {
+  portfolio_id?: number | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ConcentrationRiskGenerateResponse {
+  replayed: boolean;
+  items: ConcentrationRiskSnapshotRead[];
+  total: number;
+  history_appended_count: number;
+}
+
+export interface ConcentrationRiskEvidenceListResponse {
+  items: ConcentrationRiskEvidenceRead[];
+  total: number;
+}
+
+export interface ConcentrationRiskFactorListResponse {
+  items: ConcentrationRiskFactorRead[];
+  total: number;
+}
+
+export interface ConcentrationRiskHistoryListResponse {
+  items: ConcentrationRiskHistoryRead[];
   total: number;
 }
 
@@ -10970,6 +11074,149 @@ export const apiClient = {
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
     return request<PortfolioRecommendationHistoryListResponse>(`/ops/portfolio-recommendation-history${q}`);
+  },
+
+  generateConcentrationRisk(payload: ConcentrationRiskGeneratePayload): Promise<ConcentrationRiskGenerateResponse> {
+    return request<ConcentrationRiskGenerateResponse>("/concentration-risk/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listConcentrationRisk(params?: {
+    portfolio_id?: number;
+    concentration_type?: string;
+    concentration_key?: string;
+    exposure_status?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskListResponse>(`/concentration-risk${q}`);
+  },
+
+  getConcentrationRisk(snapshotId: number): Promise<ConcentrationRiskDetailRead> {
+    return request<ConcentrationRiskDetailRead>(`/concentration-risk/${snapshotId}`);
+  },
+
+  listConcentrationRiskEvidence(params?: {
+    concentration_risk_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskEvidenceListResponse>(`/concentration-risk-evidence${q}`);
+  },
+
+  listConcentrationRiskFactors(params?: {
+    concentration_risk_snapshot_id?: number;
+    factor_key?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskFactorListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskFactorListResponse>(`/concentration-risk-factors${q}`);
+  },
+
+  listConcentrationRiskHistory(params?: {
+    portfolio_id?: number;
+    concentration_type?: string;
+    concentration_key?: string;
+    exposure_status?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskHistoryListResponse>(`/concentration-risk-history${q}`);
+  },
+
+  listOpsConcentrationRisk(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    concentration_type?: string;
+    concentration_key?: string;
+    exposure_status?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskListResponse>(`/ops/concentration-risk${q}`);
+  },
+
+  getOpsConcentrationRisk(snapshotId: number, params?: { owner_user_id?: number }): Promise<ConcentrationRiskDetailRead> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, number | undefined>)
+        : "";
+    return request<ConcentrationRiskDetailRead>(`/ops/concentration-risk/${snapshotId}${q}`);
+  },
+
+  listOpsConcentrationRiskEvidence(params?: {
+    owner_user_id?: number;
+    concentration_risk_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskEvidenceListResponse>(`/ops/concentration-risk-evidence${q}`);
+  },
+
+  listOpsConcentrationRiskFactors(params?: {
+    owner_user_id?: number;
+    concentration_risk_snapshot_id?: number;
+    factor_key?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskFactorListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskFactorListResponse>(`/ops/concentration-risk-factors${q}`);
+  },
+
+  listOpsConcentrationRiskHistory(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    concentration_type?: string;
+    concentration_key?: string;
+    exposure_status?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConcentrationRiskHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<ConcentrationRiskHistoryListResponse>(`/ops/concentration-risk-history${q}`);
   },
 };
 

@@ -21,6 +21,7 @@ import {
   type PortfolioPerformanceItem,
   type PortfolioLiquiditySnapshotDetailResponse,
   type PortfolioRecommendationListResponse,
+  type ConcentrationRiskListResponse,
   type InventoryIntelligenceHealthRollup,
   type InventoryIntelligenceRollupSummary,
   type CollectionAnalyticsSummary,
@@ -948,6 +949,10 @@ export function DashboardPage() {
   const [portfolioRecommendationLoading, setPortfolioRecommendationLoading] = useState(true);
   const [portfolioRecommendationError, setPortfolioRecommendationError] = useState<string | null>(null);
   const [portfolioRecommendationGenBusy, setPortfolioRecommendationGenBusy] = useState(false);
+  const [concentrationRiskList, setConcentrationRiskList] = useState<ConcentrationRiskListResponse | null>(null);
+  const [concentrationRiskLoading, setConcentrationRiskLoading] = useState(true);
+  const [concentrationRiskError, setConcentrationRiskError] = useState<string | null>(null);
+  const [concentrationRiskGenBusy, setConcentrationRiskGenBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const dealerGradingMetricMap = useMemo(
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
@@ -993,6 +998,38 @@ export function DashboardPage() {
     }
     return summary;
   }, [portfolioRecommendationList]);
+  const concentrationRiskSummary = useMemo(() => {
+    const items = concentrationRiskList?.items ?? [];
+    const summary = {
+      total: concentrationRiskList?.total ?? 0,
+      concentratedCount: 0,
+      criticalCount: 0,
+      avgDiversificationScore: 0,
+      highLiquidityFragilityCount: 0,
+      duplicateWarningCount: 0,
+    };
+    if (!items.length) {
+      return summary;
+    }
+    let diversificationTotal = 0;
+    for (const row of items) {
+      if (["CONCENTRATED", "OVEREXPOSED", "CRITICAL"].includes(row.exposure_status)) {
+        summary.concentratedCount += 1;
+      }
+      if (row.exposure_status === "CRITICAL") {
+        summary.criticalCount += 1;
+      }
+      diversificationTotal += Number(row.diversification_score ?? 0);
+      if (Number(row.liquidity_weighted_concentration ?? 0) >= 45) {
+        summary.highLiquidityFragilityCount += 1;
+      }
+      if (["grading_status", "liquidity_status", "variant_family"].includes(row.concentration_type) && row.exposure_status !== "HEALTHY") {
+        summary.duplicateWarningCount += 1;
+      }
+    }
+    summary.avgDiversificationScore = diversificationTotal / items.length;
+    return summary;
+  }, [concentrationRiskList]);
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1678,6 +1715,40 @@ export function DashboardPage() {
     void (async () => {
       if (!user) {
         if (!ignore) {
+          setConcentrationRiskList(null);
+          setConcentrationRiskLoading(false);
+          setConcentrationRiskError(null);
+        }
+        return;
+      }
+      setConcentrationRiskLoading(true);
+      setConcentrationRiskError(null);
+      try {
+        const list = await apiClient.listConcentrationRisk({ limit: 500 });
+        if (!ignore) {
+          setConcentrationRiskList(list);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setConcentrationRiskList(null);
+          setConcentrationRiskError(loadErr instanceof ApiError ? loadErr.message : "Unable to load concentration risk.");
+        }
+      } finally {
+        if (!ignore) {
+          setConcentrationRiskLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
           setGradingReportsRecent(null);
           setGradingReportsFailed(null);
           setGradingReportsLoading(false);
@@ -2338,6 +2409,23 @@ export function DashboardPage() {
       setPortfolioRecommendationError(err instanceof ApiError ? err.message : "Unable to refresh portfolio recommendations.");
     } finally {
       setPortfolioRecommendationGenBusy(false);
+    }
+  }
+
+  async function refreshConcentrationRisk(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setConcentrationRiskGenBusy(true);
+    setConcentrationRiskError(null);
+    try {
+      await apiClient.generateConcentrationRisk({ replay_key: `web-crk-dash-${Date.now()}` });
+      const list = await apiClient.listConcentrationRisk({ limit: 500 });
+      setConcentrationRiskList(list);
+    } catch (err) {
+      setConcentrationRiskError(err instanceof ApiError ? err.message : "Unable to refresh concentration risk.");
+    } finally {
+      setConcentrationRiskGenBusy(false);
     }
   }
 
@@ -4370,6 +4458,59 @@ export function DashboardPage() {
               </div>
             ) : (
               <p className="mt-4 text-sm text-slate-500">Generate recommendation rows to populate this panel.</p>
+            )}
+          </section>
+
+          <section
+            id="concentration-risk-dash"
+            className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/12 p-5 shadow-xl shadow-black/18"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-100/90">Concentration intelligence</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic concentration-risk layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  Explicit portfolio concentration modeling across publishers, titles, eras, grading posture, liquidity posture,
+                  variant families, and acquisition channels. Scores remain replay-safe and fully formula-driven.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refreshConcentrationRisk()}
+                  disabled={concentrationRiskGenBusy}
+                  className="rounded-xl border border-fuchsia-400/45 bg-fuchsia-500/10 px-4 py-2 text-xs font-semibold text-fuchsia-50 transition hover:bg-fuchsia-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {concentrationRiskGenBusy ? "Generating…" : "Generate concentration risk"}
+                </button>
+                <Link
+                  to="/ops#concentration-risk-ops"
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-fuchsia-300/45 hover:bg-white/5"
+                >
+                  Ops concentration tables
+                </Link>
+              </div>
+            </div>
+            {concentrationRiskLoading ? (
+              <p className="mt-4 text-sm text-slate-400">Loading concentration risk…</p>
+            ) : concentrationRiskError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{concentrationRiskError}</StatusBanner>
+              </div>
+            ) : concentrationRiskList ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="Concentrated+" value={String(concentrationRiskSummary.concentratedCount)} />
+                <StatCard label="Critical rows" value={String(concentrationRiskSummary.criticalCount)} />
+                <StatCard
+                  label="Avg diversification"
+                  value={concentrationRiskSummary.total ? concentrationRiskSummary.avgDiversificationScore.toFixed(2) : "0.00"}
+                />
+                <StatCard label="High liquidity fragility" value={String(concentrationRiskSummary.highLiquidityFragilityCount)} />
+                <StatCard label="Non-healthy posture warnings" value={String(concentrationRiskSummary.duplicateWarningCount)} />
+                <StatCard label="Total modeled rows" value={String(concentrationRiskSummary.total)} />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">Generate concentration rows to populate this panel.</p>
             )}
           </section>
 
