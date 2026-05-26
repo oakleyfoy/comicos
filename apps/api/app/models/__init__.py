@@ -110,6 +110,13 @@ from app.models.listing_registry import (
     ListingPriceHistory,
 )
 
+from app.models.grading_candidate import (
+    GradingCandidate,
+    GradingCandidateEvidence,
+    GradingCandidateLifecycleEvent,
+    GradingCandidateSnapshot,
+)
+
 __all__ = [
     "CanonicalCreator",
     "CanonicalIssueLinkSuggestion",
@@ -134,6 +141,10 @@ __all__ = [
     "DuplicateCandidateReview",
     "GmailAccount",
     "GmailImportRecord",
+    "GradingCandidate",
+    "GradingCandidateEvidence",
+    "GradingCandidateLifecycleEvent",
+    "GradingCandidateSnapshot",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

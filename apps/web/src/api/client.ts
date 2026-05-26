@@ -3106,6 +3106,55 @@ export interface OperationalReportingDashboardRollup {
   failed_runs: OperationalReportRunRead[];
 }
 
+export interface InventoryGradingCandidateBadge {
+  grading_candidate_id: number;
+  status: string;
+  target_grader: string;
+  candidate_priority: string;
+  is_pipeline_active: boolean;
+}
+
+export interface GradingCandidateDashboardSummary {
+  total_candidates: number;
+  pipeline_active_count: number;
+  ready_for_submission_count: number;
+  submitted_count: number;
+  graded_count: number;
+  elite_priority_count: number;
+}
+
+export interface GradingCandidateRead {
+  id: number;
+  owner_user_id: number;
+  inventory_item_id: number;
+  canonical_comic_issue_id: number | null;
+  status: string;
+  target_grader: string;
+  target_grade: string | null;
+  estimated_raw_value: string | null;
+  estimated_graded_value: string | null;
+  estimated_spread: string | null;
+  estimated_grading_cost: string | null;
+  estimated_roi: string | null;
+  candidate_priority: string;
+  rationale: string | null;
+  replay_key: string | null;
+  evidence_count: number;
+  latest_snapshot_checksum: string | null;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  graded_at: string | null;
+  archived_at: string | null;
+}
+
+export interface GradingCandidateListResponse {
+  items: GradingCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export type LiquidityStatus = "HIGH" | "MODERATE" | "LOW" | "ILLIQUID" | "INSUFFICIENT_DATA";
 export type LiquidityConfidence = "HIGH" | "MEDIUM" | "LOW";
 export type LiquidityEvidenceType = "SALE" | "ACTIVE_LISTING" | "FAILED_LISTING" | "RELIST" | "STALE";
@@ -4233,6 +4282,7 @@ export interface InventoryDetail extends InventoryItem {
   inventory_fmv: InventoryFmvAttachmentRead | null;
   cover_images: InventoryCoverImage[];
   originating_scan_session?: InventoryScanSessionOrigin | null;
+  grading_candidate?: InventoryGradingCandidateBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -7639,6 +7689,31 @@ export const apiClient = {
         ? buildQueryString({ owner_user_id: ownerUserId })
         : "";
     return request<OperationalReportingDashboardRollup>(`/ops/reports/dashboard-rollups${q}`);
+  },
+
+  getGradingCandidateDashboardSummary(): Promise<GradingCandidateDashboardSummary> {
+    return request<GradingCandidateDashboardSummary>("/grading-candidates/dashboard-summary");
+  },
+
+  listGradingCandidates(params?: {
+    status?: string;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingCandidateListResponse>(`/grading-candidates${q}`);
+  },
+
+  getOpsGradingCandidates(params?: {
+    owner_user_id?: number;
+    status?: string;
+    inventory_item_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingCandidateListResponse>(`/ops/grading-candidates${q}`);
   },
 
   getListingExportDashboardSummary(): Promise<ListingExportDashboardSummary> {

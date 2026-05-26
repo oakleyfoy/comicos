@@ -168,6 +168,16 @@ Resolved routes:
   - Notification/email/SMS routers, staffing workflows, ticketing, or external BI sink automation
   - Async worker offload for heavy report fan-out beyond synchronous FastAPI envelopes (unless replay + checksum contracts are preserved)
 
+## P37-01 — Grading candidate registry foundation (2026-05-25)
+
+- Architecture note: append-safe grading intents, evidence lineage, deterministic snapshots (`grading_candidate*` tables) documented in `docs/GRADING_CANDIDATE_ARCHITECTURE.md`. Owners hold write/lifecycle transitions; `/ops/grading*` routes stay read mirrors with standard admin guards.
+- This lane deliberately avoids grade prediction, scan AI scoring, defect annotation, PSA/CGC API automation, outbound notifications, and any inventory-side mutation (including silently touching FMV or listing readiness).
+- **Deferred scope (beyond P37-01):**
+  - Automated grading ROI backtests, probabilistic grading outcomes, speculative market modeling
+  - Image-based defect catalogs, automated centering/frame analysis, counterfeit heuristics
+  - Recommendation engines tying grading to acquisition or liquidation workflows
+  - SLA tracking across physical shipments to graders, webhook callbacks from slabbers, insurance workflows
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

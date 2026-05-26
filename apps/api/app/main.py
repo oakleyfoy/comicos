@@ -185,6 +185,18 @@ from app.schemas.operational_reporting import (
     OperationalReportRunListResponse,
     OperationalReportingDashboardRollup,
 )
+from app.schemas.grading_candidate import (
+    GradingCandidateCreatePayload,
+    GradingCandidateDashboardSummary,
+    GradingCandidateDetailRead,
+    GradingCandidateEvidenceCreatePayload,
+    GradingCandidateEvidenceListResponse,
+    GradingCandidateGradePayload,
+    GradingCandidateLifecycleEventListResponse,
+    GradingCandidateListResponse,
+    GradingCandidatePatchPayload,
+    GradingCandidateRejectPayload,
+)
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
     ConventionAssignmentListResponse,
@@ -672,6 +684,7 @@ from app.services.inventory_fmv import (
     portfolio_value_summary_for_scope,
 )
 from app.services import dealer_dashboard as dealer_dashboard_service
+from app.services import grading_candidate_service
 from app.services import operational_reporting as operational_reporting_service
 from app.services import listing_export as listing_export_service
 from app.services import listing_intelligence as listing_intelligence_service
@@ -9726,6 +9739,276 @@ def ops_download_operational_report_csv(
         path=str(abs_path),
         media_type="text/csv; charset=utf-8",
         filename=frow.file_name,
+    )
+
+
+@app.get("/grading-candidates/dashboard-summary", response_model=GradingCandidateDashboardSummary)
+def owner_grading_candidates_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDashboardSummary:
+    return grading_candidate_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post(
+    "/grading-candidates",
+    response_model=GradingCandidateDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_create_grading_candidate(
+    payload: GradingCandidateCreatePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    detail, replayed = grading_candidate_service.create_candidate(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/grading-candidates", response_model=GradingCandidateListResponse)
+def owner_list_grading_candidates(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    status_filter: str | None = Query(default=None, alias="status"),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingCandidateListResponse:
+    lim, off = grading_candidate_service.clamp_grading_list_pagination(limit, offset)
+    rows, total = grading_candidate_service.list_candidates_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        status=status_filter,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_candidate_service.list_response_from_rows(
+        session,
+        rows=rows,
+        total=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/grading-candidates/{candidate_id}", response_model=GradingCandidateDetailRead)
+def owner_get_grading_candidate(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    row = grading_candidate_service.get_owner_candidate(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+    )
+    return grading_candidate_service.build_detail_read(session, row)
+
+
+@app.patch("/grading-candidates/{candidate_id}", response_model=GradingCandidateDetailRead)
+def owner_patch_grading_candidate(
+    candidate_id: int,
+    payload: GradingCandidatePatchPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.patch_candidate(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+        payload=payload,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/evidence", response_model=GradingCandidateDetailRead)
+def owner_append_grading_candidate_evidence(
+    candidate_id: int,
+    payload: GradingCandidateEvidenceCreatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.append_evidence_row(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+        payload=payload,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/review", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_review(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.transition_review(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/ready", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_ready(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.transition_ready(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/submit", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_submit(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.transition_submit(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/grade", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_grade(
+    candidate_id: int,
+    payload: GradingCandidateGradePayload | None = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    body = payload or GradingCandidateGradePayload()
+    return grading_candidate_service.transition_grade(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+        payload=body,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/reject", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_reject(
+    candidate_id: int,
+    payload: GradingCandidateRejectPayload | None = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    body = payload or GradingCandidateRejectPayload()
+    return grading_candidate_service.transition_reject(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+        payload=body,
+    )
+
+
+@app.post("/grading-candidates/{candidate_id}/archive", response_model=GradingCandidateDetailRead)
+def owner_grading_candidate_archive(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingCandidateDetailRead:
+    return grading_candidate_service.transition_archive(
+        session,
+        owner_user_id=int(current_user.id),
+        candidate_id=candidate_id,
+    )
+
+
+@app.get("/ops/grading-candidates", response_model=GradingCandidateListResponse, include_in_schema=False)
+def ops_list_grading_candidates(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    inventory_item_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingCandidateListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_candidate_service.clamp_grading_list_pagination(limit, offset)
+    rows, total = grading_candidate_service.list_candidates_ops(
+        session,
+        owner_user_id=owner_user_id,
+        status=status_filter,
+        inventory_item_id=inventory_item_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_candidate_service.list_response_from_rows(session, rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-candidates/{candidate_id}", response_model=GradingCandidateDetailRead, include_in_schema=False)
+def ops_get_grading_candidate(
+    candidate_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingCandidateDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_candidate_service.get_ops_candidate(session, candidate_id=candidate_id)
+    return grading_candidate_service.build_detail_read(session, row)
+
+
+@app.get(
+    "/ops/grading-candidate-events",
+    response_model=GradingCandidateLifecycleEventListResponse,
+    include_in_schema=False,
+)
+def ops_list_grading_candidate_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingCandidateLifecycleEventListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_candidate_service.clamp_grading_list_pagination(limit, offset)
+    return grading_candidate_service.list_lifecycle_events_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get(
+    "/ops/grading-candidate-evidence",
+    response_model=GradingCandidateEvidenceListResponse,
+    include_in_schema=False,
+)
+def ops_list_grading_candidate_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingCandidateEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_candidate_service.clamp_grading_list_pagination(limit, offset)
+    return grading_candidate_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        limit=lim,
+        offset=off,
     )
 
 

@@ -2767,6 +2767,22 @@ export function InventoryDetailPage() {
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
                 Inventory Copy <span className="font-medium text-white">#{detail.inventory_copy_id}</span>
               </div>
+              {detail.grading_candidate ? (
+                <div className="rounded-2xl border border-amber-400/35 bg-amber-950/30 px-4 py-3 text-[11px] text-amber-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-amber-200/90">Grading candidate</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_candidate.grading_candidate_id} · {detail.grading_candidate.status} ·{" "}
+                    {detail.grading_candidate.target_grader} · {detail.grading_candidate.candidate_priority}
+                    {detail.grading_candidate.is_pipeline_active ? (
+                      <span className="ml-2 rounded-full border border-emerald-400/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100">
+                        Active pipeline
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-slate-400">Historical / terminal</span>
+                    )}
+                  </p>
+                </div>
+              ) : null}
             </>
           }
         />

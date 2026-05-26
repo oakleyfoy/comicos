@@ -60,6 +60,7 @@ import {
   type LiquidityDashboardSummary,
   type SalesDashboardSummary,
   type OperationalReportingDashboardRollup,
+  type GradingCandidateDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -873,6 +874,9 @@ export function DashboardPage() {
   const [opReportRollupsLoading, setOpReportRollupsLoading] = useState(true);
   const [opReportRollupsError, setOpReportRollupsError] = useState<string | null>(null);
   const [opReportBusy, setOpReportBusy] = useState(false);
+  const [gradingDashSummary, setGradingDashSummary] = useState<GradingCandidateDashboardSummary | null>(null);
+  const [gradingDashLoading, setGradingDashLoading] = useState(true);
+  const [gradingDashError, setGradingDashError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1582,6 +1586,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setOpReportRollupsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingDashSummary(null);
+          setGradingDashLoading(false);
+          setGradingDashError(null);
+        }
+        return;
+      }
+      setGradingDashLoading(true);
+      setGradingDashError(null);
+      try {
+        const rsp = await apiClient.getGradingCandidateDashboardSummary();
+        if (!ignore) {
+          setGradingDashSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingDashSummary(null);
+          setGradingDashError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading candidate summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setGradingDashLoading(false);
         }
       }
     })();
@@ -2729,6 +2769,48 @@ export function DashboardPage() {
                     );
                   })()}
                 </div>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-candidates-dash"
+              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/85">Grading operations</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading candidate ledger</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Owner-scoped grading intentions, economics placeholders, replay-safe inserts, checksum snapshots, and
+                    append-only evidence — not grade prediction or scan AI on this lane.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-candidate-ops"
+                  className="rounded-xl border border-amber-300/35 px-4 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-200/60 hover:bg-white/5"
+                >
+                  Ops grading table
+                </Link>
+              </div>
+              {gradingDashLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading candidate rollup…</p>
+              ) : gradingDashError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingDashError}</StatusBanner>
+                </div>
+              ) : gradingDashSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                  <StatCard label="Total candidates" value={String(gradingDashSummary.total_candidates)} />
+                  <StatCard label="Pipeline active" value={String(gradingDashSummary.pipeline_active_count)} />
+                  <StatCard label="Ready for submission" value={String(gradingDashSummary.ready_for_submission_count)} />
+                  <StatCard label="Submitted" value={String(gradingDashSummary.submitted_count)} />
+                  <StatCard label="Graded" value={String(gradingDashSummary.graded_count)} />
+                  <StatCard label="Elite priority" value={String(gradingDashSummary.elite_priority_count)} />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading rollup unavailable.</p>
               )}
             </section>
           ) : null}

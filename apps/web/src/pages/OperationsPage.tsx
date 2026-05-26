@@ -145,6 +145,7 @@ import {
   type OpsListingLifecycleEventListResponse,
   type ListingExportRunListResponse,
   type OperationalReportRunListResponse,
+  type GradingCandidateListResponse,
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
@@ -1389,6 +1390,11 @@ export function OperationsPage() {
   const [opsOperationalOwnerDraft, setOpsOperationalOwnerDraft] = useState("");
   const [opsOperationalOwnerFilter, setOpsOperationalOwnerFilter] = useState<number | undefined>();
   const [opsOperationalDownloadError, setOpsOperationalDownloadError] = useState<string | null>(null);
+  const [opsGradingCandidates, setOpsGradingCandidates] = useState<GradingCandidateListResponse | null>(null);
+  const [opsGradingCandidatesLoading, setOpsGradingCandidatesLoading] = useState(true);
+  const [opsGradingCandidatesError, setOpsGradingCandidatesError] = useState<string | null>(null);
+  const [opsGradingOwnerDraft, setOpsGradingOwnerDraft] = useState("");
+  const [opsGradingOwnerFilter, setOpsGradingOwnerFilter] = useState<number | undefined>();
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2109,6 +2115,38 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsOperationalOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingCandidatesLoading(true);
+      setOpsGradingCandidatesError(null);
+      try {
+        const rsp = await apiClient.getOpsGradingCandidates({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingCandidates(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingCandidates(null);
+          setOpsGradingCandidatesError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading candidates.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingCandidatesLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -4562,6 +4600,7 @@ export function OperationsPage() {
         {[
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Operational reports", "#operational-reporting-ops"],
+          ["Grading candidates", "#grading-candidate-ops"],
           ["Listing intelligence", "#listing-intelligence-ops"],
           ["Convention", "#convention-ops"],
           ["Liquidity", "#liquidity-ops"],
@@ -4960,6 +4999,104 @@ export function OperationsPage() {
                             CSV
                           </button>
                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-candidate-ops"
+        className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading candidate registry</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only cross-owner view into grading intentions, deterministic economics placeholders, ROI fields
+                captured by owners, replay keys, lineage evidence, lifecycle events, and snapshot checksums. No inventory
+                mutation from this telescope.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+              Ops / grading
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-amber-200/15 pt-4">
+          <div className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsGradingOwnerDraft}
+                onChange={(e) => setOpsGradingOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = all owners"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-amber-400/45 px-3 py-2 text-xs font-semibold text-amber-100"
+              onClick={() => {
+                const trimmed = opsGradingOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsGradingOwnerFilter(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsGradingOwnerFilter(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+          {opsGradingCandidatesLoading ? (
+            <p className="text-sm text-slate-400">Loading grading candidates…</p>
+          ) : opsGradingCandidatesError ? (
+            <StatusBanner tone="error">{opsGradingCandidatesError}</StatusBanner>
+          ) : opsGradingCandidates ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Run</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Inventory</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Target</th>
+                    <th className="p-3 font-medium">Priority</th>
+                    <th className="p-3 font-medium">ROI est.</th>
+                    <th className="p-3 font-medium">Evidence</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingCandidates.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={9}>
+                        No grading candidates for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingCandidates.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{row.id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">inv {row.inventory_item_id}</td>
+                        <td className="p-3">{row.status}</td>
+                        <td className="p-3">
+                          {row.target_grader}
+                          {row.target_grade ? <span className="block text-[10px] text-slate-500">{row.target_grade}</span> : null}
+                        </td>
+                        <td className="p-3">{row.candidate_priority}</td>
+                        <td className="p-3 text-slate-400">{row.estimated_roi ?? "—"}</td>
+                        <td className="p-3">{row.evidence_count}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.latest_snapshot_checksum)}</td>
                       </tr>
                     ))
                   )}

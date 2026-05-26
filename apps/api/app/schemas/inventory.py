@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.cover_images import CoverImageRead
 from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
+from app.schemas.grading_candidate import InventoryGradingCandidateBadge
 from app.schemas.inventory_action_center import InventoryActionCenterAttachment
 from app.schemas.inventory_intelligence import InventoryCopyIntelligenceSignals
 from app.schemas.inventory_fmv import InventoryFmvAttachmentRead, InventoryValuationScope
@@ -140,6 +141,7 @@ class InventoryDetailResponse(BaseModel):
     inventory_action_center: InventoryActionCenterAttachment | None = None
     inventory_fmv: InventoryFmvAttachmentRead | None = None
     originating_scan_session: InventoryScanSessionOriginRead | None = None
+    grading_candidate: InventoryGradingCandidateBadge | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

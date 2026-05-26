@@ -51,6 +51,7 @@ from app.services.order_arrival_intelligence import (
 from app.services.order_states import derive_asset_state
 from app.services.run_detection import run_detection_inventory_context_for_owner
 from app.services.scan_sessions import originating_scan_session_for_inventory_copy
+from app.services.grading_candidate_service import inventory_grading_badge
 
 SORTABLE_FIELDS = {
     "title",
@@ -821,6 +822,11 @@ def get_inventory_copy_detail(
         session,
         owner_user_id=int(current_user.id),
         inventory_copy_id=inventory_copy_id,
+    )
+    merged["grading_candidate"] = inventory_grading_badge(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
     )
     return InventoryDetailResponse.model_validate(merged)
 
