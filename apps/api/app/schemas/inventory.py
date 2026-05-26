@@ -10,6 +10,7 @@ from app.schemas.grading_candidate import InventoryGradingCandidateBadge
 from app.schemas.grading_roi import InventoryGradingRoiBadge
 from app.schemas.grading_reconciliation import InventoryGradingReconciliationBadge
 from app.schemas.grading_recommendation import InventoryGradingRecommendationBadge
+from app.schemas.grading_risk import InventoryGradingRiskBadge
 from app.schemas.grading_submission import InventoryGradingSubmissionBadge
 from app.schemas.grading_spread import InventoryGradingSpreadBadge
 from app.schemas.inventory_action_center import InventoryActionCenterAttachment
@@ -152,6 +153,7 @@ class InventoryDetailResponse(BaseModel):
     grading_submission: InventoryGradingSubmissionBadge | None = None
     grading_reconciliation: InventoryGradingReconciliationBadge | None = None
     grading_recommendation: InventoryGradingRecommendationBadge | None = None
+    grading_risk: InventoryGradingRiskBadge | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

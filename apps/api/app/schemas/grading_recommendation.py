@@ -93,8 +93,13 @@ class GradingRecommendationRead(BaseModel):
     estimated_net_profit: Decimal | None
     estimated_total_cost: Decimal | None
     confidence_score: Decimal
+    overall_confidence_level: str | None = None
     recommendation_strength: str
     risk_level: str
+    grading_risk_snapshot_id: int | None = None
+    overall_risk_level: str | None = None
+    risk_adjusted_roi: Decimal | None = None
+    confidence_weight: Decimal | None = None
     recommendation_status: str
     rationale_summary: str
     warning_flags_json: list[object]
@@ -159,6 +164,10 @@ class InventoryGradingRecommendationBadge(BaseModel):
     recommended_grader: str | None
     recommended_grade_target: str | None
     confidence_score: Decimal
+    overall_confidence_level: str | None = None
     risk_level: str
+    grading_risk_snapshot_id: int | None = None
+    overall_risk_level: str | None = None
+    risk_adjusted_roi: Decimal | None = None
     recommendation_strength: str
     rationale_summary: str

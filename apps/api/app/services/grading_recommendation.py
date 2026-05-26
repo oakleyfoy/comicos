@@ -21,6 +21,7 @@ from app.models import (
     GradingRecommendationHistory,
     GradingRecommendationScenario,
     GradingReconciliationRecord,
+    GradingRiskSnapshot,
     GradingRoiSnapshot,
     GradingSpreadSnapshot,
     InventoryCopy,
@@ -126,6 +127,23 @@ def _record_read(row: GradingRecommendation) -> GradingRecommendationRead:
     return GradingRecommendationRead.model_validate(row, from_attributes=True)
 
 
+def _record_with_risk_read(session: Session, row: GradingRecommendation) -> GradingRecommendationRead:
+    payload = _record_read(row).model_dump()
+    risk = session.exec(
+        select(GradingRiskSnapshot)
+        .where(GradingRiskSnapshot.owner_user_id == row.owner_user_id)
+        .where(GradingRiskSnapshot.recommendation_id == row.id)
+        .order_by(col(GradingRiskSnapshot.snapshot_date).desc(), col(GradingRiskSnapshot.id).desc())
+    ).first()
+    if risk is not None:
+        payload["grading_risk_snapshot_id"] = int(risk.id or 0)
+        payload["overall_risk_level"] = risk.overall_risk_level
+        payload["overall_confidence_level"] = risk.overall_confidence_level
+        payload["risk_adjusted_roi"] = risk.risk_adjusted_roi
+        payload["confidence_weight"] = risk.confidence_weight
+    return GradingRecommendationRead.model_validate(payload)
+
+
 def _evidence_read(row: GradingRecommendationEvidence) -> GradingRecommendationEvidenceRead:
     return GradingRecommendationEvidenceRead.model_validate(row, from_attributes=True)
 
@@ -161,7 +179,7 @@ def _detail_read(session: Session, row: GradingRecommendation) -> GradingRecomme
         .order_by(col(GradingRecommendationHistory.snapshot_date).desc(), col(GradingRecommendationHistory.id).desc())
     ).all()
     return GradingRecommendationDetailRead(
-        recommendation=_record_read(row),
+        recommendation=_record_with_risk_read(session, row),
         evidence=[_evidence_read(item) for item in evidence],
         scenarios=[_scenario_read(item) for item in scenarios],
         history=[_history_read(item) for item in history],
@@ -1355,6 +1373,22 @@ def recommendations_response_from_rows(
     )
 
 
+def recommendations_response_from_rows_with_risk(
+    session: Session,
+    *,
+    rows: list[GradingRecommendation],
+    total: int,
+    limit: int,
+    offset: int,
+) -> GradingRecommendationListResponse:
+    return GradingRecommendationListResponse(
+        items=[_record_with_risk_read(session, row) for row in rows],
+        total_items=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 def evidence_response_from_rows(
     *,
     rows: list[GradingRecommendationEvidence],
@@ -1400,13 +1434,23 @@ def inventory_grading_recommendation_badge(
     ).first()
     if row is None:
         return None
+    risk = session.exec(
+        select(GradingRiskSnapshot)
+        .where(GradingRiskSnapshot.owner_user_id == owner_user_id)
+        .where(GradingRiskSnapshot.recommendation_id == row.id)
+        .order_by(col(GradingRiskSnapshot.snapshot_date).desc(), col(GradingRiskSnapshot.id).desc())
+    ).first()
     return InventoryGradingRecommendationBadge(
         grading_recommendation_id=int(row.id or 0),
         recommended_action=row.recommended_action,
         recommended_grader=row.recommended_grader,
         recommended_grade_target=row.recommended_grade_target,
         confidence_score=row.confidence_score,
+        overall_confidence_level=risk.overall_confidence_level if risk is not None else None,
         risk_level=row.risk_level,
+        grading_risk_snapshot_id=int(risk.id or 0) if risk is not None else None,
+        overall_risk_level=risk.overall_risk_level if risk is not None else None,
+        risk_adjusted_roi=risk.risk_adjusted_roi if risk is not None else None,
         recommendation_strength=row.recommendation_strength,
         rationale_summary=row.rationale_summary,
     )

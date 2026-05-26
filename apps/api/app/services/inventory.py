@@ -52,6 +52,7 @@ from app.services.order_states import derive_asset_state
 from app.services.grading_roi import inventory_grading_roi_badge
 from app.services.grading_reconciliation import inventory_grading_reconciliation_badge
 from app.services.grading_recommendation import inventory_grading_recommendation_badge
+from app.services.grading_risk import inventory_grading_risk_badge
 from app.services.grading_submission import inventory_grading_submission_badge
 from app.services.grading_spread import inventory_grading_spread_badge
 from app.services.run_detection import run_detection_inventory_context_for_owner
@@ -854,6 +855,11 @@ def get_inventory_copy_detail(
         inventory_item_id=inventory_copy_id,
     )
     merged["grading_recommendation"] = inventory_grading_recommendation_badge(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["grading_risk"] = inventory_grading_risk_badge(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,

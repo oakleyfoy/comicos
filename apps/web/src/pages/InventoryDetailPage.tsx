@@ -2853,7 +2853,33 @@ export function InventoryDetailPage() {
                     Confidence {detail.grading_recommendation.confidence_score} · risk{" "}
                     {detail.grading_recommendation.risk_level} · {detail.grading_recommendation.recommendation_strength}
                   </p>
+                  {detail.grading_recommendation.risk_adjusted_roi ? (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Risk-adjusted ROI {detail.grading_recommendation.risk_adjusted_roi}
+                      {detail.grading_recommendation.overall_confidence_level
+                        ? ` · ${detail.grading_recommendation.overall_confidence_level} confidence`
+                        : ""}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-[11px] text-slate-400">{detail.grading_recommendation.rationale_summary}</p>
+                </div>
+              ) : null}
+              {detail.grading_risk ? (
+                <div className="rounded-2xl border border-rose-400/35 bg-rose-950/30 px-4 py-3 text-[11px] text-rose-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-rose-200/90">Risk snapshot</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_risk.grading_risk_snapshot_id} · {detail.grading_risk.overall_risk_level} risk ·{" "}
+                    {detail.grading_risk.overall_confidence_level} confidence
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Risk-adjusted ROI {detail.grading_risk.risk_adjusted_roi ?? "—"} · weight{" "}
+                    {detail.grading_risk.confidence_weight ?? "—"}
+                  </p>
+                  {detail.grading_risk.warning_flags_json.length ? (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {detail.grading_risk.warning_flags_json.slice(0, 3).map(String).join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
             </>

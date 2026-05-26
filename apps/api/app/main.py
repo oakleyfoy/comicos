@@ -231,6 +231,15 @@ from app.schemas.grading_recommendation import (
     GradingRecommendationHistoryListResponse,
     GradingRecommendationListResponse,
 )
+from app.schemas.grading_risk import (
+    ConfidenceFactorSnapshotListResponse,
+    GradingRiskDashboardSummary,
+    GradingRiskDetailRead,
+    GradingRiskEvidenceListResponse,
+    GradingRiskGeneratePayload,
+    GradingRiskListResponse,
+    RiskHistoryListResponse,
+)
 from app.schemas.grading_submission import (
     GradingSubmissionCreatePayload,
     GradingSubmissionDashboardSummary,
@@ -731,6 +740,7 @@ from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
+from app.services import grading_risk as grading_risk_service
 from app.services import grading_spread as grading_spread_service
 from app.services import grading_roi as grading_roi_service
 from app.services import grading_submission as grading_submission_service
@@ -11072,6 +11082,25 @@ def ops_grading_recommendation_dashboard_summary(
     return grading_recommendation_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
 
 
+@app.get("/grading-risk/dashboard-summary", response_model=GradingRiskDashboardSummary)
+def owner_grading_risk_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRiskDashboardSummary:
+    return grading_risk_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/ops/grading-risk/dashboard-summary", response_model=GradingRiskDashboardSummary, include_in_schema=False)
+def ops_grading_risk_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingRiskDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_risk_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
 @app.post("/grading-recommendations/generate", response_model=GradingRecommendationDetailRead, status_code=status.HTTP_201_CREATED)
 def owner_generate_grading_recommendation(
     payload: GradingRecommendationGeneratePayload,
@@ -11079,6 +11108,19 @@ def owner_generate_grading_recommendation(
     current_user: User = Depends(get_current_user),
 ) -> GradingRecommendationDetailRead:
     return grading_recommendation_service.generate_grading_recommendation(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.post("/grading-risk/generate", response_model=GradingRiskDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_generate_grading_risk(
+    payload: GradingRiskGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRiskDetailRead:
+    return grading_risk_service.generate_grading_risk(
         session,
         owner_user_id=int(current_user.id),
         payload=payload,
@@ -11117,7 +11159,13 @@ def owner_list_grading_recommendations(
         limit=lim,
         offset=off,
     )
-    return grading_recommendation_service.recommendations_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+    return grading_recommendation_service.recommendations_response_from_rows_with_risk(
+        session,
+        rows=rows,
+        total=total,
+        limit=lim,
+        offset=off,
+    )
 
 
 @app.get("/grading-recommendations/evidence", response_model=GradingRecommendationEvidenceListResponse)
@@ -11137,6 +11185,102 @@ def owner_list_grading_recommendation_evidence(
         offset=off,
     )
     return grading_recommendation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-risk", response_model=GradingRiskListResponse)
+def owner_list_grading_risk(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    overall_risk_level: str | None = Query(default=None),
+    overall_confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRiskListResponse:
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_risk_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        overall_risk_level=overall_risk_level,
+        overall_confidence_level=overall_confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.risk_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-risk/evidence", response_model=GradingRiskEvidenceListResponse)
+def owner_list_grading_risk_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRiskEvidenceListResponse:
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-confidence-factors", response_model=ConfidenceFactorSnapshotListResponse)
+def owner_list_grading_confidence_factors(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConfidenceFactorSnapshotListResponse:
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_factors_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.factor_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-risk/history", response_model=RiskHistoryListResponse)
+def owner_list_grading_risk_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    overall_risk_level: str | None = Query(default=None),
+    overall_confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> RiskHistoryListResponse:
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        overall_risk_level=overall_risk_level,
+        overall_confidence_level=overall_confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/grading-recommendations/history", response_model=GradingRecommendationHistoryListResponse)
@@ -11166,6 +11310,16 @@ def owner_list_grading_recommendation_history(
         offset=off,
     )
     return grading_recommendation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-risk/{snapshot_id}", response_model=GradingRiskDetailRead)
+def owner_get_grading_risk(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRiskDetailRead:
+    row = grading_risk_service.get_risk_owner(session, owner_user_id=int(current_user.id), snapshot_id=snapshot_id)
+    return grading_risk_service._detail_read(session, row)
 
 
 @app.get("/grading-recommendations/{recommendation_id}", response_model=GradingRecommendationDetailRead)
@@ -11217,7 +11371,13 @@ def ops_list_grading_recommendations(
         limit=lim,
         offset=off,
     )
-    return grading_recommendation_service.recommendations_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+    return grading_recommendation_service.recommendations_response_from_rows_with_risk(
+        session,
+        rows=rows,
+        total=total,
+        limit=lim,
+        offset=off,
+    )
 
 
 @app.get("/ops/grading-recommendation-evidence", response_model=GradingRecommendationEvidenceListResponse, include_in_schema=False)
@@ -11240,6 +11400,114 @@ def ops_list_grading_recommendation_evidence(
         offset=off,
     )
     return grading_recommendation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-risk", response_model=GradingRiskListResponse, include_in_schema=False)
+def ops_list_grading_risk(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    overall_risk_level: str | None = Query(default=None),
+    overall_confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRiskListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_risk_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        overall_risk_level=overall_risk_level,
+        overall_confidence_level=overall_confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.risk_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-risk-evidence", response_model=GradingRiskEvidenceListResponse, include_in_schema=False)
+def ops_list_grading_risk_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRiskEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_id=snapshot_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-confidence-factors", response_model=ConfidenceFactorSnapshotListResponse, include_in_schema=False)
+def ops_list_grading_confidence_factors(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ConfidenceFactorSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_factors_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_id=snapshot_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.factor_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-risk-history", response_model=RiskHistoryListResponse, include_in_schema=False)
+def ops_list_grading_risk_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    overall_risk_level: str | None = Query(default=None),
+    overall_confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> RiskHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_risk_service.clamp_grading_risk_pagination(limit, offset)
+    rows, total = grading_risk_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        overall_risk_level=overall_risk_level,
+        overall_confidence_level=overall_confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_risk_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/ops/grading-recommendation-history", response_model=GradingRecommendationHistoryListResponse, include_in_schema=False)
@@ -11272,6 +11540,18 @@ def ops_list_grading_recommendation_history(
         offset=off,
     )
     return grading_recommendation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-risk/{snapshot_id}", response_model=GradingRiskDetailRead, include_in_schema=False)
+def ops_get_grading_risk(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingRiskDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_risk_service.get_risk_ops(session, snapshot_id=snapshot_id)
+    return grading_risk_service._detail_read(session, row)
 
 
 @app.get("/ops/grading-recommendations/{recommendation_id}", response_model=GradingRecommendationDetailRead, include_in_schema=False)

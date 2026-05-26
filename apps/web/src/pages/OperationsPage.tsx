@@ -147,6 +147,7 @@ import {
   type OperationalReportRunListResponse,
   type GradingCandidateListResponse,
   type GradingRecommendationListResponse,
+  type GradingRiskListResponse,
   type GradingReconciliationListResponse,
   type GradingSpreadListResponse,
   type GradingRoiListResponse,
@@ -1414,6 +1415,9 @@ export function OperationsPage() {
   );
   const [opsGradingRecommendationLoading, setOpsGradingRecommendationLoading] = useState(true);
   const [opsGradingRecommendationError, setOpsGradingRecommendationError] = useState<string | null>(null);
+  const [opsGradingRisk, setOpsGradingRisk] = useState<GradingRiskListResponse | null>(null);
+  const [opsGradingRiskLoading, setOpsGradingRiskLoading] = useState(true);
+  const [opsGradingRiskError, setOpsGradingRiskError] = useState<string | null>(null);
   const [opsGradingReconciliation, setOpsGradingReconciliation] = useState<GradingReconciliationListResponse | null>(
     null,
   );
@@ -2290,6 +2294,36 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsGradingRecommendationLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingRiskLoading(true);
+      setOpsGradingRiskError(null);
+      try {
+        const rsp = await apiClient.listOpsGradingRisk({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingRisk(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingRisk(null);
+          setOpsGradingRiskError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading risk.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingRiskLoading(false);
         }
       }
     })();
@@ -4785,6 +4819,7 @@ export function OperationsPage() {
           ["Grading candidates", "#grading-candidate-ops"],
           ["Grading spreads", "#grading-spread-ops"],
           ["Grading recommendations", "#grading-recommendation-ops"],
+          ["Grading risk", "#grading-risk-ops"],
           ["Listing intelligence", "#listing-intelligence-ops"],
           ["Convention", "#convention-ops"],
           ["Liquidity", "#liquidity-ops"],
@@ -5654,6 +5689,92 @@ export function OperationsPage() {
                         <td className="p-3 text-slate-300">
                           {row.risk_level}
                           <span className="block text-[10px] text-slate-500">{row.evidence_count} evidence</span>
+                        </td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-risk-ops"
+        className="mt-6 rounded-3xl border border-rose-400/35 bg-rose-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading risk and confidence</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic risk snapshots, confidence bands, and risk-adjusted ROI signals layered onto grading
+                recommendations without changing recommendation actions.
+              </p>
+            </div>
+            <span className="rounded-full border border-rose-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-100/90">
+              Ops / risk
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-rose-200/15 pt-4">
+          {opsGradingRiskLoading ? (
+            <p className="text-sm text-slate-400">Loading grading risk snapshots…</p>
+          ) : opsGradingRiskError ? (
+            <StatusBanner tone="error">{opsGradingRiskError}</StatusBanner>
+          ) : opsGradingRisk ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Snapshot</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Inventory</th>
+                    <th className="p-3 font-medium">Risk / confidence</th>
+                    <th className="p-3 font-medium">Risk-adjusted ROI</th>
+                    <th className="p-3 font-medium">Volatility indicators</th>
+                    <th className="p-3 font-medium">Evidence</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingRisk.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={8}>
+                        No grading risk snapshots for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingRisk.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">#{row.id}</div>
+                          <div className="text-[10px] text-slate-500">rec {row.recommendation_id ?? "—"}</div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                        <td className="p-3 text-slate-300">
+                          inv {row.inventory_item_id ?? "—"}
+                          <span className="block text-[10px] text-slate-500">candidate {row.grading_candidate_id ?? "—"}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.overall_risk_level}
+                          <span className="block text-[10px] text-slate-500">{row.overall_confidence_level}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.risk_adjusted_roi ?? "—"}
+                          <span className="block text-[10px] text-slate-500">weight {row.confidence_weight ?? "—"}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          liq {row.liquidity_risk_score} · spread {row.spread_volatility_score}
+                          <span className="block text-[10px] text-slate-500">
+                            roi {row.roi_volatility_score} · grader {row.grader_variability_score}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.evidence_count} rows
+                          <span className="block text-[10px] text-slate-500">strength {row.evidence_strength_score}</span>
                         </td>
                         <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
                       </tr>

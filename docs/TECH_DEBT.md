@@ -236,6 +236,17 @@ Resolved routes:
   - Autonomous repricing, FMV mutation, inventory mutation, or portfolio auto-actions
   - Fully automated grading decisions without explicit human review
 
+## P37-07 — Grading risk / confidence modeling (2026-05-26)
+
+- Architecture note: deterministic grading risk snapshots, evidence rows, confidence factors, and append-safe history live in `docs/GRADING_RISK_ENGINE_ARCHITECTURE.md`. The lane scores liquidity stability, spread and ROI volatility, grader consistency, reconciliation history, market depth, and evidence volume using fixed weightings only.
+- Owner routes may generate and inspect risk snapshots; `/ops/grading-risk*` and `/ops/grading-confidence-factors` remain read-only mirrors with explicit owner filtering and no mutation of recommendations, FMV, inventory, or submission state.
+- **Deferred scope (beyond P37-07):**
+  - Probabilistic ML, Monte Carlo simulation, or predictive confidence forecasting
+  - Scan AI, image grading, defect prediction, or vision-model-derived uncertainty
+  - Live grader APIs or webhook-driven confidence adjustments
+  - Autonomous grading decisions or automatic recommendation action changes
+  - Hidden portfolio, FMV, pricing, or inventory mutations driven by confidence/risk outputs
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

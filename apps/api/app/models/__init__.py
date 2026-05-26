@@ -150,6 +150,12 @@ from app.models.grading_recommendation import (
     GradingRecommendationHistory,
     GradingRecommendationScenario,
 )
+from app.models.grading_risk import (
+    ConfidenceFactorSnapshot,
+    GradingRiskEvidence,
+    GradingRiskSnapshot,
+    RiskHistory,
+)
 
 __all__ = [
     "CanonicalCreator",
@@ -200,6 +206,10 @@ __all__ = [
     "GradingRecommendationEvidence",
     "GradingRecommendationHistory",
     "GradingRecommendationScenario",
+    "GradingRiskEvidence",
+    "GradingRiskSnapshot",
+    "ConfidenceFactorSnapshot",
+    "RiskHistory",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

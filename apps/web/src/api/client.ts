@@ -3160,9 +3160,22 @@ export interface InventoryGradingRecommendationBadge {
   recommended_grader: string | null;
   recommended_grade_target: string | null;
   confidence_score: string;
+  overall_confidence_level: string | null;
   risk_level: string;
+  grading_risk_snapshot_id: number | null;
+  overall_risk_level: string | null;
+  risk_adjusted_roi: string | null;
   recommendation_strength: string;
   rationale_summary: string;
+}
+
+export interface InventoryGradingRiskBadge {
+  grading_risk_snapshot_id: number;
+  overall_risk_level: string;
+  overall_confidence_level: string;
+  risk_adjusted_roi: string | null;
+  confidence_weight: string | null;
+  warning_flags_json: unknown[];
 }
 
 export interface GradingReconciliationEvidenceRead {
@@ -3328,8 +3341,13 @@ export interface GradingRecommendationRead {
   estimated_net_profit: string | null;
   estimated_total_cost: string | null;
   confidence_score: string;
+  overall_confidence_level: string | null;
   recommendation_strength: string;
   risk_level: string;
+  grading_risk_snapshot_id: number | null;
+  overall_risk_level: string | null;
+  risk_adjusted_roi: string | null;
+  confidence_weight: string | null;
   recommendation_status: string;
   rationale_summary: string;
   warning_flags_json: unknown[];
@@ -3380,6 +3398,116 @@ export interface GradingRecommendationGeneratePayload {
   grading_candidate_id?: number | null;
   inventory_item_id?: number | null;
   canonical_comic_issue_id?: number | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface GradingRiskEvidenceRead {
+  id: number;
+  grading_risk_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConfidenceFactorSnapshotRead {
+  id: number;
+  grading_risk_snapshot_id: number;
+  factor_key: string;
+  factor_score: string;
+  weighting: string;
+  created_at: string;
+}
+
+export interface RiskHistoryRead {
+  id: number;
+  owner_user_id: number | null;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  overall_risk_level: string;
+  overall_confidence_level: string;
+  risk_adjusted_roi: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface GradingRiskSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  recommendation_id: number | null;
+  overall_risk_level: string;
+  overall_confidence_level: string;
+  liquidity_risk_score: string;
+  spread_volatility_score: string;
+  roi_volatility_score: string;
+  grader_variability_score: string;
+  reconciliation_variance_score: string;
+  market_stability_score: string;
+  evidence_strength_score: string;
+  risk_adjusted_roi: string | null;
+  confidence_weight: string | null;
+  warning_flags_json: unknown[];
+  evidence_count: number;
+  checksum: string;
+  replay_key: string | null;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface GradingRiskDetailRead {
+  snapshot: GradingRiskSnapshotRead;
+  evidence: GradingRiskEvidenceRead[];
+  confidence_factors: ConfidenceFactorSnapshotRead[];
+  history: RiskHistoryRead[];
+}
+
+export interface GradingRiskListResponse {
+  items: GradingRiskSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRiskEvidenceListResponse {
+  items: GradingRiskEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConfidenceFactorSnapshotListResponse {
+  items: ConfidenceFactorSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface RiskHistoryListResponse {
+  items: RiskHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRiskDashboardSummary {
+  low_risk_count: number;
+  high_risk_count: number;
+  high_confidence_count: number;
+  low_confidence_count: number;
+  average_risk_adjusted_roi: string | null;
+}
+
+export interface GradingRiskGeneratePayload {
+  grading_candidate_id?: number | null;
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  recommendation_id?: number | null;
   snapshot_date?: string | null;
   replay_key?: string | null;
 }
@@ -4902,6 +5030,7 @@ export interface InventoryDetail extends InventoryItem {
   grading_submission?: InventoryGradingSubmissionBadge | null;
   grading_reconciliation?: InventoryGradingReconciliationBadge | null;
   grading_recommendation?: InventoryGradingRecommendationBadge | null;
+  grading_risk?: InventoryGradingRiskBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -8677,6 +8806,126 @@ export const apiClient = {
   }): Promise<GradingRecommendationHistoryListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GradingRecommendationHistoryListResponse>(`/ops/grading-recommendation-history${q}`);
+  },
+
+  getGradingRiskDashboardSummary(): Promise<GradingRiskDashboardSummary> {
+    return request<GradingRiskDashboardSummary>("/grading-risk/dashboard-summary");
+  },
+
+  generateGradingRisk(payload: GradingRiskGeneratePayload): Promise<GradingRiskDetailRead> {
+    return request<GradingRiskDetailRead>("/grading-risk/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingRisk(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    overall_risk_level?: string;
+    overall_confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRiskListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRiskListResponse>(`/grading-risk${q}`);
+  },
+
+  getGradingRisk(snapshotId: number): Promise<GradingRiskDetailRead> {
+    return request<GradingRiskDetailRead>(`/grading-risk/${snapshotId}`);
+  },
+
+  getGradingRiskEvidence(params?: {
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRiskEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRiskEvidenceListResponse>(`/grading-risk/evidence${q}`);
+  },
+
+  getGradingConfidenceFactors(params?: {
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConfidenceFactorSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<ConfidenceFactorSnapshotListResponse>(`/grading-confidence-factors${q}`);
+  },
+
+  getGradingRiskHistory(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    overall_risk_level?: string;
+    overall_confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<RiskHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<RiskHistoryListResponse>(`/grading-risk/history${q}`);
+  },
+
+  getOpsGradingRiskDashboardSummary(ownerUserId?: number): Promise<GradingRiskDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingRiskDashboardSummary>(`/ops/grading-risk/dashboard-summary${q}`);
+  },
+
+  listOpsGradingRisk(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    overall_risk_level?: string;
+    overall_confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRiskListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRiskListResponse>(`/ops/grading-risk${q}`);
+  },
+
+  getOpsGradingRisk(snapshotId: number): Promise<GradingRiskDetailRead> {
+    return request<GradingRiskDetailRead>(`/ops/grading-risk/${snapshotId}`);
+  },
+
+  getOpsGradingRiskEvidence(params?: {
+    owner_user_id?: number;
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRiskEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRiskEvidenceListResponse>(`/ops/grading-risk-evidence${q}`);
+  },
+
+  getOpsGradingConfidenceFactors(params?: {
+    owner_user_id?: number;
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConfidenceFactorSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<ConfidenceFactorSnapshotListResponse>(`/ops/grading-confidence-factors${q}`);
+  },
+
+  getOpsGradingRiskHistory(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    overall_risk_level?: string;
+    overall_confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<RiskHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<RiskHistoryListResponse>(`/ops/grading-risk-history${q}`);
   },
 
   getGradingSpreadDashboardSummary(): Promise<GradingSpreadDashboardSummary> {

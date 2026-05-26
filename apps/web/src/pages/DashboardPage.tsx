@@ -62,6 +62,7 @@ import {
   type OperationalReportingDashboardRollup,
   type GradingCandidateDashboardSummary,
   type GradingRecommendationDashboardSummary,
+  type GradingRiskDashboardSummary,
   type GradingReconciliationDashboardSummary,
   type GradingSpreadDashboardSummary,
   type GradingRoiDashboardSummary,
@@ -901,6 +902,9 @@ export function DashboardPage() {
     useState<GradingRecommendationDashboardSummary | null>(null);
   const [gradingRecommendationLoading, setGradingRecommendationLoading] = useState(true);
   const [gradingRecommendationError, setGradingRecommendationError] = useState<string | null>(null);
+  const [gradingRiskSummary, setGradingRiskSummary] = useState<GradingRiskDashboardSummary | null>(null);
+  const [gradingRiskLoading, setGradingRiskLoading] = useState(true);
+  const [gradingRiskError, setGradingRiskError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1574,6 +1578,40 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingRiskSummary(null);
+          setGradingRiskLoading(false);
+          setGradingRiskError(null);
+        }
+        return;
+      }
+      setGradingRiskLoading(true);
+      setGradingRiskError(null);
+      try {
+        const rsp = await apiClient.getGradingRiskDashboardSummary();
+        if (!ignore) {
+          setGradingRiskSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingRiskSummary(null);
+          setGradingRiskError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading risk summary.");
+        }
+      } finally {
+        if (!ignore) {
+          setGradingRiskLoading(false);
         }
       }
     })();
@@ -3264,6 +3302,50 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading recommendation rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-risk-dash"
+              className="mt-6 rounded-3xl border border-rose-400/35 bg-rose-950/12 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-rose-200/85">Risk and confidence</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading uncertainty layer</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic risk and confidence snapshots explaining where grading economics are stable, thin,
+                    or too volatile to trust fully.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-risk-ops"
+                  className="rounded-xl border border-rose-300/35 px-4 py-2 text-xs font-semibold text-rose-100 transition hover:border-rose-200/60 hover:bg-white/5"
+                >
+                  Ops risk view
+                </Link>
+              </div>
+              {gradingRiskLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading risk snapshots…</p>
+              ) : gradingRiskError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingRiskError}</StatusBanner>
+                </div>
+              ) : gradingRiskSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Low risk candidates" value={String(gradingRiskSummary.low_risk_count)} />
+                  <StatCard label="High risk candidates" value={String(gradingRiskSummary.high_risk_count)} />
+                  <StatCard label="High confidence" value={String(gradingRiskSummary.high_confidence_count)} />
+                  <StatCard label="Low confidence" value={String(gradingRiskSummary.low_confidence_count)} />
+                  <StatCard
+                    label="Average risk-adjusted ROI"
+                    value={gradingRiskSummary.average_risk_adjusted_roi ?? "—"}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading risk rollup unavailable.</p>
               )}
             </section>
           ) : null}
