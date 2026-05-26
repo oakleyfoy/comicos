@@ -285,6 +285,33 @@ Resolved routes:
 - Automatic portfolio mutation, FMV mutation, or inventory mutation driven by acquisition signals.
 - Marketplace-specific sourcing bots, watchlists, or auction-sniping workflows.
 
+## P38-07 — Portfolio strategy dashboard (2026-05-26)
+
+- Architecture note: deterministic strategy snapshots, metrics, observational alerts, and append-safe feed events live in `docs/PORTFOLIO_STRATEGY_DASHBOARD_ARCHITECTURE.md`. The lane consolidates existing P38 ledgers only; it must never become an execution engine.
+
+### Deferred scope (beyond P38-07)
+
+- Autonomous portfolio balancing, auto-rebalancing, or automatic liquidation workflows.
+- Predictive portfolio strategy, market timing, probabilistic scoring, or AI portfolio management.
+- Tax-aware optimization, wash-sale handling, or accounting-style optimization overlays.
+- Brokerage integrations, auction execution, sourcing bots, or automatic acquisition workflows.
+- Real-time push dashboards, websocket alerting, staffing/task orchestration, or notification routing layered onto strategy alerts.
+- Any hidden mutation of portfolios, FMV, listings, recommendations, or inventory based on strategy dashboard outputs.
+
+## P38-08 — Portfolio strategy dashboard stabilization (2026-05-26)
+
+- Performance follow-up: if owner-wide strategy generation grows materially, move more dependency selection / dedupe work to targeted SQL projections and add explicit query-budget checks around multi-engine aggregation.
+- Caching follow-up: introduce an opt-in checksum-aware cache layer only if it preserves replay semantics and never hides upstream ledger changes.
+- Delivery follow-up: websocket / realtime strategy feed remains deferred until the product defines replay-safe streaming contracts.
+- Intelligence follow-up: predictive portfolio intelligence remains explicitly deferred beyond P38; stabilization does not authorize ML, forecasting, or autonomous actions.
+
+## P39-01 — Market ingestion foundation (2026-05-26)
+
+- Normalization engine remains deferred to P39-02; P39-01 only preserves raw records plus lightweight candidate scaffolding.
+- Scoring/ranking layers remain deferred to P39-03+; ingestion must stay intelligence-free.
+- External enrichment, predictive pricing, ML models, and market-fit intelligence remain out of scope for the foundation layer.
+- Live marketplace automation, webhook ingestion, and scheduled background imports remain deferred until replay-safe source contracts are defined.
+
 ## P37-09 — Grading reporting / production closeout (2026-05-26)
 
 - Architecture note: deterministic grading closeout reporting plus final stabilization lives in `docs/GRADING_CLOSEOUT_ARCHITECTURE.md` (`GradingOperationalReportRun|File|Item`, UTF-8 CSV checksums, row-level lineage, replay-safe generation, owner vs `/ops/grading-reports` parity, deterministic filename rules).

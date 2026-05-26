@@ -3142,6 +3142,197 @@ export interface DealerGradingDashboardFeedListResponse {
   offset: number;
 }
 
+export type PortfolioStrategyDashboardAlertType =
+  | "OVEREXPOSURE"
+  | "DEAD_CAPITAL"
+  | "DUPLICATE_RISK"
+  | "LIQUIDITY_IMBALANCE"
+  | "CONCENTRATION_CRITICAL"
+  | "WEAK_DIVERSIFICATION"
+  | "HIGH_RISK_HOLDING"
+  | "ACQUISITION_GAP";
+export type PortfolioStrategyDashboardSeverity = "info" | "warning" | "critical";
+export type PortfolioStrategyDashboardFeedEventType =
+  | "PORTFOLIO_CREATED"
+  | "EXPOSURE_GENERATED"
+  | "DUPLICATE_CLUSTER_CREATED"
+  | "HOLD_RECOMMENDATION_CREATED"
+  | "SELL_RECOMMENDATION_CREATED"
+  | "CONCENTRATION_ALERT"
+  | "ACQUISITION_OPPORTUNITY"
+  | "LIQUIDITY_WARNING";
+
+export interface PortfolioStrategyDashboardGeneratePayload {
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface PortfolioStrategyDashboardSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  replay_key?: string | null;
+  portfolio_count: number;
+  total_portfolio_value?: string | null;
+  total_cost_basis?: string | null;
+  total_realized_sales?: string | null;
+  diversification_score?: string | null;
+  liquidity_efficiency_score?: string | null;
+  concentration_risk_score?: string | null;
+  dead_capital_estimate?: string | null;
+  duplicate_cluster_count: number;
+  overexposed_category_count: number;
+  hold_recommendation_count: number;
+  sell_recommendation_count: number;
+  reduce_exposure_count: number;
+  acquisition_opportunity_count: number;
+  elite_acquisition_count: number;
+  grading_candidate_count: number;
+  liquid_inventory_percentage?: string | null;
+  illiquid_inventory_percentage?: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioStrategyDashboardMetricRead {
+  id: number;
+  dashboard_snapshot_id: number;
+  metric_key: string;
+  metric_value_decimal?: string | null;
+  metric_value_text?: string | null;
+  metric_metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface PortfolioStrategyDashboardAlertRead {
+  id: number;
+  owner_user_id: number;
+  alert_type: PortfolioStrategyDashboardAlertType | string;
+  severity: PortfolioStrategyDashboardSeverity | string;
+  alert_replay_key: string;
+  source_portfolio_id?: number | null;
+  source_inventory_item_id?: number | null;
+  source_snapshot_id?: number | null;
+  message: string;
+  acknowledged_at?: string | null;
+  created_at: string;
+}
+
+export interface PortfolioStrategyDashboardFeedEventRead {
+  id: number;
+  owner_user_id: number;
+  deterministic_key: string;
+  dashboard_snapshot_id?: number | null;
+  event_type: PortfolioStrategyDashboardFeedEventType | string;
+  source_id?: number | null;
+  summary: string;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface PortfolioStrategyDashboardGetResponse {
+  snapshot: PortfolioStrategyDashboardSnapshotRead | null;
+}
+
+export interface PortfolioStrategyDashboardGenerateResponse {
+  snapshot: PortfolioStrategyDashboardSnapshotRead;
+}
+
+export interface PortfolioStrategyDashboardMetricListResponse {
+  items: PortfolioStrategyDashboardMetricRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioStrategyDashboardAlertListResponse {
+  items: PortfolioStrategyDashboardAlertRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioStrategyDashboardFeedListResponse {
+  items: PortfolioStrategyDashboardFeedEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type MarketAcquisitionExternalSourceType =
+  | "manual_input"
+  | "csv_import"
+  | "api_feed"
+  | "auction_snapshot"
+  | "curated_feed";
+export type MarketAcquisitionIngestionStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type MarketAcquisitionRawProcessingStatus = "PENDING" | "NORMALIZED" | "FAILED";
+export type MarketAcquisitionIngestionEventType =
+  | "BATCH_CREATED"
+  | "RECORD_PARSED"
+  | "RECORD_NORMALIZED"
+  | "RECORD_REJECTED"
+  | "BATCH_COMPLETED";
+
+export interface MarketAcquisitionIngestionBatchCreatePayload {
+  batch_source_type: MarketAcquisitionExternalSourceType;
+  batch_file_name?: string | null;
+  records: Record<string, unknown>[];
+}
+
+export interface MarketAcquisitionRawSourceRead {
+  id: number;
+  ingestion_batch_id: number;
+  raw_record_json: Record<string, unknown>;
+  raw_hash: string;
+  processing_status: MarketAcquisitionRawProcessingStatus | string;
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface MarketAcquisitionIngestionEventRead {
+  id: number;
+  ingestion_batch_id: number;
+  event_type: MarketAcquisitionIngestionEventType | string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketAcquisitionIngestionBatchSummaryRead {
+  id: number;
+  owner_user_id?: number | null;
+  batch_source_type: MarketAcquisitionExternalSourceType | string;
+  batch_file_name?: string | null;
+  batch_checksum: string;
+  total_records: number;
+  successful_records: number;
+  failed_records: number;
+  ingestion_status: MarketAcquisitionIngestionStatus | string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketAcquisitionIngestionBatchRead extends MarketAcquisitionIngestionBatchSummaryRead {
+  events: MarketAcquisitionIngestionEventRead[];
+}
+
+export interface MarketAcquisitionIngestionBatchListResponse {
+  items: MarketAcquisitionIngestionBatchSummaryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+  status_counts: Record<string, number>;
+  last_ingestion_at?: string | null;
+}
+
+export interface MarketAcquisitionRawSourceListResponse {
+  items: MarketAcquisitionRawSourceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -9254,6 +9445,150 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<DealerGradingDashboardFeedListResponse>(`/ops/dealer-grading-dashboard/feed${q}`);
+  },
+
+  getPortfolioStrategyDashboard(): Promise<PortfolioStrategyDashboardGetResponse> {
+    return request<PortfolioStrategyDashboardGetResponse>("/portfolio-strategy-dashboard");
+  },
+
+  generatePortfolioStrategyDashboard(
+    payload: PortfolioStrategyDashboardGeneratePayload,
+  ): Promise<PortfolioStrategyDashboardGenerateResponse> {
+    return request<PortfolioStrategyDashboardGenerateResponse>("/portfolio-strategy-dashboard/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listPortfolioStrategyDashboardMetrics(params?: {
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<PortfolioStrategyDashboardMetricListResponse>(`/portfolio-strategy-dashboard/metrics${q}`);
+  },
+
+  listPortfolioStrategyDashboardAlerts(params?: {
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PortfolioStrategyDashboardAlertListResponse>(`/portfolio-strategy-dashboard/alerts${q}`);
+  },
+
+  listPortfolioStrategyDashboardFeed(params?: {
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PortfolioStrategyDashboardFeedListResponse>(`/portfolio-strategy-dashboard/feed${q}`);
+  },
+
+  getOpsPortfolioStrategyDashboard(params?: { owner_user_id?: number }): Promise<PortfolioStrategyDashboardGetResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<PortfolioStrategyDashboardGetResponse>(`/ops/portfolio-strategy-dashboard${q}`);
+  },
+
+  listOpsPortfolioStrategyDashboardMetrics(params?: {
+    owner_user_id?: number;
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<PortfolioStrategyDashboardMetricListResponse>(`/ops/portfolio-strategy-dashboard/metrics${q}`);
+  },
+
+  listOpsPortfolioStrategyDashboardAlerts(params?: {
+    owner_user_id?: number;
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PortfolioStrategyDashboardAlertListResponse>(`/ops/portfolio-strategy-dashboard/alerts${q}`);
+  },
+
+  listOpsPortfolioStrategyDashboardFeed(params?: {
+    owner_user_id?: number;
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioStrategyDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<PortfolioStrategyDashboardFeedListResponse>(`/ops/portfolio-strategy-dashboard/feed${q}`);
+  },
+
+  createMarketIngestionBatch(
+    payload: MarketAcquisitionIngestionBatchCreatePayload,
+  ): Promise<MarketAcquisitionIngestionBatchRead> {
+    return request<MarketAcquisitionIngestionBatchRead>("/market-ingestion/batch", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketIngestionBatches(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionIngestionBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<MarketAcquisitionIngestionBatchListResponse>(`/market-ingestion/batches${q}`);
+  },
+
+  getMarketIngestionBatch(batchId: number): Promise<MarketAcquisitionIngestionBatchRead> {
+    return request<MarketAcquisitionIngestionBatchRead>(`/market-ingestion/batches/${batchId}`);
+  },
+
+  listMarketIngestionBatchRaw(
+    batchId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketAcquisitionRawSourceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<MarketAcquisitionRawSourceListResponse>(`/market-ingestion/batches/${batchId}/raw${q}`);
+  },
+
+  listOpsMarketIngestionBatches(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionIngestionBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<MarketAcquisitionIngestionBatchListResponse>(`/ops/market-ingestion/batches${q}`);
+  },
+
+  getOpsMarketIngestionBatch(batchId: number): Promise<MarketAcquisitionIngestionBatchRead> {
+    return request<MarketAcquisitionIngestionBatchRead>(`/ops/market-ingestion/batches/${batchId}`);
+  },
+
+  listOpsMarketIngestionRaw(params?: {
+    owner_user_id?: number;
+    ingestion_batch_id?: number;
+    processing_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionRawSourceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionRawSourceListResponse>(`/ops/market-ingestion/raw${q}`);
   },
 
   getListingIntelligence(params?: {

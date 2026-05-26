@@ -131,6 +131,18 @@ from app.models.concentration_risk import (
     ConcentrationRiskHistory,
     ConcentrationRiskSnapshot,
 )
+from app.models.portfolio_strategy_dashboard import (
+    PortfolioStrategyDashboardAlert,
+    PortfolioStrategyDashboardFeedEvent,
+    PortfolioStrategyDashboardMetric,
+    PortfolioStrategyDashboardSnapshot,
+)
+from app.models.market_ingestion import (
+    MarketAcquisitionCandidate,
+    MarketAcquisitionIngestionBatch,
+    MarketAcquisitionIngestionEvent,
+    MarketAcquisitionRawSource,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -336,6 +348,14 @@ __all__ = [
     "ConcentrationRiskEvidence",
     "ConcentrationRiskFactor",
     "ConcentrationRiskHistory",
+    "PortfolioStrategyDashboardSnapshot",
+    "PortfolioStrategyDashboardMetric",
+    "PortfolioStrategyDashboardAlert",
+    "PortfolioStrategyDashboardFeedEvent",
+    "MarketAcquisitionCandidate",
+    "MarketAcquisitionIngestionBatch",
+    "MarketAcquisitionRawSource",
+    "MarketAcquisitionIngestionEvent",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

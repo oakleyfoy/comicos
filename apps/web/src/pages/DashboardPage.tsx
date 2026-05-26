@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -50,6 +50,7 @@ import {
   type MarketFmvSnapshotListResponse,
   type MarketTrendSnapshotListResponse,
   type MarketSaleSummaryRead,
+  type MarketAcquisitionIngestionBatchListResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
@@ -62,6 +63,10 @@ import {
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
+  type PortfolioStrategyDashboardAlertRead,
+  type PortfolioStrategyDashboardFeedEventRead,
+  type PortfolioStrategyDashboardGetResponse,
+  type PortfolioStrategyDashboardMetricRead,
   type DealerGradingDashboardAlertRead,
   type DealerGradingDashboardFeedEventRead,
   type DealerGradingDashboardGetResponse,
@@ -845,6 +850,9 @@ export function DashboardPage() {
   const [marketSalesPreview, setMarketSalesPreview] = useState<MarketSaleSummaryRead[]>([]);
   const [marketSalesLoading, setMarketSalesLoading] = useState(true);
   const [marketSalesError, setMarketSalesError] = useState<string | null>(null);
+  const [marketIngestionSummary, setMarketIngestionSummary] = useState<MarketAcquisitionIngestionBatchListResponse | null>(null);
+  const [marketIngestionLoading, setMarketIngestionLoading] = useState(true);
+  const [marketIngestionError, setMarketIngestionError] = useState<string | null>(null);
   const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
@@ -891,6 +899,13 @@ export function DashboardPage() {
   const [dealerAlerts, setDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
   const [dealerFeed, setDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
   const [dealerGenBusy, setDealerGenBusy] = useState(false);
+  const [strategyDashResp, setStrategyDashResp] = useState<PortfolioStrategyDashboardGetResponse | null>(null);
+  const [strategyDashLoading, setStrategyDashLoading] = useState(true);
+  const [strategyDashError, setStrategyDashError] = useState<string | null>(null);
+  const [strategyAlerts, setStrategyAlerts] = useState<PortfolioStrategyDashboardAlertRead[]>([]);
+  const [strategyFeed, setStrategyFeed] = useState<PortfolioStrategyDashboardFeedEventRead[]>([]);
+  const [strategyMetrics, setStrategyMetrics] = useState<PortfolioStrategyDashboardMetricRead[]>([]);
+  const [strategyGenBusy, setStrategyGenBusy] = useState(false);
   const [dealerGradingDashResp, setDealerGradingDashResp] = useState<DealerGradingDashboardGetResponse | null>(null);
   const [dealerGradingDashLoading, setDealerGradingDashLoading] = useState(true);
   const [dealerGradingDashError, setDealerGradingDashError] = useState<string | null>(null);
@@ -963,6 +978,79 @@ export function DashboardPage() {
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
     [dealerGradingMetrics],
   );
+  const strategyMetricMap = useMemo(
+    () => new Map(strategyMetrics.map((row) => [row.metric_key, row])),
+    [strategyMetrics],
+  );
+  const strategyDuplicateClusters = useMemo(() => {
+    const clusters = strategyMetricMap.get("duplicate_top_clusters")?.metric_metadata_json;
+    if (!clusters || typeof clusters !== "object" || !("clusters" in clusters) || !Array.isArray(clusters.clusters)) {
+      return [] as Array<Record<string, unknown>>;
+    }
+    return clusters.clusters as Array<Record<string, unknown>>;
+  }, [strategyMetricMap]);
+  const strategyAcquisitionFocusRows = useMemo(() => {
+    const rows = strategyMetricMap.get("acquisition_focus_rows")?.metric_metadata_json;
+    if (!rows || typeof rows !== "object" || !("rows" in rows) || !Array.isArray(rows.rows)) {
+      return [] as Array<Record<string, unknown>>;
+    }
+    return rows.rows as Array<Record<string, unknown>>;
+  }, [strategyMetricMap]);
+  const loadPortfolioStrategyDashboard = useCallback(async () => {
+    if (!user) {
+      setStrategyDashResp(null);
+      setStrategyAlerts([]);
+      setStrategyFeed([]);
+      setStrategyMetrics([]);
+      setStrategyDashLoading(false);
+      setStrategyDashError(null);
+      return;
+    }
+    setStrategyDashLoading(true);
+    setStrategyDashError(null);
+    const [dashResult, alertsResult, feedResult, metricsResult] = await Promise.allSettled([
+      apiClient.getPortfolioStrategyDashboard(),
+      apiClient.listPortfolioStrategyDashboardAlerts({ limit: 24, offset: 0 }),
+      apiClient.listPortfolioStrategyDashboardFeed({ limit: 24, offset: 0 }),
+      apiClient.listPortfolioStrategyDashboardMetrics({ limit: 80, offset: 0 }),
+    ]);
+    const dash = dashResult.status === "fulfilled" ? dashResult.value : null;
+    const failedParts: string[] = [];
+    if (dashResult.status === "rejected") {
+      failedParts.push("snapshot");
+    }
+    if (alertsResult.status === "fulfilled") {
+      setStrategyAlerts(alertsResult.value.items);
+    } else {
+      setStrategyAlerts([]);
+      failedParts.push("alerts");
+    }
+    if (feedResult.status === "fulfilled") {
+      setStrategyFeed(feedResult.value.items);
+    } else {
+      setStrategyFeed([]);
+      failedParts.push("feed");
+    }
+    if (metricsResult.status === "fulfilled") {
+      setStrategyMetrics(metricsResult.value.items);
+    } else {
+      setStrategyMetrics([]);
+      failedParts.push("metrics");
+    }
+    setStrategyDashResp(dash);
+    if (failedParts.length > 0) {
+      const primaryMessage =
+        dashResult.status === "rejected"
+          ? dashResult.reason instanceof ApiError
+            ? dashResult.reason.message
+            : "Unable to load portfolio strategy dashboard."
+          : `Strategy dashboard partially loaded. Missing ${failedParts.join(", ")}.`;
+      setStrategyDashError(primaryMessage);
+    } else {
+      setStrategyDashError(null);
+    }
+    setStrategyDashLoading(false);
+  }, [user]);
   const portfolioRecommendationSummary = useMemo(() => {
     const items = portfolioRecommendationList?.items ?? [];
     const summary = {
@@ -1064,6 +1152,7 @@ export function DashboardPage() {
     }
     return summary;
   }, [acquisitionPriorityList]);
+  const marketIngestionStatusCounts = marketIngestionSummary?.status_counts ?? {};
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1313,6 +1402,42 @@ export function DashboardPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketIngestionSummary(null);
+          setMarketIngestionLoading(false);
+          setMarketIngestionError(null);
+        }
+        return;
+      }
+      setMarketIngestionLoading(true);
+      setMarketIngestionError(null);
+      try {
+        const summary = await apiClient.listMarketIngestionBatches({ limit: 25, offset: 0 });
+        if (!ignore) {
+          setMarketIngestionSummary(summary);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketIngestionSummary(null);
+          setMarketIngestionError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market ingestion summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketIngestionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let ignore = false;
@@ -1743,6 +1868,10 @@ export function DashboardPage() {
       ignore = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    void loadPortfolioStrategyDashboard();
+  }, [loadPortfolioStrategyDashboard]);
 
   useEffect(() => {
     let ignore = false;
@@ -2383,6 +2512,24 @@ export function DashboardPage() {
       setDealerDashError(err instanceof ApiError ? err.message : "Unable to generate dealer dashboard snapshot.");
     } finally {
       setDealerGenBusy(false);
+    }
+  }
+
+  async function refreshPortfolioStrategyDashboard(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setStrategyGenBusy(true);
+    setStrategyDashError(null);
+    try {
+      await apiClient.generatePortfolioStrategyDashboard({ replay_key: `web-psd-dash-${Date.now()}` });
+      await loadPortfolioStrategyDashboard();
+    } catch (err) {
+      setStrategyDashError(
+        err instanceof ApiError ? err.message : "Unable to refresh portfolio strategy dashboard.",
+      );
+    } finally {
+      setStrategyGenBusy(false);
     }
   }
 
@@ -3133,6 +3280,47 @@ export function DashboardPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {marketIngestionLoading || marketIngestionError || (marketIngestionSummary?.total_items ?? 0) > 0 ? (
+            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market ingestion foundation</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">External acquisition intake ledger</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic batch-ingestion summary for raw external acquisition datasets. This panel stays strictly
+                    ingestion-only with preserved raw payloads and replay-safe checksums.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-ingestion-ops"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                >
+                  Open ingestion ops
+                </Link>
+              </div>
+              {marketIngestionLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market ingestion summary…</p>
+              ) : marketIngestionError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketIngestionError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard label="Total batches" value={String(marketIngestionSummary?.total_items ?? 0)} />
+                  <StatCard label="Failed batches" value={String(marketIngestionStatusCounts.FAILED ?? 0)} />
+                  <StatCard
+                    label="Pending batches"
+                    value={String((marketIngestionStatusCounts.PENDING ?? 0) + (marketIngestionStatusCounts.PROCESSING ?? 0))}
+                  />
+                  <StatCard
+                    label="Last ingestion"
+                    value={marketIngestionSummary?.last_ingestion_at ? formatDateTime(marketIngestionSummary.last_ingestion_at) : "—"}
+                  />
                 </div>
               )}
             </section>
@@ -4489,6 +4677,185 @@ export function DashboardPage() {
               )}
             </section>
           ) : null}
+
+          <section
+            id="portfolio-strategy-dashboard-dash"
+            className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/18"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/90">Portfolio strategy dashboard</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Unified strategic portfolio command center</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  Dealer-grade portfolio cockpit consolidating exposure, duplicates, liquidity, hold/sell posture,
+                  concentration risk, and acquisition gaps into one deterministic strategic readout.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refreshPortfolioStrategyDashboard()}
+                  disabled={strategyGenBusy}
+                  className="rounded-xl border border-emerald-400/45 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-50 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {strategyGenBusy ? "Generating…" : "Generate strategy dashboard"}
+                </button>
+                <Link
+                  to="/ops#portfolio-strategy-dashboard-ops"
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-emerald-300/45 hover:bg-white/5"
+                >
+                  Ops strategy tables
+                </Link>
+              </div>
+            </div>
+            {strategyDashLoading ? (
+              <p className="mt-4 text-sm text-slate-400">Loading strategy dashboard…</p>
+            ) : strategyDashResp?.snapshot ? (
+              <>
+                {strategyDashError ? (
+                  <div className="mt-4">
+                    <StatusBanner tone="warning">{strategyDashError}</StatusBanner>
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Portfolios" value={String(strategyDashResp.snapshot.portfolio_count)} />
+                  <StatCard label="Total value" value={formatMaybeCurrency(strategyDashResp.snapshot.total_portfolio_value)} />
+                  <StatCard label="Cost basis" value={formatMaybeCurrency(strategyDashResp.snapshot.total_cost_basis)} />
+                  <StatCard label="Realized sales" value={formatMaybeCurrency(strategyDashResp.snapshot.total_realized_sales)} />
+                  <StatCard label="Diversification" value={strategyDashResp.snapshot.diversification_score ?? "—"} />
+                </div>
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Exposure & diversification</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <StatCard label="Overexposed categories" value={String(strategyDashResp.snapshot.overexposed_category_count)} />
+                      <StatCard label="Concentration score" value={strategyDashResp.snapshot.concentration_risk_score ?? "—"} />
+                      <StatCard
+                        label="Critical alerts"
+                        value={String(strategyAlerts.filter((row) => row.alert_type === "CONCENTRATION_CRITICAL").length)}
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Liquidity & capital efficiency</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                      <StatCard label="Liquidity efficiency" value={strategyDashResp.snapshot.liquidity_efficiency_score ?? "—"} />
+                      <StatCard label="Dead capital" value={formatMaybeCurrency(strategyDashResp.snapshot.dead_capital_estimate)} />
+                      <StatCard label="Liquid %" value={strategyDashResp.snapshot.liquid_inventory_percentage ?? "—"} />
+                      <StatCard label="Illiquid %" value={strategyDashResp.snapshot.illiquid_inventory_percentage ?? "—"} />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Duplicate & consolidation</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <StatCard label="Duplicate clusters" value={String(strategyDashResp.snapshot.duplicate_cluster_count)} />
+                      <StatCard
+                        label="Warning clusters"
+                        value={strategyMetricMap.get("duplicate_warning_clusters")?.metric_value_decimal ?? "0"}
+                      />
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs text-slate-300">
+                      {strategyDuplicateClusters.length ? (
+                        strategyDuplicateClusters.slice(0, 3).map((row) => (
+                          <div key={String(row.cluster_id ?? row.cluster_key)} className="rounded-xl border border-white/10 px-3 py-2">
+                            <p className="font-semibold text-white">{String(row.cluster_key ?? "cluster")}</p>
+                            <p className="text-[11px] text-slate-400">
+                              {String(row.duplication_status ?? "UNKNOWN")} · items {String(row.total_item_count ?? "—")} · FMV{" "}
+                              {formatMaybeCurrency(String(row.total_fmv_amount ?? ""))}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-slate-500">No duplicate consolidation hotspots recorded.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hold / sell intelligence</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                      <StatCard label="HOLD" value={String(strategyDashResp.snapshot.hold_recommendation_count)} />
+                      <StatCard label="SELL" value={String(strategyDashResp.snapshot.sell_recommendation_count)} />
+                      <StatCard label="Reduce exposure" value={String(strategyDashResp.snapshot.reduce_exposure_count)} />
+                      <StatCard label="Capital release" value={formatMaybeCurrency(strategyMetricMap.get("capital_release_estimate")?.metric_value_decimal)} />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Acquisition intelligence</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                      <StatCard label="Opportunities" value={String(strategyDashResp.snapshot.acquisition_opportunity_count)} />
+                      <StatCard label="Elite" value={String(strategyDashResp.snapshot.elite_acquisition_count)} />
+                      <StatCard
+                        label="Diversification"
+                        value={strategyMetricMap.get("diversification_acquisitions")?.metric_value_decimal ?? "0"}
+                      />
+                      <StatCard
+                        label="Liquidity-improvement"
+                        value={strategyMetricMap.get("liquidity_improvement_acquisitions")?.metric_value_decimal ?? "0"}
+                      />
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs text-slate-300">
+                      {strategyAcquisitionFocusRows.length ? (
+                        strategyAcquisitionFocusRows.slice(0, 3).map((row) => (
+                          <div key={String(row.snapshot_id ?? row.issue_id)} className="rounded-xl border border-white/10 px-3 py-2">
+                            <p className="font-semibold text-white">
+                              {String(row.acquisition_category ?? "Opportunity")} · {String(row.acquisition_priority ?? "—")}
+                            </p>
+                            <p className="text-[11px] text-slate-400">
+                              issue {String(row.issue_id ?? "gap")} · diversification {String(row.diversification_impact ?? "—")}
+                              {" · "}liquidity {String(row.liquidity_impact ?? "—")}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-slate-500">No strategic acquisition gap rows recorded yet.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Strategic alerts</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {strategyAlerts.length ? (
+                        strategyAlerts.slice(0, 5).map((row) => (
+                          <div key={row.alert_replay_key} className="rounded-xl border border-white/10 px-3 py-2">
+                            <p className="font-semibold text-white">
+                              {row.alert_type} · <span className="text-slate-300">{row.severity}</span>
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-400">{row.message}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-slate-500">No strategy alerts have been persisted yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Strategic feed</p>
+                  <div className="mt-3 space-y-2 text-xs text-slate-200">
+                    {strategyFeed.length ? (
+                      strategyFeed.slice(0, 8).map((row) => (
+                        <div key={row.deterministic_key} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                          <div>
+                            <p className="font-semibold text-white">{row.event_type}</p>
+                            <p className="mt-1 text-[11px] text-slate-400">{row.summary}</p>
+                          </div>
+                          <span className="text-[10px] text-slate-500">{formatDate(row.created_at)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-500">No strategy feed events yet.</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : strategyDashError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{strategyDashError}</StatusBanner>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">Generate a strategy snapshot to populate the strategic cockpit.</p>
+            )}
+          </section>
 
           <section
             id="acquisition-priority-dash"

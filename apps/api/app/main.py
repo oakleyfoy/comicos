@@ -25,7 +25,7 @@ from app.api.report_params import (
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_session
-from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, User
+from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, PortfolioStrategyDashboardSnapshot, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
 
@@ -187,6 +187,20 @@ from app.schemas.dealer_grading_dashboard import (
     DealerGradingDashboardGenerateResponse,
     DealerGradingDashboardGetResponse,
     DealerGradingDashboardMetricListResponse,
+)
+from app.schemas.portfolio_strategy_dashboard import (
+    PortfolioStrategyDashboardAlertListResponse,
+    PortfolioStrategyDashboardFeedListResponse,
+    PortfolioStrategyDashboardGeneratePayload,
+    PortfolioStrategyDashboardGenerateResponse,
+    PortfolioStrategyDashboardGetResponse,
+    PortfolioStrategyDashboardMetricListResponse,
+)
+from app.schemas.market_ingestion import (
+    MarketAcquisitionIngestionBatchCreatePayload,
+    MarketAcquisitionIngestionBatchListResponse,
+    MarketAcquisitionIngestionBatchRead,
+    MarketAcquisitionRawSourceListResponse,
 )
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
@@ -688,6 +702,15 @@ from app.services.market_sales import (
     start_market_import_run_for_ops,
     upsert_market_sale_record,
 )
+from app.services.market_ingestion import (
+    get_ingestion_batch_ops,
+    get_ingestion_batch_owner,
+    ingest_market_acquisition_batch_for_owner,
+    list_ingestion_batches_ops,
+    list_ingestion_batches_owner,
+    list_ingestion_raw_ops,
+    list_ingestion_raw_owner,
+)
 from app.services.market_sale_review_queue import (
     flag_duplicate_market_sale_record,
     get_market_sale_review_detail,
@@ -811,6 +834,7 @@ from app.services.inventory_fmv import (
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import dealer_grading_dashboard as dealer_grading_dashboard_service
 from app.services import grading_reporting as grading_reporting_service
+from app.services import portfolio_strategy_dashboard as portfolio_strategy_dashboard_service
 from app.services import portfolio_registry as portfolio_registry_service
 from app.services import duplicate_consolidation as duplicate_consolidation_service
 from app.services import portfolio_liquidity as portfolio_liquidity_service
@@ -6688,6 +6712,119 @@ def owner_delete_scanner_profile_endpoint(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@app.post("/market-ingestion/batch", response_model=MarketAcquisitionIngestionBatchRead, status_code=status.HTTP_201_CREATED)
+def owner_create_market_ingestion_batch_endpoint(
+    payload: MarketAcquisitionIngestionBatchCreatePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionIngestionBatchRead:
+    assert current_user.id is not None
+    body, created = ingest_market_acquisition_batch_for_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/market-ingestion/batches", response_model=MarketAcquisitionIngestionBatchListResponse)
+def owner_list_market_ingestion_batches_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionIngestionBatchListResponse:
+    assert current_user.id is not None
+    return list_ingestion_batches_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-ingestion/batches/{batch_id}", response_model=MarketAcquisitionIngestionBatchRead)
+def owner_get_market_ingestion_batch_endpoint(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionIngestionBatchRead:
+    assert current_user.id is not None
+    return get_ingestion_batch_owner(session, owner_user_id=int(current_user.id), batch_id=batch_id)
+
+
+@app.get("/market-ingestion/batches/{batch_id}/raw", response_model=MarketAcquisitionRawSourceListResponse)
+def owner_list_market_ingestion_raw_endpoint(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionRawSourceListResponse:
+    assert current_user.id is not None
+    return list_ingestion_raw_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        batch_id=batch_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-ingestion/batches", response_model=MarketAcquisitionIngestionBatchListResponse)
+def ops_list_market_ingestion_batches_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionIngestionBatchListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_ingestion_batches_ops(
+        session,
+        owner_user_id=owner_user_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-ingestion/batches/{batch_id}", response_model=MarketAcquisitionIngestionBatchRead)
+def ops_get_market_ingestion_batch_endpoint(
+    batch_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketAcquisitionIngestionBatchRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_ingestion_batch_ops(session, batch_id=batch_id)
+
+
+@app.get("/ops/market-ingestion/raw", response_model=MarketAcquisitionRawSourceListResponse)
+def ops_list_market_ingestion_raw_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    ingestion_batch_id: int | None = Query(default=None),
+    processing_status: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionRawSourceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_ingestion_raw_ops(
+        session,
+        owner_user_id=owner_user_id,
+        ingestion_batch_id=ingestion_batch_id,
+        processing_status=processing_status,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @app.get("/market-sales", response_model=MarketSaleListResponse)
 def owner_list_market_sales_endpoint(
     session: Session = Depends(get_session),
@@ -9845,6 +9982,185 @@ def ops_list_dealer_grading_dashboard_feed(
 ) -> DealerGradingDashboardFeedListResponse:
     ensure_ops_admin_access(current_user, settings)
     return dealer_grading_dashboard_service.list_feed_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-strategy-dashboard", response_model=PortfolioStrategyDashboardGetResponse)
+def owner_portfolio_strategy_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioStrategyDashboardGetResponse:
+    return portfolio_strategy_dashboard_service.get_dashboard_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post(
+    "/portfolio-strategy-dashboard/generate",
+    response_model=PortfolioStrategyDashboardGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_portfolio_strategy_dashboard_generate(
+    payload: PortfolioStrategyDashboardGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioStrategyDashboardGenerateResponse:
+    existing = None
+    if payload.replay_key:
+        existing = session.exec(
+            select(PortfolioStrategyDashboardSnapshot).where(
+                PortfolioStrategyDashboardSnapshot.owner_user_id == int(current_user.id),
+                PortfolioStrategyDashboardSnapshot.replay_key == payload.replay_key,
+            )
+        ).first()
+    body = portfolio_strategy_dashboard_service.generate_dashboard(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/portfolio-strategy-dashboard/metrics", response_model=PortfolioStrategyDashboardMetricListResponse)
+def owner_list_portfolio_strategy_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardMetricListResponse:
+    return portfolio_strategy_dashboard_service.list_metrics_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-strategy-dashboard/alerts", response_model=PortfolioStrategyDashboardAlertListResponse)
+def owner_list_portfolio_strategy_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardAlertListResponse:
+    return portfolio_strategy_dashboard_service.list_alerts_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/portfolio-strategy-dashboard/feed", response_model=PortfolioStrategyDashboardFeedListResponse)
+def owner_list_portfolio_strategy_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardFeedListResponse:
+    return portfolio_strategy_dashboard_service.list_feed_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-strategy-dashboard", response_model=PortfolioStrategyDashboardGetResponse)
+def ops_portfolio_strategy_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> PortfolioStrategyDashboardGetResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_strategy_dashboard_service.get_dashboard_ops(session, owner_user_id=owner_user_id)
+
+
+@app.get("/ops/portfolio-strategy-dashboard/metrics", response_model=PortfolioStrategyDashboardMetricListResponse)
+def ops_list_portfolio_strategy_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardMetricListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_strategy_dashboard_service.list_metrics_ops(
+        session,
+        owner_user_id=owner_user_id,
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-strategy-dashboard/alerts", response_model=PortfolioStrategyDashboardAlertListResponse)
+def ops_list_portfolio_strategy_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardAlertListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_strategy_dashboard_service.list_alerts_ops(
+        session,
+        owner_user_id=owner_user_id,
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/portfolio-strategy-dashboard/feed", response_model=PortfolioStrategyDashboardFeedListResponse)
+def ops_list_portfolio_strategy_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioStrategyDashboardFeedListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return portfolio_strategy_dashboard_service.list_feed_ops(
         session,
         owner_user_id=owner_user_id,
         event_type=event_type,

@@ -96,6 +96,9 @@ import {
   type MarketTrendStrength,
   type MarketTrendWindow,
   type MarketSaleSummaryRead,
+  type MarketAcquisitionIngestionBatchListResponse,
+  type MarketAcquisitionIngestionBatchRead,
+  type MarketAcquisitionRawSourceRead,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
   type RelationshipConflictListResponse,
@@ -183,6 +186,10 @@ import {
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
   type DealerDashboardMetricRead,
+  type PortfolioStrategyDashboardAlertRead,
+  type PortfolioStrategyDashboardFeedEventRead,
+  type PortfolioStrategyDashboardGetResponse,
+  type PortfolioStrategyDashboardMetricRead,
   type DealerGradingDashboardAlertRead,
   type DealerGradingDashboardFeedEventRead,
   type DealerGradingDashboardGetResponse,
@@ -1501,6 +1508,12 @@ export function OperationsPage() {
   const [opsDealerAlerts, setOpsDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
   const [opsDealerFeed, setOpsDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
   const [opsDealerMetrics, setOpsDealerMetrics] = useState<DealerDashboardMetricRead[]>([]);
+  const [opsStrategyDash, setOpsStrategyDash] = useState<PortfolioStrategyDashboardGetResponse | null>(null);
+  const [opsStrategyDashLoading, setOpsStrategyDashLoading] = useState(true);
+  const [opsStrategyDashError, setOpsStrategyDashError] = useState<string | null>(null);
+  const [opsStrategyAlerts, setOpsStrategyAlerts] = useState<PortfolioStrategyDashboardAlertRead[]>([]);
+  const [opsStrategyFeed, setOpsStrategyFeed] = useState<PortfolioStrategyDashboardFeedEventRead[]>([]);
+  const [opsStrategyMetrics, setOpsStrategyMetrics] = useState<PortfolioStrategyDashboardMetricRead[]>([]);
   const [opsDealerGradingDash, setOpsDealerGradingDash] = useState<DealerGradingDashboardGetResponse | null>(null);
   const [opsDealerGradingDashLoading, setOpsDealerGradingDashLoading] = useState(true);
   const [opsDealerGradingDashError, setOpsDealerGradingDashError] = useState<string | null>(null);
@@ -1511,6 +1524,53 @@ export function OperationsPage() {
   const [opsDealerGradingMetrics, setOpsDealerGradingMetrics] = useState<DealerGradingDashboardMetricRead[]>([]);
   const [opsPortfolioOwnerDraft, setOpsPortfolioOwnerDraft] = useState("");
   const [opsPortfolioOwnerApplied, setOpsPortfolioOwnerApplied] = useState<number | undefined>(undefined);
+  const loadOpsStrategyDashboard = useCallback(async () => {
+    setOpsStrategyDashLoading(true);
+    setOpsStrategyDashError(null);
+    const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+    const [dashResult, alertsResult, feedResult, metricsResult] = await Promise.allSettled([
+      apiClient.getOpsPortfolioStrategyDashboard(scoped),
+      apiClient.listOpsPortfolioStrategyDashboardAlerts({ ...scoped, limit: 60, offset: 0 }),
+      apiClient.listOpsPortfolioStrategyDashboardFeed({ ...scoped, limit: 60, offset: 0 }),
+      apiClient.listOpsPortfolioStrategyDashboardMetrics({ ...scoped, limit: 120, offset: 0 }),
+    ]);
+    const dash = dashResult.status === "fulfilled" ? dashResult.value : null;
+    const failedParts: string[] = [];
+    if (dashResult.status === "rejected") {
+      failedParts.push("snapshot");
+    }
+    if (alertsResult.status === "fulfilled") {
+      setOpsStrategyAlerts(alertsResult.value.items);
+    } else {
+      setOpsStrategyAlerts([]);
+      failedParts.push("alerts");
+    }
+    if (feedResult.status === "fulfilled") {
+      setOpsStrategyFeed(feedResult.value.items);
+    } else {
+      setOpsStrategyFeed([]);
+      failedParts.push("feed");
+    }
+    if (metricsResult.status === "fulfilled") {
+      setOpsStrategyMetrics(metricsResult.value.items);
+    } else {
+      setOpsStrategyMetrics([]);
+      failedParts.push("metrics");
+    }
+    setOpsStrategyDash(dash);
+    if (failedParts.length > 0) {
+      const primaryMessage =
+        dashResult.status === "rejected"
+          ? dashResult.reason instanceof ApiError
+            ? dashResult.reason.message
+            : "Unable to load portfolio strategy dashboard ops payloads."
+          : `Strategy ops partially loaded. Missing ${failedParts.join(", ")}.`;
+      setOpsStrategyDashError(primaryMessage);
+    } else {
+      setOpsStrategyDashError(null);
+    }
+    setOpsStrategyDashLoading(false);
+  }, [opsPortfolioOwnerApplied]);
   const [opsPortfolioList, setOpsPortfolioList] = useState<PortfolioListResponse | null>(null);
   const [opsPortfolioItems, setOpsPortfolioItems] = useState<PortfolioItemListResponse | null>(null);
   const [opsPortfolioExposures, setOpsPortfolioExposures] = useState<PortfolioExposureSnapshotListResponse | null>(null);
@@ -1570,6 +1630,14 @@ export function OperationsPage() {
   const [opsSalesLedger, setOpsSalesLedger] = useState<SaleRecordRead[]>([]);
   const [opsSalesLedgerLoading, setOpsSalesLedgerLoading] = useState(true);
   const [opsSalesLedgerError, setOpsSalesLedgerError] = useState<string | null>(null);
+  const [opsMarketIngestionSummary, setOpsMarketIngestionSummary] = useState<MarketAcquisitionIngestionBatchListResponse | null>(null);
+  const [opsMarketIngestionLoading, setOpsMarketIngestionLoading] = useState(true);
+  const [opsMarketIngestionError, setOpsMarketIngestionError] = useState<string | null>(null);
+  const [opsMarketIngestionSelectedId, setOpsMarketIngestionSelectedId] = useState<number | null>(null);
+  const [opsMarketIngestionDetail, setOpsMarketIngestionDetail] = useState<MarketAcquisitionIngestionBatchRead | null>(null);
+  const [opsMarketIngestionDetailLoading, setOpsMarketIngestionDetailLoading] = useState(false);
+  const [opsMarketIngestionDetailError, setOpsMarketIngestionDetailError] = useState<string | null>(null);
+  const [opsMarketIngestionRaw, setOpsMarketIngestionRaw] = useState<MarketAcquisitionRawSourceRead[]>([]);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -1888,6 +1956,78 @@ export function OperationsPage() {
   useEffect(() => {
     let ignore = false;
     void (async () => {
+      setOpsMarketIngestionLoading(true);
+      setOpsMarketIngestionError(null);
+      try {
+        const summary = await apiClient.listOpsMarketIngestionBatches({ limit: 60, offset: 0 });
+        if (!ignore) {
+          setOpsMarketIngestionSummary(summary);
+          setOpsMarketIngestionSelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketIngestionSummary(null);
+          setOpsMarketIngestionSelectedId(null);
+          setOpsMarketIngestionError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market ingestion batches.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketIngestionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsMarketIngestionSelectedId) {
+        if (!ignore) {
+          setOpsMarketIngestionDetail(null);
+          setOpsMarketIngestionRaw([]);
+          setOpsMarketIngestionDetailLoading(false);
+          setOpsMarketIngestionDetailError(null);
+        }
+        return;
+      }
+      setOpsMarketIngestionDetailLoading(true);
+      setOpsMarketIngestionDetailError(null);
+      try {
+        const [detail, raw] = await Promise.all([
+          apiClient.getOpsMarketIngestionBatch(opsMarketIngestionSelectedId),
+          apiClient.listOpsMarketIngestionRaw({ ingestion_batch_id: opsMarketIngestionSelectedId, limit: 200, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsMarketIngestionDetail(detail);
+          setOpsMarketIngestionRaw(raw.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketIngestionDetail(null);
+          setOpsMarketIngestionRaw([]);
+          setOpsMarketIngestionDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market ingestion detail.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketIngestionDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketIngestionSelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
       setOpsMarketSalesLoading(true);
       setOpsMarketSalesError(null);
       try {
@@ -2104,6 +2244,10 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsDealerGradingOwnerApplied]);
+
+  useEffect(() => {
+    void loadOpsStrategyDashboard();
+  }, [loadOpsStrategyDashboard]);
 
   useEffect(() => {
     let ignore = false;
@@ -5178,6 +5322,8 @@ export function OperationsPage() {
         {[
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
+          ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
+          ["Market ingestion", "#market-ingestion-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
           ["Duplicate consolidation", "#duplicate-consolidation-ops"],
           ["Portfolio liquidity", "#portfolio-liquidity-ops"],
@@ -6264,6 +6410,157 @@ export function OperationsPage() {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="portfolio-strategy-dashboard-ops"
+        open
+        className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Portfolio strategy dashboard operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only `/ops/portfolio-strategy-dashboard*` mirrors. Strategic KPIs, metrics, alerts, and feed events
+                built from the latest portfolio, duplicate, liquidity, recommendation, concentration, and acquisition layers.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/95">
+              Ops / strategy
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-emerald-200/15 pt-4">
+          {opsStrategyDashLoading ? (
+            <p className="text-sm text-slate-400">Loading portfolio strategy dashboard…</p>
+          ) : (
+            <>
+              {opsStrategyDashError ? <StatusBanner tone={opsStrategyDash?.snapshot ? "warning" : "error"}>{opsStrategyDashError}</StatusBanner> : null}
+              {!opsStrategyDash?.snapshot ? (
+                <p className="mt-3 text-sm text-slate-500">No strategy snapshots materialized for this scope.</p>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Portfolios" value={String(opsStrategyDash?.snapshot?.portfolio_count ?? 0)} />
+                <StatCard label="Total value" value={formatCurrency(opsStrategyDash?.snapshot?.total_portfolio_value ?? null)} />
+                <StatCard label="Cost basis" value={formatCurrency(opsStrategyDash?.snapshot?.total_cost_basis ?? null)} />
+                <StatCard label="Dead capital" value={formatCurrency(opsStrategyDash?.snapshot?.dead_capital_estimate ?? null)} />
+                <StatCard label="Diversification" value={opsStrategyDash?.snapshot?.diversification_score ?? "—"} />
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Strategy metrics ({opsStrategyMetrics.length})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Metric</th>
+                      <th className="p-3 font-medium">Value</th>
+                      <th className="p-3 font-medium">Text</th>
+                      <th className="p-3 font-medium">Metadata</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsStrategyMetrics.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          No strategy metrics captured for this owner scope yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsStrategyMetrics.map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 text-slate-300">{row.metric_key}</td>
+                          <td className="p-3 text-slate-300">{row.metric_value_decimal ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.metric_value_text ?? "—"}</td>
+                          <td className="p-3 text-[10px] text-slate-400">
+                            {row.metric_metadata_json ? JSON.stringify(row.metric_metadata_json).slice(0, 220) : "—"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Strategic alerts ({opsStrategyAlerts.length})
+                  </p>
+                  <table className="mt-3 w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Severity</th>
+                        <th className="p-3 font-medium">Type</th>
+                        <th className="p-3 font-medium">Owner</th>
+                        <th className="p-3 font-medium">Source</th>
+                        <th className="p-3 font-medium">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsStrategyAlerts.length === 0 ? (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={5}>
+                            No strategy alerts recorded for this scope.
+                          </td>
+                        </tr>
+                      ) : (
+                        opsStrategyAlerts.map((row) => (
+                          <tr key={row.alert_replay_key}>
+                            <td className="p-3">{row.severity}</td>
+                            <td className="p-3">{row.alert_type}</td>
+                            <td className="p-3 font-mono text-[11px]">@{row.owner_user_id}</td>
+                            <td className="p-3 text-[10px] text-slate-500">
+                              portfolio {row.source_portfolio_id ?? "—"} · inv {row.source_inventory_item_id ?? "—"} · snap{" "}
+                              {row.source_snapshot_id ?? "—"}
+                            </td>
+                            <td className="p-3 text-slate-300">{row.message}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Strategic feed ({opsStrategyFeed.length})
+                  </p>
+                  <table className="mt-3 w-full border-collapse text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="p-3 font-medium">Created</th>
+                        <th className="p-3 font-medium">Event</th>
+                        <th className="p-3 font-medium">Owner</th>
+                        <th className="p-3 font-medium">Summary</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {opsStrategyFeed.length === 0 ? (
+                        <tr>
+                          <td className="p-4 text-slate-500" colSpan={4}>
+                            No strategic feed events recorded for this scope.
+                          </td>
+                        </tr>
+                      ) : (
+                        opsStrategyFeed.map((row) => (
+                          <tr key={row.deterministic_key}>
+                            <td className="whitespace-nowrap p-3 text-slate-400">{formatDateTime(row.created_at)}</td>
+                            <td className="p-3">{row.event_type}</td>
+                            <td className="p-3 font-mono text-[11px]">@{row.owner_user_id}</td>
+                            <td className="p-3 text-slate-300">{row.summary}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </details>
@@ -8487,6 +8784,163 @@ export function OperationsPage() {
           )}
         </div>
       </section>
+
+      <details
+        id="market-ingestion-ops"
+        className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market ingestion foundation</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic external acquisition intake batches with preserved raw payload rows, replay-safe checksums,
+                append-only events, and no normalization or scoring yet.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / ingestion
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/15 pt-4">
+          {opsMarketIngestionLoading ? (
+            <p className="text-sm text-slate-400">Loading market ingestion batches…</p>
+          ) : opsMarketIngestionError ? (
+            <StatusBanner tone="error">{opsMarketIngestionError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                <StatCard label="Batches" value={String(opsMarketIngestionSummary?.total_items ?? 0)} />
+                <StatCard label="Completed" value={String(opsMarketIngestionSummary?.status_counts.COMPLETED ?? 0)} />
+                <StatCard label="Failed" value={String(opsMarketIngestionSummary?.status_counts.FAILED ?? 0)} />
+                <StatCard
+                  label="Pending / processing"
+                  value={String((opsMarketIngestionSummary?.status_counts.PENDING ?? 0) + (opsMarketIngestionSummary?.status_counts.PROCESSING ?? 0))}
+                />
+                <StatCard
+                  label="Last ingestion"
+                  value={opsMarketIngestionSummary?.last_ingestion_at ? formatDateTime(opsMarketIngestionSummary.last_ingestion_at) : "—"}
+                />
+              </div>
+
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Source</th>
+                      <th className="p-3 font-medium">Records</th>
+                      <th className="p-3 font-medium">Failures</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                      <th className="p-3 font-medium">Timeline</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketIngestionSummary?.items.length ? (
+                      opsMarketIngestionSummary.items.map((row) => {
+                        const isSelected = opsMarketIngestionSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSelected
+                                    ? "border-cyan-300/70 bg-cyan-400/20 text-cyan-50"
+                                    : "border-white/15 text-slate-200 hover:border-cyan-300/35"
+                                }`}
+                                onClick={() => setOpsMarketIngestionSelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSelected ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top">{row.ingestion_status}</td>
+                            <td className="p-3 align-top font-mono text-[11px] text-slate-400">
+                              {row.owner_user_id ? `@${row.owner_user_id}` : "global"}
+                            </td>
+                            <td className="p-3 align-top">
+                              <div>{row.batch_source_type}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">{row.batch_file_name ?? "No file name"}</div>
+                            </td>
+                            <td className="p-3 align-top">
+                              <div>{row.successful_records}/{row.total_records}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">accepted / total</div>
+                            </td>
+                            <td className="p-3 align-top">{row.failed_records}</td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">
+                              {abbrevExportChecksum(row.batch_checksum)}
+                            </td>
+                            <td className="p-3 align-top text-[11px] text-slate-400">
+                              <div>created {formatDateTime(row.created_at)}</div>
+                              <div className="mt-1">completed {row.completed_at ? formatDateTime(row.completed_at) : "—"}</div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={8}>
+                          No market-ingestion batches recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsMarketIngestionDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading selected ingestion batch…</p>
+              ) : opsMarketIngestionDetailError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{opsMarketIngestionDetailError}</StatusBanner>
+                </div>
+              ) : opsMarketIngestionDetail ? (
+                <div className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Ingestion timeline</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {opsMarketIngestionDetail.events.map((event) => (
+                        <div key={event.id} className="rounded-xl border border-white/10 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold text-white">{event.event_type}</p>
+                            <span className="text-[10px] text-slate-500">{formatDateTime(event.created_at)}</span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-slate-400">
+                            {JSON.stringify(event.metadata_json).slice(0, 240)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Raw source preview</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {opsMarketIngestionRaw.length === 0 ? (
+                        <p className="text-slate-500">No raw rows captured for the selected batch.</p>
+                      ) : (
+                        opsMarketIngestionRaw.slice(0, 8).map((row) => (
+                          <div key={row.id} className="rounded-xl border border-white/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-semibold text-white">{row.processing_status}</p>
+                              <span className="font-mono text-[10px] text-slate-500">{abbrevExportChecksum(row.raw_hash)}</span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              {row.error_message ?? JSON.stringify(row.raw_record_json).slice(0, 220)}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
 
       <details
         id="ops-market-sales-anchor"
