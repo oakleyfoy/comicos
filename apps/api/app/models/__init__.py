@@ -119,6 +119,12 @@ from app.models.portfolio_recommendation import (
     PortfolioRecommendationHistory,
     PortfolioRecommendationScenario,
 )
+from app.models.acquisition_priority import (
+    AcquisitionPriorityEvidence,
+    AcquisitionPriorityHistory,
+    AcquisitionPriorityScenario,
+    AcquisitionPrioritySnapshot,
+)
 from app.models.concentration_risk import (
     ConcentrationRiskEvidence,
     ConcentrationRiskFactor,
@@ -322,6 +328,10 @@ __all__ = [
     "PortfolioRecommendationEvidence",
     "PortfolioRecommendationHistory",
     "PortfolioRecommendationScenario",
+    "AcquisitionPrioritySnapshot",
+    "AcquisitionPriorityEvidence",
+    "AcquisitionPriorityScenario",
+    "AcquisitionPriorityHistory",
     "ConcentrationRiskSnapshot",
     "ConcentrationRiskEvidence",
     "ConcentrationRiskFactor",

@@ -2865,6 +2865,27 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {detail.acquisition_priority ? (
+                <div className="rounded-2xl border border-sky-400/35 bg-sky-950/30 px-4 py-3 text-[11px] text-sky-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-sky-200/90">Acquisition intelligence</p>
+                    <span className="rounded-full border border-sky-300/45 bg-sky-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-100">
+                      {detail.acquisition_priority.acquisition_priority}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    {detail.acquisition_priority.acquisition_category} · strength {detail.acquisition_priority.recommendation_strength}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    {detail.acquisition_priority.rationale_summary}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Diversification {detail.acquisition_priority.diversification_impact ?? "—"} · liquidity{" "}
+                    {detail.acquisition_priority.liquidity_impact ?? "—"} · overlap risk{" "}
+                    {detail.acquisition_priority.duplication_risk ?? "—"}
+                  </p>
+                </div>
+              ) : null}
               {detail.concentration_risk ? (
                 <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
                   <div className="flex flex-wrap items-center gap-2">

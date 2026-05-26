@@ -225,6 +225,14 @@ from app.schemas.portfolio_recommendation import (
     PortfolioRecommendationHistoryListResponse,
     PortfolioRecommendationListResponse,
 )
+from app.schemas.acquisition_priority import (
+    AcquisitionPriorityDetailRead,
+    AcquisitionPriorityEvidenceListResponse,
+    AcquisitionPriorityGeneratePayload,
+    AcquisitionPriorityGenerateResponse,
+    AcquisitionPriorityHistoryListResponse,
+    AcquisitionPriorityListResponse,
+)
 from app.schemas.concentration_risk import (
     ConcentrationRiskDetailRead,
     ConcentrationRiskEvidenceListResponse,
@@ -807,6 +815,7 @@ from app.services import portfolio_registry as portfolio_registry_service
 from app.services import duplicate_consolidation as duplicate_consolidation_service
 from app.services import portfolio_liquidity as portfolio_liquidity_service
 from app.services import portfolio_recommendation as portfolio_recommendation_service
+from app.services import acquisition_priority as acquisition_priority_service
 from app.services import concentration_risk as concentration_risk_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
@@ -12987,6 +12996,218 @@ def ops_list_portfolio_recommendation_history(
         portfolio_id=portfolio_id,
         inventory_item_id=inventory_item_id,
         recommendation_action=recommendation_action,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.post("/acquisition-priorities/generate", response_model=AcquisitionPriorityGenerateResponse, status_code=status.HTTP_201_CREATED)
+def owner_generate_acquisition_priorities(
+    payload: AcquisitionPriorityGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AcquisitionPriorityGenerateResponse:
+    body = acquisition_priority_service.generate_acquisition_priorities(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/acquisition-priorities", response_model=AcquisitionPriorityListResponse)
+def owner_list_acquisition_priorities(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    acquisition_category: str | None = Query(default=None),
+    acquisition_priority: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityListResponse:
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_priorities_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_category=acquisition_category,
+        acquisition_priority=acquisition_priority,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/acquisition-priorities/{snapshot_id}", response_model=AcquisitionPriorityDetailRead)
+def owner_get_acquisition_priority(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AcquisitionPriorityDetailRead:
+    row = acquisition_priority_service.get_priority_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+    )
+    return acquisition_priority_service._detail_read(session, row)
+
+
+@app.get("/acquisition-priority-evidence", response_model=AcquisitionPriorityEvidenceListResponse)
+def owner_list_acquisition_priority_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    acquisition_priority_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityEvidenceListResponse:
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_priority_snapshot_id=acquisition_priority_snapshot_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/acquisition-priority-history", response_model=AcquisitionPriorityHistoryListResponse)
+def owner_list_acquisition_priority_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    acquisition_category: str | None = Query(default=None),
+    acquisition_priority: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityHistoryListResponse:
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_category=acquisition_category,
+        acquisition_priority=acquisition_priority,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/acquisition-priorities", response_model=AcquisitionPriorityListResponse, include_in_schema=False)
+def ops_list_acquisition_priorities(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    acquisition_category: str | None = Query(default=None),
+    acquisition_priority: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_priorities_ops(
+        session,
+        owner_user_id=owner_user_id,
+        acquisition_category=acquisition_category,
+        acquisition_priority=acquisition_priority,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/acquisition-priorities/{snapshot_id}", response_model=AcquisitionPriorityDetailRead, include_in_schema=False)
+def ops_get_acquisition_priority(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> AcquisitionPriorityDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = acquisition_priority_service.get_priority_ops(session, snapshot_id=snapshot_id)
+    return acquisition_priority_service._detail_read(session, row)
+
+
+@app.get("/ops/acquisition-priority-evidence", response_model=AcquisitionPriorityEvidenceListResponse, include_in_schema=False)
+def ops_list_acquisition_priority_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    acquisition_priority_snapshot_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        acquisition_priority_snapshot_id=acquisition_priority_snapshot_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/acquisition-priority-history", response_model=AcquisitionPriorityHistoryListResponse, include_in_schema=False)
+def ops_list_acquisition_priority_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    acquisition_category: str | None = Query(default=None),
+    acquisition_priority: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> AcquisitionPriorityHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = acquisition_priority_service.clamp_pagination(limit=limit, offset=offset)
+    return acquisition_priority_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        acquisition_category=acquisition_category,
+        acquisition_priority=acquisition_priority,
         recommendation_strength=recommendation_strength,
         confidence_level=confidence_level,
         risk_level=risk_level,

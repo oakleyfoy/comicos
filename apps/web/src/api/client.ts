@@ -5214,6 +5214,17 @@ export interface InventoryPortfolioLiquidityTeaser {
   dead_capital_teaser: string | null;
 }
 
+/** P38-06 deterministic acquisition-priority teaser for inventory detail. */
+export interface InventoryAcquisitionPriorityTeaser {
+  acquisition_category: string;
+  acquisition_priority: "LOW" | "MEDIUM" | "HIGH" | "ELITE";
+  recommendation_strength: "WEAK" | "MODERATE" | "STRONG" | "ELITE";
+  rationale_summary: string;
+  diversification_impact: string | null;
+  liquidity_impact: string | null;
+  duplication_risk: string | null;
+}
+
 /** P38-05 deterministic concentration-risk teaser for inventory detail. */
 export interface InventoryConcentrationRiskTeaser {
   concentration_type: string;
@@ -5259,6 +5270,7 @@ export interface InventoryDetail extends InventoryItem {
   portfolio_intelligence?: InventoryPortfolioIntelligenceTeaser | null;
   duplicate_intelligence?: InventoryDuplicateIntelligenceTeaser | null;
   portfolio_liquidity?: InventoryPortfolioLiquidityTeaser | null;
+  acquisition_priority?: InventoryAcquisitionPriorityTeaser | null;
   concentration_risk?: InventoryConcentrationRiskTeaser | null;
   portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
 }
@@ -6506,6 +6518,99 @@ export interface ConcentrationRiskFactorListResponse {
 
 export interface ConcentrationRiskHistoryListResponse {
   items: ConcentrationRiskHistoryRead[];
+  total: number;
+}
+
+/** P38-06 deterministic acquisition-priority intelligence. */
+export interface AcquisitionPrioritySnapshotRead {
+  id: number;
+  owner_user_id: number;
+  canonical_comic_issue_id: number | null;
+  acquisition_category: string;
+  acquisition_priority: "LOW" | "MEDIUM" | "HIGH" | "ELITE";
+  portfolio_impact_score: string | null;
+  diversification_impact: string | null;
+  liquidity_impact: string | null;
+  grading_upside_score: string | null;
+  duplication_risk: string | null;
+  concentration_reduction_score: string | null;
+  estimated_capital_efficiency: string | null;
+  recommendation_strength: "WEAK" | "MODERATE" | "STRONG" | "ELITE";
+  confidence_level: "LOW" | "MEDIUM" | "HIGH";
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  rationale_summary: string;
+  warning_flags_json: unknown[];
+  checksum: string;
+  replay_key: string | null;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface AcquisitionPriorityEvidenceRead {
+  id: number;
+  acquisition_priority_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AcquisitionPriorityScenarioRead {
+  id: number;
+  acquisition_priority_snapshot_id: number;
+  scenario_name: "pessimistic" | "baseline" | "optimistic";
+  projected_liquidity_impact: string | null;
+  projected_diversification_impact: string | null;
+  projected_portfolio_efficiency: string | null;
+  created_at: string;
+}
+
+export interface AcquisitionPriorityHistoryRead {
+  id: number;
+  owner_user_id: number;
+  canonical_comic_issue_id: number | null;
+  acquisition_category: string;
+  acquisition_priority: string;
+  recommendation_strength: string;
+  confidence_level: string;
+  risk_level: string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface AcquisitionPriorityDetailRead {
+  snapshot: AcquisitionPrioritySnapshotRead;
+  evidence: AcquisitionPriorityEvidenceRead[];
+  scenarios: AcquisitionPriorityScenarioRead[];
+  history: AcquisitionPriorityHistoryRead[];
+}
+
+export interface AcquisitionPriorityListResponse {
+  items: AcquisitionPrioritySnapshotRead[];
+  total: number;
+}
+
+export interface AcquisitionPriorityGeneratePayload {
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface AcquisitionPriorityGenerateResponse {
+  replayed: boolean;
+  items: AcquisitionPrioritySnapshotRead[];
+  total: number;
+  history_appended_count: number;
+}
+
+export interface AcquisitionPriorityEvidenceListResponse {
+  items: AcquisitionPriorityEvidenceRead[];
+  total: number;
+}
+
+export interface AcquisitionPriorityHistoryListResponse {
+  items: AcquisitionPriorityHistoryRead[];
   total: number;
 }
 
@@ -11217,6 +11322,126 @@ export const apiClient = {
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
     return request<ConcentrationRiskHistoryListResponse>(`/ops/concentration-risk-history${q}`);
+  },
+
+  generateAcquisitionPriorities(payload: AcquisitionPriorityGeneratePayload): Promise<AcquisitionPriorityGenerateResponse> {
+    return request<AcquisitionPriorityGenerateResponse>("/acquisition-priorities/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listAcquisitionPriorities(params?: {
+    acquisition_category?: string;
+    acquisition_priority?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityListResponse>(`/acquisition-priorities${q}`);
+  },
+
+  getAcquisitionPriority(snapshotId: number): Promise<AcquisitionPriorityDetailRead> {
+    return request<AcquisitionPriorityDetailRead>(`/acquisition-priorities/${snapshotId}`);
+  },
+
+  listAcquisitionPriorityEvidence(params?: {
+    acquisition_priority_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityEvidenceListResponse>(`/acquisition-priority-evidence${q}`);
+  },
+
+  listAcquisitionPriorityHistory(params?: {
+    acquisition_category?: string;
+    acquisition_priority?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityHistoryListResponse>(`/acquisition-priority-history${q}`);
+  },
+
+  listOpsAcquisitionPriorities(params?: {
+    owner_user_id?: number;
+    acquisition_category?: string;
+    acquisition_priority?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityListResponse>(`/ops/acquisition-priorities${q}`);
+  },
+
+  getOpsAcquisitionPriority(snapshotId: number, params?: { owner_user_id?: number }): Promise<AcquisitionPriorityDetailRead> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, number | undefined>)
+        : "";
+    return request<AcquisitionPriorityDetailRead>(`/ops/acquisition-priorities/${snapshotId}${q}`);
+  },
+
+  listOpsAcquisitionPriorityEvidence(params?: {
+    owner_user_id?: number;
+    acquisition_priority_snapshot_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityEvidenceListResponse>(`/ops/acquisition-priority-evidence${q}`);
+  },
+
+  listOpsAcquisitionPriorityHistory(params?: {
+    owner_user_id?: number;
+    acquisition_category?: string;
+    acquisition_priority?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionPriorityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<AcquisitionPriorityHistoryListResponse>(`/ops/acquisition-priority-history${q}`);
   },
 };
 

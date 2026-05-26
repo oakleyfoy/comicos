@@ -272,6 +272,19 @@ Resolved routes:
 - Cross-owner benchmarking, market-relative diversification ranks, or benchmark-index modeling.
 - Trendline forecasting / scenario simulation beyond the current deterministic snapshot-and-history ledger.
 
+## P38-06 — Acquisition priority engine (2026-05-26)
+
+- Architecture note: deterministic acquisition snapshots, evidence rows, scenario rows, and append-safe history live in `docs/ACQUISITION_PRIORITY_ARCHITECTURE.md`. The lane translates existing owner inventory into explicit expansion and gap-analysis opportunities using only persisted portfolio, concentration, liquidity, duplicate, grading, recommendation, listing, and sales ledgers.
+- Owner routes may generate and inspect acquisition rows; `/ops/acquisition-priorities*` mirrors remain read-only with optional owner scoping.
+
+### Deferred scope (beyond P38-06)
+
+- Autonomous buying, brokerage integrations, auction automation, or execution tooling.
+- Predictive market timing, probabilistic acquisition forecasting, or AI portfolio management.
+- External candidate-universe generation that depends on live market catalog ingest beyond the owner’s current issue graph.
+- Automatic portfolio mutation, FMV mutation, or inventory mutation driven by acquisition signals.
+- Marketplace-specific sourcing bots, watchlists, or auction-sniping workflows.
+
 ## P37-09 — Grading reporting / production closeout (2026-05-26)
 
 - Architecture note: deterministic grading closeout reporting plus final stabilization lives in `docs/GRADING_CLOSEOUT_ARCHITECTURE.md` (`GradingOperationalReportRun|File|Item`, UTF-8 CSV checksums, row-level lineage, replay-safe generation, owner vs `/ops/grading-reports` parity, deterministic filename rules).

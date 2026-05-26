@@ -30,6 +30,7 @@ from app.schemas.inventory import (
     ReleaseCalendarPresence,
 )
 from app.services.inventory_fmv import build_inventory_fmv_attachment, summarize_inventory_fmv
+from app.services.acquisition_priority import inventory_acquisition_priority_teaser
 from app.services.cover_images import list_cover_reads_for_inventory
 from app.services.portfolio_registry import inventory_portfolio_teaser
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
@@ -881,6 +882,11 @@ def get_inventory_copy_detail(
         inventory_item_id=inventory_copy_id,
     )
     merged["portfolio_liquidity"] = inventory_portfolio_liquidity_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["acquisition_priority"] = inventory_acquisition_priority_teaser(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,

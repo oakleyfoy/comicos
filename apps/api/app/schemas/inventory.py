@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.cover_images import CoverImageRead
+from app.schemas.acquisition_priority import InventoryAcquisitionPriorityTeaser
 from app.schemas.duplicate_ownership import DuplicateOwnershipCopyAttachment
 from app.schemas.grading_candidate import InventoryGradingCandidateBadge
 from app.schemas.grading_roi import InventoryGradingRoiBadge
@@ -162,6 +163,7 @@ class InventoryDetailResponse(BaseModel):
     portfolio_intelligence: InventoryPortfolioIntelligenceTeaser | None = None
     duplicate_intelligence: InventoryDuplicateIntelligenceTeaser | None = None
     portfolio_liquidity: InventoryPortfolioLiquidityTeaser | None = None
+    acquisition_priority: InventoryAcquisitionPriorityTeaser | None = None
     concentration_risk: InventoryConcentrationRiskTeaser | None = None
     portfolio_recommendation: InventoryPortfolioRecommendationTeaser | None = None
 

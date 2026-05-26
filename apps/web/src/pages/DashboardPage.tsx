@@ -21,6 +21,7 @@ import {
   type PortfolioPerformanceItem,
   type PortfolioLiquiditySnapshotDetailResponse,
   type PortfolioRecommendationListResponse,
+  type AcquisitionPriorityListResponse,
   type ConcentrationRiskListResponse,
   type InventoryIntelligenceHealthRollup,
   type InventoryIntelligenceRollupSummary,
@@ -949,6 +950,10 @@ export function DashboardPage() {
   const [portfolioRecommendationLoading, setPortfolioRecommendationLoading] = useState(true);
   const [portfolioRecommendationError, setPortfolioRecommendationError] = useState<string | null>(null);
   const [portfolioRecommendationGenBusy, setPortfolioRecommendationGenBusy] = useState(false);
+  const [acquisitionPriorityList, setAcquisitionPriorityList] = useState<AcquisitionPriorityListResponse | null>(null);
+  const [acquisitionPriorityLoading, setAcquisitionPriorityLoading] = useState(true);
+  const [acquisitionPriorityError, setAcquisitionPriorityError] = useState<string | null>(null);
+  const [acquisitionPriorityGenBusy, setAcquisitionPriorityGenBusy] = useState(false);
   const [concentrationRiskList, setConcentrationRiskList] = useState<ConcentrationRiskListResponse | null>(null);
   const [concentrationRiskLoading, setConcentrationRiskLoading] = useState(true);
   const [concentrationRiskError, setConcentrationRiskError] = useState<string | null>(null);
@@ -1030,6 +1035,35 @@ export function DashboardPage() {
     summary.avgDiversificationScore = diversificationTotal / items.length;
     return summary;
   }, [concentrationRiskList]);
+  const acquisitionPrioritySummary = useMemo(() => {
+    const items = acquisitionPriorityList?.items ?? [];
+    const summary = {
+      total: acquisitionPriorityList?.total ?? 0,
+      highPriority: 0,
+      eliteOpportunities: 0,
+      diversificationOpportunities: 0,
+      liquidityImprovementOpportunities: 0,
+      gradingOpportunityCount: 0,
+    };
+    for (const row of items) {
+      if (row.acquisition_priority === "HIGH" || row.acquisition_priority === "ELITE") {
+        summary.highPriority += 1;
+      }
+      if (row.acquisition_priority === "ELITE") {
+        summary.eliteOpportunities += 1;
+      }
+      if (row.acquisition_category === "DIVERSIFICATION" || row.acquisition_category === "LOW_EXPOSURE_CATEGORY") {
+        summary.diversificationOpportunities += 1;
+      }
+      if (row.acquisition_category === "LIQUIDITY_IMPROVEMENT") {
+        summary.liquidityImprovementOpportunities += 1;
+      }
+      if (row.acquisition_category === "GRADING_OPPORTUNITY") {
+        summary.gradingOpportunityCount += 1;
+      }
+    }
+    return summary;
+  }, [acquisitionPriorityList]);
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1702,6 +1736,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setAcquisitionPriorityList(null);
+          setAcquisitionPriorityLoading(false);
+          setAcquisitionPriorityError(null);
+        }
+        return;
+      }
+      setAcquisitionPriorityLoading(true);
+      setAcquisitionPriorityError(null);
+      try {
+        const list = await apiClient.listAcquisitionPriorities({ limit: 500 });
+        if (!ignore) {
+          setAcquisitionPriorityList(list);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setAcquisitionPriorityList(null);
+          setAcquisitionPriorityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load acquisition priorities.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setAcquisitionPriorityLoading(false);
         }
       }
     })();
@@ -2409,6 +2479,23 @@ export function DashboardPage() {
       setPortfolioRecommendationError(err instanceof ApiError ? err.message : "Unable to refresh portfolio recommendations.");
     } finally {
       setPortfolioRecommendationGenBusy(false);
+    }
+  }
+
+  async function refreshAcquisitionPriorities(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setAcquisitionPriorityGenBusy(true);
+    setAcquisitionPriorityError(null);
+    try {
+      await apiClient.generateAcquisitionPriorities({ replay_key: `web-apr-dash-${Date.now()}` });
+      const list = await apiClient.listAcquisitionPriorities({ limit: 500 });
+      setAcquisitionPriorityList(list);
+    } catch (err) {
+      setAcquisitionPriorityError(err instanceof ApiError ? err.message : "Unable to refresh acquisition priorities.");
+    } finally {
+      setAcquisitionPriorityGenBusy(false);
     }
   }
 
@@ -4402,6 +4489,62 @@ export function DashboardPage() {
               )}
             </section>
           ) : null}
+
+          <section
+            id="acquisition-priority-dash"
+            className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/12 p-5 shadow-xl shadow-black/18"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-sky-100/90">Acquisition intelligence</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic expansion and gap-analysis layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  Explainable acquisition priorities that highlight diversification, liquidity, grading upside, sales velocity,
+                  and low-overlap growth opportunities without any autonomous buying or predictive market timing.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refreshAcquisitionPriorities()}
+                  disabled={acquisitionPriorityGenBusy}
+                  className="rounded-xl border border-sky-400/45 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-50 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {acquisitionPriorityGenBusy ? "Generating…" : "Generate acquisition priorities"}
+                </button>
+                <Link
+                  to="/ops#acquisition-priority-ops"
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-sky-300/45 hover:bg-white/5"
+                >
+                  Ops acquisition tables
+                </Link>
+              </div>
+            </div>
+            {acquisitionPriorityLoading ? (
+              <p className="mt-4 text-sm text-slate-400">Loading acquisition priorities…</p>
+            ) : acquisitionPriorityError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{acquisitionPriorityError}</StatusBanner>
+              </div>
+            ) : acquisitionPriorityList ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="High-priority acquisitions" value={String(acquisitionPrioritySummary.highPriority)} />
+                <StatCard label="Elite opportunities" value={String(acquisitionPrioritySummary.eliteOpportunities)} />
+                <StatCard
+                  label="Diversification opportunities"
+                  value={String(acquisitionPrioritySummary.diversificationOpportunities)}
+                />
+                <StatCard
+                  label="Liquidity-improvement opportunities"
+                  value={String(acquisitionPrioritySummary.liquidityImprovementOpportunities)}
+                />
+                <StatCard label="Grading opportunities" value={String(acquisitionPrioritySummary.gradingOpportunityCount)} />
+                <StatCard label="Total modeled rows" value={String(acquisitionPrioritySummary.total)} />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">Generate acquisition rows to populate this panel.</p>
+            )}
+          </section>
 
           <section
             id="portfolio-recommendation-dash"

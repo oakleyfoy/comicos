@@ -126,6 +126,10 @@ import {
   type PortfolioRecommendationEvidenceListResponse,
   type PortfolioRecommendationHistoryListResponse,
   type PortfolioRecommendationListResponse,
+  type AcquisitionPriorityDetailRead,
+  type AcquisitionPriorityEvidenceListResponse,
+  type AcquisitionPriorityHistoryListResponse,
+  type AcquisitionPriorityListResponse,
   type ConcentrationRiskDetailRead,
   type ConcentrationRiskEvidenceListResponse,
   type ConcentrationRiskFactorListResponse,
@@ -1539,6 +1543,14 @@ export function OperationsPage() {
     useState<PortfolioRecommendationHistoryListResponse | null>(null);
   const [opsPortfolioRecommendationLoading, setOpsPortfolioRecommendationLoading] = useState(true);
   const [opsPortfolioRecommendationError, setOpsPortfolioRecommendationError] = useState<string | null>(null);
+  const [opsAcquisitionPriorityList, setOpsAcquisitionPriorityList] = useState<AcquisitionPriorityListResponse | null>(null);
+  const [opsAcquisitionPriorityDetail, setOpsAcquisitionPriorityDetail] = useState<AcquisitionPriorityDetailRead | null>(null);
+  const [opsAcquisitionPriorityEvidence, setOpsAcquisitionPriorityEvidence] =
+    useState<AcquisitionPriorityEvidenceListResponse | null>(null);
+  const [opsAcquisitionPriorityHistory, setOpsAcquisitionPriorityHistory] =
+    useState<AcquisitionPriorityHistoryListResponse | null>(null);
+  const [opsAcquisitionPriorityLoading, setOpsAcquisitionPriorityLoading] = useState(true);
+  const [opsAcquisitionPriorityError, setOpsAcquisitionPriorityError] = useState<string | null>(null);
   const [opsConcentrationRiskList, setOpsConcentrationRiskList] = useState<ConcentrationRiskListResponse | null>(null);
   const [opsConcentrationRiskDetail, setOpsConcentrationRiskDetail] = useState<ConcentrationRiskDetailRead | null>(null);
   const [opsConcentrationRiskEvidence, setOpsConcentrationRiskEvidence] =
@@ -2100,6 +2112,8 @@ export function OperationsPage() {
       setOpsPortfolioError(null);
       setOpsPortfolioRecommendationLoading(true);
       setOpsPortfolioRecommendationError(null);
+      setOpsAcquisitionPriorityLoading(true);
+      setOpsAcquisitionPriorityError(null);
       setOpsConcentrationRiskLoading(true);
       setOpsConcentrationRiskError(null);
       try {
@@ -2124,6 +2138,8 @@ export function OperationsPage() {
           liqHist,
           recList,
           recHist,
+          acqList,
+          acqHist,
           concList,
           concHist,
         ] =
@@ -2141,6 +2157,8 @@ export function OperationsPage() {
             apiClient.listOpsPortfolioLiquidityHistory({ ...scoped, limit: 120, offset: 0 }),
             apiClient.listOpsPortfolioRecommendations({ ...scoped, limit: 200, offset: 0 }),
             apiClient.listOpsPortfolioRecommendationHistory({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsAcquisitionPriorities({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsAcquisitionPriorityHistory({ ...scoped, limit: 200, offset: 0 }),
             apiClient.listOpsConcentrationRisk({ ...scoped, limit: 200, offset: 0 }),
             apiClient.listOpsConcentrationRiskHistory({ ...scoped, limit: 200, offset: 0 }),
           ]);
@@ -2164,6 +2182,18 @@ export function OperationsPage() {
           recEvidence = await apiClient.listOpsPortfolioRecommendationEvidence({
             ...scoped,
             recommendation_id: firstRec.id,
+            limit: 120,
+            offset: 0,
+          });
+        }
+        let acqDetail: AcquisitionPriorityDetailRead | null = null;
+        let acqEvidence: AcquisitionPriorityEvidenceListResponse | null = null;
+        const firstAcq = acqList.items[0];
+        if (firstAcq) {
+          acqDetail = await apiClient.getOpsAcquisitionPriority(firstAcq.id, scoped);
+          acqEvidence = await apiClient.listOpsAcquisitionPriorityEvidence({
+            ...scoped,
+            acquisition_priority_snapshot_id: firstAcq.id,
             limit: 120,
             offset: 0,
           });
@@ -2205,6 +2235,10 @@ export function OperationsPage() {
           setOpsPortfolioRecommendationDetail(recDetail);
           setOpsPortfolioRecommendationEvidence(recEvidence);
           setOpsPortfolioRecommendationHistory(recHist);
+          setOpsAcquisitionPriorityList(acqList);
+          setOpsAcquisitionPriorityDetail(acqDetail);
+          setOpsAcquisitionPriorityEvidence(acqEvidence);
+          setOpsAcquisitionPriorityHistory(acqHist);
           setOpsConcentrationRiskList(concList);
           setOpsConcentrationRiskDetail(concDetail);
           setOpsConcentrationRiskEvidence(concEvidence);
@@ -2230,6 +2264,10 @@ export function OperationsPage() {
           setOpsPortfolioRecommendationDetail(null);
           setOpsPortfolioRecommendationEvidence(null);
           setOpsPortfolioRecommendationHistory(null);
+          setOpsAcquisitionPriorityList(null);
+          setOpsAcquisitionPriorityDetail(null);
+          setOpsAcquisitionPriorityEvidence(null);
+          setOpsAcquisitionPriorityHistory(null);
           setOpsConcentrationRiskList(null);
           setOpsConcentrationRiskDetail(null);
           setOpsConcentrationRiskEvidence(null);
@@ -2241,6 +2279,9 @@ export function OperationsPage() {
           setOpsPortfolioRecommendationError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio recommendation ops payloads.",
           );
+          setOpsAcquisitionPriorityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load acquisition priority ops payloads.",
+          );
           setOpsConcentrationRiskError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load concentration risk ops payloads.",
           );
@@ -2249,6 +2290,7 @@ export function OperationsPage() {
         if (!ignore) {
           setOpsPortfolioLoading(false);
           setOpsPortfolioRecommendationLoading(false);
+          setOpsAcquisitionPriorityLoading(false);
           setOpsConcentrationRiskLoading(false);
         }
       }
@@ -5140,6 +5182,7 @@ export function OperationsPage() {
           ["Duplicate consolidation", "#duplicate-consolidation-ops"],
           ["Portfolio liquidity", "#portfolio-liquidity-ops"],
           ["Portfolio recommendations", "#portfolio-recommendation-ops"],
+          ["Acquisition priorities", "#acquisition-priority-ops"],
           ["Concentration risk", "#concentration-risk-ops"],
           ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
@@ -6221,6 +6264,186 @@ export function OperationsPage() {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="acquisition-priority-ops"
+        open
+        className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Acquisition intelligence operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only `/ops/acquisition-priorities*` mirrors. Deterministic acquisition rows showing category, priority,
+                diversification gain, liquidity gain, confidence, risk, and replay-safe checksums.
+              </p>
+            </div>
+            <span className="rounded-full border border-sky-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-100/95">
+              Ops / acquisition
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-sky-200/15 pt-4">
+          {opsAcquisitionPriorityLoading ? (
+            <p className="text-sm text-slate-400">Loading acquisition priorities…</p>
+          ) : opsAcquisitionPriorityError ? (
+            <StatusBanner tone="error">{opsAcquisitionPriorityError}</StatusBanner>
+          ) : (
+            <>
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Acquisition table ({opsAcquisitionPriorityList?.total ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Category</th>
+                      <th className="p-3 font-medium">Priority</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Issue</th>
+                      <th className="p-3 font-medium">Diversification</th>
+                      <th className="p-3 font-medium">Liquidity</th>
+                      <th className="p-3 font-medium">Confidence</th>
+                      <th className="p-3 font-medium">Risk</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsAcquisitionPriorityList?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={9}>
+                          No acquisition-priority rows for this scope yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsAcquisitionPriorityList!.items.slice(0, 30).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 text-slate-300">{row.acquisition_category}</td>
+                          <td className="p-3">
+                            <div className="font-semibold text-white">{row.acquisition_priority}</div>
+                            <div className="text-[10px] text-slate-500">{row.recommendation_strength}</div>
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                          <td className="p-3 text-slate-300">issue {row.canonical_comic_issue_id ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.diversification_impact ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.liquidity_impact ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.confidence_level}</td>
+                          <td className="p-3 text-slate-300">{row.risk_level}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsAcquisitionPriorityDetail ? (
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 xl:col-span-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Selected acquisition row</p>
+                    <p className="mt-2 text-sm text-slate-100">
+                      {opsAcquisitionPriorityDetail.snapshot.acquisition_category} ·{" "}
+                      {opsAcquisitionPriorityDetail.snapshot.acquisition_priority} · confidence{" "}
+                      {opsAcquisitionPriorityDetail.snapshot.confidence_level} · risk{" "}
+                      {opsAcquisitionPriorityDetail.snapshot.risk_level}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-300">
+                      {opsAcquisitionPriorityDetail.snapshot.rationale_summary}
+                    </p>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Evidence list ({opsAcquisitionPriorityEvidence?.total ?? 0})
+                    </p>
+                    <table className="mt-3 w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Type</th>
+                          <th className="p-3 font-medium">Source</th>
+                          <th className="p-3 font-medium">Payload</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {(opsAcquisitionPriorityEvidence?.items.length ?? 0) === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={3}>
+                              Evidence rows attach to each acquisition snapshot.
+                            </td>
+                          </tr>
+                        ) : (
+                          opsAcquisitionPriorityEvidence!.items.slice(0, 20).map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3">{row.evidence_type}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {row.source_table ?? "—"} #{row.source_id ?? "—"}
+                              </td>
+                              <td className="p-3 text-[10px] text-slate-400">{JSON.stringify(row.evidence_value_json).slice(0, 200)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Scenarios / history
+                    </p>
+                    <div className="mt-3 space-y-4">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Scenario</th>
+                            <th className="p-3 font-medium">Liquidity</th>
+                            <th className="p-3 font-medium">Diversification</th>
+                            <th className="p-3 font-medium">Efficiency</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsAcquisitionPriorityDetail.scenarios.map((scenario) => (
+                            <tr key={scenario.id}>
+                              <td className="p-3">{scenario.scenario_name}</td>
+                              <td className="p-3">{scenario.projected_liquidity_impact ?? "—"}</td>
+                              <td className="p-3">{scenario.projected_diversification_impact ?? "—"}</td>
+                              <td className="p-3">{scenario.projected_portfolio_efficiency ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Date</th>
+                            <th className="p-3 font-medium">Category</th>
+                            <th className="p-3 font-medium">Priority</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsAcquisitionPriorityHistory?.items.slice(0, 15).length ? (
+                            opsAcquisitionPriorityHistory!.items.slice(0, 15).map((row) => (
+                              <tr key={row.id}>
+                                <td className="p-3 text-slate-400">{formatDate(row.snapshot_date)}</td>
+                                <td className="p-3">{row.acquisition_category}</td>
+                                <td className="p-3">{row.acquisition_priority}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="p-4 text-slate-500" colSpan={3}>
+                                History appends only when a new checksum appears for the same issue/category tuple.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </details>
