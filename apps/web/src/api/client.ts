@@ -2919,6 +2919,119 @@ export interface SalesDashboardSummary {
   sales_count_by_channel: SaleChannelCountRow[];
 }
 
+export type DealerDashboardAlertType =
+  | "STALE_LISTING"
+  | "EXPORT_FAILURE"
+  | "LOW_COMPLETENESS"
+  | "LOW_LIQUIDITY"
+  | "CONVENTION_PRICING_MISSING"
+  | "MISSING_PRIMARY_IMAGE";
+export type DealerDashboardAlertSeverity = "info" | "warning" | "critical";
+export type DealerDashboardFeedEventType =
+  | "LISTING_CREATED"
+  | "LISTING_SOLD"
+  | "EXPORT_COMPLETED"
+  | "EXPORT_FAILED"
+  | "SALE_RECORDED"
+  | "STALE_DETECTED"
+  | "CONVENTION_ASSIGNED"
+  | "LIQUIDITY_UPDATED";
+
+export interface DealerDashboardGeneratePayload {
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface DealerDashboardSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  replay_key?: string | null;
+  active_listing_count: number;
+  export_ready_count: number;
+  incomplete_listing_count: number;
+  stale_listing_count: number;
+  active_convention_count: number;
+  assigned_convention_inventory_count: number;
+  open_sale_session_count: number;
+  gross_sales_30d: string;
+  net_sales_30d: string;
+  realized_profit_30d: string;
+  liquidity_high_count: number;
+  liquidity_low_count: number;
+  export_run_count_30d: number;
+  failed_export_count_30d: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface DealerDashboardGetResponse {
+  snapshot: DealerDashboardSnapshotRead | null;
+}
+
+export interface DealerDashboardGenerateResponse {
+  snapshot: DealerDashboardSnapshotRead;
+}
+
+export interface DealerDashboardAlertRead {
+  id: number;
+  owner_user_id: number;
+  dashboard_snapshot_id: number;
+  alert_type: DealerDashboardAlertType | string;
+  severity: DealerDashboardAlertSeverity | string;
+  alert_replay_key: string;
+  source_listing_id?: number | null;
+  source_inventory_item_id?: number | null;
+  source_export_run_id?: number | null;
+  source_convention_event_id?: number | null;
+  message: string;
+  acknowledged_at?: string | null;
+  created_at: string;
+}
+
+export interface DealerDashboardFeedEventRead {
+  id: number;
+  owner_user_id: number;
+  deterministic_key: string;
+  dashboard_snapshot_id?: number | null;
+  event_type: DealerDashboardFeedEventType | string;
+  source_id?: number | null;
+  summary: string;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface DealerDashboardMetricRead {
+  id: number;
+  dashboard_snapshot_id: number;
+  metric_key: string;
+  metric_value_decimal?: string | null;
+  metric_value_text?: string | null;
+  metric_metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface DealerDashboardAlertListResponse {
+  items: DealerDashboardAlertRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface DealerDashboardFeedListResponse {
+  items: DealerDashboardFeedEventRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface DealerDashboardMetricListResponse {
+  items: DealerDashboardMetricRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export type LiquidityStatus = "HIGH" | "MODERATE" | "LOW" | "ILLIQUID" | "INSUFFICIENT_DATA";
 export type LiquidityConfidence = "HIGH" | "MEDIUM" | "LOW";
 export type LiquidityEvidenceType = "SALE" | "ACTIVE_LISTING" | "FAILED_LISTING" | "RELIST" | "STALE";
@@ -3018,6 +3131,157 @@ export interface LiquidityDashboardSummary {
   median_days_to_sale: string | null;
   sell_through_pct: string;
   recent_snapshots: InventoryLiquiditySnapshotRead[];
+}
+
+export type ListingIntelligenceStatus = "STRONG" | "ADEQUATE" | "WEAK" | "INCOMPLETE" | "INSUFFICIENT_DATA";
+export type ListingCompletenessStatus = "PASS" | "WARNING" | "FAIL";
+export type ListingCompletenessSeverity = "info" | "warning" | "critical";
+export type ListingIntelligenceEvidenceType =
+  | "LISTING_FIELD"
+  | "IMAGE"
+  | "PRICE"
+  | "EXPORT_RUN"
+  | "SALE"
+  | "LIQUIDITY"
+  | "CONVENTION";
+
+export interface ListingIntelligenceGeneratePayload {
+  snapshot_date?: string | null;
+  listing_id?: number | null;
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  channel?: string | null;
+  replay_key?: string | null;
+}
+
+export interface ListingIntelligenceSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  listing_id: number;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  channel: string | null;
+  replay_key: string | null;
+  intelligence_status: ListingIntelligenceStatus | string;
+  completeness_score: string;
+  image_score: string;
+  title_score: string;
+  description_score: string;
+  pricing_score: string;
+  export_readiness_score: string;
+  sale_outcome_score: string | null;
+  stale_risk_flag: boolean;
+  missing_required_fields_json: unknown[];
+  warning_flags_json: unknown[];
+  evidence_count: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ListingIntelligenceEvidenceRead {
+  id: number;
+  intelligence_snapshot_id: number;
+  evidence_type: ListingIntelligenceEvidenceType | string;
+  source_listing_id: number | null;
+  source_export_run_id: number | null;
+  source_sale_id: number | null;
+  source_liquidity_snapshot_id: number | null;
+  source_convention_event_id: number | null;
+  evidence_key: string;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ListingCompletenessCheckRead {
+  id: number;
+  intelligence_snapshot_id: number;
+  owner_user_id: number;
+  listing_id: number;
+  replay_key: string | null;
+  status: ListingCompletenessStatus | string;
+  check_key:
+    | "title_present"
+    | "description_present"
+    | "condition_present"
+    | "price_present"
+    | "currency_present"
+    | "image_present"
+    | "primary_image_present"
+    | "inventory_link_present"
+    | "exportable_status"
+    | string;
+  message: string;
+  severity: ListingCompletenessSeverity | string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ListingChannelPerformanceSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  channel: string;
+  replay_key: string | null;
+  total_listings: number;
+  active_listings: number;
+  sold_listings: number;
+  cancelled_listings: number;
+  exported_count: number;
+  sales_count: number;
+  gross_sales_amount: string;
+  net_proceeds_amount: string;
+  median_days_to_sale: string | null;
+  stale_listing_count: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface ListingIntelligenceDashboardSummary {
+  strong_listing_count: number;
+  incomplete_listing_count: number;
+  average_completeness_score: string | null;
+  export_ready_count: number;
+  stale_risk_count: number;
+  recent_weak_or_incomplete: ListingIntelligenceSnapshotRead[];
+}
+
+export interface ListingIntelligenceGenerateResponse {
+  generated_snapshot_count: number;
+  generated_evidence_count: number;
+  generated_check_count: number;
+  generated_channel_performance_count: number;
+  checksum: string;
+  snapshot_date: string;
+  replay_key: string | null;
+}
+
+export interface ListingIntelligenceSnapshotListResponse {
+  items: ListingIntelligenceSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingIntelligenceEvidenceListResponse {
+  items: ListingIntelligenceEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingCompletenessCheckListResponse {
+  items: ListingCompletenessCheckRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListingChannelPerformanceListResponse {
+  items: ListingChannelPerformanceSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
 }
 
 export type ConventionEventType = "convention" | "local_show" | "trade_night" | "private_event" | "popup";
@@ -7016,6 +7280,235 @@ export const apiClient = {
       `/ops/reports/market-deterministic-summary.json${q}`,
       "ops-market-deterministic-summary.json",
     );
+  },
+
+  getListingIntelligenceDashboardSummary(): Promise<ListingIntelligenceDashboardSummary> {
+    return request<ListingIntelligenceDashboardSummary>("/listing-intelligence/dashboard-summary");
+  },
+
+  getOpsListingIntelligenceDashboardSummary(params?: { owner_user_id?: number }): Promise<ListingIntelligenceDashboardSummary> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<ListingIntelligenceDashboardSummary>(`/ops/listing-intelligence/dashboard-summary${q}`);
+  },
+
+  generateListingIntelligence(payload: ListingIntelligenceGeneratePayload): Promise<ListingIntelligenceGenerateResponse> {
+    return request<ListingIntelligenceGenerateResponse>("/listing-intelligence/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getDealerDashboard(): Promise<DealerDashboardGetResponse> {
+    return request<DealerDashboardGetResponse>("/dealer-dashboard");
+  },
+
+  generateDealerDashboard(payload: DealerDashboardGeneratePayload): Promise<DealerDashboardGenerateResponse> {
+    return request<DealerDashboardGenerateResponse>("/dealer-dashboard/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listDealerDashboardMetrics(params?: {
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerDashboardMetricListResponse>(`/dealer-dashboard/metrics${q}`);
+  },
+
+  listDealerDashboardAlerts(params?: {
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerDashboardAlertListResponse>(`/dealer-dashboard/alerts${q}`);
+  },
+
+  listDealerDashboardFeed(params?: {
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerDashboardFeedListResponse>(`/dealer-dashboard/feed${q}`);
+  },
+
+  getOpsDealerDashboard(params?: { owner_user_id?: number }): Promise<DealerDashboardGetResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerDashboardGetResponse>(`/ops/dealer-dashboard${q}`);
+  },
+
+  listOpsDealerDashboardMetrics(params?: {
+    owner_user_id?: number;
+    dashboard_snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardMetricListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<DealerDashboardMetricListResponse>(`/ops/dealer-dashboard/metrics${q}`);
+  },
+
+  listOpsDealerDashboardAlerts(params?: {
+    owner_user_id?: number;
+    severity?: string;
+    alert_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardAlertListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerDashboardAlertListResponse>(`/ops/dealer-dashboard/alerts${q}`);
+  },
+
+  listOpsDealerDashboardFeed(params?: {
+    owner_user_id?: number;
+    event_type?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DealerDashboardFeedListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<DealerDashboardFeedListResponse>(`/ops/dealer-dashboard/feed${q}`);
+  },
+
+  getListingIntelligence(params?: {
+    listing_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    channel?: string;
+    intelligence_status?: ListingIntelligenceStatus | string;
+    stale_risk_flag?: boolean;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingIntelligenceSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingIntelligenceSnapshotListResponse>(`/listing-intelligence${q}`);
+  },
+
+  getListingIntelligenceSnapshot(snapshotId: number): Promise<ListingIntelligenceSnapshotRead> {
+    return request<ListingIntelligenceSnapshotRead>(`/listing-intelligence/${snapshotId}`);
+  },
+
+  getListingIntelligenceEvidence(params?: {
+    listing_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    channel?: string;
+    intelligence_status?: ListingIntelligenceStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingIntelligenceEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingIntelligenceEvidenceListResponse>(`/listing-intelligence/evidence${q}`);
+  },
+
+  getListingCompletenessChecks(params?: {
+    listing_id?: number;
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    status?: ListingCompletenessStatus | string;
+    severity?: ListingCompletenessSeverity | string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingCompletenessCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingCompletenessCheckListResponse>(`/listing-completeness-checks${q}`);
+  },
+
+  getListingChannelPerformance(params?: {
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingChannelPerformanceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingChannelPerformanceListResponse>(`/listing-channel-performance${q}`);
+  },
+
+  getOpsListingIntelligence(params?: {
+    owner_user_id?: number;
+    listing_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    channel?: string;
+    intelligence_status?: ListingIntelligenceStatus | string;
+    stale_risk_flag?: boolean;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingIntelligenceSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingIntelligenceSnapshotListResponse>(`/ops/listing-intelligence${q}`);
+  },
+
+  getOpsListingIntelligenceSnapshot(snapshotId: number): Promise<ListingIntelligenceSnapshotRead> {
+    return request<ListingIntelligenceSnapshotRead>(`/ops/listing-intelligence/${snapshotId}`);
+  },
+
+  getOpsListingIntelligenceEvidence(params?: {
+    owner_user_id?: number;
+    listing_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    channel?: string;
+    intelligence_status?: ListingIntelligenceStatus | string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingIntelligenceEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingIntelligenceEvidenceListResponse>(`/ops/listing-intelligence-evidence${q}`);
+  },
+
+  getOpsListingCompletenessChecks(params?: {
+    owner_user_id?: number;
+    listing_id?: number;
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    status?: ListingCompletenessStatus | string;
+    severity?: ListingCompletenessSeverity | string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingCompletenessCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingCompletenessCheckListResponse>(`/ops/listing-completeness-checks${q}`);
+  },
+
+  getOpsListingChannelPerformance(params?: {
+    owner_user_id?: number;
+    channel?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListingChannelPerformanceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return request<ListingChannelPerformanceListResponse>(`/ops/listing-channel-performance${q}`);
   },
 
   getListingExportDashboardSummary(): Promise<ListingExportDashboardSummary> {

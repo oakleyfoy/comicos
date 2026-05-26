@@ -65,6 +65,18 @@ from app.models.listing_export import (
     ListingExportRunItem,
     ListingExportTemplate,
 )
+from app.models.listing_intelligence import (
+    ListingChannelPerformanceSnapshot,
+    ListingCompletenessCheck,
+    ListingIntelligenceEvidence,
+    ListingIntelligenceSnapshot,
+)
+from app.models.dealer_dashboard import (
+    DealerDashboardAlert,
+    DealerDashboardFeedEvent,
+    DealerDashboardMetric,
+    DealerDashboardSnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -119,6 +131,10 @@ __all__ = [
     "GmailImportRecord",
     "HighResReviewRequest",
     "InventoryCopy",
+    "DealerDashboardAlert",
+    "DealerDashboardFeedEvent",
+    "DealerDashboardMetric",
+    "DealerDashboardSnapshot",
     "ConventionEvent",
     "ConventionInventoryAssignment",
     "ConventionInventoryMovement",
@@ -129,6 +145,10 @@ __all__ = [
     "ListingExportRun",
     "ListingExportRunItem",
     "ListingExportTemplate",
+    "ListingChannelPerformanceSnapshot",
+    "ListingCompletenessCheck",
+    "ListingIntelligenceEvidence",
+    "ListingIntelligenceSnapshot",
     "ListingImage",
     "ListingInventoryLink",
     "ListingLifecycleEvent",

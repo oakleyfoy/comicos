@@ -158,6 +158,27 @@ from app.schemas.listing_export import (
     ListingExportTemplateRead,
     OpsListingExportFileListResponse,
 )
+from app.schemas.listing_intelligence import (
+    ListingChannelPerformanceListResponse,
+    ListingChannelPerformanceSnapshotRead,
+    ListingCompletenessCheckListResponse,
+    ListingCompletenessCheckRead,
+    ListingIntelligenceDashboardSummary,
+    ListingIntelligenceEvidenceListResponse,
+    ListingIntelligenceEvidenceRead,
+    ListingIntelligenceGeneratePayload,
+    ListingIntelligenceGenerateResponse,
+    ListingIntelligenceSnapshotListResponse,
+    ListingIntelligenceSnapshotRead,
+)
+from app.schemas.dealer_dashboard import (
+    DealerDashboardAlertListResponse,
+    DealerDashboardFeedListResponse,
+    DealerDashboardGeneratePayload,
+    DealerDashboardGenerateResponse,
+    DealerDashboardGetResponse,
+    DealerDashboardMetricListResponse,
+)
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
     ConventionAssignmentListResponse,
@@ -644,7 +665,9 @@ from app.services.inventory_fmv import (
     inventory_fmv_inventory_response_for_scope,
     portfolio_value_summary_for_scope,
 )
+from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import listing_export as listing_export_service
+from app.services import listing_intelligence as listing_intelligence_service
 from app.services import listing_registry as listing_registry_service
 from app.services import convention_operations as convention_operations_service
 from app.services import liquidity_engine as liquidity_engine_service
@@ -8953,6 +8976,556 @@ def ops_list_listing_export_files(
         total_items=total,
         limit=lim,
         offset=off,
+    )
+
+
+@app.get("/listing-intelligence/dashboard-summary", response_model=ListingIntelligenceDashboardSummary)
+def owner_listing_intelligence_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingIntelligenceDashboardSummary:
+    return listing_intelligence_service.build_listing_intelligence_dashboard_summary(
+        session,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@app.post("/listing-intelligence/generate", response_model=ListingIntelligenceGenerateResponse, status_code=status.HTTP_201_CREATED)
+def owner_generate_listing_intelligence(
+    payload: ListingIntelligenceGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingIntelligenceGenerateResponse:
+    return listing_intelligence_service.generate_listing_intelligence(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/listing-intelligence", response_model=ListingIntelligenceSnapshotListResponse)
+def owner_list_listing_intelligence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    listing_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    intelligence_status: str | None = Query(default=None),
+    stale_risk_flag: bool | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingIntelligenceSnapshotListResponse:
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_intelligence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        listing_id=listing_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        channel=channel,
+        intelligence_status=intelligence_status,
+        stale_risk_flag=stale_risk_flag,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingIntelligenceSnapshotListResponse(
+        items=[listing_intelligence_service._snapshot_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-intelligence/evidence", response_model=ListingIntelligenceEvidenceListResponse)
+def owner_list_listing_intelligence_evidence_pre(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    listing_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    intelligence_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingIntelligenceEvidenceListResponse:
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_intelligence_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        listing_id=listing_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        channel=channel,
+        intelligence_status=intelligence_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingIntelligenceEvidenceListResponse(
+        items=[listing_intelligence_service._evidence_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-intelligence/{snapshot_id}", response_model=ListingIntelligenceSnapshotRead)
+def owner_get_listing_intelligence(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ListingIntelligenceSnapshotRead:
+    row = listing_intelligence_service.get_listing_intelligence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=snapshot_id,
+    )
+    return listing_intelligence_service._snapshot_read(row)  # noqa: SLF001
+
+
+@app.get("/listing-completeness-checks", response_model=ListingCompletenessCheckListResponse)
+def owner_list_listing_completeness_checks(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    listing_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    check_status: str | None = Query(default=None, alias="status"),
+    severity: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingCompletenessCheckListResponse:
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_completeness_checks_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        listing_id=listing_id,
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        check_status=check_status,
+        severity=severity,
+        limit=lim,
+        offset=off,
+    )
+    return ListingCompletenessCheckListResponse(
+        items=[listing_intelligence_service._check_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/listing-channel-performance", response_model=ListingChannelPerformanceListResponse)
+def owner_list_listing_channel_performance(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingChannelPerformanceListResponse:
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_channel_performance_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingChannelPerformanceListResponse(
+        items=[listing_intelligence_service._channel_perf_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-intelligence-evidence", response_model=ListingIntelligenceEvidenceListResponse)
+def ops_list_listing_intelligence_evidence_pre(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    listing_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    intelligence_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingIntelligenceEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_intelligence_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        listing_id=listing_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        channel=channel,
+        intelligence_status=intelligence_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingIntelligenceEvidenceListResponse(
+        items=[listing_intelligence_service._evidence_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-intelligence/dashboard-summary", response_model=ListingIntelligenceDashboardSummary)
+def ops_listing_intelligence_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> ListingIntelligenceDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return listing_intelligence_service.build_listing_intelligence_dashboard_summary(
+        session,
+        owner_user_id=owner_user_id,
+    )
+
+
+@app.get("/ops/listing-intelligence", response_model=ListingIntelligenceSnapshotListResponse)
+def ops_list_listing_intelligence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    listing_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    intelligence_status: str | None = Query(default=None),
+    stale_risk_flag: bool | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingIntelligenceSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_intelligence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        listing_id=listing_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        channel=channel,
+        intelligence_status=intelligence_status,
+        stale_risk_flag=stale_risk_flag,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingIntelligenceSnapshotListResponse(
+        items=[listing_intelligence_service._snapshot_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-intelligence/{snapshot_id}", response_model=ListingIntelligenceSnapshotRead)
+def ops_get_listing_intelligence(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> ListingIntelligenceSnapshotRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = listing_intelligence_service.get_listing_intelligence_ops(session, snapshot_id=snapshot_id)
+    return listing_intelligence_service._snapshot_read(row)  # noqa: SLF001
+
+
+@app.get("/ops/listing-intelligence-evidence", response_model=ListingIntelligenceEvidenceListResponse)
+def ops_list_listing_intelligence_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    listing_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    intelligence_status: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingIntelligenceEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_intelligence_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        listing_id=listing_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        channel=channel,
+        intelligence_status=intelligence_status,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingIntelligenceEvidenceListResponse(
+        items=[listing_intelligence_service._evidence_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-completeness-checks", response_model=ListingCompletenessCheckListResponse)
+def ops_list_listing_completeness_checks(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    listing_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    check_status: str | None = Query(default=None, alias="status"),
+    severity: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingCompletenessCheckListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_completeness_checks_ops(
+        session,
+        owner_user_id=owner_user_id,
+        listing_id=listing_id,
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        check_status=check_status,
+        severity=severity,
+        limit=lim,
+        offset=off,
+    )
+    return ListingCompletenessCheckListResponse(
+        items=[listing_intelligence_service._check_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/listing-channel-performance", response_model=ListingChannelPerformanceListResponse)
+def ops_list_listing_channel_performance(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ListingChannelPerformanceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = listing_intelligence_service.clamp_listing_intelligence_pagination(limit=limit, offset=offset)
+    rows, total = listing_intelligence_service.list_listing_channel_performance_ops(
+        session,
+        owner_user_id=owner_user_id,
+        channel=channel,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return ListingChannelPerformanceListResponse(
+        items=[listing_intelligence_service._channel_perf_read(row) for row in rows],  # noqa: SLF001
+        total_items=total,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/dealer-dashboard", response_model=DealerDashboardGetResponse)
+def owner_dealer_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DealerDashboardGetResponse:
+    return dealer_dashboard_service.get_dashboard_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post("/dealer-dashboard/generate", response_model=DealerDashboardGenerateResponse, status_code=status.HTTP_201_CREATED)
+def owner_dealer_dashboard_generate(
+    payload: DealerDashboardGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DealerDashboardGenerateResponse:
+    return dealer_dashboard_service.generate_dealer_dashboard(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/dealer-dashboard/metrics", response_model=DealerDashboardMetricListResponse)
+def owner_list_dealer_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardMetricListResponse:
+    return dealer_dashboard_service.list_metrics_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/dealer-dashboard/alerts", response_model=DealerDashboardAlertListResponse)
+def owner_list_dealer_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardAlertListResponse:
+    return dealer_dashboard_service.list_alerts_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/dealer-dashboard/feed", response_model=DealerDashboardFeedListResponse)
+def owner_list_dealer_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardFeedListResponse:
+    return dealer_dashboard_service.list_feed_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-dashboard", response_model=DealerDashboardGetResponse)
+def ops_dealer_dashboard_get(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> DealerDashboardGetResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_dashboard_service.get_dashboard_ops(session, owner_user_id=owner_user_id)
+
+
+@app.get("/ops/dealer-dashboard/metrics", response_model=DealerDashboardMetricListResponse)
+def ops_list_dealer_dashboard_metrics(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    dashboard_snapshot_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardMetricListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_dashboard_service.list_metrics_ops(
+        session,
+        owner_user_id=owner_user_id,
+        dashboard_snapshot_id=dashboard_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-dashboard/alerts", response_model=DealerDashboardAlertListResponse)
+def ops_list_dealer_dashboard_alerts(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    alert_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardAlertListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_dashboard_service.list_alerts_ops(
+        session,
+        owner_user_id=owner_user_id,
+        severity=severity,
+        alert_type=alert_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/dealer-dashboard/feed", response_model=DealerDashboardFeedListResponse)
+def ops_list_dealer_dashboard_feed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DealerDashboardFeedListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return dealer_dashboard_service.list_feed_ops(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
     )
 
 

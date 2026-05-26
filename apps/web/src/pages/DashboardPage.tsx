@@ -51,7 +51,11 @@ import {
   type InventoryValuationScope,
   type PortfolioValueSummaryResponse,
   type ListingDashboardSummary,
+  type ListingIntelligenceDashboardSummary,
   type ListingExportDashboardSummary,
+  type DealerDashboardAlertRead,
+  type DealerDashboardFeedEventRead,
+  type DealerDashboardGetResponse,
   type ConventionDashboardSummary,
   type LiquidityDashboardSummary,
   type SalesDashboardSummary,
@@ -841,6 +845,9 @@ export function DashboardPage() {
   const [listingRegistrySummary, setListingRegistrySummary] = useState<ListingDashboardSummary | null>(null);
   const [listingRegistrySummaryLoading, setListingRegistrySummaryLoading] = useState(true);
   const [listingRegistrySummaryError, setListingRegistrySummaryError] = useState<string | null>(null);
+  const [listingIntelligenceSummary, setListingIntelligenceSummary] = useState<ListingIntelligenceDashboardSummary | null>(null);
+  const [listingIntelligenceSummaryLoading, setListingIntelligenceSummaryLoading] = useState(true);
+  const [listingIntelligenceSummaryError, setListingIntelligenceSummaryError] = useState<string | null>(null);
   const [conventionSummary, setConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [conventionSummaryLoading, setConventionSummaryLoading] = useState(true);
   const [conventionSummaryError, setConventionSummaryError] = useState<string | null>(null);
@@ -855,6 +862,12 @@ export function DashboardPage() {
   const [listingExportDashLoading, setListingExportDashLoading] = useState(true);
   const [listingExportDashError, setListingExportDashError] = useState<string | null>(null);
 
+  const [dealerDashResp, setDealerDashResp] = useState<DealerDashboardGetResponse | null>(null);
+  const [dealerDashLoading, setDealerDashLoading] = useState(true);
+  const [dealerDashError, setDealerDashError] = useState<string | null>(null);
+  const [dealerAlerts, setDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
+  const [dealerFeed, setDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
+  const [dealerGenBusy, setDealerGenBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1355,6 +1368,34 @@ export function DashboardPage() {
   useEffect(() => {
     let ignore = false;
     void (async () => {
+      setListingIntelligenceSummaryLoading(true);
+      setListingIntelligenceSummaryError(null);
+      try {
+        const summary = await apiClient.getListingIntelligenceDashboardSummary();
+        if (!ignore) {
+          setListingIntelligenceSummary(summary);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setListingIntelligenceSummary(null);
+          setListingIntelligenceSummaryError(
+            loadError instanceof ApiError ? loadError.message : "Unable to load listing intelligence summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setListingIntelligenceSummaryLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
       setSalesLedgerSummaryLoading(true);
       setSalesLedgerSummaryError(null);
       try {
@@ -1465,6 +1506,50 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setDealerDashResp(null);
+          setDealerAlerts([]);
+          setDealerFeed([]);
+          setDealerDashLoading(false);
+          setDealerDashError(null);
+        }
+        return;
+      }
+      setDealerDashLoading(true);
+      setDealerDashError(null);
+      try {
+        const [dash, alerts, feed] = await Promise.all([
+          apiClient.getDealerDashboard(),
+          apiClient.listDealerDashboardAlerts({ limit: 25, offset: 0 }),
+          apiClient.listDealerDashboardFeed({ limit: 35, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setDealerDashResp(dash);
+          setDealerAlerts(alerts.items);
+          setDealerFeed(feed.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setDealerDashResp(null);
+          setDealerAlerts([]);
+          setDealerFeed([]);
+          setDealerDashError(loadErr instanceof ApiError ? loadErr.message : "Unable to load dealer dashboard.");
+        }
+      } finally {
+        if (!ignore) {
+          setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
     const nextHoldDrafts: Record<number, InventoryItem["hold_status"]> = {};
     const nextGradeDrafts: Record<number, InventoryItem["grade_status"]> = {};
@@ -1487,6 +1572,29 @@ export function DashboardPage() {
     event.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+  }
+
+  async function generateDealerDashboardSnapshot(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setDealerDashError(null);
+    setDealerGenBusy(true);
+    try {
+      await apiClient.generateDealerDashboard({ replay_key: `web-dash-${Date.now()}` });
+      const [dash, alerts, feed] = await Promise.all([
+        apiClient.getDealerDashboard(),
+        apiClient.listDealerDashboardAlerts({ limit: 25, offset: 0 }),
+        apiClient.listDealerDashboardFeed({ limit: 35, offset: 0 }),
+      ]);
+      setDealerDashResp(dash);
+      setDealerAlerts(alerts.items);
+      setDealerFeed(feed.items);
+    } catch (err) {
+      setDealerDashError(err instanceof ApiError ? err.message : "Unable to generate dealer dashboard snapshot.");
+    } finally {
+      setDealerGenBusy(false);
+    }
   }
 
   function resetPageAndUpdate(callback: () => void) {
@@ -1590,9 +1698,15 @@ export function DashboardPage() {
     listingRegistrySummaryLoading ||
     listingRegistrySummaryError ||
     Boolean(listingRegistrySummary) ||
+    listingIntelligenceSummaryLoading ||
+    listingIntelligenceSummaryError ||
+    Boolean(listingIntelligenceSummary) ||
     listingExportDashLoading ||
     listingExportDashError ||
-    Boolean(listingExportDash);
+    Boolean(listingExportDash) ||
+    dealerDashLoading ||
+    dealerDashError ||
+    dealerDashResp !== null;
 
   const marketRegistryRailsVisible =
     marketSourcesLoading ||
@@ -2324,6 +2438,230 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          {user ? (
+            <section
+              id="dealer-command-dash"
+              className="mt-6 rounded-3xl border border-lime-500/35 bg-slate-950/85 p-5 shadow-xl shadow-black/35"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-lime-200/85">Dealer command</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Operational cockpit · Bloomberg-style density</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic overlays only: inventory movement, liquidity posture, exporter health, show operations, ledger sales,
+                    listing intelligence completeness. No forecasting, staffing, outbound notifications, repricing bots, or automatic
+                    alert resolution — generate snapshots explicitly to freeze evidence.
+                  </p>
+                  {(() => {
+                    const snap = dealerDashResp?.snapshot;
+                    return snap ? (
+                      <p className="mt-2 text-[11px] font-mono text-slate-500">
+                        snapshot #{snap.id} · {snap.snapshot_date} · checksum {shortenChecksum(snap.checksum)}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-[11px] font-mono text-slate-500">No persisted snapshot yet — generate to materialize.</p>
+                    );
+                  })()}
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void generateDealerDashboardSnapshot()}
+                    disabled={dealerGenBusy}
+                    className="rounded-xl border border-lime-400/45 bg-lime-500/10 px-4 py-2 text-xs font-semibold text-lime-100 transition hover:bg-lime-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {dealerGenBusy ? "Generating…" : "Generate snapshot"}
+                  </button>
+                  <Link
+                    to="/ops#dealer-dashboard-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-lime-300/45 hover:bg-white/5"
+                  >
+                    Ops drill-down tables
+                  </Link>
+                </div>
+              </div>
+
+              {dealerDashLoading ? (
+                <p className="mt-6 text-sm text-slate-400">Loading dealer rollups…</p>
+              ) : dealerDashError ? (
+                <div className="mt-6">
+                  <StatusBanner tone="error">{dealerDashError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-5">
+                  {(() => {
+                    const snap = dealerDashResp?.snapshot;
+                    return (
+                      <>
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">A · Operational overview</p>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                            <StatCard label="Active listings (registry)" value={snap ? String(snap.active_listing_count) : "—"} />
+                            <StatCard label="Export-ready (intel≥100)" value={snap ? String(snap.export_ready_count) : "—"} />
+                            <StatCard label="Incomplete intel" value={snap ? String(snap.incomplete_listing_count) : "—"} />
+                            <StatCard label="Stale posture" value={snap ? String(snap.stale_listing_count) : "—"} />
+                            <StatCard label="Liquidity HIGH / LOW*" value={
+                              snap ? `${snap.liquidity_high_count} / ${snap.liquidity_low_count}` : "—"
+                            } />
+                            <StatCard
+                              label="Gross / Net 30d"
+                              value={snap ? `${formatCurrency(snap.gross_sales_30d)} / ${formatCurrency(snap.net_sales_30d)}` : "—"}
+                            />
+                          </div>
+                          <p className="mt-2 text-[10px] text-slate-500">
+                            *LOW bucket counts inventory rows flagged LOW / ILLIQUID minus ambiguous overlaps on the pinned snapshot_date.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-5 xl:grid-cols-2">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">B · Alerts</p>
+                            <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                              <table className="w-full border-collapse text-left text-xs">
+                                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                  <tr>
+                                    <th className="p-3 font-medium">Severity</th>
+                                    <th className="p-3 font-medium">Type</th>
+                                    <th className="p-3 font-medium">Evidence</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/10 text-slate-200">
+                                  {dealerAlerts.length === 0 ? (
+                                    <tr>
+                                      <td className="p-3 text-slate-500" colSpan={3}>
+                                        No routed alerts loaded (generate a dashboard snapshot to hydrate feed-backed alerts).
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    dealerAlerts.slice(0, 12).map((a) => (
+                                      <tr key={a.id}>
+                                        <td className="p-3 font-semibold text-lime-200/90">{a.severity}</td>
+                                        <td className="p-3 text-slate-100">{a.alert_type}</td>
+                                        <td className="p-3 text-slate-400">{a.message}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">C · Operational feed</p>
+                            <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                              <table className="w-full border-collapse text-left text-xs">
+                                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                                  <tr>
+                                    <th className="p-3 font-medium">Time</th>
+                                    <th className="p-3 font-medium">Signal</th>
+                                    <th className="p-3 font-medium">Summary</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/10 text-slate-200">
+                                  {dealerFeed.length === 0 ? (
+                                    <tr>
+                                      <td className="p-3 text-slate-500" colSpan={3}>
+                                        Feed is append-only across dashboard generations — run a snapshot to hydrate missing keys.
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    dealerFeed.slice(0, 14).map((evt) => (
+                                      <tr key={evt.id}>
+                                        <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(evt.created_at)}</td>
+                                        <td className="p-3 font-semibold text-slate-100">{evt.event_type}</td>
+                                        <td className="p-3 text-slate-400">{evt.summary}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-5 xl:grid-cols-2">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">D · Convention snapshot</p>
+                            {conventionSummaryLoading ? (
+                              <p className="mt-2 text-sm text-slate-400">Loading convention aggregates…</p>
+                            ) : conventionSummaryError ? (
+                              <StatusBanner tone="error">{conventionSummaryError}</StatusBanner>
+                            ) : conventionSummary ? (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <StatCard label="Active shows" value={String(conventionSummary.active_convention_count)} />
+                                <StatCard label="Assigned inventory ids" value={String(conventionSummary.assigned_inventory_count)} />
+                                <StatCard label="Open sale sessions" value={String(conventionSummary.active_sale_session_count)} />
+                                <StatCard label="Wall / Showcase" value={`${conventionSummary.wall_book_count} · ${conventionSummary.showcase_count}`} />
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-500">No convention summaries yet.</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">E · Export ops</p>
+                            {listingExportDashLoading ? (
+                              <p className="mt-2 text-sm text-slate-400">Loading exporter rollups…</p>
+                            ) : listingExportDashError ? (
+                              <StatusBanner tone="error">{listingExportDashError}</StatusBanner>
+                            ) : listingExportDash ? (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <StatCard label="Completed runs" value={String(listingExportDash.completed_run_count)} />
+                                <StatCard label="Skipped rows (lifetime)" value={String(listingExportDash.skipped_rows_lifetime_sum)} />
+                                <StatCard label="Failed exports (dash 30d)" value={snap ? String(snap.failed_export_count_30d) : "—"} />
+                                <StatCard label="Export runs (dash 30d)" value={snap ? String(snap.export_run_count_30d) : "—"} />
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-500">No exporter history.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-5 xl:grid-cols-2">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">F · Ledger sales · 30d</p>
+                            {salesLedgerSummaryLoading ? (
+                              <p className="mt-2 text-sm text-slate-400">Loading ledger summary…</p>
+                            ) : salesLedgerSummaryError ? (
+                              <StatusBanner tone="error">{salesLedgerSummaryError}</StatusBanner>
+                            ) : salesLedgerSummary ? (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <StatCard label="Gross 30d" value={snap ? formatCurrency(snap.gross_sales_30d) : formatCurrency(salesLedgerSummary.gross_sales_total)} />
+                                <StatCard label="Net 30d" value={snap ? formatCurrency(snap.net_sales_30d) : formatCurrency(salesLedgerSummary.net_proceeds_total)} />
+                                <StatCard label="Realized profit 30d" value={snap ? formatCurrency(snap.realized_profit_30d) : formatCurrency(salesLedgerSummary.realized_profit_total)} />
+                                <StatCard label="Recent recorded rows" value={String(salesLedgerSummary.recent_sales.length)} />
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-500">Ledger summary unavailable.</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">G · Listing intelligence</p>
+                            {listingIntelligenceSummaryLoading ? (
+                              <p className="mt-2 text-sm text-slate-400">Loading intelligence rollup…</p>
+                            ) : listingIntelligenceSummaryError ? (
+                              <StatusBanner tone="error">{listingIntelligenceSummaryError}</StatusBanner>
+                            ) : listingIntelligenceSummary ? (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                <StatCard label="Avg completeness" value={listingIntelligenceSummary.average_completeness_score ?? "—"} />
+                                <StatCard label="Export-ready listings" value={String(listingIntelligenceSummary.export_ready_count)} />
+                                <StatCard label="Weak listings" value={String(listingIntelligenceSummary.recent_weak_or_incomplete.length)} />
+                                <StatCard label="Strong" value={String(listingIntelligenceSummary.strong_listing_count)} />
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-500">Listing intelligence rollup unavailable.</p>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </section>
+          ) : null}
+
           {listingRegistrySummaryLoading ||
           listingRegistrySummaryError ||
           listingRegistrySummary ? (
@@ -2382,6 +2720,90 @@ export function DashboardPage() {
                             <td className="p-3 text-slate-400">{formatDateTime(evt.created_at)}</td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {listingIntelligenceSummaryLoading ||
+          listingIntelligenceSummaryError ||
+          listingIntelligenceSummary ? (
+            <section
+              id="listing-intelligence-dash"
+              className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-5 shadow-xl shadow-black/15"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/80">Listing intelligence</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Completeness, export readiness, and cleanup signals</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic analysis only: listing quality, missing fields, stale-risk flags, and channel performance
+                    rollups. No recommendations, repricing, or hidden mutation.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#listing-intelligence-ops"
+                  className="rounded-full border border-fuchsia-400/35 px-3 py-1.5 text-xs font-semibold text-fuchsia-100 transition hover:border-fuchsia-300/60 hover:bg-fuchsia-500/10"
+                >
+                  Ops intelligence explorer
+                </Link>
+              </div>
+              {listingIntelligenceSummaryLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading listing intelligence summary…</p>
+              ) : listingIntelligenceSummaryError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{listingIntelligenceSummaryError}</StatusBanner>
+                </div>
+              ) : listingIntelligenceSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <StatCard label="Strong listings" value={String(listingIntelligenceSummary.strong_listing_count)} />
+                    <StatCard label="Incomplete listings" value={String(listingIntelligenceSummary.incomplete_listing_count)} />
+                    <StatCard
+                      label="Average completeness"
+                      value={
+                        listingIntelligenceSummary.average_completeness_score ?? "—"
+                      }
+                    />
+                    <StatCard label="Export-ready listings" value={String(listingIntelligenceSummary.export_ready_count)} />
+                    <StatCard label="Stale-risk listings" value={String(listingIntelligenceSummary.stale_risk_count)} />
+                  </div>
+                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Listing</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Score</th>
+                          <th className="p-3 font-medium">Missing fields</th>
+                          <th className="p-3 font-medium">Stale-risk</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {listingIntelligenceSummary.recent_weak_or_incomplete.length === 0 ? (
+                          <tr>
+                            <td className="p-3 text-slate-400" colSpan={5}>
+                              No weak or incomplete listings were found in the latest intelligence snapshot.
+                            </td>
+                          </tr>
+                        ) : (
+                          listingIntelligenceSummary.recent_weak_or_incomplete.slice(0, 6).map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3 font-mono text-[11px] text-slate-300">#{row.listing_id}</td>
+                              <td className="p-3">{row.intelligence_status}</td>
+                              <td className="p-3 text-slate-300">{row.completeness_score}</td>
+                              <td className="p-3 text-slate-400">
+                                {row.missing_required_fields_json.length > 0
+                                  ? row.missing_required_fields_json.join(", ")
+                                  : "—"}
+                              </td>
+                              <td className="p-3 text-slate-400">{row.stale_risk_flag ? "Yes" : "No"}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>

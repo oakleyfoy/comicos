@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -29,6 +29,7 @@ import {
   type MarketComparableListResponse,
   type MarketTrendSnapshotListResponse,
   type MarketTrendSnapshotRead,
+  type ListingIntelligenceSnapshotRead,
   type OrderArrivalClassification,
   type InventoryUpdatePayload,
   type CoverRelationshipGraphEdge,
@@ -997,6 +998,9 @@ export function InventoryDetailPage() {
   const [liquiditySnapshots, setLiquiditySnapshots] = useState<InventoryLiquiditySnapshotRead[]>([]);
   const [liquidityLoading, setLiquidityLoading] = useState(false);
   const [liquidityError, setLiquidityError] = useState<string | null>(null);
+  const [listingIntelligenceSnapshots, setListingIntelligenceSnapshots] = useState<ListingIntelligenceSnapshotRead[]>([]);
+  const [listingIntelligenceLoading, setListingIntelligenceLoading] = useState(false);
+  const [listingIntelligenceError, setListingIntelligenceError] = useState<string | null>(null);
   const [conventionAssignments, setConventionAssignments] = useState<ConventionAssignmentListResponse | null>(null);
   const [conventionAssignmentsLoading, setConventionAssignmentsLoading] = useState(false);
   const [conventionAssignmentsError, setConventionAssignmentsError] = useState<string | null>(null);
@@ -1239,6 +1243,44 @@ export function InventoryDetailPage() {
       } finally {
         if (!ignore) {
           setLiquidityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.inventory_copy_id]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.inventory_copy_id) {
+      setListingIntelligenceSnapshots([]);
+      setListingIntelligenceError(null);
+      setListingIntelligenceLoading(false);
+      return undefined;
+    }
+    void (async () => {
+      setListingIntelligenceLoading(true);
+      setListingIntelligenceError(null);
+      try {
+        const response = await apiClient.getListingIntelligence({
+          inventory_item_id: detail.inventory_copy_id,
+          limit: 5,
+          offset: 0,
+        });
+        if (!ignore) {
+          setListingIntelligenceSnapshots(response.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setListingIntelligenceSnapshots([]);
+          setListingIntelligenceError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load listing intelligence snapshots.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setListingIntelligenceLoading(false);
         }
       }
     })();
@@ -3282,6 +3324,117 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               </div>
+            </section>
+          ) : null}
+
+          {listingIntelligenceLoading || listingIntelligenceError || listingIntelligenceSnapshots.length > 0 ? (
+            <section className="mt-6 rounded-3xl border border-fuchsia-400/20 bg-fuchsia-950/10 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-100/75">Listing intelligence teaser</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Quality, export readiness, and stale-risk flags</h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                    Read-only completeness analysis for this inventory copy. It surfaces missing fields, export readiness,
+                    and weak listing signals without changing inventory or listing state.
+                  </p>
+                </div>
+              </div>
+              {listingIntelligenceSnapshots.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                  {(function dealerOpsHints() {
+                    const intel = listingIntelligenceSnapshots[0];
+                    const chips: ReactElement[] = [];
+                    chips.push(
+                      <span key="intel-status" className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-100">
+                        Intel:{intel.intelligence_status}
+                      </span>,
+                    );
+                    if (intel.export_readiness_score && Number(intel.export_readiness_score) >= 100) {
+                      chips.push(
+                        <span key="export" className="rounded-full border border-emerald-300/35 px-2 py-1 text-emerald-100">
+                          Export-ready
+                        </span>,
+                      );
+                    }
+                    if (intel.intelligence_status === "INCOMPLETE" || intel.intelligence_status === "WEAK") {
+                      chips.push(
+                        <span key="weak" className="rounded-full border border-amber-300/35 px-2 py-1 text-amber-100">
+                          Incomplete / weak lane
+                        </span>,
+                      );
+                    }
+                    if (intel.stale_risk_flag) {
+                      chips.push(
+                        <span key="stale" className="rounded-full border border-rose-300/35 px-2 py-1 text-rose-100">
+                          Stale-risk
+                        </span>,
+                      );
+                    }
+                    const liquidity = liquiditySnapshots.length > 0 ? liquiditySnapshots[0] : null;
+                    const liqBucket = liquidity?.liquidity_status;
+                    if (liqBucket === "HIGH") {
+                      chips.push(
+                        <span key="liqh" className="rounded-full border border-cyan-300/35 px-2 py-1 text-cyan-50">
+                          High liquidity
+                        </span>,
+                      );
+                    }
+                    if (liqBucket === "LOW" || liqBucket === "ILLIQUID") {
+                      chips.push(
+                        <span key="liql" className="rounded-full border border-violet-300/35 px-2 py-1 text-violet-100">
+                          Low liquidity ({liqBucket})
+                        </span>,
+                      );
+                    }
+                    const hasShowAssignment = Boolean(conventionAssignments?.items?.some((assignment) => !assignment.removed_at));
+                    if (hasShowAssignment) {
+                      chips.push(
+                        <span key="conv" className="rounded-full border border-amber-200/35 px-2 py-1 text-amber-50">
+                          Convention assigned (active lane)
+                        </span>,
+                      );
+                    }
+                    return chips;
+                  })()}
+                </div>
+              ) : null}
+              {listingIntelligenceLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading listing intelligence snapshot…</p>
+              ) : listingIntelligenceError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{listingIntelligenceError}</StatusBanner>
+                </div>
+              ) : listingIntelligenceSnapshots.length > 0 ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    ["Status", listingIntelligenceSnapshots[0].intelligence_status],
+                    ["Completeness", listingIntelligenceSnapshots[0].completeness_score],
+                    ["Export-ready", listingIntelligenceSnapshots[0].export_readiness_score],
+                    ["Stale-risk", listingIntelligenceSnapshots[0].stale_risk_flag ? "Yes" : "No"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                      <p className="mt-2 text-sm text-white">{value}</p>
+                    </div>
+                  ))}
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-3 sm:col-span-2 xl:col-span-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Missing fields</p>
+                    <p className="mt-2 text-sm text-white">
+                      {listingIntelligenceSnapshots[0].missing_required_fields_json.length > 0
+                        ? listingIntelligenceSnapshots[0].missing_required_fields_json.join(", ")
+                        : "—"}
+                    </p>
+                    <p className="mt-2 text-[11px] uppercase tracking-[0.14em] text-slate-500">Warnings</p>
+                    <p className="mt-1 text-sm text-white">
+                      {listingIntelligenceSnapshots[0].warning_flags_json.length > 0
+                        ? listingIntelligenceSnapshots[0].warning_flags_json.join(", ")
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">No listing intelligence snapshot available yet for this inventory copy.</p>
+              )}
             </section>
           ) : null}
 

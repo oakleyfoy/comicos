@@ -132,6 +132,11 @@ import {
   type ConventionPriceSnapshotListResponse,
   type ConventionSaleSessionListResponse,
   type LiquidityDashboardSummary,
+  type ListingIntelligenceDashboardSummary,
+  type ListingIntelligenceSnapshotRead,
+  type ListingIntelligenceEvidenceRead,
+  type ListingCompletenessCheckRead,
+  type ListingChannelPerformanceSnapshotRead,
   type ListingStalenessEventListResponse,
   type ListingStalenessEventRead,
   type ListingVelocityListResponse,
@@ -139,6 +144,10 @@ import {
   type ListingOpsStatusDistribution,
   type OpsListingLifecycleEventListResponse,
   type ListingExportRunListResponse,
+  type DealerDashboardAlertRead,
+  type DealerDashboardFeedEventRead,
+  type DealerDashboardGetResponse,
+  type DealerDashboardMetricRead,
   type SaleRecordRead,
 } from "../api/client";
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -1391,6 +1400,29 @@ export function OperationsPage() {
   const [opsConventionSaleSessions, setOpsConventionSaleSessions] = useState<ConventionSaleSessionListResponse | null>(null);
   const [opsConventionSaleSessionsLoading, setOpsConventionSaleSessionsLoading] = useState(true);
   const [opsConventionSaleSessionsError, setOpsConventionSaleSessionsError] = useState<string | null>(null);
+  const [opsListingIntelligenceSummary, setOpsListingIntelligenceSummary] = useState<ListingIntelligenceDashboardSummary | null>(null);
+  const [opsListingIntelligenceSummaryLoading, setOpsListingIntelligenceSummaryLoading] = useState(true);
+  const [opsListingIntelligenceSummaryError, setOpsListingIntelligenceSummaryError] = useState<string | null>(null);
+  const [opsListingIntelligenceSnapshots, setOpsListingIntelligenceSnapshots] = useState<ListingIntelligenceSnapshotRead[]>([]);
+  const [opsListingIntelligenceSnapshotsLoading, setOpsListingIntelligenceSnapshotsLoading] = useState(true);
+  const [opsListingIntelligenceSnapshotsError, setOpsListingIntelligenceSnapshotsError] = useState<string | null>(null);
+  const [opsListingIntelligenceChecks, setOpsListingIntelligenceChecks] = useState<ListingCompletenessCheckRead[]>([]);
+  const [opsListingIntelligenceChecksLoading, setOpsListingIntelligenceChecksLoading] = useState(true);
+  const [opsListingIntelligenceChecksError, setOpsListingIntelligenceChecksError] = useState<string | null>(null);
+  const [opsListingIntelligenceEvidence, setOpsListingIntelligenceEvidence] = useState<ListingIntelligenceEvidenceRead[]>([]);
+  const [opsListingIntelligenceEvidenceLoading, setOpsListingIntelligenceEvidenceLoading] = useState(true);
+  const [opsListingIntelligenceEvidenceError, setOpsListingIntelligenceEvidenceError] = useState<string | null>(null);
+  const [opsListingIntelligenceChannelPerf, setOpsListingIntelligenceChannelPerf] = useState<ListingChannelPerformanceSnapshotRead[]>([]);
+  const [opsListingIntelligenceChannelPerfLoading, setOpsListingIntelligenceChannelPerfLoading] = useState(true);
+  const [opsListingIntelligenceChannelPerfError, setOpsListingIntelligenceChannelPerfError] = useState<string | null>(null);
+  const [opsDealerDash, setOpsDealerDash] = useState<DealerDashboardGetResponse | null>(null);
+  const [opsDealerDashLoading, setOpsDealerDashLoading] = useState(true);
+  const [opsDealerDashError, setOpsDealerDashError] = useState<string | null>(null);
+  const [opsDealerOwnerDraft, setOpsDealerOwnerDraft] = useState("");
+  const [opsDealerOwnerApplied, setOpsDealerOwnerApplied] = useState<number | undefined>(undefined);
+  const [opsDealerAlerts, setOpsDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
+  const [opsDealerFeed, setOpsDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
+  const [opsDealerMetrics, setOpsDealerMetrics] = useState<DealerDashboardMetricRead[]>([]);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -1798,6 +1830,102 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsListingIntelligenceSummaryLoading(true);
+      setOpsListingIntelligenceSummaryError(null);
+      setOpsListingIntelligenceSnapshotsLoading(true);
+      setOpsListingIntelligenceSnapshotsError(null);
+      setOpsListingIntelligenceChecksLoading(true);
+      setOpsListingIntelligenceChecksError(null);
+      setOpsListingIntelligenceEvidenceLoading(true);
+      setOpsListingIntelligenceEvidenceError(null);
+      setOpsListingIntelligenceChannelPerfLoading(true);
+      setOpsListingIntelligenceChannelPerfError(null);
+      try {
+        const [summary, snapshots, checks, evidence, channelPerf] = await Promise.all([
+          apiClient.getOpsListingIntelligenceDashboardSummary({}),
+          apiClient.getOpsListingIntelligence({ limit: 25, offset: 0 }),
+          apiClient.getOpsListingCompletenessChecks({ limit: 25, offset: 0 }),
+          apiClient.getOpsListingIntelligenceEvidence({ limit: 25, offset: 0 }),
+          apiClient.getOpsListingChannelPerformance({ limit: 25, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsListingIntelligenceSummary(summary);
+          setOpsListingIntelligenceSnapshots(snapshots.items);
+          setOpsListingIntelligenceChecks(checks.items);
+          setOpsListingIntelligenceEvidence(evidence.items);
+          setOpsListingIntelligenceChannelPerf(channelPerf.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          const errorMessage =
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load listing intelligence operations.";
+          setOpsListingIntelligenceSummary(null);
+          setOpsListingIntelligenceSummaryError(errorMessage);
+          setOpsListingIntelligenceSnapshots([]);
+          setOpsListingIntelligenceSnapshotsError(errorMessage);
+          setOpsListingIntelligenceChecks([]);
+          setOpsListingIntelligenceChecksError(errorMessage);
+          setOpsListingIntelligenceEvidence([]);
+          setOpsListingIntelligenceEvidenceError(errorMessage);
+          setOpsListingIntelligenceChannelPerf([]);
+          setOpsListingIntelligenceChannelPerfError(errorMessage);
+        }
+      } finally {
+        if (!ignore) {
+          setOpsListingIntelligenceSummaryLoading(false);
+          setOpsListingIntelligenceSnapshotsLoading(false);
+          setOpsListingIntelligenceChecksLoading(false);
+          setOpsListingIntelligenceEvidenceLoading(false);
+          setOpsListingIntelligenceChannelPerfLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsDealerDashLoading(true);
+      setOpsDealerDashError(null);
+      try {
+        const scoped = opsDealerOwnerApplied === undefined ? {} : { owner_user_id: opsDealerOwnerApplied };
+        const [dash, alerts, feed, metrics] = await Promise.all([
+          apiClient.getOpsDealerDashboard(scoped),
+          apiClient.listOpsDealerDashboardAlerts({ ...scoped, limit: 50, offset: 0 }),
+          apiClient.listOpsDealerDashboardFeed({ ...scoped, limit: 50, offset: 0 }),
+          apiClient.listOpsDealerDashboardMetrics({ ...scoped, limit: 100, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsDealerDash(dash);
+          setOpsDealerAlerts(alerts.items);
+          setOpsDealerFeed(feed.items);
+          setOpsDealerMetrics(metrics.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsDealerDash(null);
+          setOpsDealerAlerts([]);
+          setOpsDealerFeed([]);
+          setOpsDealerMetrics([]);
+          setOpsDealerDashError(loadErr instanceof ApiError ? loadErr.message : "Unable to load dealer dashboard ops payloads.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsDealerOwnerApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -4393,6 +4521,8 @@ export function OperationsPage() {
       >
         <span className="font-semibold uppercase tracking-[0.12em] text-emerald-100/90">Market ops shortcuts</span>
         {[
+          ["Dealer dashboard", "#dealer-dashboard-ops"],
+          ["Listing intelligence", "#listing-intelligence-ops"],
           ["Convention", "#convention-ops"],
           ["Liquidity", "#liquidity-ops"],
           ["Realized sales", "#sales-ledger-ops"],
@@ -4493,6 +4623,427 @@ export function OperationsPage() {
           ) : null}
         </div>
       </details>
+
+      <details
+        id="dealer-dashboard-ops"
+        open
+        className="mt-6 rounded-3xl border border-lime-500/35 bg-slate-950/80 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Dealer dashboard ops telescope</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Mirrors owner `/dealer-dashboard*` payloads with deterministic snapshot rows plus append-safe alerts/feeds scoped by optional `owner_user_id`.
+              </p>
+            </div>
+            <span className="rounded-full border border-lime-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-lime-100/90">
+              Ops / dealer
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-lime-200/15 pt-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsDealerOwnerDraft}
+                onChange={(e) => setOpsDealerOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = aggregate"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-lime-400/45 px-3 py-2 text-xs font-semibold text-lime-100"
+              onClick={() => {
+                const trimmed = opsDealerOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsDealerOwnerApplied(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsDealerOwnerApplied(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+
+          {opsDealerDashLoading ? (
+            <p className="text-sm text-slate-400">Loading dealer snapshots…</p>
+          ) : opsDealerDashError ? (
+            <StatusBanner tone="error">{opsDealerDashError}</StatusBanner>
+          ) : opsDealerDash?.snapshot ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5 text-xs">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Snapshot date</p>
+                <p className="mt-2 text-sm text-white">{opsDealerDash.snapshot.snapshot_date}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Owner user</p>
+                <p className="mt-2 font-mono text-sm text-white">#{opsDealerDash.snapshot.owner_user_id}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Liquidity hi / low</p>
+                <p className="mt-2 text-sm text-white">
+                  {opsDealerDash.snapshot.liquidity_high_count} · {opsDealerDash.snapshot.liquidity_low_count}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Exports 30d</p>
+                <p className="mt-2 text-sm text-white">
+                  {opsDealerDash.snapshot.export_run_count_30d} runs · {opsDealerDash.snapshot.failed_export_count_30d} degraded
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Checksum</p>
+                <p className="mt-2 break-all font-mono text-[11px] text-slate-300">{abbrevExportChecksum(opsDealerDash.snapshot.checksum)}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No dealer snapshots materialized.</p>
+          )}
+
+          <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+            <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Alerts · recent slice</p>
+            <table className="mt-3 w-full border-collapse text-left text-xs">
+              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="p-3 font-medium">When</th>
+                  <th className="p-3 font-medium">Severity</th>
+                  <th className="p-3 font-medium">Type</th>
+                  <th className="p-3 font-medium">Evidence</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-slate-200">
+                {opsDealerAlerts.length === 0 ? (
+                  <tr>
+                    <td className="p-4 text-slate-500" colSpan={4}>
+                      No alerts in this scope.
+                    </td>
+                  </tr>
+                ) : (
+                  opsDealerAlerts.map((alertRow) => (
+                    <tr key={alertRow.id}>
+                      <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(alertRow.created_at)}</td>
+                      <td className="p-3 font-semibold">{alertRow.severity}</td>
+                      <td className="p-3">{alertRow.alert_type}</td>
+                      <td className="p-3 text-slate-400">{alertRow.message}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+            <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Operational feed</p>
+            <table className="mt-3 w-full border-collapse text-left text-xs">
+              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="p-3 font-medium">When</th>
+                  <th className="p-3 font-medium">Type</th>
+                  <th className="p-3 font-medium">Summary</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-slate-200">
+                {opsDealerFeed.length === 0 ? (
+                  <tr>
+                    <td className="p-4 text-slate-500" colSpan={3}>
+                      Append-only deterministic feed waits for dealer snapshot generation.
+                    </td>
+                  </tr>
+                ) : (
+                  opsDealerFeed.map((evt) => (
+                    <tr key={evt.id}>
+                      <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(evt.created_at)}</td>
+                      <td className="p-3">{evt.event_type}</td>
+                      <td className="p-3 text-slate-400">{evt.summary}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+            <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Derived metrics ledger</p>
+            <table className="mt-3 w-full border-collapse text-left text-xs">
+              <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="p-3 font-medium">Metric key</th>
+                  <th className="p-3 font-medium">Decimal</th>
+                  <th className="p-3 font-medium">Text</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10 text-slate-200">
+                {opsDealerMetrics.length === 0 ? (
+                  <tr>
+                    <td className="p-4 text-slate-500" colSpan={3}>
+                      Metrics hydrate when dealer snapshots persist.
+                    </td>
+                  </tr>
+                ) : (
+                  opsDealerMetrics.map((metricRow) => (
+                    <tr key={metricRow.id}>
+                      <td className="p-3 font-mono text-[11px] text-slate-300">{metricRow.metric_key}</td>
+                      <td className="p-3 text-slate-400">{metricRow.metric_value_decimal ?? "—"}</td>
+                      <td className="p-3 text-slate-400">{metricRow.metric_value_text ?? "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      {opsListingIntelligenceSummaryLoading ||
+      opsListingIntelligenceSummaryError ||
+      opsListingIntelligenceSummary ||
+      opsListingIntelligenceSnapshotsLoading ||
+      opsListingIntelligenceSnapshotsError ||
+      opsListingIntelligenceSnapshots.length > 0 ||
+      opsListingIntelligenceChecksLoading ||
+      opsListingIntelligenceChecksError ||
+      opsListingIntelligenceChecks.length > 0 ||
+      opsListingIntelligenceEvidenceLoading ||
+      opsListingIntelligenceEvidenceError ||
+      opsListingIntelligenceEvidence.length > 0 ||
+      opsListingIntelligenceChannelPerfLoading ||
+      opsListingIntelligenceChannelPerfError ||
+      opsListingIntelligenceChannelPerf.length > 0 ? (
+        <details
+          id="listing-intelligence-ops"
+          open
+          className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/10 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+        >
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Listing intelligence explorer</h2>
+                <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                  Deterministic listing quality, export-readiness, and channel-performance snapshots with evidence and
+                  completeness checks. Read-only operational intelligence only.
+                </p>
+              </div>
+              <span className="rounded-full border border-fuchsia-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100/90">
+                Ops / intelligence
+              </span>
+            </div>
+          </summary>
+          <div className="mt-5 space-y-4 border-t border-fuchsia-200/15 pt-4">
+            {opsListingIntelligenceSummaryLoading ? (
+              <p className="text-sm text-slate-400">Loading listing intelligence summary…</p>
+            ) : opsListingIntelligenceSummaryError ? (
+              <StatusBanner tone="error">{opsListingIntelligenceSummaryError}</StatusBanner>
+            ) : opsListingIntelligenceSummary ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Strong listings" value={String(opsListingIntelligenceSummary.strong_listing_count)} />
+                <StatCard
+                  label="Incomplete listings"
+                  value={String(opsListingIntelligenceSummary.incomplete_listing_count)}
+                />
+                <StatCard
+                  label="Average completeness"
+                  value={opsListingIntelligenceSummary.average_completeness_score ?? "—"}
+                />
+                <StatCard label="Export-ready" value={String(opsListingIntelligenceSummary.export_ready_count)} />
+                <StatCard label="Stale-risk" value={String(opsListingIntelligenceSummary.stale_risk_count)} />
+              </div>
+            ) : null}
+
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Snapshot</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Score</th>
+                    <th className="p-3 font-medium">Evidence</th>
+                    <th className="p-3 font-medium">Warnings</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsListingIntelligenceSnapshotsLoading ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={6}>
+                        Loading intelligence snapshots…
+                      </td>
+                    </tr>
+                  ) : opsListingIntelligenceSnapshotsError ? (
+                    <tr>
+                      <td className="p-4" colSpan={6}>
+                        <StatusBanner tone="error">{opsListingIntelligenceSnapshotsError}</StatusBanner>
+                      </td>
+                    </tr>
+                  ) : opsListingIntelligenceSnapshots.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={6}>
+                        No intelligence snapshots recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsListingIntelligenceSnapshots.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{row.listing_id}</td>
+                        <td className="p-3">{row.intelligence_status}</td>
+                        <td className="p-3 text-slate-300">{row.completeness_score}</td>
+                        <td className="p-3 text-slate-300">{row.evidence_count}</td>
+                        <td className="p-3 text-slate-400">
+                          {row.warning_flags_json.length > 0 ? row.warning_flags_json.join(", ") : "—"}
+                        </td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Listing</th>
+                    <th className="p-3 font-medium">Check</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Severity</th>
+                    <th className="p-3 font-medium">Message</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsListingIntelligenceChecksLoading ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={5}>
+                        Loading completeness checks…
+                      </td>
+                    </tr>
+                  ) : opsListingIntelligenceChecksError ? (
+                    <tr>
+                      <td className="p-4" colSpan={5}>
+                        <StatusBanner tone="error">{opsListingIntelligenceChecksError}</StatusBanner>
+                      </td>
+                    </tr>
+                  ) : opsListingIntelligenceChecks.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={5}>
+                        No completeness checks recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsListingIntelligenceChecks.slice(0, 12).map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{row.listing_id}</td>
+                        <td className="p-3">{row.check_key.replace(/_/g, " ")}</td>
+                        <td className="p-3">{row.status}</td>
+                        <td className="p-3 text-slate-400">{row.severity}</td>
+                        <td className="p-3 text-slate-400">{row.message}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Listing</th>
+                      <th className="p-3 font-medium">Evidence</th>
+                      <th className="p-3 font-medium">Type</th>
+                      <th className="p-3 font-medium">Key</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsListingIntelligenceEvidenceLoading ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          Loading evidence rows…
+                        </td>
+                      </tr>
+                    ) : opsListingIntelligenceEvidenceError ? (
+                      <tr>
+                        <td className="p-4" colSpan={4}>
+                          <StatusBanner tone="error">{opsListingIntelligenceEvidenceError}</StatusBanner>
+                        </td>
+                      </tr>
+                    ) : opsListingIntelligenceEvidence.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={4}>
+                          No evidence rows recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsListingIntelligenceEvidence.slice(0, 10).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">#{row.source_listing_id ?? "—"}</td>
+                          <td className="p-3 text-slate-300">#{row.id}</td>
+                          <td className="p-3">{row.evidence_type}</td>
+                          <td className="p-3 text-slate-400">{row.evidence_key}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Channel</th>
+                      <th className="p-3 font-medium">Listings</th>
+                      <th className="p-3 font-medium">Sold</th>
+                      <th className="p-3 font-medium">Exported</th>
+                      <th className="p-3 font-medium">Sales</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsListingIntelligenceChannelPerfLoading ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={6}>
+                          Loading channel performance…
+                        </td>
+                      </tr>
+                    ) : opsListingIntelligenceChannelPerfError ? (
+                      <tr>
+                        <td className="p-4" colSpan={6}>
+                          <StatusBanner tone="error">{opsListingIntelligenceChannelPerfError}</StatusBanner>
+                        </td>
+                      </tr>
+                    ) : opsListingIntelligenceChannelPerf.length === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={6}>
+                          No channel performance snapshots recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsListingIntelligenceChannelPerf.slice(0, 10).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3">{row.channel}</td>
+                          <td className="p-3">{row.total_listings}</td>
+                          <td className="p-3">{row.sold_listings}</td>
+                          <td className="p-3">{row.exported_count}</td>
+                          <td className="p-3">{row.sales_count}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">
+                            {abbrevExportChecksum(row.checksum)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </details>
+      ) : null}
 
       <details
         id="listing-export-ops"

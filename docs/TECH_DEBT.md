@@ -129,6 +129,34 @@ Resolved routes:
 - Inventory decrementing or hidden movement state changes.
 - Convention analytics, staffing workflows, and settlement reconciliation.
 
+## P36-06 — Listing intelligence (2026-05-25)
+
+- Architecture note: listing intelligence lives in `docs/LISTING_INTELLIGENCE_ARCHITECTURE.md` and explains completeness, export readiness, stale-risk flags, and channel performance using deterministic snapshot rows plus evidence.
+- Owner routes generate and inspect the ledger; ops routes mirror the same data read-only and can filter across owners without mutating listing or inventory state.
+
+### Deferred scope (intentionally not P36-06)
+
+- Marketplace-specific validation and channel taxonomy enforcement depth.
+- AI-generated title/description suggestions.
+- Auto-pricing or sell/hold recommendations.
+- Channel recommendations or ranking advice.
+- Dynamic scoring thresholds or predictive listing performance.
+- Bulk cleanup workflows beyond the current read-only intelligence surfaces.
+
+## P36-07 — Dealer dashboard / Dealer OS foundation (2026-05-25)
+
+- Architecture note: see `docs/DEALER_DASHBOARD_ARCHITECTURE.md` for deterministic rollup composition (`DealerDashboardSnapshot`, metrics ledger, deterministic alerts, deterministic feed ingestion), hashed checksum contracts, owner vs `/ops/dealer-dashboard` mirrors, replay semantics, observational-only alerting, explicit non-goals, and ingestion ordering guarantees.
+- **Deferred scope**
+
+  | Track | Deferred item |
+  | --- | --- |
+  | Connectivity | Websocket/live delta ingestion replacing explicit owner-initiated regeneration |
+  | Signals | Dedicated notification/email/SMS delivery routers |
+  | Platforms | Responsive mobile cockpit + offline workstation packaging |
+  | Workforce | Staffing/task workflows, SLA tracking, ticketing built on dashboards |
+  | Intelligence | Recommendation systems, predictive dealer analytics |
+  | Comparative analytics | Automated cross-owner benchmarking without deterministic export contracts |
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.
