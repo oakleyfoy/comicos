@@ -60,6 +60,7 @@ from app.services.run_detection import run_detection_inventory_context_for_owner
 from app.services.scan_sessions import originating_scan_session_for_inventory_copy
 from app.services.grading_candidate_service import inventory_grading_badge
 from app.services.portfolio_liquidity import inventory_portfolio_liquidity_teaser
+from app.services.portfolio_recommendation import inventory_portfolio_recommendation_teaser
 
 SORTABLE_FIELDS = {
     "title",
@@ -878,6 +879,11 @@ def get_inventory_copy_detail(
         inventory_item_id=inventory_copy_id,
     )
     merged["portfolio_liquidity"] = inventory_portfolio_liquidity_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["portfolio_recommendation"] = inventory_portfolio_recommendation_teaser(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,

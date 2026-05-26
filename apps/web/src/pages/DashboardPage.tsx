@@ -20,6 +20,7 @@ import {
   type PortfolioPerformance,
   type PortfolioPerformanceItem,
   type PortfolioLiquiditySnapshotDetailResponse,
+  type PortfolioRecommendationListResponse,
   type InventoryIntelligenceHealthRollup,
   type InventoryIntelligenceRollupSummary,
   type CollectionAnalyticsSummary,
@@ -941,11 +942,57 @@ export function DashboardPage() {
   const [portfolioLiquidityLoading, setPortfolioLiquidityLoading] = useState(true);
   const [portfolioLiquidityError, setPortfolioLiquidityError] = useState<string | null>(null);
   const [portfolioLiquidityGenBusy, setPortfolioLiquidityGenBusy] = useState(false);
+  const [portfolioRecommendationList, setPortfolioRecommendationList] = useState<PortfolioRecommendationListResponse | null>(
+    null,
+  );
+  const [portfolioRecommendationLoading, setPortfolioRecommendationLoading] = useState(true);
+  const [portfolioRecommendationError, setPortfolioRecommendationError] = useState<string | null>(null);
+  const [portfolioRecommendationGenBusy, setPortfolioRecommendationGenBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const dealerGradingMetricMap = useMemo(
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
     [dealerGradingMetrics],
   );
+  const portfolioRecommendationSummary = useMemo(() => {
+    const items = portfolioRecommendationList?.items ?? [];
+    const summary = {
+      total: portfolioRecommendationList?.total ?? 0,
+      holdCount: 0,
+      sellCount: 0,
+      reduceExposureCount: 0,
+      gradeThenSellCount: 0,
+      consolidateCount: 0,
+      watchCount: 0,
+      estimatedCapitalRelease: 0,
+      estimatedPortfolioEfficiencyGain: 0,
+    };
+    for (const row of items) {
+      switch (row.recommendation_action) {
+        case "HOLD":
+          summary.holdCount += 1;
+          break;
+        case "SELL":
+          summary.sellCount += 1;
+          break;
+        case "REDUCE_EXPOSURE":
+          summary.reduceExposureCount += 1;
+          break;
+        case "GRADE_THEN_SELL":
+          summary.gradeThenSellCount += 1;
+          break;
+        case "CONSOLIDATE":
+          summary.consolidateCount += 1;
+          break;
+        case "WATCH":
+        default:
+          summary.watchCount += 1;
+          break;
+      }
+      summary.estimatedCapitalRelease += Number(row.estimated_capital_release ?? 0);
+      summary.estimatedPortfolioEfficiencyGain += Number(row.estimated_portfolio_efficiency_gain ?? 0);
+    }
+    return summary;
+  }, [portfolioRecommendationList]);
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1835,6 +1882,42 @@ export function DashboardPage() {
     void (async () => {
       if (!user) {
         if (!ignore) {
+          setPortfolioRecommendationList(null);
+          setPortfolioRecommendationLoading(false);
+          setPortfolioRecommendationError(null);
+        }
+        return;
+      }
+      setPortfolioRecommendationLoading(true);
+      setPortfolioRecommendationError(null);
+      try {
+        const list = await apiClient.listPortfolioRecommendations({ limit: 500 });
+        if (!ignore) {
+          setPortfolioRecommendationList(list);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setPortfolioRecommendationList(null);
+          setPortfolioRecommendationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio recommendations.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setPortfolioRecommendationLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
           setGradingRiskSummary(null);
           setGradingRiskLoading(false);
           setGradingRiskError(null);
@@ -2238,6 +2321,23 @@ export function DashboardPage() {
       setPortfolioLiquidityError(err instanceof ApiError ? err.message : "Unable to refresh portfolio liquidity.");
     } finally {
       setPortfolioLiquidityGenBusy(false);
+    }
+  }
+
+  async function refreshPortfolioRecommendations(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setPortfolioRecommendationGenBusy(true);
+    setPortfolioRecommendationError(null);
+    try {
+      await apiClient.generatePortfolioRecommendations({ replay_key: `web-prd-dash-${Date.now()}` });
+      const list = await apiClient.listPortfolioRecommendations({ limit: 500 });
+      setPortfolioRecommendationList(list);
+    } catch (err) {
+      setPortfolioRecommendationError(err instanceof ApiError ? err.message : "Unable to refresh portfolio recommendations.");
+    } finally {
+      setPortfolioRecommendationGenBusy(false);
     }
   }
 
@@ -4214,6 +4314,64 @@ export function DashboardPage() {
               )}
             </section>
           ) : null}
+
+          <section
+            id="portfolio-recommendation-dash"
+            className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/12 p-5 shadow-xl shadow-black/18"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Hold / sell intelligence</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic strategic recommendation layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  Explainable HOLD, SELL, REDUCE_EXPOSURE, GRADE_THEN_SELL, CONSOLIDATE, and WATCH signals built from
+                  liquidity, exposure, duplicates, grading economics, sales history, listing activity, and risk evidence.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refreshPortfolioRecommendations()}
+                  disabled={portfolioRecommendationGenBusy}
+                  className="rounded-xl border border-amber-400/45 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-50 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {portfolioRecommendationGenBusy ? "Generating…" : "Generate recommendations"}
+                </button>
+                <Link
+                  to="/ops#portfolio-recommendation-ops"
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-amber-300/45 hover:bg-white/5"
+                >
+                  Ops recommendation tables
+                </Link>
+              </div>
+            </div>
+            {portfolioRecommendationLoading ? (
+              <p className="mt-4 text-sm text-slate-400">Loading portfolio recommendations…</p>
+            ) : portfolioRecommendationError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{portfolioRecommendationError}</StatusBanner>
+              </div>
+            ) : portfolioRecommendationList ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="HOLD" value={String(portfolioRecommendationSummary.holdCount)} />
+                <StatCard label="SELL" value={String(portfolioRecommendationSummary.sellCount)} />
+                <StatCard label="REDUCE_EXPOSURE" value={String(portfolioRecommendationSummary.reduceExposureCount)} />
+                <StatCard label="GRADE_THEN_SELL" value={String(portfolioRecommendationSummary.gradeThenSellCount)} />
+                <StatCard label="CONSOLIDATE" value={String(portfolioRecommendationSummary.consolidateCount)} />
+                <StatCard label="WATCH" value={String(portfolioRecommendationSummary.watchCount)} />
+                <StatCard
+                  label="Estimated capital release"
+                  value={formatCurrency(String(portfolioRecommendationSummary.estimatedCapitalRelease))}
+                />
+                <StatCard
+                  label="Efficiency opportunities"
+                  value={formatCurrency(String(portfolioRecommendationSummary.estimatedPortfolioEfficiencyGain))}
+                />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">Generate recommendation rows to populate this panel.</p>
+            )}
+          </section>
 
           {user ? (
             <section

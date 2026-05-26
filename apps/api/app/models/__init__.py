@@ -113,6 +113,12 @@ from app.models.portfolio_liquidity import (
     PortfolioLiquidityHistory,
     PortfolioLiquiditySnapshot,
 )
+from app.models.portfolio_recommendation import (
+    PortfolioRecommendation,
+    PortfolioRecommendationEvidence,
+    PortfolioRecommendationHistory,
+    PortfolioRecommendationScenario,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -306,6 +312,10 @@ __all__ = [
     "PortfolioLiquidityEvidence",
     "PortfolioLiquidityHistory",
     "PortfolioLiquiditySnapshot",
+    "PortfolioRecommendation",
+    "PortfolioRecommendationEvidence",
+    "PortfolioRecommendationHistory",
+    "PortfolioRecommendationScenario",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

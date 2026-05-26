@@ -5214,6 +5214,20 @@ export interface InventoryPortfolioLiquidityTeaser {
   dead_capital_teaser: string | null;
 }
 
+/** P38-04 deterministic portfolio recommendation teaser for inventory detail. */
+export interface InventoryPortfolioRecommendationTeaser {
+  recommendation_action: "HOLD" | "SELL" | "REDUCE_EXPOSURE" | "GRADE_THEN_SELL" | "CONSOLIDATE" | "WATCH";
+  recommendation_strength: "WEAK" | "MODERATE" | "STRONG" | "ELITE";
+  confidence_level: "LOW" | "MEDIUM" | "HIGH";
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  rationale_summary: string;
+  estimated_capital_release: string | null;
+  estimated_liquidity_impact: string | null;
+  estimated_portfolio_efficiency_gain: string | null;
+  recommendation_status: "ACTIVE" | "SUPERSEDED" | "ARCHIVED";
+  recommendation_checksum: string | null;
+}
+
 export interface InventoryDetail extends InventoryItem {
   copy_number: number;
   metadata_identity_key?: string | null;
@@ -5235,6 +5249,7 @@ export interface InventoryDetail extends InventoryItem {
   portfolio_intelligence?: InventoryPortfolioIntelligenceTeaser | null;
   duplicate_intelligence?: InventoryDuplicateIntelligenceTeaser | null;
   portfolio_liquidity?: InventoryPortfolioLiquidityTeaser | null;
+  portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -6294,6 +6309,99 @@ export interface PortfolioLiquidityHistoryRead {
 
 export interface PortfolioLiquidityHistoryListResponse {
   items: PortfolioLiquidityHistoryRead[];
+  total: number;
+}
+
+/** P38-04 deterministic portfolio hold/sell intelligence. */
+export interface PortfolioRecommendationRead {
+  id: number;
+  owner_user_id: number;
+  inventory_item_id: number | null;
+  portfolio_id: number | null;
+  canonical_comic_issue_id: number | null;
+  recommendation_action: "HOLD" | "SELL" | "REDUCE_EXPOSURE" | "GRADE_THEN_SELL" | "CONSOLIDATE" | "WATCH";
+  recommendation_strength: "WEAK" | "MODERATE" | "STRONG" | "ELITE";
+  confidence_level: "LOW" | "MEDIUM" | "HIGH";
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  estimated_liquidity_impact: string | null;
+  estimated_capital_release: string | null;
+  estimated_portfolio_efficiency_gain: string | null;
+  expected_roi_if_graded: string | null;
+  rationale_summary: string;
+  warning_flags_json: unknown[];
+  recommendation_status: "ACTIVE" | "SUPERSEDED" | "ARCHIVED";
+  checksum: string;
+  replay_key: string | null;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioRecommendationEvidenceRead {
+  id: number;
+  portfolio_recommendation_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PortfolioRecommendationScenarioRead {
+  id: number;
+  portfolio_recommendation_id: number;
+  scenario_name: "pessimistic" | "baseline" | "optimistic";
+  projected_capital_release: string | null;
+  projected_liquidity_gain: string | null;
+  projected_portfolio_impact: string | null;
+  created_at: string;
+}
+
+export interface PortfolioRecommendationHistoryRead {
+  id: number;
+  owner_user_id: number;
+  inventory_item_id: number | null;
+  portfolio_id: number | null;
+  recommendation_action: string;
+  recommendation_strength: string;
+  confidence_level: string;
+  risk_level: string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioRecommendationListResponse {
+  items: PortfolioRecommendationRead[];
+  total: number;
+}
+
+export interface PortfolioRecommendationDetailRead {
+  recommendation: PortfolioRecommendationRead;
+  evidence: PortfolioRecommendationEvidenceRead[];
+  scenarios: PortfolioRecommendationScenarioRead[];
+  history: PortfolioRecommendationHistoryRead[];
+}
+
+export interface PortfolioRecommendationGeneratePayload {
+  portfolio_id?: number | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface PortfolioRecommendationGenerateResponse {
+  replayed: boolean;
+  items: PortfolioRecommendationRead[];
+  total: number;
+  history_appended_count: number;
+}
+
+export interface PortfolioRecommendationEvidenceListResponse {
+  items: PortfolioRecommendationEvidenceRead[];
+  total: number;
+}
+
+export interface PortfolioRecommendationHistoryListResponse {
+  items: PortfolioRecommendationHistoryRead[];
   total: number;
 }
 
@@ -10738,6 +10846,130 @@ export const apiClient = {
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
     return request<PortfolioLiquidityHistoryListResponse>(`/ops/portfolio-liquidity-history${q}`);
+  },
+
+  generatePortfolioRecommendations(payload: PortfolioRecommendationGeneratePayload): Promise<PortfolioRecommendationGenerateResponse> {
+    return request<PortfolioRecommendationGenerateResponse>("/portfolio-recommendations/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listPortfolioRecommendations(params?: {
+    portfolio_id?: number;
+    inventory_item_id?: number;
+    recommendation_action?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationListResponse>(`/portfolio-recommendations${q}`);
+  },
+
+  getPortfolioRecommendation(recommendationId: number): Promise<PortfolioRecommendationDetailRead> {
+    return request<PortfolioRecommendationDetailRead>(`/portfolio-recommendations/${recommendationId}`);
+  },
+
+  listPortfolioRecommendationEvidence(params?: {
+    recommendation_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationEvidenceListResponse>(`/portfolio-recommendation-evidence${q}`);
+  },
+
+  listPortfolioRecommendationHistory(params?: {
+    portfolio_id?: number;
+    inventory_item_id?: number;
+    recommendation_action?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationHistoryListResponse>(`/portfolio-recommendation-history${q}`);
+  },
+
+  listOpsPortfolioRecommendations(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    inventory_item_id?: number;
+    recommendation_action?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationListResponse>(`/ops/portfolio-recommendations${q}`);
+  },
+
+  getOpsPortfolioRecommendation(recommendationId: number, params?: { owner_user_id?: number }): Promise<PortfolioRecommendationDetailRead> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, number | undefined>)
+        : "";
+    return request<PortfolioRecommendationDetailRead>(`/ops/portfolio-recommendations/${recommendationId}${q}`);
+  },
+
+  listOpsPortfolioRecommendationEvidence(params?: {
+    owner_user_id?: number;
+    recommendation_id?: number;
+    evidence_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationEvidenceListResponse>(`/ops/portfolio-recommendation-evidence${q}`);
+  },
+
+  listOpsPortfolioRecommendationHistory(params?: {
+    owner_user_id?: number;
+    portfolio_id?: number;
+    inventory_item_id?: number;
+    recommendation_action?: string;
+    recommendation_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRecommendationHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return request<PortfolioRecommendationHistoryListResponse>(`/ops/portfolio-recommendation-history${q}`);
   },
 };
 

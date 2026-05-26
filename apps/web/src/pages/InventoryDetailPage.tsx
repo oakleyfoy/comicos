@@ -2865,6 +2865,30 @@ export function InventoryDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {detail.portfolio_recommendation ? (
+                <div className="rounded-2xl border border-amber-400/35 bg-amber-950/30 px-4 py-3 text-[11px] text-amber-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-amber-200/90">Portfolio recommendation</p>
+                    <span className="rounded-full border border-amber-300/45 bg-amber-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-100">
+                      {detail.portfolio_recommendation.recommendation_action}
+                    </span>
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-100">
+                      {detail.portfolio_recommendation.recommendation_strength}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Confidence {detail.portfolio_recommendation.confidence_level} · risk {detail.portfolio_recommendation.risk_level}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    {detail.portfolio_recommendation.rationale_summary}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Capital release {detail.portfolio_recommendation.estimated_capital_release ?? "—"} · liquidity impact{" "}
+                    {detail.portfolio_recommendation.estimated_liquidity_impact ?? "—"} · efficiency gain{" "}
+                    {detail.portfolio_recommendation.estimated_portfolio_efficiency_gain ?? "—"}
+                  </p>
+                </div>
+              ) : null}
               {detail.grading_spread ? (
                 <div className="rounded-2xl border border-violet-400/35 bg-violet-950/30 px-4 py-3 text-[11px] text-violet-100">
                   <p className="font-semibold uppercase tracking-[0.12em] text-violet-200/90">Grading spread</p>

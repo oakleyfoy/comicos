@@ -217,6 +217,14 @@ from app.schemas.portfolio_liquidity import (
     PortfolioLiquiditySnapshotDetailResponse,
     PortfolioLiquiditySnapshotListResponse,
 )
+from app.schemas.portfolio_recommendation import (
+    PortfolioRecommendationDetailRead,
+    PortfolioRecommendationEvidenceListResponse,
+    PortfolioRecommendationGeneratePayload,
+    PortfolioRecommendationGenerateResponse,
+    PortfolioRecommendationHistoryListResponse,
+    PortfolioRecommendationListResponse,
+)
 from app.schemas.portfolio import (
     PortfolioAllocationGenerateResponse,
     PortfolioAllocationSnapshotListResponse,
@@ -789,6 +797,7 @@ from app.services import grading_reporting as grading_reporting_service
 from app.services import portfolio_registry as portfolio_registry_service
 from app.services import duplicate_consolidation as duplicate_consolidation_service
 from app.services import portfolio_liquidity as portfolio_liquidity_service
+from app.services import portfolio_recommendation as portfolio_recommendation_service
 from app.services import grading_candidate_service
 from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_recommendation as grading_recommendation_service
@@ -12756,6 +12765,226 @@ def ops_get_grading_recommendation(
     ensure_ops_admin_access(current_user, settings)
     row = grading_recommendation_service.get_recommendation_ops(session, recommendation_id=recommendation_id)
     return grading_recommendation_service._detail_read(session, row)
+
+
+@app.post("/portfolio-recommendations/generate", response_model=PortfolioRecommendationGenerateResponse, status_code=status.HTTP_201_CREATED)
+def owner_generate_portfolio_recommendations(
+    payload: PortfolioRecommendationGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRecommendationGenerateResponse:
+    body = portfolio_recommendation_service.generate_portfolio_recommendations(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if body.replayed:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/portfolio-recommendations", response_model=PortfolioRecommendationListResponse)
+def owner_list_portfolio_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationListResponse:
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_recommendations_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        inventory_item_id=inventory_item_id,
+        recommendation_action=recommendation_action,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/portfolio-recommendations/{recommendation_id}", response_model=PortfolioRecommendationDetailRead)
+def owner_get_portfolio_recommendation(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioRecommendationDetailRead:
+    row = portfolio_recommendation_service.get_recommendation_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_id=recommendation_id,
+    )
+    return portfolio_recommendation_service._detail_read(session, row)
+
+
+@app.get("/portfolio-recommendation-evidence", response_model=PortfolioRecommendationEvidenceListResponse)
+def owner_list_portfolio_recommendation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    recommendation_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationEvidenceListResponse:
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_id=recommendation_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/portfolio-recommendation-history", response_model=PortfolioRecommendationHistoryListResponse)
+def owner_list_portfolio_recommendation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    portfolio_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationHistoryListResponse:
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        portfolio_id=portfolio_id,
+        inventory_item_id=inventory_item_id,
+        recommendation_action=recommendation_action,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/portfolio-recommendations", response_model=PortfolioRecommendationListResponse, include_in_schema=False)
+def ops_list_portfolio_recommendations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_recommendations_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        inventory_item_id=inventory_item_id,
+        recommendation_action=recommendation_action,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/portfolio-recommendations/{recommendation_id}", response_model=PortfolioRecommendationDetailRead, include_in_schema=False)
+def ops_get_portfolio_recommendation(
+    recommendation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> PortfolioRecommendationDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = portfolio_recommendation_service.get_recommendation_ops(session, recommendation_id=recommendation_id)
+    return portfolio_recommendation_service._detail_read(session, row)
+
+
+@app.get("/ops/portfolio-recommendation-evidence", response_model=PortfolioRecommendationEvidenceListResponse, include_in_schema=False)
+def ops_list_portfolio_recommendation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    recommendation_id: int | None = Query(default=None),
+    evidence_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        recommendation_id=recommendation_id,
+        evidence_type=evidence_type,
+        limit=lim,
+        offset=off,
+    )
+
+
+@app.get("/ops/portfolio-recommendation-history", response_model=PortfolioRecommendationHistoryListResponse, include_in_schema=False)
+def ops_list_portfolio_recommendation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    portfolio_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    recommendation_action: str | None = Query(default=None),
+    recommendation_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioRecommendationHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = portfolio_recommendation_service.clamp_pagination(limit=limit, offset=offset)
+    return portfolio_recommendation_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        portfolio_id=portfolio_id,
+        inventory_item_id=inventory_item_id,
+        recommendation_action=recommendation_action,
+        recommendation_strength=recommendation_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

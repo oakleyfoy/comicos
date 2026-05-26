@@ -122,6 +122,10 @@ import {
   type PortfolioLiquidityHistoryListResponse,
   type PortfolioLiquiditySnapshotDetailResponse,
   type PortfolioLiquiditySnapshotListResponse,
+  type PortfolioRecommendationDetailRead,
+  type PortfolioRecommendationEvidenceListResponse,
+  type PortfolioRecommendationHistoryListResponse,
+  type PortfolioRecommendationListResponse,
   type PortfolioValueSummaryResponse,
   type VariantFamilyClassificationFilter,
   type VariantFamilyClustersListResponse,
@@ -1520,6 +1524,16 @@ export function OperationsPage() {
     useState<PortfolioLiquidityEvidenceListResponse | null>(null);
   const [opsPortfolioLiquidityHistory, setOpsPortfolioLiquidityHistory] =
     useState<PortfolioLiquidityHistoryListResponse | null>(null);
+  const [opsPortfolioRecommendationList, setOpsPortfolioRecommendationList] =
+    useState<PortfolioRecommendationListResponse | null>(null);
+  const [opsPortfolioRecommendationDetail, setOpsPortfolioRecommendationDetail] =
+    useState<PortfolioRecommendationDetailRead | null>(null);
+  const [opsPortfolioRecommendationEvidence, setOpsPortfolioRecommendationEvidence] =
+    useState<PortfolioRecommendationEvidenceListResponse | null>(null);
+  const [opsPortfolioRecommendationHistory, setOpsPortfolioRecommendationHistory] =
+    useState<PortfolioRecommendationHistoryListResponse | null>(null);
+  const [opsPortfolioRecommendationLoading, setOpsPortfolioRecommendationLoading] = useState(true);
+  const [opsPortfolioRecommendationError, setOpsPortfolioRecommendationError] = useState<string | null>(null);
   const [opsLiquiditySummary, setOpsLiquiditySummary] = useState<LiquidityDashboardSummary | null>(null);
   const [opsLiquiditySummaryLoading, setOpsLiquiditySummaryLoading] = useState(true);
   const [opsLiquiditySummaryError, setOpsLiquiditySummaryError] = useState<string | null>(null);
@@ -2069,6 +2083,8 @@ export function OperationsPage() {
     void (async () => {
       setOpsPortfolioLoading(true);
       setOpsPortfolioError(null);
+      setOpsPortfolioRecommendationLoading(true);
+      setOpsPortfolioRecommendationError(null);
       try {
         const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
         const dupScoped = {
@@ -2077,7 +2093,21 @@ export function OperationsPage() {
           limit: 200,
           offset: 0,
         };
-        const [portfolios, items, exposures, evidence, allocations, dupClusters, dupItems, dupRecos, dupHist, liqList, liqHist] =
+        const [
+          portfolios,
+          items,
+          exposures,
+          evidence,
+          allocations,
+          dupClusters,
+          dupItems,
+          dupRecos,
+          dupHist,
+          liqList,
+          liqHist,
+          recList,
+          recHist,
+        ] =
           await Promise.all([
             apiClient.listOpsPortfolios({ ...scoped, limit: 75, offset: 0 }),
             apiClient.listOpsPortfolioItems({ ...scoped, limit: 150, offset: 0 }),
@@ -2090,6 +2120,8 @@ export function OperationsPage() {
             apiClient.listOpsDuplicateHistory(dupScoped),
             apiClient.listOpsPortfolioLiquidity(dupScoped),
             apiClient.listOpsPortfolioLiquidityHistory({ ...scoped, limit: 120, offset: 0 }),
+            apiClient.listOpsPortfolioRecommendations({ ...scoped, limit: 200, offset: 0 }),
+            apiClient.listOpsPortfolioRecommendationHistory({ ...scoped, limit: 200, offset: 0 }),
           ]);
         let liqDetail: PortfolioLiquiditySnapshotDetailResponse | null = null;
         let liqEvidence: PortfolioLiquidityEvidenceListResponse | null = null;
@@ -2099,6 +2131,18 @@ export function OperationsPage() {
           liqEvidence = await apiClient.listOpsPortfolioLiquidityEvidence({
             ...scoped,
             portfolio_liquidity_snapshot_id: firstLiq.id,
+            limit: 120,
+            offset: 0,
+          });
+        }
+        let recDetail: PortfolioRecommendationDetailRead | null = null;
+        let recEvidence: PortfolioRecommendationEvidenceListResponse | null = null;
+        const firstRec = recList.items[0];
+        if (firstRec) {
+          recDetail = await apiClient.getOpsPortfolioRecommendation(firstRec.id, scoped);
+          recEvidence = await apiClient.listOpsPortfolioRecommendationEvidence({
+            ...scoped,
+            recommendation_id: firstRec.id,
             limit: 120,
             offset: 0,
           });
@@ -2117,6 +2161,10 @@ export function OperationsPage() {
           setOpsPortfolioLiquidityDetail(liqDetail);
           setOpsPortfolioLiquidityEvidence(liqEvidence);
           setOpsPortfolioLiquidityHistory(liqHist);
+          setOpsPortfolioRecommendationList(recList);
+          setOpsPortfolioRecommendationDetail(recDetail);
+          setOpsPortfolioRecommendationEvidence(recEvidence);
+          setOpsPortfolioRecommendationHistory(recHist);
         }
       } catch (loadErr) {
         if (!ignore) {
@@ -2133,13 +2181,21 @@ export function OperationsPage() {
           setOpsPortfolioLiquidityDetail(null);
           setOpsPortfolioLiquidityEvidence(null);
           setOpsPortfolioLiquidityHistory(null);
+          setOpsPortfolioRecommendationList(null);
+          setOpsPortfolioRecommendationDetail(null);
+          setOpsPortfolioRecommendationEvidence(null);
+          setOpsPortfolioRecommendationHistory(null);
           setOpsPortfolioError(
             loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio registry ops payloads.",
+          );
+          setOpsPortfolioRecommendationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio recommendation ops payloads.",
           );
         }
       } finally {
         if (!ignore) {
           setOpsPortfolioLoading(false);
+          setOpsPortfolioRecommendationLoading(false);
         }
       }
     })();
@@ -5029,6 +5085,7 @@ export function OperationsPage() {
           ["Portfolio registry", "#portfolio-registry-ops"],
           ["Duplicate consolidation", "#duplicate-consolidation-ops"],
           ["Portfolio liquidity", "#portfolio-liquidity-ops"],
+          ["Portfolio recommendations", "#portfolio-recommendation-ops"],
           ["Grading reports", "#grading-reporting-ops"],
           ["Operational reports", "#operational-reporting-ops"],
           ["Grading candidates", "#grading-candidate-ops"],
@@ -6109,6 +6166,193 @@ export function OperationsPage() {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="portfolio-recommendation-ops"
+        open
+        className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Portfolio recommendation operations</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only `/ops/portfolio-recommendations*` mirrors. Deterministic hold/sell intelligence rows with action,
+                strength, confidence, risk, capital-release estimates, and replay-safe checksums.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/95">
+              Ops / recommendations
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 space-y-4 border-t border-amber-200/15 pt-4">
+          {opsPortfolioRecommendationLoading ? (
+            <p className="text-sm text-slate-400">Loading portfolio recommendations…</p>
+          ) : opsPortfolioRecommendationError ? (
+            <StatusBanner tone="error">{opsPortfolioRecommendationError}</StatusBanner>
+          ) : (
+            <>
+              <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Recommendation table ({opsPortfolioRecommendationList?.total ?? 0})
+                </p>
+                <table className="mt-3 w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Action</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Inventory</th>
+                      <th className="p-3 font-medium">Strength</th>
+                      <th className="p-3 font-medium">Confidence</th>
+                      <th className="p-3 font-medium">Risk</th>
+                      <th className="p-3 font-medium">Capital release</th>
+                      <th className="p-3 font-medium">Liquidity impact</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {(opsPortfolioRecommendationList?.items.length ?? 0) === 0 ? (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={9}>
+                          No portfolio recommendation rows for this scope yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      opsPortfolioRecommendationList!.items.slice(0, 30).map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3">
+                            <div className="font-semibold text-white">{row.recommendation_action}</div>
+                            <div className="text-[10px] text-slate-500">{row.recommendation_status}</div>
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                          <td className="p-3 text-slate-300">
+                            inv {row.inventory_item_id ?? "—"}
+                            <span className="block text-[10px] text-slate-500">portfolio {row.portfolio_id ?? "—"}</span>
+                          </td>
+                          <td className="p-3 text-slate-300">{row.recommendation_strength}</td>
+                          <td className="p-3 text-slate-300">{row.confidence_level}</td>
+                          <td className="p-3 text-slate-300">{row.risk_level}</td>
+                          <td className="p-3 text-slate-300">{row.estimated_capital_release ?? "—"}</td>
+                          <td className="p-3 text-slate-300">{row.estimated_liquidity_impact ?? "—"}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsPortfolioRecommendationDetail ? (
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 xl:col-span-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Selected recommendation</p>
+                    <p className="mt-2 text-sm text-slate-100">
+                      {opsPortfolioRecommendationDetail.recommendation.recommendation_action} ·{" "}
+                      {opsPortfolioRecommendationDetail.recommendation.recommendation_strength} · confidence{" "}
+                      {opsPortfolioRecommendationDetail.recommendation.confidence_level} · risk{" "}
+                      {opsPortfolioRecommendationDetail.recommendation.risk_level}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-300">
+                      {opsPortfolioRecommendationDetail.recommendation.rationale_summary}
+                    </p>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45 xl:col-span-2">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Evidence spine ({opsPortfolioRecommendationEvidence?.total ?? 0})
+                    </p>
+                    <table className="mt-3 w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Type</th>
+                          <th className="p-3 font-medium">Source</th>
+                          <th className="p-3 font-medium">Payload</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {(opsPortfolioRecommendationEvidence?.items.length ?? 0) === 0 ? (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={3}>
+                              Evidence rows attach to each recommendation snapshot.
+                            </td>
+                          </tr>
+                        ) : (
+                          opsPortfolioRecommendationEvidence!.items.slice(0, 20).map((ev) => (
+                            <tr key={ev.id}>
+                              <td className="p-3">{ev.evidence_type}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {ev.source_table ?? "—"} #{ev.source_id ?? "—"}
+                              </td>
+                              <td className="p-3 text-[10px] text-slate-400">
+                                {JSON.stringify(ev.evidence_value_json).slice(0, 200)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Scenarios / history
+                    </p>
+                    <div className="mt-3 space-y-4">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Scenario</th>
+                            <th className="p-3 font-medium">Capital release</th>
+                            <th className="p-3 font-medium">Liquidity gain</th>
+                            <th className="p-3 font-medium">Impact</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsPortfolioRecommendationDetail.scenarios.map((scenario) => (
+                            <tr key={scenario.id}>
+                              <td className="p-3">{scenario.scenario_name}</td>
+                              <td className="p-3">{scenario.projected_capital_release ?? "—"}</td>
+                              <td className="p-3">{scenario.projected_liquidity_gain ?? "—"}</td>
+                              <td className="p-3">{scenario.projected_portfolio_impact ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="p-3 font-medium">Date</th>
+                            <th className="p-3 font-medium">Action</th>
+                            <th className="p-3 font-medium">Strength</th>
+                            <th className="p-3 font-medium">Risk</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {opsPortfolioRecommendationHistory?.items.slice(0, 15).length ? (
+                            opsPortfolioRecommendationHistory!.items.slice(0, 15).map((row) => (
+                              <tr key={row.id}>
+                                <td className="p-3 text-slate-400">{formatDate(row.snapshot_date)}</td>
+                                <td className="p-3">{row.recommendation_action}</td>
+                                <td className="p-3">{row.recommendation_strength}</td>
+                                <td className="p-3">{row.risk_level}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="p-4 text-slate-500" colSpan={4}>
+                                History appends only when a new checksum appears for the same generation tuple.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </details>

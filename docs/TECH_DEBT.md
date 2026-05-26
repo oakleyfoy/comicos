@@ -320,6 +320,22 @@ Resolved routes:
 | Timing | Market timing, regime detection, momentum allocation |
 | AI | ML / AI-driven allocation systems or hidden scoring |
 
+## P38-04 — Portfolio recommendation engine (2026-05-27)
+
+- Architecture note: deterministic portfolio recommendation snapshots, evidence rows, scenario rows, append-safe history, checksum replay semantics, and owner vs `/ops/portfolio-recommendation*` separation are documented in `docs/PORTFOLIO_RECOMMENDATION_ARCHITECTURE.md`. The engine is observational only and must not mutate inventory, FMV, portfolios, listings, or sales ledgers.
+- UI remains intentionally lightweight: dashboard counts, ops tables, and inventory-detail teasers are read surfaces only. Any future execution workflow must be designed as a separate explicit system, not added implicitly to recommendation generation.
+
+### Deferred scope (beyond P38-04 / explicitly not shipped)
+
+| Track | Deferred item |
+| --- | --- |
+| Execution | Autonomous selling, auto-listing, brokerage integrations, or automatic liquidation |
+| Predictive | Market timing, ML/AI recommendation models, hidden weights, Monte Carlo scenario generation |
+| Rebalancing | Automatic portfolio rebalancing, mandate enforcement, or target-allocation execution |
+| Tax / treasury | Tax-aware liquidation sequencing, wash-sale logic, treasury optimization |
+| Automation | Background auto-refresh that silently changes strategic posture without explicit user initiation |
+| Acquisition | Buy-list generation, acquisition guidance, or speculative arbitrage recommendations |
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

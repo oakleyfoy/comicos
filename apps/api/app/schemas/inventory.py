@@ -22,6 +22,7 @@ from app.schemas.duplicate_consolidation import InventoryDuplicateIntelligenceTe
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.portfolio import InventoryPortfolioIntelligenceTeaser
 from app.schemas.portfolio_liquidity import InventoryPortfolioLiquidityTeaser
+from app.schemas.portfolio_recommendation import InventoryPortfolioRecommendationTeaser
 from app.schemas.run_detection import RunDetectionCopyAttachment
 
 ReleaseCalendarPresence = Literal["present", "missing"]
@@ -160,6 +161,7 @@ class InventoryDetailResponse(BaseModel):
     portfolio_intelligence: InventoryPortfolioIntelligenceTeaser | None = None
     duplicate_intelligence: InventoryDuplicateIntelligenceTeaser | None = None
     portfolio_liquidity: InventoryPortfolioLiquidityTeaser | None = None
+    portfolio_recommendation: InventoryPortfolioRecommendationTeaser | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):
