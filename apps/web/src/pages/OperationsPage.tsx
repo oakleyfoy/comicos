@@ -146,6 +146,7 @@ import {
   type ListingExportRunListResponse,
   type OperationalReportRunListResponse,
   type GradingCandidateListResponse,
+  type GradingReconciliationListResponse,
   type GradingSpreadListResponse,
   type GradingRoiListResponse,
   type GradingSubmissionListResponse,
@@ -1407,6 +1408,11 @@ export function OperationsPage() {
   const [opsGradingSubmission, setOpsGradingSubmission] = useState<GradingSubmissionListResponse | null>(null);
   const [opsGradingSubmissionLoading, setOpsGradingSubmissionLoading] = useState(true);
   const [opsGradingSubmissionError, setOpsGradingSubmissionError] = useState<string | null>(null);
+  const [opsGradingReconciliation, setOpsGradingReconciliation] = useState<GradingReconciliationListResponse | null>(
+    null,
+  );
+  const [opsGradingReconciliationLoading, setOpsGradingReconciliationLoading] = useState(true);
+  const [opsGradingReconciliationError, setOpsGradingReconciliationError] = useState<string | null>(null);
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2246,6 +2252,38 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsGradingSubmissionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingReconciliationLoading(true);
+      setOpsGradingReconciliationError(null);
+      try {
+        const rsp = await apiClient.listOpsGradingReconciliation({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingReconciliation(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingReconciliation(null);
+          setOpsGradingReconciliationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading reconciliation.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingReconciliationLoading(false);
         }
       }
     })();
@@ -5488,6 +5526,88 @@ export function OperationsPage() {
                           </span>
                         </td>
                         <td className="p-3 text-slate-300">{row.estimated_turnaround_days ?? "—"}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-reconciliation-ops"
+        className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading reconciliation</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only expected-vs-actual grade and ROI delta rows with deterministic confidence and checksum
+                lineage.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+              Ops / reconciliation
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-cyan-200/15 pt-4">
+          {opsGradingReconciliationLoading ? (
+            <p className="text-sm text-slate-400">Loading grading reconciliation…</p>
+          ) : opsGradingReconciliationError ? (
+            <StatusBanner tone="error">{opsGradingReconciliationError}</StatusBanner>
+          ) : opsGradingReconciliation ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Record</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Inventory</th>
+                    <th className="p-3 font-medium">Grader</th>
+                    <th className="p-3 font-medium">Expected</th>
+                    <th className="p-3 font-medium">Actual</th>
+                    <th className="p-3 font-medium">ROI delta</th>
+                    <th className="p-3 font-medium">Confidence</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingReconciliation.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={10}>
+                        No grading reconciliation records for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingReconciliation.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">#{row.id}</div>
+                          <div className="text-[10px] text-slate-500">{row.grading_accuracy_status}</div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">inv {row.inventory_item_id}</td>
+                        <td className="p-3 text-slate-300">{row.target_grader}</td>
+                        <td className="p-3 text-slate-300">
+                          {row.expected_grade ?? "—"}
+                          <span className="block text-[10px] text-slate-500">ROI {row.expected_roi ?? "—"}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {row.final_grade ?? "—"}
+                          <span className="block text-[10px] text-slate-500">ROI {row.realized_roi ?? "—"}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">{row.roi_delta ?? "—"}</td>
+                        <td className="p-3 text-slate-300">{row.confidence_level}</td>
+                        <td className="p-3 text-slate-300">
+                          {row.reconciliation_status}
+                          <span className="block text-[10px] text-slate-500">{row.grading_accuracy_status}</span>
+                        </td>
                         <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
                       </tr>
                     ))

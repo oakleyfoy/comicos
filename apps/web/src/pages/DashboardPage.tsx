@@ -61,6 +61,7 @@ import {
   type SalesDashboardSummary,
   type OperationalReportingDashboardRollup,
   type GradingCandidateDashboardSummary,
+  type GradingReconciliationDashboardSummary,
   type GradingSpreadDashboardSummary,
   type GradingRoiDashboardSummary,
   type GradingSubmissionDashboardSummary,
@@ -891,6 +892,10 @@ export function DashboardPage() {
   );
   const [gradingSubmissionLoading, setGradingSubmissionLoading] = useState(true);
   const [gradingSubmissionError, setGradingSubmissionError] = useState<string | null>(null);
+  const [gradingReconciliationSummary, setGradingReconciliationSummary] =
+    useState<GradingReconciliationDashboardSummary | null>(null);
+  const [gradingReconciliationLoading, setGradingReconciliationLoading] = useState(true);
+  const [gradingReconciliationError, setGradingReconciliationError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1564,6 +1569,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingReconciliationSummary(null);
+          setGradingReconciliationLoading(false);
+          setGradingReconciliationError(null);
+        }
+        return;
+      }
+      setGradingReconciliationLoading(true);
+      setGradingReconciliationError(null);
+      try {
+        const rsp = await apiClient.getGradingReconciliationDashboardSummary();
+        if (!ignore) {
+          setGradingReconciliationSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingReconciliationSummary(null);
+          setGradingReconciliationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load grading reconciliation summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setGradingReconciliationLoading(false);
         }
       }
     })();
@@ -3066,6 +3107,72 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading submission rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-reconciliation-dash"
+              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/85">Result reconciliation</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading outcome reconciliation</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Actual returned grades, ROI deltas, and grader performance snapshots without changing FMV,
+                    pricing, or inventory automatically.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-reconciliation-ops"
+                  className="rounded-xl border border-cyan-300/35 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/60 hover:bg-white/5"
+                >
+                  Ops reconciliation
+                </Link>
+              </div>
+              {gradingReconciliationLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading reconciliation…</p>
+              ) : gradingReconciliationError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingReconciliationError}</StatusBanner>
+                </div>
+              ) : gradingReconciliationSummary ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Reconciled" value={String(gradingReconciliationSummary.reconciled_count)} />
+                    <StatCard
+                      label="Above expectation"
+                      value={String(gradingReconciliationSummary.above_expectation_count)}
+                    />
+                    <StatCard
+                      label="Below expectation"
+                      value={String(gradingReconciliationSummary.below_expectation_count)}
+                    />
+                    <StatCard label="Average ROI delta" value={gradingReconciliationSummary.average_roi_delta ?? "—"} />
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                    {gradingReconciliationSummary.grader_performance.length === 0 ? (
+                      <p className="text-sm text-slate-500">No grader performance snapshots yet.</p>
+                    ) : (
+                      gradingReconciliationSummary.grader_performance.map((row) => (
+                        <div key={`${row.grader}-${row.snapshot_date}`} className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                          <p className="text-sm font-semibold text-white">{row.grader}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            submissions {row.submission_count} · ROI delta {row.average_roi_delta ?? "—"}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            above {row.above_expectation_count} · met {row.met_expectation_count} · below{" "}
+                            {row.below_expectation_count}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading reconciliation rollup unavailable.</p>
               )}
             </section>
           ) : null}

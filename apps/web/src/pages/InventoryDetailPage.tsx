@@ -2824,6 +2824,20 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.grading_reconciliation ? (
+                <div className="rounded-2xl border border-cyan-400/35 bg-cyan-950/30 px-4 py-3 text-[11px] text-cyan-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-cyan-200/90">Reconciled grade</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_reconciliation.grading_reconciliation_record_id} ·{" "}
+                    {detail.grading_reconciliation.target_grader} · final {detail.grading_reconciliation.final_grade ?? "—"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    ROI delta {detail.grading_reconciliation.roi_delta ?? "—"} ·{" "}
+                    {detail.grading_reconciliation.grading_accuracy_status} ·{" "}
+                    {detail.grading_reconciliation.reconciliation_status}
+                  </p>
+                </div>
+              ) : null}
             </>
           }
         />

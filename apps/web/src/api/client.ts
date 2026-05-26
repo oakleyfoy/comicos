@@ -3145,6 +3145,129 @@ export interface InventoryGradingSubmissionBadge {
   item_count: number;
 }
 
+export interface InventoryGradingReconciliationBadge {
+  grading_reconciliation_record_id: number;
+  target_grader: string;
+  final_grade: string | null;
+  roi_delta: string | null;
+  grading_accuracy_status: string;
+  reconciliation_status: string;
+}
+
+export interface GradingReconciliationEvidenceRead {
+  id: number;
+  grading_reconciliation_record_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingReconciliationHistoryRead {
+  id: number;
+  owner_user_id: number | null;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  target_grader: string;
+  expected_grade: string | null;
+  actual_grade: string | null;
+  realized_roi: string | null;
+  roi_delta: string | null;
+  snapshot_date: string;
+  checksum: string;
+  created_at: string;
+}
+
+export interface GraderPerformanceSnapshotRead {
+  id: number;
+  owner_user_id: number | null;
+  grader: string;
+  submission_count: number;
+  above_expectation_count: number;
+  met_expectation_count: number;
+  below_expectation_count: number;
+  average_roi_delta: string | null;
+  average_turnaround_days: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface GradingReconciliationRead {
+  id: number;
+  owner_user_id: number;
+  grading_submission_item_id: number;
+  grading_candidate_id: number;
+  inventory_item_id: number;
+  target_grader: string;
+  expected_grade: string | null;
+  final_grade: string | null;
+  expected_raw_value: string | null;
+  expected_graded_value: string | null;
+  realized_graded_value: string | null;
+  expected_roi: string | null;
+  realized_roi: string | null;
+  roi_delta: string | null;
+  grading_accuracy_status: string;
+  reconciliation_status: string;
+  confidence_level: string;
+  checksum: string;
+  reconciled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GradingReconciliationDetailRead {
+  record: GradingReconciliationRead;
+  evidence: GradingReconciliationEvidenceRead[];
+  history: GradingReconciliationHistoryRead[];
+}
+
+export interface GradingReconciliationListResponse {
+  items: GradingReconciliationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingReconciliationEvidenceListResponse {
+  items: GradingReconciliationEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingReconciliationHistoryListResponse {
+  items: GradingReconciliationHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GraderPerformanceSnapshotListResponse {
+  items: GraderPerformanceSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingReconciliationDashboardSummary {
+  reconciled_count: number;
+  above_expectation_count: number;
+  below_expectation_count: number;
+  average_roi_delta: string | null;
+  grader_performance: GraderPerformanceSnapshotRead[];
+}
+
+export interface GradingReconciliationReconcilePayload {
+  grading_submission_item_id: number;
+  final_grade: string;
+  realized_graded_value?: string | null;
+  reconciled_at?: string | null;
+  confidence_level?: "HIGH" | "MEDIUM" | "LOW" | null;
+}
+
 export interface GradingSubmissionDashboardSummary {
   active_batch_count: number;
   shipped_batch_count: number;
@@ -4661,6 +4784,7 @@ export interface InventoryDetail extends InventoryItem {
   grading_spread?: InventoryGradingSpreadBadge | null;
   grading_roi?: InventoryGradingRoiBadge | null;
   grading_submission?: InventoryGradingSubmissionBadge | null;
+  grading_reconciliation?: InventoryGradingReconciliationBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -8203,6 +8327,132 @@ export const apiClient = {
   }): Promise<GradingSubmissionShipmentListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GradingSubmissionShipmentListResponse>(`/ops/grading-submission-shipments${q}`);
+  },
+
+  getGradingReconciliationDashboardSummary(): Promise<GradingReconciliationDashboardSummary> {
+    return request<GradingReconciliationDashboardSummary>("/grading-reconciliation/dashboard-summary");
+  },
+
+  reconcileGradingResult(payload: GradingReconciliationReconcilePayload): Promise<GradingReconciliationDetailRead> {
+    return request<GradingReconciliationDetailRead>("/grading-reconciliation/reconcile", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingReconciliation(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    reconciliation_status?: string;
+    grading_accuracy_status?: string;
+    confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationListResponse>(`/grading-reconciliation${q}`);
+  },
+
+  getGradingReconciliation(recordId: number): Promise<GradingReconciliationDetailRead> {
+    return request<GradingReconciliationDetailRead>(`/grading-reconciliation/${recordId}`);
+  },
+
+  getGradingReconciliationEvidence(params?: {
+    record_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationEvidenceListResponse>(`/grading-reconciliation/evidence${q}`);
+  },
+
+  getGradingReconciliationHistory(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationHistoryListResponse>(`/grading-reconciliation/history${q}`);
+  },
+
+  getGraderPerformance(params?: {
+    grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GraderPerformanceSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GraderPerformanceSnapshotListResponse>(`/grader-performance${q}`);
+  },
+
+  getOpsGradingReconciliationDashboardSummary(ownerUserId?: number): Promise<GradingReconciliationDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingReconciliationDashboardSummary>(`/ops/grading-reconciliation/dashboard-summary${q}`);
+  },
+
+  listOpsGradingReconciliation(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    reconciliation_status?: string;
+    grading_accuracy_status?: string;
+    confidence_level?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationListResponse>(`/ops/grading-reconciliation${q}`);
+  },
+
+  getOpsGradingReconciliation(recordId: number): Promise<GradingReconciliationDetailRead> {
+    return request<GradingReconciliationDetailRead>(`/ops/grading-reconciliation/${recordId}`);
+  },
+
+  getOpsGradingReconciliationEvidence(params?: {
+    owner_user_id?: number;
+    record_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationEvidenceListResponse>(`/ops/grading-reconciliation-evidence${q}`);
+  },
+
+  getOpsGradingReconciliationHistory(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    target_grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingReconciliationHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingReconciliationHistoryListResponse>(`/ops/grading-reconciliation-history${q}`);
+  },
+
+  getOpsGraderPerformance(params?: {
+    owner_user_id?: number;
+    grader?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GraderPerformanceSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GraderPerformanceSnapshotListResponse>(`/ops/grader-performance${q}`);
   },
 
   getGradingSpreadDashboardSummary(): Promise<GradingSpreadDashboardSummary> {

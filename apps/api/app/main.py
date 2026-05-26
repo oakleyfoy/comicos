@@ -213,6 +213,15 @@ from app.schemas.grading_roi import (
     GradingRoiHistoryListResponse,
     GradingRoiListResponse,
 )
+from app.schemas.grading_reconciliation import (
+    GraderPerformanceSnapshotListResponse,
+    GradingReconciliationDashboardSummary,
+    GradingReconciliationDetailRead,
+    GradingReconciliationEvidenceListResponse,
+    GradingReconciliationHistoryListResponse,
+    GradingReconciliationListResponse,
+    GradingReconciliationReconcilePayload,
+)
 from app.schemas.grading_submission import (
     GradingSubmissionCreatePayload,
     GradingSubmissionDashboardSummary,
@@ -711,6 +720,7 @@ from app.services.inventory_fmv import (
 )
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
+from app.services import grading_reconciliation as grading_reconciliation_service
 from app.services import grading_spread as grading_spread_service
 from app.services import grading_roi as grading_roi_service
 from app.services import grading_submission as grading_submission_service
@@ -10753,6 +10763,280 @@ def ops_list_grading_submission_shipments(
         offset=off,
     )
     return grading_submission_service.shipment_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-reconciliation/dashboard-summary", response_model=GradingReconciliationDashboardSummary)
+def owner_grading_reconciliation_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingReconciliationDashboardSummary:
+    return grading_reconciliation_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get(
+    "/ops/grading-reconciliation/dashboard-summary",
+    response_model=GradingReconciliationDashboardSummary,
+    include_in_schema=False,
+)
+def ops_grading_reconciliation_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingReconciliationDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_reconciliation_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.post("/grading-reconciliation/reconcile", response_model=GradingReconciliationDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_reconcile_grading_result(
+    payload: GradingReconciliationReconcilePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingReconciliationDetailRead:
+    return grading_reconciliation_service.reconcile_grading_result(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/grading-reconciliation", response_model=GradingReconciliationListResponse)
+def owner_list_grading_reconciliation(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    reconciliation_status: str | None = Query(default=None),
+    grading_accuracy_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationListResponse:
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_records_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        reconciliation_status=reconciliation_status,
+        grading_accuracy_status=grading_accuracy_status,
+        confidence_level=confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.records_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-reconciliation/{record_id}", response_model=GradingReconciliationDetailRead)
+def owner_get_grading_reconciliation(
+    record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingReconciliationDetailRead:
+    row = grading_reconciliation_service.get_record_owner(session, owner_user_id=int(current_user.id), record_id=record_id)
+    return grading_reconciliation_service._detail_read(session, row)
+
+
+@app.get("/grading-reconciliation/evidence", response_model=GradingReconciliationEvidenceListResponse)
+def owner_list_grading_reconciliation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    record_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationEvidenceListResponse:
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        record_id=record_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-reconciliation/history", response_model=GradingReconciliationHistoryListResponse)
+def owner_list_grading_reconciliation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationHistoryListResponse:
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grader-performance", response_model=GraderPerformanceSnapshotListResponse)
+def owner_list_grader_performance(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GraderPerformanceSnapshotListResponse:
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_performance_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grader=grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.performance_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-reconciliation", response_model=GradingReconciliationListResponse, include_in_schema=False)
+def ops_list_grading_reconciliation(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    reconciliation_status: str | None = Query(default=None),
+    grading_accuracy_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_records_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        reconciliation_status=reconciliation_status,
+        grading_accuracy_status=grading_accuracy_status,
+        confidence_level=confidence_level,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.records_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-reconciliation/{record_id}", response_model=GradingReconciliationDetailRead, include_in_schema=False)
+def ops_get_grading_reconciliation(
+    record_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingReconciliationDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_reconciliation_service.get_record_ops(session, record_id=record_id)
+    return grading_reconciliation_service._detail_read(session, row)
+
+
+@app.get("/ops/grading-reconciliation-evidence", response_model=GradingReconciliationEvidenceListResponse, include_in_schema=False)
+def ops_list_grading_reconciliation_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    record_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        record_id=record_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-reconciliation-history", response_model=GradingReconciliationHistoryListResponse, include_in_schema=False)
+def ops_list_grading_reconciliation_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingReconciliationHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        target_grader=target_grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grader-performance", response_model=GraderPerformanceSnapshotListResponse, include_in_schema=False)
+def ops_list_grader_performance(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grader: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GraderPerformanceSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_reconciliation_service.clamp_grading_reconciliation_pagination(limit, offset)
+    rows, total = grading_reconciliation_service.list_performance_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grader=grader,
+        date_from=date_from,
+        date_to=date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_reconciliation_service.performance_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

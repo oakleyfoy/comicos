@@ -26,6 +26,7 @@ def make_ready_candidate(client: TestClient, token: str, inventory_id: int, targ
         json={
             "inventory_item_id": inventory_id,
             "target_grader": target_grader,
+            "target_grade": "9.8",
             "candidate_priority": "HIGH",
             "estimated_raw_value": "100.00",
             "estimated_graded_value": "240.00",

@@ -138,6 +138,12 @@ from app.models.grading_submission import (
     GradingSubmissionLifecycleEvent,
     GradingSubmissionShipment,
 )
+from app.models.grading_reconciliation import (
+    GraderPerformanceSnapshot,
+    GradingReconciliationEvidence,
+    GradingReconciliationHistory,
+    GradingReconciliationRecord,
+)
 
 __all__ = [
     "CanonicalCreator",
@@ -180,6 +186,10 @@ __all__ = [
     "GradingSubmissionItem",
     "GradingSubmissionLifecycleEvent",
     "GradingSubmissionShipment",
+    "GraderPerformanceSnapshot",
+    "GradingReconciliationEvidence",
+    "GradingReconciliationHistory",
+    "GradingReconciliationRecord",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

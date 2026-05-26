@@ -214,6 +214,17 @@ Resolved routes:
   - Invoice reconciliation, label printing, packing workflows, or bulk scan intake
   - Any automatic inventory mutation or grade assignment beyond the explicit completion transition
 
+## P37-05 — Grading reconciliation (2026-05-26)
+
+- Architecture note: deterministic reconciliation records, evidence rows, historical snapshots, and grader performance summaries live in `docs/GRADING_RECONCILIATION_ARCHITECTURE.md`. The lane compares expected grades and ROI assumptions against actual returned grades and realized economics.
+- Owner routes may reconcile submission items and inspect outcome history; `/ops/grading-reconciliation*` and `/ops/grader-performance` remain read-only and support explicit owner filtering.
+- **Deferred scope (beyond P37-05):**
+  - Automated grader imports or live grader API integrations
+  - OCR slab reading, scan verification, or AI grading analysis
+  - Recommendation engines or post-grade automation
+  - Automatic FMV, pricing, or inventory mutation based on reconciliation results
+  - Probabilistic grading models or forecasting
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.
