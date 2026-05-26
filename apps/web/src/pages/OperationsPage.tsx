@@ -147,6 +147,7 @@ import {
   type OperationalReportRunListResponse,
   type GradingCandidateListResponse,
   type GradingSpreadListResponse,
+  type GradingRoiListResponse,
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
@@ -1399,6 +1400,9 @@ export function OperationsPage() {
   const [opsGradingSpreads, setOpsGradingSpreads] = useState<GradingSpreadListResponse | null>(null);
   const [opsGradingSpreadsLoading, setOpsGradingSpreadsLoading] = useState(true);
   const [opsGradingSpreadsError, setOpsGradingSpreadsError] = useState<string | null>(null);
+  const [opsGradingRoi, setOpsGradingRoi] = useState<GradingRoiListResponse | null>(null);
+  const [opsGradingRoiLoading, setOpsGradingRoiLoading] = useState(true);
+  const [opsGradingRoiError, setOpsGradingRoiError] = useState<string | null>(null);
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2176,6 +2180,36 @@ export function OperationsPage() {
       } finally {
         if (!ignore) {
           setOpsGradingSpreadsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsGradingOwnerFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsGradingRoiLoading(true);
+      setOpsGradingRoiError(null);
+      try {
+        const rsp = await apiClient.getOpsGradingRoi({
+          owner_user_id: opsGradingOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsGradingRoi(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsGradingRoi(null);
+          setOpsGradingRoiError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading ROI.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsGradingRoiLoading(false);
         }
       }
     })();
@@ -5239,6 +5273,90 @@ export function OperationsPage() {
                         <td className="p-3">
                           <div>{row.liquidity_modifier}</div>
                           <div className="text-[10px] text-slate-500">{row.liquidity_adjusted_upside ?? "—"}</div>
+                        </td>
+                        <td className="p-3">{row.confidence_level}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
+
+      <details
+        id="grading-roi-ops"
+        className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/15 p-5 shadow-xl shadow-black/18 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Grading ROI engine</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only ROI economics for grading fees, shipping, insurance, liquidity adjustment, and break-even
+                checks. The same owner scope filter applies to this section.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/90">
+              Ops / ROI
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-emerald-200/15 pt-4">
+          {opsGradingRoiLoading ? (
+            <p className="text-sm text-slate-400">Loading grading ROI…</p>
+          ) : opsGradingRoiError ? (
+            <StatusBanner tone="error">{opsGradingRoiError}</StatusBanner>
+          ) : opsGradingRoi ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">ROI</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Inventory</th>
+                    <th className="p-3 font-medium">Target</th>
+                    <th className="p-3 font-medium">Costs</th>
+                    <th className="p-3 font-medium">Net profit</th>
+                    <th className="p-3 font-medium">ROI %</th>
+                    <th className="p-3 font-medium">Liquidity-adjusted</th>
+                    <th className="p-3 font-medium">Confidence</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsGradingRoi.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={10}>
+                        No grading ROI snapshots for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsGradingRoi.items.map((row) => (
+                      <tr key={row.id}>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">{row.roi_status}</div>
+                          <div className="text-[10px] text-slate-500">#{row.id}</div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{row.owner_user_id ?? "—"}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">inv {row.inventory_item_id ?? "—"}</td>
+                        <td className="p-3">
+                          {row.target_grader}
+                          {row.target_grade ? <span className="block text-[10px] text-slate-500">{row.target_grade}</span> : null}
+                        </td>
+                        <td className="p-3 text-slate-400">
+                          {row.grading_fee_amount ?? "—"} / {row.shipping_cost_amount ?? "—"} / {row.insurance_cost_amount ?? "—"}
+                          <span className="block text-[10px] text-slate-500">
+                            total {row.estimated_total_cost ?? "—"} · BE {row.break_even_grade ?? "—"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300">{row.estimated_net_profit ?? "—"}</td>
+                        <td className="p-3 text-slate-300">{row.estimated_roi_pct ?? "—"}</td>
+                        <td className="p-3">
+                          <div>{row.liquidity_adjusted_roi ?? "—"}</div>
+                          <div className="text-[10px] text-slate-500">{row.estimated_spread_amount ?? "—"} spread</div>
                         </td>
                         <td className="p-3">{row.confidence_level}</td>
                         <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>

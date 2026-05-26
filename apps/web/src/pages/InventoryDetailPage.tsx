@@ -2797,6 +2797,20 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.grading_roi ? (
+                <div className="rounded-2xl border border-emerald-400/35 bg-emerald-950/30 px-4 py-3 text-[11px] text-emerald-100">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-emerald-200/90">Grading ROI</p>
+                  <p className="mt-1 text-xs text-slate-100">
+                    #{detail.grading_roi.grading_roi_snapshot_id} · {detail.grading_roi.roi_status} ·{" "}
+                    {detail.grading_roi.target_grader}
+                    {detail.grading_roi.target_grade ? ` ${detail.grading_roi.target_grade}` : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Break-even {detail.grading_roi.break_even_grade ?? "—"} · estimated total cost{" "}
+                    {detail.grading_roi.estimated_total_cost ?? "—"}
+                  </p>
+                </div>
+              ) : null}
             </>
           }
         />

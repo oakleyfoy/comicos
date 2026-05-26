@@ -205,6 +205,14 @@ from app.schemas.grading_spread import (
     GradingSpreadHistoryListResponse,
     GradingSpreadListResponse,
 )
+from app.schemas.grading_roi import (
+    GradingRoiDashboardSummary,
+    GradingRoiDetailRead,
+    GradingRoiEvidenceListResponse,
+    GradingRoiGeneratePayload,
+    GradingRoiHistoryListResponse,
+    GradingRoiListResponse,
+)
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
     ConventionAssignmentListResponse,
@@ -694,6 +702,7 @@ from app.services.inventory_fmv import (
 from app.services import dealer_dashboard as dealer_dashboard_service
 from app.services import grading_candidate_service
 from app.services import grading_spread as grading_spread_service
+from app.services import grading_roi as grading_roi_service
 from app.services import operational_reporting as operational_reporting_service
 from app.services import listing_export as listing_export_service
 from app.services import listing_intelligence as listing_intelligence_service
@@ -10248,6 +10257,239 @@ def ops_list_grading_spread_history(
         offset=off,
     )
     return grading_spread_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-roi/dashboard-summary", response_model=GradingRoiDashboardSummary)
+def owner_grading_roi_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRoiDashboardSummary:
+    return grading_roi_service.dashboard_summary_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.get("/ops/grading-roi/dashboard-summary", response_model=GradingRoiDashboardSummary, include_in_schema=False)
+def ops_grading_roi_dashboard_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> GradingRoiDashboardSummary:
+    ensure_ops_admin_access(current_user, settings)
+    return grading_roi_service.dashboard_summary_ops(session, owner_user_id=owner_user_id)
+
+
+@app.post("/grading-roi/generate", response_model=GradingRoiDetailRead, status_code=status.HTTP_201_CREATED)
+def owner_generate_grading_roi(
+    payload: GradingRoiGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRoiDetailRead:
+    detail, replayed = grading_roi_service.generate_grading_roi(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/grading-roi", response_model=GradingRoiListResponse)
+def owner_list_grading_roi(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    roi_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiListResponse:
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        roi_status=roi_status,
+        confidence_level=confidence_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.list_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-roi/{roi_id}", response_model=GradingRoiDetailRead)
+def owner_get_grading_roi(
+    roi_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GradingRoiDetailRead:
+    row = grading_roi_service.get_snapshot_owner(session, owner_user_id=int(current_user.id), roi_id=roi_id)
+    return grading_roi_service._detail_read(session, row)
+
+
+@app.get("/grading-roi/evidence", response_model=GradingRoiEvidenceListResponse)
+def owner_list_grading_roi_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    roi_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiEvidenceListResponse:
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        roi_id=roi_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/grading-roi/history", response_model=GradingRoiHistoryListResponse)
+def owner_list_grading_roi_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    grading_candidate_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiHistoryListResponse:
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        grading_candidate_id=grading_candidate_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-roi", response_model=GradingRoiListResponse, include_in_schema=False)
+def ops_list_grading_roi(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    inventory_item_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    roi_status: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        inventory_item_id=inventory_item_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        roi_status=roi_status,
+        confidence_level=confidence_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.list_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-roi/{roi_id}", response_model=GradingRoiDetailRead, include_in_schema=False)
+def ops_get_grading_roi(
+    roi_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> GradingRoiDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = grading_roi_service.get_snapshot_ops(session, roi_id=roi_id)
+    return grading_roi_service._detail_read(session, row)
+
+
+@app.get("/ops/grading-roi/evidence", response_model=GradingRoiEvidenceListResponse, include_in_schema=False)
+def ops_list_grading_roi_evidence(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    roi_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        roi_id=roi_id,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.evidence_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/grading-roi/history", response_model=GradingRoiHistoryListResponse, include_in_schema=False)
+def ops_list_grading_roi_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    grading_candidate_id: int | None = Query(default=None),
+    canonical_comic_issue_id: int | None = Query(default=None),
+    target_grader: str | None = Query(default=None),
+    target_grade: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> GradingRoiHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = grading_roi_service.clamp_grading_roi_pagination(limit, offset)
+    rows, total = grading_roi_service.list_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        grading_candidate_id=grading_candidate_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        target_grader=target_grader,
+        target_grade=target_grade,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=lim,
+        offset=off,
+    )
+    return grading_roi_service.history_response_from_rows(rows=rows, total=total, limit=lim, offset=off)
 
 
 @app.get("/sales/dashboard-summary", response_model=SalesDashboardSummary)

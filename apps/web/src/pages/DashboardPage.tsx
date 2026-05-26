@@ -62,6 +62,7 @@ import {
   type OperationalReportingDashboardRollup,
   type GradingCandidateDashboardSummary,
   type GradingSpreadDashboardSummary,
+  type GradingRoiDashboardSummary,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -881,6 +882,9 @@ export function DashboardPage() {
   const [gradingSpreadSummary, setGradingSpreadSummary] = useState<GradingSpreadDashboardSummary | null>(null);
   const [gradingSpreadLoading, setGradingSpreadLoading] = useState(true);
   const [gradingSpreadError, setGradingSpreadError] = useState<string | null>(null);
+  const [gradingRoiSummary, setGradingRoiSummary] = useState<GradingRoiDashboardSummary | null>(null);
+  const [gradingRoiLoading, setGradingRoiLoading] = useState(true);
+  const [gradingRoiError, setGradingRoiError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1554,6 +1558,40 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setDealerDashLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setGradingRoiSummary(null);
+          setGradingRoiLoading(false);
+          setGradingRoiError(null);
+        }
+        return;
+      }
+      setGradingRoiLoading(true);
+      setGradingRoiError(null);
+      try {
+        const rsp = await apiClient.getGradingRoiDashboardSummary();
+        if (!ignore) {
+          setGradingRoiSummary(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setGradingRoiSummary(null);
+          setGradingRoiError(loadErr instanceof ApiError ? loadErr.message : "Unable to load grading ROI summary.");
+        }
+      } finally {
+        if (!ignore) {
+          setGradingRoiLoading(false);
         }
       }
     })();
@@ -2898,6 +2936,50 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Grading spread rollup unavailable.</p>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="grading-roi-dash"
+              className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/15 p-5 shadow-xl shadow-black/18"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/85">Grading economics</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading ROI engine</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic ROI snapshots combine grading fees, shipping, insurance, liquidity weighting, and
+                    realized-sale evidence. The lane stays explainable and mutation-free.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#grading-roi-ops"
+                  className="rounded-xl border border-emerald-300/35 px-4 py-2 text-xs font-semibold text-emerald-100 transition hover:border-emerald-200/60 hover:bg-white/5"
+                >
+                  Ops ROI table
+                </Link>
+              </div>
+              {gradingRoiLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading grading ROI rollup…</p>
+              ) : gradingRoiError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{gradingRoiError}</StatusBanner>
+                </div>
+              ) : gradingRoiSummary ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Strong ROI" value={String(gradingRoiSummary.strong_roi_count)} />
+                  <StatCard label="Elite ROI" value={String(gradingRoiSummary.elite_roi_count)} />
+                  <StatCard label="Negative ROI" value={String(gradingRoiSummary.negative_roi_count)} />
+                  <StatCard label="Average ROI" value={gradingRoiSummary.average_estimated_roi ?? "—"} />
+                  <StatCard
+                    label="Liquidity-adjusted total"
+                    value={gradingRoiSummary.liquidity_adjusted_roi_total ?? "—"}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">Grading ROI rollup unavailable.</p>
               )}
             </section>
           ) : null}

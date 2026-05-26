@@ -190,6 +190,19 @@ Resolved routes:
   - Grader API integrations and automated market posting
   - Hidden FMV/inventory/liquidity mutations
 
+## P37-03 — Grading ROI engine (2026-05-26)
+
+- Architecture note: deterministic grading ROI snapshots, evidence rows, scenarios, and append-safe history live in `docs/GRADING_ROI_ENGINE_ARCHITECTURE.md`. The lane compares grading fees, shipping, insurance, liquidity, and realized-sale evidence to produce deterministic ROI, break-even, and scenario reads.
+- Owner routes may generate and inspect ROI snapshots; `/ops/grading-roi*` mirrors stay read-only and can filter by owner, issue, inventory, candidate, grader, grade, confidence, ROI status, and date range.
+- **Deferred scope (beyond P37-03):**
+  - Grade prediction or AI grading pipelines
+  - Scan AI, defect scoring, image-based grading heuristics
+  - Recommendation engines, sell/hold guidance, or portfolio optimization
+  - Dynamic market forecasting or probabilistic pricing
+  - Grader API integrations and automatic market posting
+  - Monte Carlo simulation or any probabilistic ROI forecasting
+  - Hidden FMV, inventory, grading-candidate, or liquidity mutations
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

@@ -124,6 +124,13 @@ from app.models.grading_spread import (
     GradingSpreadSnapshot,
 )
 
+from app.models.grading_roi import (
+    GradingRoiEvidence,
+    GradingRoiHistory,
+    GradingRoiScenario,
+    GradingRoiSnapshot,
+)
+
 __all__ = [
     "CanonicalCreator",
     "CanonicalIssueLinkSuggestion",
@@ -156,6 +163,10 @@ __all__ = [
     "GradingSpreadEvidence",
     "GradingSpreadHistory",
     "GradingSpreadSnapshot",
+    "GradingRoiEvidence",
+    "GradingRoiHistory",
+    "GradingRoiScenario",
+    "GradingRoiSnapshot",
     "HighResReviewRequest",
     "InventoryCopy",
     "DealerDashboardAlert",

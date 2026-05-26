@@ -3124,6 +3124,18 @@ export interface InventoryGradingSpreadBadge {
   checksum: string;
 }
 
+export interface InventoryGradingRoiBadge {
+  grading_roi_snapshot_id: number;
+  roi_status: string;
+  target_grader: string;
+  target_grade: string | null;
+  estimated_total_cost: string | null;
+  estimated_net_profit: string | null;
+  liquidity_adjusted_roi: string | null;
+  break_even_grade: string | null;
+  checksum: string;
+}
+
 export interface GradingCandidateDashboardSummary {
   total_candidates: number;
   pipeline_active_count: number;
@@ -3252,6 +3264,118 @@ export interface GradingSpreadEvidenceListResponse {
 
 export interface GradingSpreadHistoryListResponse {
   items: GradingSpreadHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRoiDashboardSummary {
+  strong_roi_count: number;
+  elite_roi_count: number;
+  negative_roi_count: number;
+  average_estimated_roi: string | null;
+  liquidity_adjusted_roi_total: string | null;
+}
+
+export interface GradingRoiGeneratePayload {
+  grading_candidate_id?: number | null;
+  inventory_item_id?: number | null;
+  canonical_comic_issue_id?: number | null;
+  target_grader: "PSA" | "CGC" | "CBCS";
+  target_grade?: string | null;
+  snapshot_date?: string | null;
+  replay_key?: string | null;
+}
+
+export interface GradingRoiEvidenceRead {
+  id: number;
+  grading_roi_snapshot_id: number;
+  evidence_type: string;
+  source_id: number | null;
+  source_table: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingRoiScenarioRead {
+  id: number;
+  grading_roi_snapshot_id: number;
+  scenario_name: string;
+  target_grade: string | null;
+  estimated_value: string | null;
+  estimated_roi_pct: string | null;
+  liquidity_adjusted_roi: string | null;
+  created_at: string;
+}
+
+export interface GradingRoiHistoryRead {
+  id: number;
+  owner_user_id: number | null;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  target_grader: string;
+  target_grade: string | null;
+  roi_pct: string | null;
+  liquidity_adjusted_roi: string | null;
+  snapshot_date: string;
+  checksum: string;
+  created_at: string;
+}
+
+export interface GradingRoiRead {
+  id: number;
+  owner_user_id: number | null;
+  grading_candidate_id: number | null;
+  inventory_item_id: number | null;
+  canonical_comic_issue_id: number | null;
+  target_grader: string;
+  target_grade: string | null;
+  raw_fmv_amount: string | null;
+  graded_fmv_amount: string | null;
+  grading_fee_amount: string | null;
+  shipping_cost_amount: string | null;
+  insurance_cost_amount: string | null;
+  estimated_turnaround_days: number | null;
+  estimated_total_cost: string | null;
+  estimated_spread_amount: string | null;
+  estimated_net_profit: string | null;
+  estimated_roi_pct: string | null;
+  liquidity_adjusted_roi: string | null;
+  break_even_grade: string | null;
+  roi_status: string;
+  confidence_level: string;
+  evidence_count: number;
+  checksum: string;
+  snapshot_date: string;
+  replay_key: string | null;
+  generation_params_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface GradingRoiDetailRead {
+  snapshot: GradingRoiRead;
+  evidence: GradingRoiEvidenceRead[];
+  scenarios: GradingRoiScenarioRead[];
+  history: GradingRoiHistoryRead[];
+}
+
+export interface GradingRoiListResponse {
+  items: GradingRoiRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRoiEvidenceListResponse {
+  items: GradingRoiEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradingRoiHistoryListResponse {
+  items: GradingRoiHistoryRead[];
   total_items: number;
   limit: number;
   offset: number;
@@ -4386,6 +4510,7 @@ export interface InventoryDetail extends InventoryItem {
   originating_scan_session?: InventoryScanSessionOrigin | null;
   grading_candidate?: InventoryGradingCandidateBadge | null;
   grading_spread?: InventoryGradingSpreadBadge | null;
+  grading_roi?: InventoryGradingRoiBadge | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -7823,6 +7948,10 @@ export const apiClient = {
     return request<GradingSpreadDashboardSummary>("/grading-spreads/dashboard-summary");
   },
 
+  getGradingRoiDashboardSummary(): Promise<GradingRoiDashboardSummary> {
+    return request<GradingRoiDashboardSummary>("/grading-roi/dashboard-summary");
+  },
+
   generateGradingSpread(payload: GradingSpreadGeneratePayload): Promise<GradingSpreadDetailRead> {
     return request<GradingSpreadDetailRead>("/grading-spreads/generate", {
       method: "POST",
@@ -7844,6 +7973,109 @@ export const apiClient = {
   }): Promise<GradingSpreadListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<GradingSpreadListResponse>(`/grading-spreads${q}`);
+  },
+
+  generateGradingRoi(payload: GradingRoiGeneratePayload): Promise<GradingRoiDetailRead> {
+    return request<GradingRoiDetailRead>("/grading-roi/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listGradingRoi(params?: {
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    roi_status?: string;
+    confidence_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiListResponse>(`/grading-roi${q}`);
+  },
+
+  getGradingRoi(roiId: number): Promise<GradingRoiDetailRead> {
+    return request<GradingRoiDetailRead>(`/grading-roi/${roiId}`);
+  },
+
+  getGradingRoiEvidence(params?: {
+    roi_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiEvidenceListResponse>(`/grading-roi/evidence${q}`);
+  },
+
+  getGradingRoiHistory(params?: {
+    grading_candidate_id?: number;
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiHistoryListResponse>(`/grading-roi/history${q}`);
+  },
+
+  getOpsGradingRoiDashboardSummary(ownerUserId?: number): Promise<GradingRoiDashboardSummary> {
+    const q = typeof ownerUserId === "number" && Number.isFinite(ownerUserId) ? buildQueryString({ owner_user_id: ownerUserId }) : "";
+    return request<GradingRoiDashboardSummary>(`/ops/grading-roi/dashboard-summary${q}`);
+  },
+
+  getOpsGradingRoi(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    inventory_item_id?: number;
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    roi_status?: string;
+    confidence_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiListResponse>(`/ops/grading-roi${q}`);
+  },
+
+  getOpsGradingRoiById(roiId: number): Promise<GradingRoiDetailRead> {
+    return request<GradingRoiDetailRead>(`/ops/grading-roi/${roiId}`);
+  },
+
+  getOpsGradingRoiEvidence(params?: {
+    owner_user_id?: number;
+    roi_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiEvidenceListResponse>(`/ops/grading-roi/evidence${q}`);
+  },
+
+  getOpsGradingRoiHistory(params?: {
+    owner_user_id?: number;
+    grading_candidate_id?: number;
+    canonical_comic_issue_id?: number;
+    target_grader?: string;
+    target_grade?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradingRoiHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<GradingRoiHistoryListResponse>(`/ops/grading-roi/history${q}`);
   },
 
   getGradingSpread(spreadId: number): Promise<GradingSpreadDetailRead> {
