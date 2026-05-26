@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     ocr_replay_item_stuck_seconds: int = Field(default=7200, alias="OCR_REPLAY_ITEM_STUCK_SECONDS")
 
     cover_images_storage_root_raw: str = Field(default="", alias="COVER_IMAGES_STORAGE_ROOT")
+    listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
+    operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
 
     model_config = SettingsConfigDict(
@@ -87,6 +89,20 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "cover_images"
+
+    @property
+    def listing_exports_storage_root(self) -> Path:
+        trimmed = self.listing_exports_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "listing_exports"
+
+    @property
+    def operational_reports_storage_root(self) -> Path:
+        trimmed = self.operational_reports_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "operational_reports"
 
 
 def validate_production_settings(settings: Settings) -> None:

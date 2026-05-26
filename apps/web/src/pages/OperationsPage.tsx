@@ -144,6 +144,7 @@ import {
   type ListingOpsStatusDistribution,
   type OpsListingLifecycleEventListResponse,
   type ListingExportRunListResponse,
+  type OperationalReportRunListResponse,
   type DealerDashboardAlertRead,
   type DealerDashboardFeedEventRead,
   type DealerDashboardGetResponse,
@@ -1382,6 +1383,12 @@ export function OperationsPage() {
   const [opsListingExportRunsLoading, setOpsListingExportRunsLoading] = useState(true);
   const [opsListingExportRunsError, setOpsListingExportRunsError] = useState<string | null>(null);
   const [opsListingExportDownloadError, setOpsListingExportDownloadError] = useState<string | null>(null);
+  const [opsOperationalReports, setOpsOperationalReports] = useState<OperationalReportRunListResponse | null>(null);
+  const [opsOperationalReportsLoading, setOpsOperationalReportsLoading] = useState(true);
+  const [opsOperationalReportsError, setOpsOperationalReportsError] = useState<string | null>(null);
+  const [opsOperationalOwnerDraft, setOpsOperationalOwnerDraft] = useState("");
+  const [opsOperationalOwnerFilter, setOpsOperationalOwnerFilter] = useState<number | undefined>();
+  const [opsOperationalDownloadError, setOpsOperationalDownloadError] = useState<string | null>(null);
   const [opsConventionSummary, setOpsConventionSummary] = useState<ConventionDashboardSummary | null>(null);
   const [opsConventionSummaryLoading, setOpsConventionSummaryLoading] = useState(true);
   const [opsConventionSummaryError, setOpsConventionSummaryError] = useState<string | null>(null);
@@ -2070,6 +2077,38 @@ export function OperationsPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsOperationalReportsLoading(true);
+      setOpsOperationalReportsError(null);
+      try {
+        const rsp = await apiClient.getOpsOperationalReports({
+          owner_user_id: opsOperationalOwnerFilter,
+          limit: 75,
+          offset: 0,
+        });
+        if (!ignore) {
+          setOpsOperationalReports(rsp);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsOperationalReports(null);
+          setOpsOperationalReportsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load operational reports.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsOperationalReportsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsOperationalOwnerFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -4522,6 +4561,7 @@ export function OperationsPage() {
         <span className="font-semibold uppercase tracking-[0.12em] text-emerald-100/90">Market ops shortcuts</span>
         {[
           ["Dealer dashboard", "#dealer-dashboard-ops"],
+          ["Operational reports", "#operational-reporting-ops"],
           ["Listing intelligence", "#listing-intelligence-ops"],
           ["Convention", "#convention-ops"],
           ["Liquidity", "#liquidity-ops"],
@@ -4796,6 +4836,137 @@ export function OperationsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      </details>
+
+      <details
+        id="operational-reporting-ops"
+        className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/15 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Operational reporting</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Append-only CSV run history with deterministic checksums and replay keys. Downloads are read-only; no
+                source-table mutation. Optional owner scope limits the run list.
+              </p>
+            </div>
+            <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+              Ops / reports
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          <div className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Owner user id
+              <input
+                value={opsOperationalOwnerDraft}
+                onChange={(e) => setOpsOperationalOwnerDraft(e.target.value)}
+                className="mt-2 w-52 rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                placeholder="Blank = all owners"
+              />
+            </label>
+            <button
+              type="button"
+              className="rounded-xl border border-violet-400/45 px-3 py-2 text-xs font-semibold text-violet-100"
+              onClick={() => {
+                const trimmed = opsOperationalOwnerDraft.trim();
+                if (!trimmed) {
+                  setOpsOperationalOwnerFilter(undefined);
+                  return;
+                }
+                const n = Number(trimmed);
+                setOpsOperationalOwnerFilter(Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
+              }}
+            >
+              Apply scope
+            </button>
+          </div>
+          {opsOperationalDownloadError ? (
+            <div className="mb-3">
+              <StatusBanner tone="error">{opsOperationalDownloadError}</StatusBanner>
+            </div>
+          ) : null}
+          {opsOperationalReportsLoading ? (
+            <p className="text-sm text-slate-400">Loading operational report runs…</p>
+          ) : opsOperationalReportsError ? (
+            <StatusBanner tone="error">{opsOperationalReportsError}</StatusBanner>
+          ) : opsOperationalReports ? (
+            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="p-3 font-medium">Run</th>
+                    <th className="p-3 font-medium">Owner</th>
+                    <th className="p-3 font-medium">Report type</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">CSV rows</th>
+                    <th className="p-3 font-medium">Checksum</th>
+                    <th className="p-3 font-medium">Replay</th>
+                    <th className="p-3 font-medium">Created</th>
+                    <th className="p-3 font-medium">Download</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10 text-slate-200">
+                  {opsOperationalReports.items.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={9}>
+                        No report runs recorded for this scope.
+                      </td>
+                    </tr>
+                  ) : (
+                    opsOperationalReports.items.map((run) => (
+                      <tr key={run.id}>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">#{run.id}</td>
+                        <td className="p-3 font-mono text-[11px] text-slate-300">@{run.owner_user_id}</td>
+                        <td className="p-3 text-slate-300">{run.report_type.replace(/_/g, " ")}</td>
+                        <td className="p-3">
+                          <div>{run.status}</div>
+                          {run.failure_reason ? (
+                            <div
+                              className="mt-1 max-w-[14rem] truncate text-[10px] text-rose-300"
+                              title={run.failure_reason}
+                            >
+                              {run.failure_reason}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="p-3">{run.csv_row_count}</td>
+                        <td className="p-3 font-mono text-[10px] text-slate-400">{abbrevExportChecksum(run.checksum)}</td>
+                        <td className="max-w-[10rem] truncate p-3 font-mono text-[10px] text-slate-400" title={run.replay_key ?? undefined}>
+                          {run.replay_key ?? "—"}
+                        </td>
+                        <td className="p-3 text-slate-400">{formatDateTime(run.created_at)}</td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            className="rounded-full border border-violet-400/35 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10 disabled:opacity-40"
+                            disabled={run.status !== "COMPLETED"}
+                            onClick={() => {
+                              void (async () => {
+                                setOpsOperationalDownloadError(null);
+                                try {
+                                  await apiClient.downloadOpsOperationalReportCsv(run.id);
+                                } catch (err) {
+                                  setOpsOperationalDownloadError(
+                                    err instanceof ApiError ? err.message : "Unable to download report CSV.",
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            CSV
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       </details>
 

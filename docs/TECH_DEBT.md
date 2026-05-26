@@ -157,6 +157,17 @@ Resolved routes:
   | Intelligence | Recommendation systems, predictive dealer analytics |
   | Comparative analytics | Automated cross-owner benchmarking without deterministic export contracts |
 
+## P36-08 — Operational reporting / deterministic closeout (2026-05-25)
+
+- Architecture note: deterministic append-safe reporting registry + CSV contracts live in `docs/REPORTING_CLOSEOUT_ARCHITECTURE.md` (`OperationalReportRun|File|Item`, UTF-8 CSV checksums, lineage JSON, replay keys, owner vs `/ops/reports` parity, `OPERATIONAL_REPORTS_STORAGE_ROOT`).
+- Surfaces intentionally remain **read-mostly bookkeepers** over the P36 stack; they must never “fix” upstream objects, auto-mutate inventory, or enqueue marketplace work.
+- **Deferred scope (post-P36)**
+  - Real-time streaming / incremental report deltas / websocket fan-out of report status
+  - Predictive dealer intelligence, acquisition intelligence, portfolio optimization, ML forecasting
+  - Grading ROI systems, speculative pricing, automated sell/hold recommendation engines
+  - Notification/email/SMS routers, staffing workflows, ticketing, or external BI sink automation
+  - Async worker offload for heavy report fan-out beyond synchronous FastAPI envelopes (unless replay + checksum contracts are preserved)
+
 ## P33 — Inventory Intelligence closeout (2026-05-24)
 
 - Intelligence reads (risks, action center, timelines, duplication, run gaps, reconciliation summaries) remain **mutation-free** on the dedicated read paths.

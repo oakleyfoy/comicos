@@ -24,7 +24,7 @@ from app.api.report_params import (
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_session
-from app.models import InventoryCopy, User
+from app.models import InventoryCopy, OperationalReportRun, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
 
@@ -178,6 +178,12 @@ from app.schemas.dealer_dashboard import (
     DealerDashboardGenerateResponse,
     DealerDashboardGetResponse,
     DealerDashboardMetricListResponse,
+)
+from app.schemas.operational_reporting import (
+    OperationalReportGeneratePayload,
+    OperationalReportRunDetailRead,
+    OperationalReportRunListResponse,
+    OperationalReportingDashboardRollup,
 )
 from app.schemas.convention_operations import (
     ConventionAssignmentCreate,
@@ -666,6 +672,7 @@ from app.services.inventory_fmv import (
     portfolio_value_summary_for_scope,
 )
 from app.services import dealer_dashboard as dealer_dashboard_service
+from app.services import operational_reporting as operational_reporting_service
 from app.services import listing_export as listing_export_service
 from app.services import listing_intelligence as listing_intelligence_service
 from app.services import listing_registry as listing_registry_service
@@ -9526,6 +9533,199 @@ def ops_list_dealer_dashboard_feed(
         created_to=created_to,
         limit=limit,
         offset=offset,
+    )
+
+
+@app.get("/reports/dashboard-rollups", response_model=OperationalReportingDashboardRollup)
+def owner_operational_reports_dashboard_rollups(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OperationalReportingDashboardRollup:
+    return operational_reporting_service.dashboard_rollup_owner(session, owner_user_id=int(current_user.id))
+
+
+@app.post(
+    "/reports/generate",
+    response_model=OperationalReportRunDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_generate_operational_report(
+    payload: OperationalReportGeneratePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OperationalReportRunDetailRead:
+    detail, replayed = operational_reporting_service.generate_operational_report(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return detail
+
+
+@app.get("/reports", response_model=OperationalReportRunListResponse)
+def owner_list_operational_reports(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    report_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> OperationalReportRunListResponse:
+    lim, off = operational_reporting_service.clamp_report_pagination(limit=limit, offset=offset)
+    rows, total = operational_reporting_service.list_runs_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        report_type=report_type,
+        status=status_filter,
+        created_from=created_from,
+        created_to=created_to,
+        limit=lim,
+        offset=off,
+    )
+    return operational_reporting_service.list_response_from_rows(rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/reports/{report_id}/download")
+def download_owner_operational_report_csv(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    run_row = session.get(OperationalReportRun, report_id)
+
+    if run_row is None or int(run_row.owner_user_id) != int(current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report run not found")
+    if str(run_row.status) != "COMPLETED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="report not ready for download")
+
+    abs_path, frow = operational_reporting_service.resolve_operational_report_download_path(
+        session,
+        settings,
+        owner_user_id=int(current_user.id),
+        operational_report_run_id=report_id,
+        operational_report_file_id=file_id,
+        allow_ops_any_owner=False,
+    )
+    return FileResponse(
+        path=str(abs_path),
+        media_type="text/csv; charset=utf-8",
+        filename=frow.file_name,
+    )
+
+
+@app.get("/reports/{report_id}", response_model=OperationalReportRunDetailRead)
+def owner_get_operational_report(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> OperationalReportRunDetailRead:
+    return operational_reporting_service.build_run_detail(
+        session,
+        owner_user_id=int(current_user.id),
+        operational_report_run_id=report_id,
+    )
+
+
+@app.get("/ops/reports/dashboard-rollups", response_model=OperationalReportingDashboardRollup, include_in_schema=False)
+def ops_operational_reports_dashboard_rollups(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> OperationalReportingDashboardRollup:
+    ensure_ops_admin_access(current_user, settings)
+    if owner_user_id is None:
+        return OperationalReportingDashboardRollup(recent_runs=[], failed_runs=[])
+    return operational_reporting_service.dashboard_rollup_owner(session, owner_user_id=int(owner_user_id))
+
+
+@app.get("/ops/reports", response_model=OperationalReportRunListResponse, include_in_schema=False)
+def ops_list_operational_reports(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    report_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> OperationalReportRunListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    lim, off = operational_reporting_service.clamp_report_pagination(limit=limit, offset=offset)
+    rows, total = operational_reporting_service.list_runs_ops(
+        session,
+        owner_user_id=owner_user_id,
+        report_type=report_type,
+        status=status_filter,
+        created_from=created_from,
+        created_to=created_to,
+        limit=lim,
+        offset=off,
+    )
+    return operational_reporting_service.list_response_from_rows(rows, total=total, limit=lim, offset=off)
+
+
+@app.get("/ops/reports/{report_id}", response_model=OperationalReportRunDetailRead, include_in_schema=False)
+def ops_get_operational_report(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> OperationalReportRunDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    row = session.get(OperationalReportRun, report_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report run not found")
+
+    uid = int(row.owner_user_id)
+    return operational_reporting_service.build_run_detail(
+        session,
+        owner_user_id=uid,
+        operational_report_run_id=report_id,
+        allow_cross_owner_ops=True,
+    )
+
+
+@app.get("/ops/reports/{report_id}/download", include_in_schema=False)
+def ops_download_operational_report_csv(
+    report_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    file_id: int | None = Query(default=None),
+) -> FileResponse:
+    ensure_ops_admin_access(current_user, settings)
+    row = session.get(OperationalReportRun, report_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report run not found")
+    uid = int(row.owner_user_id)
+    if str(row.status) != "COMPLETED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="report not ready for download")
+
+    abs_path, frow = operational_reporting_service.resolve_operational_report_download_path(
+        session,
+        settings,
+        owner_user_id=uid,
+        operational_report_run_id=report_id,
+        operational_report_file_id=file_id,
+        allow_ops_any_owner=True,
+    )
+
+    return FileResponse(
+        path=str(abs_path),
+        media_type="text/csv; charset=utf-8",
+        filename=frow.file_name,
     )
 
 

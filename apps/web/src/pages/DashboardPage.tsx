@@ -59,6 +59,7 @@ import {
   type ConventionDashboardSummary,
   type LiquidityDashboardSummary,
   type SalesDashboardSummary,
+  type OperationalReportingDashboardRollup,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -868,6 +869,10 @@ export function DashboardPage() {
   const [dealerAlerts, setDealerAlerts] = useState<DealerDashboardAlertRead[]>([]);
   const [dealerFeed, setDealerFeed] = useState<DealerDashboardFeedEventRead[]>([]);
   const [dealerGenBusy, setDealerGenBusy] = useState(false);
+  const [opReportRollups, setOpReportRollups] = useState<OperationalReportingDashboardRollup | null>(null);
+  const [opReportRollupsLoading, setOpReportRollupsLoading] = useState(true);
+  const [opReportRollupsError, setOpReportRollupsError] = useState<string | null>(null);
+  const [opReportBusy, setOpReportBusy] = useState(false);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1550,6 +1555,42 @@ export function DashboardPage() {
   }, [user?.id]);
 
   useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setOpReportRollups(null);
+          setOpReportRollupsLoading(false);
+          setOpReportRollupsError(null);
+        }
+        return;
+      }
+      setOpReportRollupsLoading(true);
+      setOpReportRollupsError(null);
+      try {
+        const roll = await apiClient.getOperationalReportRollups();
+        if (!ignore) {
+          setOpReportRollups(roll);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpReportRollups(null);
+          setOpReportRollupsError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load operational reporting rollups.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpReportRollupsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
     const nextHoldDrafts: Record<number, InventoryItem["hold_status"]> = {};
     const nextGradeDrafts: Record<number, InventoryItem["grade_status"]> = {};
@@ -1594,6 +1635,36 @@ export function DashboardPage() {
       setDealerDashError(err instanceof ApiError ? err.message : "Unable to generate dealer dashboard snapshot.");
     } finally {
       setDealerGenBusy(false);
+    }
+  }
+
+  async function generateQuickListingOperationalReport(): Promise<void> {
+    if (!user) {
+      return;
+    }
+    setOpReportBusy(true);
+    setOpReportRollupsError(null);
+    try {
+      await apiClient.generateOperationalReport({
+        report_type: "listing_summary",
+        replay_key: `dash-listing-${Date.now()}`,
+      });
+      setOpReportRollups(await apiClient.getOperationalReportRollups());
+    } catch (err) {
+      setOpReportRollupsError(err instanceof ApiError ? err.message : "Unable to generate operational report.");
+    } finally {
+      setOpReportBusy(false);
+    }
+  }
+
+  async function downloadOperationalReportCsvClient(reportId: number): Promise<void> {
+    try {
+      setError(null);
+      await apiClient.downloadOperationalReportCsv(reportId);
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Operational report download failed.";
+      setError(`Operational report: ${message}`);
     }
   }
 
@@ -2657,6 +2728,103 @@ export function DashboardPage() {
                       </>
                     );
                   })()}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {user ? (
+            <section
+              id="operational-reporting-dash"
+              className="mt-6 rounded-3xl border border-sky-400/30 bg-slate-950/80 p-5 shadow-xl shadow-black/20"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Operational reporting</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">P36 closeout CSV registry</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic, checksum-backed summaries across listings, liquidity, conventions, exporters, ledger sales,
+                    dealer snapshots, and inventory health signals. Replay keys keep generation idempotent — no corrective writes,
+                    forecasting, or notification fan-out on this lane.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void generateQuickListingOperationalReport()}
+                    disabled={opReportBusy}
+                    className="rounded-xl border border-sky-400/45 bg-sky-500/12 px-4 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/18 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {opReportBusy ? "Generating…" : "Generate listing summary CSV"}
+                  </button>
+                  <Link
+                    to="/ops#operational-reporting-ops"
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-sky-300/55 hover:bg-white/5"
+                  >
+                    Ops reporting table
+                  </Link>
+                </div>
+              </div>
+
+              {opReportRollupsLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading operational report fingerprints…</p>
+              ) : opReportRollupsError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{opReportRollupsError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recent runs (14d)</p>
+                    {opReportRollups && opReportRollups.recent_runs.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-xs text-slate-200">
+                        {opReportRollups.recent_runs.map((run) => (
+                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
+                            <div>
+                              <p className="font-semibold text-white">{run.report_type}</p>
+                              <p className="font-mono text-[10px] text-slate-500">
+                                #{run.id} · {run.status} · rows {run.csv_row_count}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-300">
+                                {shortenChecksum(run.checksum)}
+                              </span>
+                              {run.status === "COMPLETED" ? (
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-sky-300/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-100"
+                                  onClick={() => void downloadOperationalReportCsvClient(run.id)}
+                                >
+                                  Download CSV
+                                </button>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">No report runs logged in the trailing window.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-400/35 bg-rose-950/20 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-200/80">Failed reports</p>
+                    {opReportRollups && opReportRollups.failed_runs.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-xs text-rose-100">
+                        {opReportRollups.failed_runs.map((run) => (
+                          <li key={run.id} className="border-b border-white/10 pb-2">
+                            <p className="font-semibold">{run.report_type}</p>
+                            <p className="font-mono text-[10px] text-rose-200/80">
+                              #{run.id} · {(run.failure_reason ?? "UNKNOWN").slice(0, 120)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-rose-200/70">No failed generations on record.</p>
+                    )}
+                  </div>
                 </div>
               )}
             </section>

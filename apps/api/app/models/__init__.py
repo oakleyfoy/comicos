@@ -77,6 +77,11 @@ from app.models.dealer_dashboard import (
     DealerDashboardMetric,
     DealerDashboardSnapshot,
 )
+from app.models.operational_reporting import (
+    OperationalReportFile,
+    OperationalReportItem,
+    OperationalReportRun,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -176,6 +181,9 @@ __all__ = [
     "OcrReplayItem",
     "OcrReplayRun",
     "OpsEvent",
+    "OperationalReportFile",
+    "OperationalReportItem",
+    "OperationalReportRun",
     "Order",
     "OrderItem",
     "Publisher",

@@ -3032,6 +3032,80 @@ export interface DealerDashboardMetricListResponse {
   offset: number;
 }
 
+export type OperationalReportType =
+  | "listing_summary"
+  | "sales_summary"
+  | "liquidity_summary"
+  | "convention_summary"
+  | "export_summary"
+  | "dealer_dashboard_summary"
+  | "inventory_health_summary";
+
+export interface OperationalReportGenerationParamsPayload {
+  sale_date_from?: string | null;
+  sale_date_to?: string | null;
+}
+
+export interface OperationalReportGeneratePayloadInput {
+  report_type: OperationalReportType;
+  replay_key?: string | null;
+  generation_params?: OperationalReportGenerationParamsPayload;
+}
+
+export interface OperationalReportFileRead {
+  id: number;
+  operational_report_run_id: number;
+  file_name: string;
+  file_type: string;
+  storage_path: string;
+  checksum: string;
+  row_count: number;
+  created_at: string;
+}
+
+export interface OperationalReportItemRead {
+  id: number;
+  operational_report_run_id: number;
+  row_number: number;
+  lineage_domain: string;
+  lineage_key: string;
+  lineage_json: Record<string, unknown>;
+  row_checksum: string | null;
+  created_at: string;
+}
+
+export interface OperationalReportRunRead {
+  id: number;
+  owner_user_id: number;
+  report_type: string;
+  status: string;
+  replay_key: string | null;
+  generation_params_json: Record<string, unknown>;
+  checksum: string | null;
+  csv_row_count: number;
+  failure_reason: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface OperationalReportRunDetailRead extends OperationalReportRunRead {
+  items: OperationalReportItemRead[];
+  files: OperationalReportFileRead[];
+}
+
+export interface OperationalReportRunListResponse {
+  items: OperationalReportRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OperationalReportingDashboardRollup {
+  recent_runs: OperationalReportRunRead[];
+  failed_runs: OperationalReportRunRead[];
+}
+
 export type LiquidityStatus = "HIGH" | "MODERATE" | "LOW" | "ILLIQUID" | "INSUFFICIENT_DATA";
 export type LiquidityConfidence = "HIGH" | "MEDIUM" | "LOW";
 export type LiquidityEvidenceType = "SALE" | "ACTIVE_LISTING" | "FAILED_LISTING" | "RELIST" | "STALE";
@@ -7509,6 +7583,62 @@ export const apiClient = {
   }): Promise<ListingChannelPerformanceListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
     return request<ListingChannelPerformanceListResponse>(`/ops/listing-channel-performance${q}`);
+  },
+
+  downloadOpsOperationalReportCsv(reportId: number): Promise<void> {
+    return downloadAuthenticatedReport(`/ops/reports/${reportId}/download`, `ops-operational-report-${reportId}.csv`);
+  },
+
+  generateOperationalReport(payload: OperationalReportGeneratePayloadInput): Promise<OperationalReportRunDetailRead> {
+    return request<OperationalReportRunDetailRead>("/reports/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getOperationalReport(reportId: number): Promise<OperationalReportRunDetailRead> {
+    return request<OperationalReportRunDetailRead>(`/reports/${reportId}`);
+  },
+
+  getOperationalReportRollups(): Promise<OperationalReportingDashboardRollup> {
+    return request<OperationalReportingDashboardRollup>("/reports/dashboard-rollups");
+  },
+
+  listOperationalReports(params?: {
+    report_type?: OperationalReportType | string;
+    status?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<OperationalReportRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<OperationalReportRunListResponse>(`/reports${q}`);
+  },
+
+  downloadOperationalReportCsv(reportId: number): Promise<void> {
+    return downloadAuthenticatedReport(`/reports/${reportId}/download`, `operational-report-${reportId}.csv`);
+  },
+
+  getOpsOperationalReports(params?: {
+    owner_user_id?: number;
+    report_type?: OperationalReportType | string;
+    status?: string;
+    created_from?: string;
+    created_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<OperationalReportRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<OperationalReportRunListResponse>(`/ops/reports${q}`);
+  },
+
+  getOpsOperationalReportRollups(ownerUserId?: number): Promise<OperationalReportingDashboardRollup> {
+    const q =
+      typeof ownerUserId === "number" && Number.isFinite(ownerUserId)
+        ? buildQueryString({ owner_user_id: ownerUserId })
+        : "";
+    return request<OperationalReportingDashboardRollup>(`/ops/reports/dashboard-rollups${q}`);
   },
 
   getListingExportDashboardSummary(): Promise<ListingExportDashboardSummary> {
