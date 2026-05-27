@@ -2,6 +2,23 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40-06 — Defect detection foundation (2026-05-27)
+
+- Architecture note: deterministic condition regions, scan-quality gates, baseline evidence anchors, append-only defect artifacts, and replay-safe lineage are documented in `docs/SCAN_DEFECT_FOUNDATION_ARCHITECTURE.md`.
+- This layer remains foundation-only. It creates provisional condition evidence without assigning grades, naming final defects, pricing condition impact, or using AI restoration.
+
+### Deferred scope (beyond P40-06)
+
+- Specialized spine tick detection
+- Specialized corner wear detection
+- Surface defect classification
+- Structural damage classification
+- AI defect segmentation
+- Grade-impact modeling
+- Restoration detection
+- ML-based visual evidence scoring
+- Defect-aware valuation
+
 ## P40-03 — Boundary mapping / cover detect (2026-05-27)
 
 - Architecture note: deterministic cover-area geometry, immutable normalized inputs, overlay artifacts, and replay-safe checksum lineage are documented in `docs/SCAN_BOUNDARY_MAPPING_ARCHITECTURE.md`.

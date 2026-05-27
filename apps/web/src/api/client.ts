@@ -8038,6 +8038,152 @@ export interface ScanReconciliationFailureListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanDefectStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanDefectRunCreate {
+  scan_image_id: number;
+  boundary_run_id?: number | null;
+  ocr_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+}
+
+export interface ScanDefectRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  normalization_run_id: number;
+  boundary_run_id: number;
+  ocr_run_id: number | null;
+  reconciliation_run_id: number | null;
+  source_artifact_id: number;
+  source_checksum: string;
+  defect_checksum: string;
+  defect_status: ScanDefectStatus | string;
+  detection_engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanDefectRegionRead {
+  id: number;
+  owner_user_id: number;
+  defect_run_id: number;
+  region_type: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  region_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  defect_run_id: number;
+  region_id: number;
+  evidence_type: string;
+  evidence_category: string;
+  severity_hint: string;
+  confidence_score: number;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectArtifactRead {
+  id: number;
+  owner_user_id: number;
+  defect_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url: string | null;
+  created_at: string;
+}
+
+export interface ScanDefectIssueRead {
+  id: number;
+  owner_user_id: number;
+  defect_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectHistoryRead {
+  id: number;
+  owner_user_id: number;
+  defect_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectRunDetail extends ScanDefectRunRead {
+  regions: ScanDefectRegionRead[];
+  evidence: ScanDefectEvidenceRead[];
+  artifacts: ScanDefectArtifactRead[];
+  issues: ScanDefectIssueRead[];
+  history: ScanDefectHistoryRead[];
+  original_scan_checksum: string | null;
+  normalization_checksum: string | null;
+  boundary_checksum: string | null;
+  ocr_checksum: string | null;
+  reconciliation_checksum: string | null;
+  source_preview_data_url: string | null;
+  quality_gates: Array<Record<string, unknown>>;
+  evidence_summary: Record<string, unknown>;
+  quality_gate_counts: Record<string, number>;
+}
+
+export interface ScanDefectRunListResponse {
+  items: ScanDefectRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  quality_gate_failure_count: number;
+  low_confidence_evidence_count: number;
+}
+
+export interface ScanDefectRegionListResponse {
+  items: ScanDefectRegionRead[];
+  pagination: MarketApiV1Pagination;
+  region_type_counts: Record<string, number>;
+}
+
+export interface ScanDefectEvidenceListResponse {
+  items: ScanDefectEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  category_counts: Record<string, number>;
+  low_confidence_count: number;
+}
+
+export interface ScanDefectIssueListResponse {
+  items: ScanDefectIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanDefectFailureListResponse {
+  items: ScanDefectRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -11091,6 +11237,105 @@ export const apiClient = {
   }): Promise<ScanReconciliationFailureListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanReconciliationFailureListResponse>(`/ops/scan-reconciliation/failures${q}`);
+  },
+
+  runScanDefectFoundation(payload: ScanDefectRunCreate): Promise<ScanDefectRunDetail> {
+    return requestScanV1<ScanDefectRunDetail>("/scan-defects/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanDefectRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectRunListResponse>(`/scan-defects/runs${q}`);
+  },
+
+  getScanDefectRun(runId: number): Promise<ScanDefectRunDetail> {
+    return requestScanV1<ScanDefectRunDetail>(`/scan-defects/runs/${runId}`);
+  },
+
+  listScanDefectRegions(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectRegionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectRegionListResponse>(`/scan-defects/regions${q}`);
+  },
+
+  listScanDefectEvidence(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectEvidenceListResponse>(`/scan-defects/evidence${q}`);
+  },
+
+  listScanDefectIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectIssueListResponse>(`/scan-defects/issues${q}`);
+  },
+
+  getScanDefectArtifact(artifactId: number): Promise<ScanDefectArtifactRead> {
+    return requestScanV1<ScanDefectArtifactRead>(`/scan-defects/artifacts/${artifactId}`);
+  },
+
+  listScanDefectQualityGates(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectIssueListResponse>(`/scan-defects/issues${q}`);
+  },
+
+  listOpsScanDefectRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectRunListResponse>(`/ops/scan-defects/runs${q}`);
+  },
+
+  listOpsScanDefectIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectIssueListResponse>(`/ops/scan-defects/issues${q}`);
+  },
+
+  listOpsScanDefectFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectFailureListResponse>(`/ops/scan-defects/failures${q}`);
+  },
+
+  listOpsScanDefectQualityGates(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectIssueListResponse>(`/ops/scan-defects/quality-gates${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

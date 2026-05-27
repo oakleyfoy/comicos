@@ -93,6 +93,7 @@ import { ScanNormalizationSummaryCard } from "../components/ScanNormalizationSum
 import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
 import { ScanOcrSummaryCard } from "../components/ScanOcrSummaryCard";
 import { ScanReconciliationSummaryCard } from "../components/ScanReconciliationSummaryCard";
+import { ScanDefectsSummaryCard } from "../components/ScanDefectsSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7640,6 +7641,7 @@ export function DashboardPage() {
       <ScanBoundarySummaryCard />
       <ScanOcrSummaryCard />
       <ScanReconciliationSummaryCard />
+      <ScanDefectsSummaryCard />
     </AppShell>
   );
 }

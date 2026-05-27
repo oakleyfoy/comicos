@@ -208,6 +208,14 @@ from app.models.scan_reconciliation import (
     ScanReconciliationIssue,
     ScanReconciliationRun,
 )
+from app.models.scan_defects import (
+    ScanDefectArtifact,
+    ScanDefectEvidence,
+    ScanDefectHistory,
+    ScanDefectIssue,
+    ScanDefectRegion,
+    ScanDefectRun,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -472,6 +480,12 @@ __all__ = [
     "ScanReconciliationArtifact",
     "ScanReconciliationIssue",
     "ScanReconciliationHistory",
+    "ScanDefectRun",
+    "ScanDefectRegion",
+    "ScanDefectEvidence",
+    "ScanDefectArtifact",
+    "ScanDefectIssue",
+    "ScanDefectHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

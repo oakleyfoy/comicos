@@ -230,6 +230,7 @@ import { ScanNormalizationOpsPanel } from "../components/ScanNormalizationOpsPan
 import { ScanBoundaryOpsPanel } from "../components/ScanBoundaryOpsPanel";
 import { ScanOcrOpsPanel } from "../components/ScanOcrOpsPanel";
 import { ScanReconciliationOpsPanel } from "../components/ScanReconciliationOpsPanel";
+import { ScanDefectsOpsPanel } from "../components/ScanDefectsOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17466,6 +17467,7 @@ export function OperationsPage() {
       <ScanBoundaryOpsPanel />
       <ScanOcrOpsPanel />
       <ScanReconciliationOpsPanel />
+      <ScanDefectsOpsPanel />
     </AppShell>
   );
 }
