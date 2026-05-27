@@ -1105,6 +1105,7 @@ from app.services.variant_family_intelligence import (
 
 from app.api.market_v1_layer import attach_market_v1_layer
 from app.api.scan_ingestion import attach_scan_ingestion_layer
+from app.api.scan_normalization import attach_scan_normalization_layer
 
 
 settings = get_settings()
@@ -1121,6 +1122,7 @@ app.add_middleware(
 
 attach_market_v1_layer(app)
 attach_scan_ingestion_layer(app)
+attach_scan_normalization_layer(app)
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:

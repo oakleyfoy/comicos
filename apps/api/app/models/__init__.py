@@ -180,6 +180,12 @@ from app.models.scan_ingestion import (
     ScanIngestionEvent,
     ScanUploadSession,
 )
+from app.models.scan_normalization import (
+    ScanNormalizationArtifact,
+    ScanNormalizationHistory,
+    ScanNormalizationIssue,
+    ScanNormalizationRun,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -424,6 +430,10 @@ __all__ = [
     "ScanImage",
     "ScanImageVariant",
     "ScanIngestionEvent",
+    "ScanNormalizationRun",
+    "ScanNormalizationArtifact",
+    "ScanNormalizationIssue",
+    "ScanNormalizationHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

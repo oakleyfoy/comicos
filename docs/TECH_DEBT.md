@@ -2,6 +2,20 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40-02 — Image normalization engine (2026-05-27)
+
+- Architecture note: deterministic preprocessing, immutable originals, artifact lineage, checksum propagation, and issue tracking are documented in `docs/SCAN_NORMALIZATION_ARCHITECTURE.md`.
+- This layer remains preprocessing-only. It corrects geometry and scanner variance without performing OCR, grading, defect analysis, or any AI enhancement.
+
+### Deferred scope (beyond P40-02)
+
+- AI enhancement
+- Super resolution
+- Defect-aware restoration
+- Advanced perspective reconstruction
+- ML image cleanup
+- Scan denoising AI
+
 ## P40-01 — Scan ingestion layer (2026-05-27)
 
 - Architecture note: deterministic visual intake, immutable originals, append-only ingest events, storage-path abstraction, and duplicate detection are documented in `docs/SCAN_INGESTION_ARCHITECTURE.md`.

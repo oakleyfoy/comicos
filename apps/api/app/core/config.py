@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     cover_images_storage_root_raw: str = Field(default="", alias="COVER_IMAGES_STORAGE_ROOT")
     scan_ingestion_storage_root_raw: str = Field(default="", alias="SCAN_INGESTION_STORAGE_ROOT")
+    scan_normalization_storage_root_raw: str = Field(default="", alias="SCAN_NORMALIZATION_STORAGE_ROOT")
     listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
@@ -97,6 +98,13 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "scan_ingestion"
+
+    @property
+    def scan_normalization_storage_root(self) -> Path:
+        trimmed = self.scan_normalization_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_normalization"
 
     @property
     def listing_exports_storage_root(self) -> Path:

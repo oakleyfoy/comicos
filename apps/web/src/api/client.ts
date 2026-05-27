@@ -7560,6 +7560,119 @@ export interface ScanImageListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanNormalizationStatus = "PENDING" | "COMPLETE" | "FAILED";
+export type ScanNormalizationOrientation = "portrait" | "rotated_left" | "rotated_right" | "upside_down";
+export type ScanNormalizationArtifactType =
+  | "ROTATED"
+  | "CROPPED"
+  | "PERSPECTIVE_FIXED"
+  | "COLOR_NORMALIZED"
+  | "FINAL_NORMALIZED"
+  | "THUMBNAIL";
+
+export interface ScanNormalizationRunPayload {
+  scan_image_id: number;
+}
+
+export interface ScanNormalizationArtifactRead {
+  id: number;
+  scan_normalization_run_id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  parent_artifact_id: number | null;
+  artifact_type: ScanNormalizationArtifactType | string;
+  artifact_order: number;
+  storage_backend: string;
+  storage_path: string;
+  width: number;
+  height: number;
+  dpi_x: number | null;
+  dpi_y: number | null;
+  artifact_checksum: string;
+  parent_checksum: string | null;
+  normalization_status: ScanNormalizationStatus | string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url: string | null;
+  created_at: string;
+}
+
+export interface ScanNormalizationIssueRead {
+  id: number;
+  scan_normalization_run_id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  issue_type: string;
+  severity: string;
+  normalization_status: ScanNormalizationStatus | string;
+  metric_value: string | null;
+  detail_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanNormalizationHistoryRead {
+  id: number;
+  scan_normalization_run_id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  history_order: number;
+  stage_name: string;
+  event_type: string;
+  from_checksum: string | null;
+  to_checksum: string | null;
+  detail_json: Record<string, unknown>;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ScanNormalizationRunSummaryRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  source_sha256_checksum: string;
+  normalization_checksum: string;
+  normalization_status: ScanNormalizationStatus | string;
+  orientation_code: ScanNormalizationOrientation | string;
+  rotation_degrees: number;
+  crop_left: number;
+  crop_top: number;
+  crop_right: number;
+  crop_bottom: number;
+  perspective_strength: number;
+  issue_count: number;
+  artifact_count: number;
+  replayed_from_run_id: number | null;
+  final_artifact_id: number | null;
+  summary_json: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanNormalizationRunRead extends ScanNormalizationRunSummaryRead {
+  artifacts: ScanNormalizationArtifactRead[];
+  issues: ScanNormalizationIssueRead[];
+  history: ScanNormalizationHistoryRead[];
+  source_preview_data_url: string | null;
+  final_preview_data_url: string | null;
+}
+
+export interface ScanNormalizationRunListResponse {
+  items: ScanNormalizationRunSummaryRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  replay_safe_run_count: number;
+}
+
+export interface ScanNormalizationIssueListResponse {
+  items: ScanNormalizationIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanNormalizationFailureListResponse {
+  items: ScanNormalizationRunSummaryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -10343,6 +10456,70 @@ export const apiClient = {
   }): Promise<ScanImageListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanImageListResponse>(`/ops/scan-ingestion/failures${q}`);
+  },
+
+  runScanNormalization(payload: ScanNormalizationRunPayload): Promise<ScanNormalizationRunRead> {
+    return requestScanV1<ScanNormalizationRunRead>("/scan-normalization/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listNormalizationRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanNormalizationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanNormalizationRunListResponse>(`/scan-normalization/runs${q}`);
+  },
+
+  getNormalizationRun(runId: number): Promise<ScanNormalizationRunRead> {
+    return requestScanV1<ScanNormalizationRunRead>(`/scan-normalization/runs/${runId}`);
+  },
+
+  listNormalizationIssues(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanNormalizationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanNormalizationIssueListResponse>(`/scan-normalization/issues${q}`);
+  },
+
+  getNormalizationArtifacts(artifactId: number): Promise<ScanNormalizationArtifactRead> {
+    return requestScanV1<ScanNormalizationArtifactRead>(`/scan-normalization/artifacts/${artifactId}`);
+  },
+
+  listOpsNormalizationRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanNormalizationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanNormalizationRunListResponse>(`/ops/scan-normalization/runs${q}`);
+  },
+
+  listOpsNormalizationIssues(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanNormalizationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanNormalizationIssueListResponse>(`/ops/scan-normalization/issues${q}`);
+  },
+
+  listOpsNormalizationFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanNormalizationFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanNormalizationFailureListResponse>(`/ops/scan-normalization/failures${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

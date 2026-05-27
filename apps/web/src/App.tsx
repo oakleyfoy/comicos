@@ -16,6 +16,7 @@ import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ScanIngestionPage } from "./pages/ScanIngestionPage";
+import { ScanNormalizationPage } from "./pages/ScanNormalizationPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -42,6 +43,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/scan-ingestion" element={<ScanIngestionPage />} />
+        <Route path="/scan-normalization" element={<ScanNormalizationPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />
