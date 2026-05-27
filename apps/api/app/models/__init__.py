@@ -149,6 +149,12 @@ from app.models.market_normalization import (
     MarketAcquisitionNormalizationIssue,
     MarketAcquisitionNormalizationRun,
 )
+from app.models.market_scoring import (
+    MarketAcquisitionScore,
+    MarketAcquisitionScoreEvidence,
+    MarketAcquisitionScoreHistory,
+    MarketAcquisitionScoreSnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -366,6 +372,10 @@ __all__ = [
     "MarketAcquisitionNormalizedCandidate",
     "MarketAcquisitionNormalizationIssue",
     "MarketAcquisitionNormalizationEvent",
+    "MarketAcquisitionScoreSnapshot",
+    "MarketAcquisitionScore",
+    "MarketAcquisitionScoreEvidence",
+    "MarketAcquisitionScoreHistory",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

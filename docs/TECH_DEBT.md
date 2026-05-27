@@ -2,6 +2,20 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P39-03 — Market scoring engine (2026-05-26)
+
+- Architecture note: deterministic acquisition ranking, evidence, snapshots, and append-safe history live in `docs/MARKET_SCORING_ARCHITECTURE.md`. The scorer must remain a pure reader over P39-02 normalized candidates and persisted P38 context.
+- UI surfaces stay lightweight: dashboard summary cards, ops drill-down tables, and inventory detail teasers only. Do not expand these into autonomous workflow controls without a separate product decision.
+
+### Deferred scope (beyond P39-03)
+
+- ML ranking models or probabilistic weighting
+- Predictive pricing systems or real-time market forecasting
+- External signal weighting, live marketplace feeds, or third-party ranking inputs
+- Autonomous recommendation tuning or auto-generated buy actions
+- Caching layers for larger owner datasets once score volume justifies dedicated materialized read paths
+- Real-time websocket score feeds instead of explicit read-only snapshot refreshes
+
 ## `apps/api/app/main.py` — Ruff / structure (updated 2026-05-23)
 
 Run: `python -m ruff check app/main.py` from `apps/api`.

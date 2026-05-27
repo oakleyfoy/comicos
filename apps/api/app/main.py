@@ -209,6 +209,14 @@ from app.schemas.market_normalization import (
     MarketNormalizationRunDetailRead,
     MarketNormalizationRunListResponse,
 )
+from app.schemas.market_scoring import (
+    MarketAcquisitionScoreDetailRead,
+    MarketAcquisitionScoreHistoryListResponse,
+    MarketAcquisitionScoreListResponse,
+    MarketAcquisitionScoreRunPayload,
+    MarketAcquisitionScoreRunResponse,
+    MarketAcquisitionScoreSnapshotListResponse,
+)
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
     OperationalReportRunDetailRead,
@@ -728,6 +736,17 @@ from app.services.market_normalization import (
     list_normalization_issues_owner,
     list_normalization_runs_ops,
     list_normalization_runs_owner,
+)
+from app.services.market_scoring import (
+    get_score_ops,
+    get_score_owner,
+    list_history_ops as list_market_scoring_history_ops,
+    list_history_owner as list_market_scoring_history_owner,
+    list_scores_ops,
+    list_scores_owner,
+    list_snapshots_ops,
+    list_snapshots_owner,
+    run_market_acquisition_scoring_for_owner,
 )
 from app.services.market_sale_review_queue import (
     flag_duplicate_market_sale_record,
@@ -7040,6 +7059,199 @@ def ops_get_market_normalization_run_endpoint(
 ) -> MarketNormalizationRunDetailRead:
     ensure_ops_admin_access(current_user, settings)
     return get_normalization_run_ops(session, run_id=run_id)
+
+
+@app.post("/market-scoring/run", response_model=MarketAcquisitionScoreRunResponse)
+def owner_run_market_scoring_endpoint(
+    payload: MarketAcquisitionScoreRunPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionScoreRunResponse:
+    assert current_user.id is not None
+    return run_market_acquisition_scoring_for_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/market-scoring/scores", response_model=MarketAcquisitionScoreListResponse)
+def owner_list_market_scoring_scores_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    recommendation_label: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    score_min: Decimal | None = Query(default=None),
+    score_max: Decimal | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreListResponse:
+    assert current_user.id is not None
+    return list_scores_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_label=recommendation_label,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        score_min=score_min,
+        score_max=score_max,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-scoring/scores/{score_id}", response_model=MarketAcquisitionScoreDetailRead)
+def owner_get_market_scoring_score_endpoint(
+    score_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionScoreDetailRead:
+    assert current_user.id is not None
+    return get_score_owner(session, owner_user_id=int(current_user.id), score_id=score_id)
+
+
+@app.get("/market-scoring/snapshots", response_model=MarketAcquisitionScoreSnapshotListResponse)
+def owner_list_market_scoring_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreSnapshotListResponse:
+    assert current_user.id is not None
+    return list_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-scoring/history", response_model=MarketAcquisitionScoreHistoryListResponse)
+def owner_list_market_scoring_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    recommendation_label: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreHistoryListResponse:
+    assert current_user.id is not None
+    return list_market_scoring_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_label=recommendation_label,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-scoring/scores", response_model=MarketAcquisitionScoreListResponse)
+def ops_list_market_scoring_scores_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    recommendation_label: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    score_min: Decimal | None = Query(default=None),
+    score_max: Decimal | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_scores_ops(
+        session,
+        owner_user_id=owner_user_id,
+        recommendation_label=recommendation_label,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        score_min=score_min,
+        score_max=score_max,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-scoring/scores/{score_id}", response_model=MarketAcquisitionScoreDetailRead)
+def ops_get_market_scoring_score_endpoint(
+    score_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketAcquisitionScoreDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_score_ops(session, score_id=score_id)
+
+
+@app.get("/ops/market-scoring/snapshots", response_model=MarketAcquisitionScoreSnapshotListResponse)
+def ops_list_market_scoring_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-scoring/history", response_model=MarketAcquisitionScoreHistoryListResponse)
+def ops_list_market_scoring_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    recommendation_label: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionScoreHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_scoring_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        recommendation_label=recommendation_label,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/market-sales", response_model=MarketSaleListResponse)

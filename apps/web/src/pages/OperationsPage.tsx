@@ -100,6 +100,10 @@ import {
   type MarketAcquisitionIngestionBatchRead,
   type MarketAcquisitionRawSourceRead,
   type MarketAcquisitionNormalizedCandidateRead,
+  type MarketAcquisitionScoreDetailRead,
+  type MarketAcquisitionScoreHistoryRead,
+  type MarketAcquisitionScoreRead,
+  type MarketAcquisitionScoreSnapshotListResponse,
   type MarketNormalizationIssueRead,
   type MarketNormalizationRunDetailRead,
   type MarketNormalizationRunListResponse,
@@ -1651,6 +1655,17 @@ export function OperationsPage() {
   const [opsMarketNormDetailError, setOpsMarketNormDetailError] = useState<string | null>(null);
   const [opsMarketNormCandidates, setOpsMarketNormCandidates] = useState<MarketAcquisitionNormalizedCandidateRead[]>([]);
   const [opsMarketNormIssues, setOpsMarketNormIssues] = useState<MarketNormalizationIssueRead[]>([]);
+  const [opsMarketScoringSummary, setOpsMarketScoringSummary] = useState<MarketAcquisitionScoreSnapshotListResponse | null>(
+    null,
+  );
+  const [opsMarketScoringLoading, setOpsMarketScoringLoading] = useState(true);
+  const [opsMarketScoringError, setOpsMarketScoringError] = useState<string | null>(null);
+  const [opsMarketScoringSelectedId, setOpsMarketScoringSelectedId] = useState<number | null>(null);
+  const [opsMarketScoringScores, setOpsMarketScoringScores] = useState<MarketAcquisitionScoreRead[]>([]);
+  const [opsMarketScoringHistory, setOpsMarketScoringHistory] = useState<MarketAcquisitionScoreHistoryRead[]>([]);
+  const [opsMarketScoringDetail, setOpsMarketScoringDetail] = useState<MarketAcquisitionScoreDetailRead | null>(null);
+  const [opsMarketScoringDetailLoading, setOpsMarketScoringDetailLoading] = useState(false);
+  const [opsMarketScoringDetailError, setOpsMarketScoringDetailError] = useState<string | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -2137,6 +2152,88 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketNormSelectedId, opsPortfolioOwnerApplied, opsMarketNormSummary?.items]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketScoringLoading(true);
+      setOpsMarketScoringError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const summary = await apiClient.listOpsMarketScoringSnapshots({ limit: 40, offset: 0, ...scoped });
+        if (!ignore) {
+          setOpsMarketScoringSummary(summary);
+          setOpsMarketScoringSelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketScoringSummary(null);
+          setOpsMarketScoringSelectedId(null);
+          setOpsMarketScoringError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market scoring snapshots.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketScoringLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsMarketScoringSelectedId || !opsMarketScoringSummary) {
+        if (!ignore) {
+          setOpsMarketScoringScores([]);
+          setOpsMarketScoringHistory([]);
+          setOpsMarketScoringDetail(null);
+          setOpsMarketScoringDetailLoading(false);
+          setOpsMarketScoringDetailError(null);
+        }
+        return;
+      }
+      setOpsMarketScoringDetailLoading(true);
+      setOpsMarketScoringDetailError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const [scores, history] = await Promise.all([
+          apiClient.listOpsMarketScoringScores({ ...scoped, limit: 200, offset: 0 }),
+          apiClient.listOpsMarketScoringHistory({ ...scoped, limit: 80, offset: 0 }),
+        ]);
+        const scopedScores = scores.items.filter(
+          (row) => row.market_acquisition_score_snapshot_id === opsMarketScoringSelectedId,
+        );
+        const leadScore = scopedScores[0] ?? null;
+        const detail = leadScore ? await apiClient.getOpsMarketScoringScore(leadScore.id) : null;
+        if (!ignore) {
+          setOpsMarketScoringScores(scopedScores);
+          setOpsMarketScoringHistory(history.items.filter((row) => row.snapshot_date === leadScore?.snapshot_date));
+          setOpsMarketScoringDetail(detail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketScoringScores([]);
+          setOpsMarketScoringHistory([]);
+          setOpsMarketScoringDetail(null);
+          setOpsMarketScoringDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market scoring drill-down.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketScoringDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketScoringSelectedId, opsMarketScoringSummary, opsPortfolioOwnerApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -5436,6 +5533,7 @@ export function OperationsPage() {
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
           ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
+          ["Market scoring", "#market-scoring-ops"],
           ["Market normalization", "#market-normalization-ops"],
           ["Market ingestion", "#market-ingestion-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
@@ -9047,6 +9145,164 @@ export function OperationsPage() {
                           </div>
                         ))
                       )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="market-scoring-ops"
+        className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market acquisition scoring engine</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic acquisition ranking built on normalized market candidates plus read-only P38 context.
+                Use this view for snapshot distribution, top scored rows, evidence payloads, and append-safe history.
+              </p>
+            </div>
+            <span className="rounded-full border border-fuchsia-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100/90">
+              Ops / P39-03
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-fuchsia-200/15 pt-4">
+          {opsMarketScoringLoading ? (
+            <p className="text-sm text-slate-400">Loading market scoring snapshots…</p>
+          ) : opsMarketScoringError ? (
+            <StatusBanner tone="error">{opsMarketScoringError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Snapshots tracked" value={String(opsMarketScoringSummary?.total_items ?? 0)} />
+                <StatCard label="Top bucket: STRONG_BUY" value={String(opsMarketScoringSummary?.items[0]?.strong_buy_count ?? 0)} />
+                <StatCard label="Top bucket: BUY" value={String(opsMarketScoringSummary?.items[0]?.buy_count ?? 0)} />
+                <StatCard label="Avg score" value={opsMarketScoringSummary?.items[0]?.avg_score ?? "—"} />
+                <StatCard label="Avg liquidity" value={opsMarketScoringSummary?.items[0]?.avg_liquidity_score ?? "—"} />
+              </div>
+
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Snapshot date</th>
+                      <th className="p-3 font-medium">Rows</th>
+                      <th className="p-3 font-medium">Distribution</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketScoringSummary?.items.length ? (
+                      opsMarketScoringSummary.items.map((row) => {
+                        const isSelected = opsMarketScoringSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSelected
+                                    ? "border-fuchsia-300/70 bg-fuchsia-400/20 text-fuchsia-50"
+                                    : "border-white/15 text-slate-200 hover:border-fuchsia-300/35"
+                                }`}
+                                onClick={() => setOpsMarketScoringSelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSelected ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[11px] text-slate-400">@{row.owner_user_id}</td>
+                            <td className="p-3 align-top">{formatDate(row.snapshot_date)}</td>
+                            <td className="p-3 align-top">{row.total_candidates_scored}</td>
+                            <td className="p-3 align-top">
+                              <div>SB {row.strong_buy_count} / B {row.buy_count}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">W {row.watch_count} / I {row.ignore_count}</div>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">
+                              {abbrevExportChecksum(row.checksum)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={6}>
+                          No market-scoring snapshots recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsMarketScoringDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading scoring drill-down…</p>
+              ) : opsMarketScoringDetailError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{opsMarketScoringDetailError}</StatusBanner>
+                </div>
+              ) : opsMarketScoringSelectedId ? (
+                <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Top scored rows</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {opsMarketScoringScores.length === 0 ? (
+                        <p className="text-slate-500">No score rows loaded for the selected snapshot.</p>
+                      ) : (
+                        opsMarketScoringScores.slice(0, 10).map((row) => (
+                          <div key={row.id} className="rounded-xl border border-white/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-semibold text-white">
+                                Candidate #{row.normalized_candidate_id} · {row.recommendation_label}
+                              </p>
+                              <span className="text-[10px] text-slate-500">{row.final_rank_score ?? "—"}</span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              Fit {row.portfolio_fit_score ?? "—"} · liquidity {row.liquidity_score ?? "—"} · grading{" "}
+                              {row.grading_upside_score ?? "—"} · risk {row.risk_penalty_score ?? "—"}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Lead evidence payload</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {!opsMarketScoringDetail ? (
+                        <p className="text-slate-500">No lead score selected for evidence drill-down.</p>
+                      ) : (
+                        opsMarketScoringDetail.evidence.map((row) => (
+                          <div key={row.id} className="rounded-xl border border-white/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-semibold text-white">{row.evidence_type}</p>
+                              <span className="text-[10px] text-slate-500">{formatDateTime(row.created_at)}</span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-400">{JSON.stringify(row.evidence_value_json).slice(0, 240)}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent append-safe history</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-200">
+                        {opsMarketScoringHistory.length === 0 ? (
+                          <span className="text-slate-500">No matching history rows for the selected snapshot date.</span>
+                        ) : (
+                          opsMarketScoringHistory.slice(0, 12).map((row) => (
+                            <span key={row.id} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-fuchsia-100">
+                              #{row.normalized_candidate_id} {row.recommendation_label} {row.acquisition_score ?? "—"}
+                            </span>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

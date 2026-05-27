@@ -3430,6 +3430,123 @@ export interface MarketNormalizationIssueListResponse {
 export interface MarketNormalizationRunCreatePayload {
   ingestion_batch_id: number;
 }
+
+export type MarketAcquisitionRecommendationLabel = "IGNORE" | "WATCH" | "BUY" | "STRONG_BUY";
+export type MarketAcquisitionConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+export type MarketAcquisitionRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface MarketAcquisitionScoreSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  total_candidates_scored: number;
+  avg_score?: string | null;
+  avg_liquidity_score?: string | null;
+  avg_grading_upside_score?: string | null;
+  high_value_count: number;
+  strong_buy_count: number;
+  buy_count: number;
+  watch_count: number;
+  ignore_count: number;
+  portfolio_alignment_score?: string | null;
+  liquidity_alignment_score?: string | null;
+  diversification_alignment_score?: string | null;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionScoreRead {
+  id: number;
+  market_acquisition_score_snapshot_id: number;
+  normalized_candidate_id: number;
+  canonical_comic_issue_id?: number | null;
+  owner_user_id?: number | null;
+  acquisition_score?: string | null;
+  portfolio_fit_score?: string | null;
+  liquidity_score?: string | null;
+  grading_upside_score?: string | null;
+  concentration_reduction_score?: string | null;
+  diversification_score?: string | null;
+  risk_penalty_score?: string | null;
+  final_rank_score?: string | null;
+  score_breakdown_json: Record<string, unknown>;
+  recommendation_label: MarketAcquisitionRecommendationLabel | string;
+  confidence_level: MarketAcquisitionConfidenceLevel | string;
+  risk_level: MarketAcquisitionRiskLevel | string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionScoreEvidenceRead {
+  id: number;
+  score_id: number;
+  evidence_type: string;
+  source_id?: number | null;
+  source_table?: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketAcquisitionScoreHistoryRead {
+  id: number;
+  owner_user_id: number;
+  normalized_candidate_id: number;
+  acquisition_score?: string | null;
+  recommendation_label: MarketAcquisitionRecommendationLabel | string;
+  confidence_level: MarketAcquisitionConfidenceLevel | string;
+  risk_level: MarketAcquisitionRiskLevel | string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionScoreDetailRead {
+  score: MarketAcquisitionScoreRead;
+  evidence: MarketAcquisitionScoreEvidenceRead[];
+}
+
+export interface MarketAcquisitionScoreRunPayload {
+  snapshot_date?: string | null;
+}
+
+export interface MarketAcquisitionScoreRunResponse {
+  replayed: boolean;
+  snapshot: MarketAcquisitionScoreSnapshotRead;
+  total_scores: number;
+}
+
+export interface MarketAcquisitionScoreListResponse {
+  items: MarketAcquisitionScoreRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketAcquisitionScoreSnapshotListResponse {
+  items: MarketAcquisitionScoreSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketAcquisitionScoreHistoryListResponse {
+  items: MarketAcquisitionScoreHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InventoryMarketAcquisitionScoreTeaser {
+  normalized_candidate_id: number;
+  final_rank_score?: string | null;
+  recommendation_label: string;
+  confidence_level: string;
+  risk_level: string;
+  liquidity_score?: string | null;
+  grading_upside_score?: string | null;
+  snapshot_date: string;
+}
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -5561,6 +5678,7 @@ export interface InventoryDetail extends InventoryItem {
   acquisition_priority?: InventoryAcquisitionPriorityTeaser | null;
   concentration_risk?: InventoryConcentrationRiskTeaser | null;
   portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
+  market_acquisition_score?: InventoryMarketAcquisitionScoreTeaser | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -9776,6 +9894,106 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<MarketNormalizationIssueListResponse>(`/ops/market-normalization/issues${q}`);
+  },
+
+  runMarketScoring(payload: MarketAcquisitionScoreRunPayload): Promise<MarketAcquisitionScoreRunResponse> {
+    return request<MarketAcquisitionScoreRunResponse>("/market-scoring/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketScoringScores(params?: {
+    recommendation_label?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    score_min?: number;
+    score_max?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreListResponse>(`/market-scoring/scores${q}`);
+  },
+
+  getMarketScoringScore(scoreId: number): Promise<MarketAcquisitionScoreDetailRead> {
+    return request<MarketAcquisitionScoreDetailRead>(`/market-scoring/scores/${scoreId}`);
+  },
+
+  listMarketScoringSnapshots(params?: {
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreSnapshotListResponse>(`/market-scoring/snapshots${q}`);
+  },
+
+  listMarketScoringHistory(params?: {
+    recommendation_label?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreHistoryListResponse>(`/market-scoring/history${q}`);
+  },
+
+  listOpsMarketScoringScores(params?: {
+    owner_user_id?: number;
+    recommendation_label?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    score_min?: number;
+    score_max?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreListResponse>(`/ops/market-scoring/scores${q}`);
+  },
+
+  getOpsMarketScoringScore(scoreId: number): Promise<MarketAcquisitionScoreDetailRead> {
+    return request<MarketAcquisitionScoreDetailRead>(`/ops/market-scoring/scores/${scoreId}`);
+  },
+
+  listOpsMarketScoringSnapshots(params?: {
+    owner_user_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreSnapshotListResponse>(`/ops/market-scoring/snapshots${q}`);
+  },
+
+  listOpsMarketScoringHistory(params?: {
+    owner_user_id?: number;
+    recommendation_label?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionScoreHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionScoreHistoryListResponse>(`/ops/market-scoring/history${q}`);
   },
 
   getListingIntelligence(params?: {

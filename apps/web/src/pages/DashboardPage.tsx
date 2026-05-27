@@ -52,6 +52,7 @@ import {
   type MarketSaleSummaryRead,
   type MarketAcquisitionIngestionBatchListResponse,
   type MarketNormalizationRunListResponse,
+  type MarketAcquisitionScoreSnapshotListResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
@@ -857,6 +858,11 @@ export function DashboardPage() {
   const [marketNormalizationRuns, setMarketNormalizationRuns] = useState<MarketNormalizationRunListResponse | null>(null);
   const [marketNormalizationLoading, setMarketNormalizationLoading] = useState(true);
   const [marketNormalizationError, setMarketNormalizationError] = useState<string | null>(null);
+  const [marketScoringSnapshots, setMarketScoringSnapshots] = useState<MarketAcquisitionScoreSnapshotListResponse | null>(
+    null,
+  );
+  const [marketScoringLoading, setMarketScoringLoading] = useState(true);
+  const [marketScoringError, setMarketScoringError] = useState<string | null>(null);
   const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
@@ -1182,6 +1188,7 @@ export function DashboardPage() {
       ambiguousTitle: flags.ambiguous_title ?? 0,
     };
   }, [marketNormalizationRuns]);
+  const latestMarketScoringSnapshot = marketScoringSnapshots?.items[0] ?? null;
 
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1461,6 +1468,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketIngestionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketScoringSnapshots(null);
+          setMarketScoringLoading(false);
+          setMarketScoringError(null);
+        }
+        return;
+      }
+      setMarketScoringLoading(true);
+      setMarketScoringError(null);
+      try {
+        const snapshots = await apiClient.listMarketScoringSnapshots({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketScoringSnapshots(snapshots);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketScoringSnapshots(null);
+          setMarketScoringError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market scoring summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketScoringLoading(false);
         }
       }
     })();
@@ -3445,6 +3488,60 @@ export function DashboardPage() {
                   />
                 </div>
               )}
+            </section>
+          ) : null}
+
+          {marketScoringLoading || marketScoringError || latestMarketScoringSnapshot ? (
+            <section className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/14 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/70">
+                    Market acquisition scoring (P39-03)
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Market score distribution & score health</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic ranking over normalized acquisition candidates using existing portfolio context only.
+                    This panel is read-only and does not execute trades or autonomous buy decisions.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-scoring-ops"
+                  className="rounded-full border border-fuchsia-400/35 px-3 py-1.5 text-xs font-semibold text-fuchsia-100 transition hover:border-fuchsia-300/60 hover:bg-fuchsia-500/10"
+                >
+                  Open scoring ops
+                </Link>
+              </div>
+              {marketScoringLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market scoring summary…</p>
+              ) : marketScoringError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketScoringError}</StatusBanner>
+                </div>
+              ) : latestMarketScoringSnapshot ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="STRONG_BUY" value={String(latestMarketScoringSnapshot.strong_buy_count ?? 0)} />
+                    <StatCard label="BUY" value={String(latestMarketScoringSnapshot.buy_count ?? 0)} />
+                    <StatCard label="WATCH" value={String(latestMarketScoringSnapshot.watch_count ?? 0)} />
+                    <StatCard label="IGNORE" value={String(latestMarketScoringSnapshot.ignore_count ?? 0)} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Avg acquisition score" value={latestMarketScoringSnapshot.avg_score ?? "—"} />
+                    <StatCard
+                      label="Avg liquidity score"
+                      value={latestMarketScoringSnapshot.avg_liquidity_score ?? "—"}
+                    />
+                    <StatCard
+                      label="Avg grading upside"
+                      value={latestMarketScoringSnapshot.avg_grading_upside_score ?? "—"}
+                    />
+                    <StatCard
+                      label="Last scoring snapshot"
+                      value={latestMarketScoringSnapshot.snapshot_date ? formatDate(latestMarketScoringSnapshot.snapshot_date) : "—"}
+                    />
+                  </div>
+                </>
+              ) : null}
             </section>
           ) : null}
 

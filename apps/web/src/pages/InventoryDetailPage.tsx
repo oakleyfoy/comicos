@@ -2886,6 +2886,29 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.market_acquisition_score ? (
+                <div className="rounded-2xl border border-fuchsia-500/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-fuchsia-200/90">Market scoring</p>
+                    <span className="rounded-full border border-fuchsia-300/45 bg-fuchsia-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-fuchsia-100">
+                      {detail.market_acquisition_score.recommendation_label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Candidate #{detail.market_acquisition_score.normalized_candidate_id} · final rank{" "}
+                    {detail.market_acquisition_score.final_rank_score ?? "—"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Confidence {detail.market_acquisition_score.confidence_level} · risk{" "}
+                    {detail.market_acquisition_score.risk_level} · snapshot{" "}
+                    {formatDate(detail.market_acquisition_score.snapshot_date)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Liquidity {detail.market_acquisition_score.liquidity_score ?? "—"} · grading upside{" "}
+                    {detail.market_acquisition_score.grading_upside_score ?? "—"}
+                  </p>
+                </div>
+              ) : null}
               {detail.concentration_risk ? (
                 <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
                   <div className="flex flex-wrap items-center gap-2">
