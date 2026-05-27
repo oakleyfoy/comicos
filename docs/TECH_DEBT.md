@@ -30,6 +30,61 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Non-deterministic ranking or prioritization of feed rows
 - Automatic write-back from feed replay into upstream P39 sources
 
+## P39-10 — Market determinism layer (2026-05-27)
+
+- Architecture note: checksum lineage validation, replay audits, invariant rows, and owner/ops read surfaces are documented in `docs/MARKET_DETERMINISM_ARCHITECTURE.md`. P39-10 must remain a pure hardening layer over persisted P39 artifacts and must not mutate upstream market rows.
+- Dashboard and inventory surfaces stay compact and observational; deeper inspection belongs in the ops drill-down.
+
+### Deferred scope (beyond P39-10 hardening)
+
+- Automatic remediation or repair suggestions that write back into upstream P39 ledgers
+- Background scheduled validation runs, alert fan-out, or real-time streaming integrity monitors
+- Cross-owner rollup analytics or shared integrity benchmarking
+- ML-based anomaly detection over validation findings
+- Historical trend dashboards for long-horizon validation drift beyond the current append-only run ledger
+- Determinism checks for future P39 layers until those layers define stable checksum contracts
+
+## P39 CLOSED / FROZEN
+
+P39-01 through P39-10 are now frozen. The completed system is production-grade, replay-safe, checksum-verified, and documented in the P39 architecture files.
+
+### Completed
+
+- P39-01 ingestion foundation
+- P39-02 normalization engine
+- P39-03 scoring engine
+- P39-04 signal classification
+- P39-05 opportunity aggregation
+- P39-06 portfolio coupling
+- P39-07 API standardization
+- P39-08 dashboard integration
+- P39-09 append-only feed layer
+- P39-10 determinism and integrity enforcement
+
+### Deferred to P40+ / future infrastructure backlog
+
+- websocket streaming or push fan-out
+- Kafka / event bus integration
+- AI prediction or ML anomaly detection
+- distributed replay validation
+- external marketplace sync automation
+- auto-remediation or write-back from integrity checks
+
+### Intentionally excluded from P39
+
+- feature expansion beyond the frozen contracts
+- API shape changes that break the v1 envelope
+- schema redesigns for existing P39 tables
+- architecture rewrites of the completed P39 layers
+- hidden background behavior that mutates upstream market ledgers
+
+### Freeze rules
+
+- No new P39 intelligence may be added.
+- No new P39 product features may be added.
+- Future work must be additive and live in P40+ or a separate extension layer.
+- Existing P39 routes, checksums, and deterministic ordering contracts are locked.
+
 
 ## P39-03 — Market scoring engine (2026-05-26)
 

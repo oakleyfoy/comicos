@@ -15,6 +15,7 @@ MARKET_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "signals": "P39-04",
     "opportunity": "P39-05",
     "coupling": "P39-06",
+    "determinism": "P39-10",
 }
 
 

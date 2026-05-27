@@ -708,14 +708,14 @@ def generate_market_opportunities_for_owner(
         snapshot_date=snap_date,
         event_payload_json={
             "opportunity_snapshot_id": int(snap.id or 0),
-            "signal_snapshot_id": int(opportunity_snap.market_acquisition_signal_snapshot_id or 0),
+            "signal_snapshot_id": int(signal_snap.id or 0),
             "snapshot_checksum": checksum,
             "total_candidates": len(uniq_candidates),
             "total_signals": total_signals,
             "opportunity_classification": classification,
         },
         opportunity_snapshot_id=int(snap.id or 0),
-        signal_snapshot_id=int(opportunity_snap.market_acquisition_signal_snapshot_id or 0),
+        signal_snapshot_id=int(signal_snap.id or 0),
     )
     append_market_feed_event(
         session,

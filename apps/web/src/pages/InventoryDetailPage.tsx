@@ -55,6 +55,7 @@ import {
   type CollectionHistoricalTimelineGrouping,
   type InventoryScanQaPanelRead,
   type ScanSessionRoutingRead,
+  type MarketDeterminismValidationRunListResponse,
 } from "../api/client";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -125,6 +126,18 @@ function inventoryIntelHealthClassMini(level: InventoryIntelligenceHealthLevel):
       return "border-rose-400/35 bg-rose-400/10 text-rose-100";
     default:
       return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function determinismBadgeTone(status: string): string {
+  switch (status) {
+    case "PASS":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+    case "WARNING":
+      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+    case "FAIL":
+    default:
+      return "border-rose-400/30 bg-rose-400/10 text-rose-100";
   }
 }
 
@@ -1105,6 +1118,10 @@ export function InventoryDetailPage() {
   const [inventoryRoutingPanel, setInventoryRoutingPanel] = useState<ScanSessionRoutingRead | null>(null);
   const [inventoryRoutingError, setInventoryRoutingError] = useState<string | null>(null);
   const [inventoryRoutingBusy, setInventoryRoutingBusy] = useState(false);
+  const [marketDeterminismSummary, setMarketDeterminismSummary] = useState<MarketDeterminismValidationRunListResponse | null>(
+    null,
+  );
+  const [marketDeterminismError, setMarketDeterminismError] = useState<string | null>(null);
   const [physicalReceiveBusy, setPhysicalReceiveBusy] = useState(false);
   const [physicalIntakeSessionBusy, setPhysicalIntakeSessionBusy] = useState(false);
 
@@ -1710,6 +1727,36 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [parsedInventoryCopyId, inventoryHistoricalTimelineGrouping]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketDeterminismSummary(null);
+          setMarketDeterminismError(null);
+        }
+        return;
+      }
+      try {
+        const response = await apiClient.listMarketDeterminismValidationRuns({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketDeterminismSummary(response);
+          setMarketDeterminismError(null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketDeterminismSummary(null);
+          setMarketDeterminismError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load integrity summary.",
+          );
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const covers = detail?.cover_images ?? [];
@@ -3213,6 +3260,21 @@ export function InventoryDetailPage() {
                 {detail.inventory_intelligence ? (
                   <InventoryDetailIntelStrip intel={detail.inventory_intelligence} />
                 ) : null}
+                {marketDeterminismSummary?.items[0] ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${determinismBadgeTone(
+                        marketDeterminismSummary.items[0].validation_status,
+                      )}`}
+                    >
+                      Integrity: {marketDeterminismSummary.items[0].validation_status}
+                    </span>
+                    <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+                      Validation {marketDeterminismSummary.items[0].snapshot_date}
+                    </span>
+                  </div>
+                ) : null}
+                {marketDeterminismError ? <p className="mt-3 text-xs text-slate-500">{marketDeterminismError}</p> : null}
                 <div className="mt-4">
                   <MarketIntelligenceFeedPanel ownerUserId={user?.id} mode="teaser" />
                 </div>

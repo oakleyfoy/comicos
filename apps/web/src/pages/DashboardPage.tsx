@@ -52,6 +52,8 @@ import {
   type MarketSaleSummaryRead,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
+  type MarketApiV1Envelope,
+  type MarketDeterminismValidationRunListResponse,
   type ScanPipelineDashboardResponse,
   type ScanSessionSummary,
   type InventoryValuationScope,
@@ -145,6 +147,18 @@ function shortenChecksum(value: string | null): string {
     return value;
   }
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
+
+function determinismStatusTone(status: string): string {
+  switch (status) {
+    case "PASS":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "WARNING":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "FAIL":
+    default:
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+  }
 }
 
 function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {
@@ -970,6 +984,10 @@ export function DashboardPage() {
   const [concentrationRiskLoading, setConcentrationRiskLoading] = useState(true);
   const [concentrationRiskError, setConcentrationRiskError] = useState<string | null>(null);
   const [concentrationRiskGenBusy, setConcentrationRiskGenBusy] = useState(false);
+  const [marketDeterminismEnvelope, setMarketDeterminismEnvelope] =
+    useState<MarketApiV1Envelope<MarketDeterminismValidationRunListResponse> | null>(null);
+  const [marketDeterminismLoading, setMarketDeterminismLoading] = useState(true);
+  const [marketDeterminismError, setMarketDeterminismError] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const dealerGradingMetricMap = useMemo(
     () => new Map(dealerGradingMetrics.map((row) => [row.metric_key, row])),
@@ -2427,6 +2445,42 @@ export function DashboardPage() {
   }, [user?.id]);
 
   useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketDeterminismEnvelope(null);
+          setMarketDeterminismLoading(false);
+          setMarketDeterminismError(null);
+        }
+        return;
+      }
+      setMarketDeterminismLoading(true);
+      setMarketDeterminismError(null);
+      try {
+        const envelope = await apiClient.listMarketDeterminismValidationRunsEnvelope({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketDeterminismEnvelope(envelope);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketDeterminismEnvelope(null);
+          setMarketDeterminismError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market determinism summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketDeterminismLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
     const nextHoldDrafts: Record<number, InventoryItem["hold_status"]> = {};
     const nextGradeDrafts: Record<number, InventoryItem["grade_status"]> = {};
@@ -3240,6 +3294,68 @@ export function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </section>
+          ) : null}
+
+          {marketDeterminismLoading || marketDeterminismError || marketDeterminismEnvelope ? (
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market integrity</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Determinism layer</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Replay-safe checksum lineage and invariant enforcement across the P39 pipeline.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-determinism-ops"
+                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                >
+                  Open ops integrity view
+                </Link>
+              </div>
+              {marketDeterminismLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading latest validation run…</p>
+              ) : marketDeterminismError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketDeterminismError}</StatusBanner>
+                </div>
+              ) : marketDeterminismEnvelope?.data.items[0] ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Latest status</p>
+                    <p
+                      className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${determinismStatusTone(
+                        marketDeterminismEnvelope.data.items[0].validation_status,
+                      )}`}
+                    >
+                      {marketDeterminismEnvelope.data.items[0].validation_status}
+                    </p>
+                  </div>
+                  <StatCard
+                    label="Validation checksum"
+                    value={shortenChecksum(marketDeterminismEnvelope.data.items[0].validation_checksum)}
+                  />
+                  <StatCard
+                    label="Pipeline checksum"
+                    value={shortenChecksum(marketDeterminismEnvelope.meta.checksum ?? marketDeterminismEnvelope.data.items[0].pipeline_checksum)}
+                  />
+                  <StatCard
+                    label="Fail counts"
+                    value={String(
+                      marketDeterminismEnvelope.data.items[0].checksum_mismatch_count +
+                        marketDeterminismEnvelope.data.items[0].invariant_failure_count +
+                        marketDeterminismEnvelope.data.items[0].replay_failure_count,
+                    )}
+                  />
+                  <StatCard
+                    label="Snapshot date"
+                    value={marketDeterminismEnvelope.data.items[0].snapshot_date}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-400">No determinism validation runs recorded yet.</p>
               )}
             </section>
           ) : null}

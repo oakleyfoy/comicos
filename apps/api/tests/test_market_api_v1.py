@@ -25,6 +25,7 @@ def test_market_api_v1_envelope_and_pagination_on_ingestion_list(
     meta = body["meta"]
     assert meta["snapshot_id"] is None
     assert meta["engine_versions"]["signals"] == "P39-04"
+    assert meta["engine_versions"]["determinism"] == "P39-10"
     assert meta["generated_at"].endswith("Z")
 
     owner_id = int(session.exec(select(User.id).where(User.email == "p39-v1-envelope@example.com")).one())

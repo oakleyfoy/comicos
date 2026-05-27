@@ -629,7 +629,7 @@ def generate_market_signals_for_owner(
         owner_user_id=owner_user_id,
         event_type="SIGNALS_GENERATED",
         severity="INFO",
-        snapshot_date=snapshot_date,
+            snapshot_date=score_snapshot.snapshot_date,
         event_payload_json={
             "signal_snapshot_id": int(snapshot.id or 0),
             "source_score_snapshot_id": int(score_snapshot.id or 0),
@@ -647,7 +647,7 @@ def generate_market_signals_for_owner(
         owner_user_id=owner_user_id,
         event_type="SNAPSHOT_CREATED",
         severity="INFO",
-        snapshot_date=snapshot_date,
+            snapshot_date=score_snapshot.snapshot_date,
         event_payload_json={
             "layer": "signals",
             "signal_snapshot_id": int(snapshot.id or 0),

@@ -3873,6 +3873,88 @@ export interface PortfolioMarketCouplingHistoryListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export interface MarketDeterminismValidationRunRead {
+  id: number;
+  owner_user_id: number;
+  validation_status: "PASS" | "FAIL" | "WARNING" | string;
+  validation_checksum: string;
+  pipeline_checksum: string;
+  snapshot_date: string;
+  total_stages_checked: number;
+  total_invariants_checked: number;
+  total_replays_checked: number;
+  invariant_failure_count: number;
+  checksum_mismatch_count: number;
+  replay_failure_count: number;
+  ordering_failure_count: number;
+  validation_summary_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketDeterminismInvariantRead {
+  id: number;
+  market_determinism_validation_run_id: number;
+  owner_user_id: number;
+  layer_name: string;
+  invariant_code: string;
+  invariant_status: "PASS" | "FAIL" | "WARNING" | string;
+  expected_value_json: Record<string, unknown> | null;
+  actual_value_json: Record<string, unknown> | null;
+  detail_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketDeterminismChecksumAuditRead {
+  id: number;
+  market_determinism_validation_run_id: number;
+  owner_user_id: number;
+  stage_name: string;
+  upstream_stage_name: string | null;
+  validation_status: "PASS" | "FAIL" | "WARNING" | string;
+  upstream_checksum: string | null;
+  current_checksum: string | null;
+  pipeline_checksum: string;
+  detail_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketDeterminismReplayAuditRead {
+  id: number;
+  market_determinism_validation_run_id: number;
+  owner_user_id: number;
+  artifact_type: string;
+  artifact_key: string;
+  replay_status: "PASS" | "FAIL" | "WARNING" | string;
+  original_checksum: string | null;
+  replay_checksum: string | null;
+  pipeline_checksum: string;
+  detail_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketDeterminismValidationRunListResponse {
+  items: MarketDeterminismValidationRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketDeterminismInvariantListResponse {
+  items: MarketDeterminismInvariantRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketDeterminismReplayAuditListResponse {
+  items: MarketDeterminismReplayAuditRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketDeterminismRunResponse {
+  replayed: boolean;
+  run: MarketDeterminismValidationRunRead;
+  checksum_audits: MarketDeterminismChecksumAuditRead[];
+  invariants: MarketDeterminismInvariantRead[];
+  replay_audits: MarketDeterminismReplayAuditRead[];
+}
+
 export interface InventoryPortfolioMarketCouplingTeaserRead {
   coupling_snapshot_id: number;
   portfolio_market_alignment_score?: string | null;
@@ -10712,6 +10794,95 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return requestMarketV1<MarketAcquisitionOpportunityHistoryListResponse>(`/ops/market-opportunities/history${q}`);
+  },
+
+  listMarketDeterminismValidationRunsEnvelope(params?: {
+    validation_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketApiV1Envelope<MarketDeterminismValidationRunListResponse>> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return fetchMarketV1Envelope<MarketDeterminismValidationRunListResponse>(`/market-determinism/validation-runs${q}`);
+  },
+
+  listMarketDeterminismValidationRuns(params?: {
+    validation_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketDeterminismValidationRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismValidationRunListResponse>(`/market-determinism/validation-runs${q}`);
+  },
+
+  getMarketDeterminismValidationRun(validationRunId: number): Promise<MarketDeterminismRunResponse> {
+    return requestMarketV1<MarketDeterminismRunResponse>(`/market-determinism/validation-runs/${validationRunId}`);
+  },
+
+  listMarketDeterminismInvariants(params?: {
+    validation_run_id?: number;
+    invariant_status?: string;
+    layer_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketDeterminismInvariantListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismInvariantListResponse>(`/market-determinism/invariants${q}`);
+  },
+
+  runMarketDeterminism(payload?: { snapshot_date?: string | null }): Promise<MarketDeterminismRunResponse> {
+    return requestMarketV1<MarketDeterminismRunResponse>("/market-determinism/run", {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  listOpsMarketDeterminismValidationRuns(params?: {
+    owner_user_id?: number;
+    validation_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketDeterminismValidationRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismValidationRunListResponse>(`/ops/market-determinism/validation-runs${q}`);
+  },
+
+  getOpsMarketDeterminismValidationRun(
+    validationRunId: number,
+    params?: { owner_user_id?: number },
+  ): Promise<MarketDeterminismRunResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismRunResponse>(`/ops/market-determinism/validation-runs/${validationRunId}${q}`);
+  },
+
+  listOpsMarketDeterminismInvariants(params?: {
+    owner_user_id?: number;
+    validation_run_id?: number;
+    invariant_status?: string;
+    layer_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketDeterminismInvariantListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismInvariantListResponse>(`/ops/market-determinism/invariants${q}`);
+  },
+
+  listOpsMarketDeterminismReplayAudits(params?: {
+    owner_user_id?: number;
+    validation_run_id?: number;
+    replay_status?: string;
+    artifact_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketDeterminismReplayAuditListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketDeterminismReplayAuditListResponse>(`/ops/market-determinism/replay-audits${q}`);
   },
 
   getListingIntelligence(params?: {

@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models import User
 from app.schemas.market_api_v1 import MarketApiV1Envelope, wrap_object, wrap_standard_list
+from app.schemas.market_determinism import MarketDeterminismValidationRunPayload
 from app.schemas.market_ingestion import MarketAcquisitionIngestionBatchCreatePayload
 from app.schemas.market_normalization import MarketNormalizationRunCreatePayload
 from app.schemas.market_opportunity import MarketAcquisitionOpportunityGeneratePayload
@@ -63,6 +64,16 @@ from app.services.market_feed import (
     list_market_feed_events,
     list_market_feed_snapshots,
     replay_market_feed,
+)
+from app.services.market_determinism import (
+    get_validation_run_ops,
+    get_validation_run_owner,
+    list_invariants_ops,
+    list_invariants_owner,
+    list_replay_audits_ops,
+    list_validation_runs_ops,
+    list_validation_runs_owner,
+    run_market_validation,
 )
 from app.services.market_scoring import (
     get_score_ops,
@@ -1730,3 +1741,191 @@ def v1_ops_list_market_feed_snapshots(
         offset=offset,
     )
     return wrap_standard_list(lst, owner_user_id=owner_user_id)
+
+
+# --- Owner determinism ---
+
+
+@market_v1_router.get("/market-determinism/validation-runs", response_model=MarketApiV1Envelope)
+def v1_owner_list_market_determinism_runs(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    validation_status: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    rows = list_validation_runs_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        validation_status=validation_status,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(rows, owner_user_id=int(current_user.id))
+
+
+@market_v1_router.get("/market-determinism/validation-runs/{validation_run_id}", response_model=MarketApiV1Envelope)
+def v1_owner_get_market_determinism_run(
+    validation_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    row = get_validation_run_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        validation_run_id=validation_run_id,
+    )
+    return wrap_object(
+        row,
+        owner_user_id=int(current_user.id),
+        snapshot_id=row.run.id,
+        checksum=row.run.validation_checksum,
+    )
+
+
+@market_v1_router.get("/market-determinism/invariants", response_model=MarketApiV1Envelope)
+def v1_owner_list_market_determinism_invariants(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    validation_run_id: int | None = Query(default=None),
+    invariant_status: str | None = Query(default=None),
+    layer_name: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    rows = list_invariants_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        validation_run_id=validation_run_id,
+        invariant_status=invariant_status,
+        layer_name=layer_name,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(rows, owner_user_id=int(current_user.id))
+
+
+@market_v1_router.post(
+    "/market-determinism/run",
+    response_model=MarketApiV1Envelope,
+    status_code=status.HTTP_201_CREATED,
+)
+def v1_owner_run_market_determinism(
+    payload: MarketDeterminismValidationRunPayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    row, created = run_market_validation(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return wrap_object(
+        row,
+        owner_user_id=int(current_user.id),
+        snapshot_id=row.run.id,
+        checksum=row.run.validation_checksum,
+    )
+
+
+# --- Ops determinism ---
+
+
+@market_v1_router.get("/ops/market-determinism/validation-runs", response_model=MarketApiV1Envelope)
+def v1_ops_list_market_determinism_runs(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    validation_status: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    rows = list_validation_runs_ops(
+        session,
+        owner_user_id=owner_user_id,
+        validation_status=validation_status,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(rows, owner_user_id=owner_user_id)
+
+
+@market_v1_router.get("/ops/market-determinism/validation-runs/{validation_run_id}", response_model=MarketApiV1Envelope)
+def v1_ops_get_market_determinism_run(
+    validation_run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    row = get_validation_run_ops(
+        session,
+        validation_run_id=validation_run_id,
+        owner_user_id=owner_user_id,
+    )
+    return wrap_object(
+        row,
+        owner_user_id=owner_user_id if owner_user_id is not None else row.run.owner_user_id,
+        snapshot_id=row.run.id,
+        checksum=row.run.validation_checksum,
+    )
+
+
+@market_v1_router.get("/ops/market-determinism/invariants", response_model=MarketApiV1Envelope)
+def v1_ops_list_market_determinism_invariants(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    validation_run_id: int | None = Query(default=None),
+    invariant_status: str | None = Query(default=None),
+    layer_name: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    rows = list_invariants_ops(
+        session,
+        owner_user_id=owner_user_id,
+        validation_run_id=validation_run_id,
+        invariant_status=invariant_status,
+        layer_name=layer_name,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(rows, owner_user_id=owner_user_id)
+
+
+@market_v1_router.get("/ops/market-determinism/replay-audits", response_model=MarketApiV1Envelope)
+def v1_ops_list_market_determinism_replay_audits(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    validation_run_id: int | None = Query(default=None),
+    replay_status: str | None = Query(default=None),
+    artifact_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    rows = list_replay_audits_ops(
+        session,
+        owner_user_id=owner_user_id,
+        validation_run_id=validation_run_id,
+        replay_status=replay_status,
+        artifact_type=artifact_type,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(rows, owner_user_id=owner_user_id)

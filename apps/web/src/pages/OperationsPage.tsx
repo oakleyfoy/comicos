@@ -114,6 +114,9 @@ import {
   type MarketAcquisitionOpportunityHistoryRead,
   type MarketAcquisitionOpportunityItemRead,
   type MarketAcquisitionOpportunitySnapshotListResponse,
+  type MarketDeterminismInvariantRead,
+  type MarketDeterminismReplayAuditRead,
+  type MarketDeterminismValidationRunListResponse,
   type PortfolioMarketCouplingSnapshotListResponse,
   type PortfolioMarketCouplingDetailRead,
   type PortfolioMarketCouplingEdgeRead,
@@ -272,6 +275,18 @@ function abbrevExportChecksum(value: string | null): string {
     return value;
   }
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
+
+function determinismTone(status: string): string {
+  switch (status) {
+    case "PASS":
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
+    case "WARNING":
+      return "border-amber-400/35 bg-amber-400/10 text-amber-100";
+    case "FAIL":
+    default:
+      return "border-rose-400/35 bg-rose-400/10 text-rose-100";
+  }
 }
 
 function formatDate(value: string): string {
@@ -1595,6 +1610,44 @@ export function OperationsPage() {
     }
     setOpsStrategyDashLoading(false);
   }, [opsPortfolioOwnerApplied]);
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketDeterminismLoading(true);
+      setOpsMarketDeterminismError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const [runs, invariants, replayAudits] = await Promise.all([
+          apiClient.listOpsMarketDeterminismValidationRuns({ ...scoped, limit: 8, offset: 0 }),
+          apiClient.listOpsMarketDeterminismInvariants({ ...scoped, limit: 40, offset: 0 }),
+          apiClient.listOpsMarketDeterminismReplayAudits({ ...scoped, limit: 40, offset: 0 }),
+        ]);
+        if (!ignore) {
+          setOpsMarketDeterminismRuns(runs);
+          setOpsMarketDeterminismInvariants(invariants.items);
+          setOpsMarketDeterminismReplayAudits(replayAudits.items);
+          setOpsMarketDeterminismSelectedInvariantId(invariants.items[0]?.id ?? null);
+          setOpsMarketDeterminismSelectedReplayId(replayAudits.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketDeterminismRuns(null);
+          setOpsMarketDeterminismInvariants([]);
+          setOpsMarketDeterminismReplayAudits([]);
+          setOpsMarketDeterminismError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market determinism ops diagnostics.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketDeterminismLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
   const [opsPortfolioList, setOpsPortfolioList] = useState<PortfolioListResponse | null>(null);
   const [opsPortfolioItems, setOpsPortfolioItems] = useState<PortfolioItemListResponse | null>(null);
   const [opsPortfolioExposures, setOpsPortfolioExposures] = useState<PortfolioExposureSnapshotListResponse | null>(null);
@@ -1721,6 +1774,18 @@ export function OperationsPage() {
   const [opsPortfolioCouplingHistory, setOpsPortfolioCouplingHistory] = useState<PortfolioMarketCouplingHistoryRead[]>([]);
   const [opsPortfolioCouplingDetailLoading, setOpsPortfolioCouplingDetailLoading] = useState(false);
   const [opsPortfolioCouplingDetailError, setOpsPortfolioCouplingDetailError] = useState<string | null>(null);
+  const [opsMarketDeterminismRuns, setOpsMarketDeterminismRuns] =
+    useState<MarketDeterminismValidationRunListResponse | null>(null);
+  const [opsMarketDeterminismLoading, setOpsMarketDeterminismLoading] = useState(true);
+  const [opsMarketDeterminismError, setOpsMarketDeterminismError] = useState<string | null>(null);
+  const [opsMarketDeterminismInvariants, setOpsMarketDeterminismInvariants] = useState<MarketDeterminismInvariantRead[]>([]);
+  const [opsMarketDeterminismReplayAudits, setOpsMarketDeterminismReplayAudits] = useState<MarketDeterminismReplayAuditRead[]>(
+    [],
+  );
+  const [opsMarketDeterminismSelectedInvariantId, setOpsMarketDeterminismSelectedInvariantId] = useState<number | null>(
+    null,
+  );
+  const [opsMarketDeterminismSelectedReplayId, setOpsMarketDeterminismSelectedReplayId] = useState<number | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -9330,6 +9395,237 @@ export function OperationsPage() {
 
       <MarketIntelligenceOpsDiagnostics ownerUserId={opsPortfolioOwnerApplied} />
       <MarketIntelligenceFeedPanel ownerUserId={opsPortfolioOwnerApplied} mode="ops" />
+
+      <section
+        id="market-determinism-ops"
+        className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/12 p-5 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Market determinism integrity</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-400">
+              Append-only validation runs, invariant findings, replay audits, and checksum lineage across the P39 stack.
+            </p>
+          </div>
+          <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+            Ops / determinism
+          </span>
+        </div>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          {opsMarketDeterminismLoading ? (
+            <p className="text-sm text-slate-400">Loading market determinism runs…</p>
+          ) : opsMarketDeterminismError ? (
+            <StatusBanner tone="error">{opsMarketDeterminismError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                <StatCard
+                  label="Validation runs"
+                  value={String(opsMarketDeterminismRuns?.pagination.total_count ?? 0)}
+                />
+                <StatCard
+                  label="Invariant findings"
+                  value={String(opsMarketDeterminismInvariants.filter((row) => row.invariant_status !== "PASS").length)}
+                />
+                <StatCard
+                  label="Replay failures"
+                  value={String(opsMarketDeterminismReplayAudits.filter((row) => row.replay_status === "FAIL").length)}
+                />
+                <StatCard
+                  label="Latest checksum"
+                  value={abbrevExportChecksum(opsMarketDeterminismRuns?.items[0]?.validation_checksum ?? null)}
+                />
+                <StatCard
+                  label="Latest status"
+                  value={opsMarketDeterminismRuns?.items[0]?.validation_status ?? "—"}
+                />
+              </div>
+
+              {opsMarketDeterminismRuns?.items[0] &&
+              (opsMarketDeterminismRuns.items[0].checksum_mismatch_count > 0 ||
+                opsMarketDeterminismRuns.items[0].invariant_failure_count > 0 ||
+                opsMarketDeterminismRuns.items[0].replay_failure_count > 0) ? (
+                <div className="mt-4">
+                  <StatusBanner tone="warning">
+                    Latest run recorded {opsMarketDeterminismRuns.items[0].checksum_mismatch_count} checksum mismatches,{" "}
+                    {opsMarketDeterminismRuns.items[0].invariant_failure_count} invariant failures, and{" "}
+                    {opsMarketDeterminismRuns.items[0].replay_failure_count} replay failures.
+                  </StatusBanner>
+                </div>
+              ) : null}
+
+              <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,1fr]">
+                <div className="space-y-4">
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Run</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Date</th>
+                          <th className="p-3 font-medium">Checksum</th>
+                          <th className="p-3 font-medium">Failures</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsMarketDeterminismRuns?.items.length ? (
+                          opsMarketDeterminismRuns.items.map((row) => (
+                            <tr key={row.id}>
+                              <td className="p-3 font-mono text-[11px] text-slate-300">#{row.id}</td>
+                              <td className="p-3">
+                                <span
+                                  className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${determinismTone(
+                                    row.validation_status,
+                                  )}`}
+                                >
+                                  {row.validation_status}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-300">{row.snapshot_date}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {abbrevExportChecksum(row.validation_checksum)}
+                              </td>
+                              <td className="p-3 text-slate-300">
+                                {row.checksum_mismatch_count + row.invariant_failure_count + row.replay_failure_count}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={5}>
+                              No determinism runs recorded for this scope yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Invariant</th>
+                          <th className="p-3 font-medium">Layer</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Run</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsMarketDeterminismInvariants.length ? (
+                          opsMarketDeterminismInvariants.map((row) => (
+                            <tr
+                              key={row.id}
+                              className="cursor-pointer hover:bg-white/5"
+                              onClick={() => setOpsMarketDeterminismSelectedInvariantId(row.id)}
+                            >
+                              <td className="p-3 text-slate-200">{row.invariant_code.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-300">{row.layer_name}</td>
+                              <td className="p-3">
+                                <span
+                                  className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${determinismTone(
+                                    row.invariant_status,
+                                  )}`}
+                                >
+                                  {row.invariant_status}
+                                </span>
+                              </td>
+                              <td className="p-3 font-mono text-[11px] text-slate-400">
+                                #{row.market_determinism_validation_run_id}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={4}>
+                              No invariant rows available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Replay audit</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Original</th>
+                          <th className="p-3 font-medium">Replay</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsMarketDeterminismReplayAudits.length ? (
+                          opsMarketDeterminismReplayAudits.map((row) => (
+                            <tr
+                              key={row.id}
+                              className="cursor-pointer hover:bg-white/5"
+                              onClick={() => setOpsMarketDeterminismSelectedReplayId(row.id)}
+                            >
+                              <td className="p-3 text-slate-200">{row.artifact_type.replace(/_/g, " ")}</td>
+                              <td className="p-3">
+                                <span
+                                  className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${determinismTone(
+                                    row.replay_status,
+                                  )}`}
+                                >
+                                  {row.replay_status}
+                                </span>
+                              </td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {abbrevExportChecksum(row.original_checksum)}
+                              </td>
+                              <td className="p-3 font-mono text-[10px] text-slate-400">
+                                {abbrevExportChecksum(row.replay_checksum)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-4 text-slate-500" colSpan={4}>
+                              No replay audit rows available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {opsMarketDeterminismInvariants.find((row) => row.id === opsMarketDeterminismSelectedInvariantId) ? (
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Selected invariant</p>
+                      <pre className="mt-3 overflow-auto whitespace-pre-wrap break-all text-[11px] text-slate-300">
+                        {JSON.stringify(
+                          opsMarketDeterminismInvariants.find((row) => row.id === opsMarketDeterminismSelectedInvariantId),
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {opsMarketDeterminismReplayAudits.find((row) => row.id === opsMarketDeterminismSelectedReplayId) ? (
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Selected replay audit</p>
+                      <pre className="mt-3 overflow-auto whitespace-pre-wrap break-all text-[11px] text-slate-300">
+                        {JSON.stringify(
+                          opsMarketDeterminismReplayAudits.find((row) => row.id === opsMarketDeterminismSelectedReplayId),
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       <details
         id="market-ingestion-ops"

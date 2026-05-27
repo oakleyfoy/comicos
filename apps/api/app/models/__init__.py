@@ -173,6 +173,12 @@ from app.models.market_feed import (
     MarketIntelligenceFeedHistory,
     MarketIntelligenceFeedSnapshot,
 )
+from app.models.market_determinism import (
+    MarketDeterminismChecksumAudit,
+    MarketDeterminismInvariant,
+    MarketDeterminismReplayAudit,
+    MarketDeterminismValidationRun,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -412,6 +418,10 @@ __all__ = [
     "MarketIntelligenceFeedSnapshot",
     "MarketIntelligenceFeedHistory",
     "MarketIntelligenceFeedCursor",
+    "MarketDeterminismValidationRun",
+    "MarketDeterminismInvariant",
+    "MarketDeterminismChecksumAudit",
+    "MarketDeterminismReplayAudit",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",
