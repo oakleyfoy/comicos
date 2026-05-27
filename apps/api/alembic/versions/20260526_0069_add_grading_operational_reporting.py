@@ -73,7 +73,7 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
-        "ix_grading_operational_report_file_grading_operational_report_run_id",
+        "ix_grading_operational_report_file_run_id",
         "grading_operational_report_file",
         ["grading_operational_report_run_id"],
         unique=False,
@@ -99,7 +99,7 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
-        "ix_grading_operational_report_item_grading_operational_report_run_id",
+        "ix_grading_operational_report_item_run_id",
         "grading_operational_report_item",
         ["grading_operational_report_run_id"],
         unique=False,
@@ -108,14 +108,14 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(
-        "ix_grading_operational_report_item_grading_operational_report_run_id",
+        "ix_grading_operational_report_item_run_id",
         table_name="grading_operational_report_item",
     )
     op.drop_index("ix_grading_operational_report_item_run_row", table_name="grading_operational_report_item")
     op.drop_table("grading_operational_report_item")
 
     op.drop_index(
-        "ix_grading_operational_report_file_grading_operational_report_run_id",
+        "ix_grading_operational_report_file_run_id",
         table_name="grading_operational_report_file",
     )
     op.drop_index("ix_grading_operational_report_file_run", table_name="grading_operational_report_file")
