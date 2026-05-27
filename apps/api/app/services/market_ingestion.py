@@ -16,6 +16,7 @@ from app.models import (
     MarketAcquisitionIngestionEvent,
     MarketAcquisitionRawSource,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.market_ingestion import (
     MarketAcquisitionCandidateRead,
     MarketAcquisitionIngestionBatchCreatePayload,
@@ -311,6 +312,37 @@ def ingest_market_acquisition_batch_for_owner(
             "failed_records": batch.failed_records,
         },
         created_at=batch.completed_at,
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="INGESTION_BATCH_CREATED",
+        severity="INFO",
+        snapshot_date=now.date(),
+        event_payload_json={
+            "batch_id": batch.id,
+            "batch_checksum": batch_checksum,
+            "batch_source_type": payload.batch_source_type,
+            "batch_file_name": payload.batch_file_name,
+            "total_records": len(payload.records),
+        },
+        ingestion_batch_id=batch.id,
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="INGESTION_BATCH_COMPLETED",
+        severity="CRITICAL" if batch.successful_records == 0 else ("WARNING" if batch.failed_records > 0 else "INFO"),
+        snapshot_date=batch.completed_at.date() if batch.completed_at is not None else now.date(),
+        event_payload_json={
+            "batch_id": batch.id,
+            "batch_checksum": batch_checksum,
+            "ingestion_status": batch.ingestion_status,
+            "successful_records": batch.successful_records,
+            "failed_records": batch.failed_records,
+            "total_records": len(payload.records),
+        },
+        ingestion_batch_id=batch.id,
     )
     session.commit()
     session.refresh(batch)

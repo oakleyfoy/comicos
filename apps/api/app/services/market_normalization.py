@@ -19,6 +19,7 @@ from app.models import (
     MarketAcquisitionNormalizationRun,
     MarketAcquisitionNormalizedCandidate,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.market_normalization import (
     MarketAcquisitionNormalizedCandidateListResponse,
     MarketAcquisitionNormalizedCandidateRead,
@@ -516,6 +517,20 @@ def execute_market_normalization_run_for_owner(
         )
 
     _append_event(session, run_id=int(rid), event_type="RUN_STARTED", metadata_json={"run_checksum": chk}, created_at=now)
+    append_market_feed_event(
+        session,
+        owner_user_id=int(batch.owner_user_id) if batch.owner_user_id is not None else None,
+        event_type="NORMALIZATION_RUN_STARTED",
+        severity="INFO",
+        snapshot_date=now.date(),
+        event_payload_json={
+            "normalization_run_id": int(rid),
+            "ingestion_batch_id": int(batch.id or 0),
+            "run_checksum": chk,
+        },
+        normalization_run_id=int(rid),
+        ingestion_batch_id=int(batch.id or 0),
+    )
 
     success = partial = failed = 0
 
@@ -594,6 +609,24 @@ def execute_market_normalization_run_for_owner(
             "total_records": len(cand_rows),
         },
         created_at=utc_now(),
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=int(run_row.owner_user_id) if run_row.owner_user_id is not None else None,
+        event_type="NORMALIZATION_RUN_COMPLETED",
+        severity="CRITICAL" if failed == len(cand_rows) and len(cand_rows) > 0 else ("WARNING" if failed > 0 else "INFO"),
+        snapshot_date=now.date(),
+        event_payload_json={
+            "normalization_run_id": int(rid),
+            "ingestion_batch_id": int(batch.id or 0),
+            "run_checksum": chk,
+            "successful_records": success,
+            "partial_records": partial,
+            "failed_records": failed,
+            "total_records": len(cand_rows),
+        },
+        normalization_run_id=int(rid),
+        ingestion_batch_id=int(batch.id or 0),
     )
 
     session.commit()

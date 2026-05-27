@@ -167,6 +167,12 @@ from app.models.market_opportunity import (
     MarketAcquisitionOpportunityItem,
     MarketAcquisitionOpportunitySnapshot,
 )
+from app.models.market_feed import (
+    MarketIntelligenceFeedCursor,
+    MarketIntelligenceFeedEvent,
+    MarketIntelligenceFeedHistory,
+    MarketIntelligenceFeedSnapshot,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -402,6 +408,10 @@ __all__ = [
     "MarketAcquisitionOpportunityItem",
     "MarketAcquisitionOpportunityEvidence",
     "MarketAcquisitionOpportunityHistory",
+    "MarketIntelligenceFeedEvent",
+    "MarketIntelligenceFeedSnapshot",
+    "MarketIntelligenceFeedHistory",
+    "MarketIntelligenceFeedCursor",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

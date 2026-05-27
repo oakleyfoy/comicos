@@ -29,6 +29,7 @@ from app.models import (
     Publisher,
     Variant,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.market_scoring import (
     InventoryMarketAcquisitionScoreTeaser,
     MarketAcquisitionScoreDetailRead,
@@ -966,6 +967,39 @@ def run_market_acquisition_scoring_for_owner(
 
     for row in evidence_rows_to_insert + history_rows:
         session.add(row)
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SCORING_RUN_COMPLETED",
+        severity="INFO",
+        snapshot_date=snapshot_date,
+        event_payload_json={
+            "score_snapshot_id": int(snapshot.id or 0),
+            "snapshot_checksum": snapshot_checksum,
+            "total_scores": total,
+            "high_value_count": high_value_count,
+            "strong_buy_count": strong_buy_count,
+            "buy_count": buy_count,
+            "watch_count": watch_count,
+            "ignore_count": ignore_count,
+        },
+        scoring_run_id=None,
+        signal_snapshot_id=None,
+        opportunity_snapshot_id=None,
+        coupling_snapshot_id=None,
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SNAPSHOT_CREATED",
+        severity="INFO",
+        snapshot_date=snapshot_date,
+        event_payload_json={
+            "layer": "scoring",
+            "score_snapshot_id": int(snapshot.id or 0),
+            "snapshot_checksum": snapshot_checksum,
+        },
+    )
     session.commit()
     session.refresh(snapshot)
     return MarketAcquisitionScoreRunResponse(

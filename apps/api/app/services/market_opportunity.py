@@ -26,6 +26,7 @@ from app.models import (
     PortfolioLiquiditySnapshot,
     Variant,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.market_opportunity import (
     InventoryMarketAcquisitionOpportunityTeaser,
     MarketAcquisitionOpportunityDetailRead,
@@ -699,6 +700,36 @@ def generate_market_opportunities_for_owner(
     for ev in evidences:
         session.add(ev)
     session.add(history)
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="OPPORTUNITIES_GENERATED",
+        severity="INFO",
+        snapshot_date=snap_date,
+        event_payload_json={
+            "opportunity_snapshot_id": int(snap.id or 0),
+            "signal_snapshot_id": int(opportunity_snap.market_acquisition_signal_snapshot_id or 0),
+            "snapshot_checksum": checksum,
+            "total_candidates": len(uniq_candidates),
+            "total_signals": total_signals,
+            "opportunity_classification": classification,
+        },
+        opportunity_snapshot_id=int(snap.id or 0),
+        signal_snapshot_id=int(opportunity_snap.market_acquisition_signal_snapshot_id or 0),
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SNAPSHOT_CREATED",
+        severity="INFO",
+        snapshot_date=snap_date,
+        event_payload_json={
+            "layer": "opportunities",
+            "opportunity_snapshot_id": int(snap.id or 0),
+            "snapshot_checksum": checksum,
+        },
+        opportunity_snapshot_id=int(snap.id or 0),
+    )
     session.commit()
     session.refresh(snap)
 

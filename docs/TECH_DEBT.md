@@ -16,6 +16,20 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Animated intelligence graphs beyond simple static histograms
 - Cross-user dashboard synchronization or shared live cursors
 
+## P39-09 — Market Intelligence Feed system (2026-05-26)
+
+- Architecture note: deterministic append-only feed, replay, and owner/ops read models are documented in `docs/MARKET_FEED_ARCHITECTURE.md`. The feed records meaningful P39 outputs only; it must not invent new intelligence, mutate upstream P39 rows, or bypass the standard market v1 envelope.
+- Dashboard and ops feed surfaces remain observational. Inventory detail only shows a compact latest-event teaser.
+
+### Deferred scope (beyond P39-09 feed layer)
+
+- Real-time feed streaming / websocket fan-out
+- Live notification delivery or push subscriptions
+- Cross-user shared cursors or collaborative feed state
+- Predictive event clustering or AI interpretation of the feed
+- Non-deterministic ranking or prioritization of feed rows
+- Automatic write-back from feed replay into upstream P39 sources
+
 
 ## P39-03 — Market scoring engine (2026-05-26)
 

@@ -62,9 +62,11 @@ import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collec
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
 import { HighResReviewInventorySection } from "../components/HighResReviewInventorySection";
+import { MarketIntelligenceFeedPanel } from "../components/MarketIntelligenceFeedPanel";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import { useAuth } from "../auth/AuthContext";
 
 function assetStateLabel(state: InventoryDetail["asset_state"]): string {
   switch (state) {
@@ -987,6 +989,7 @@ function edgesByLane(edges: CoverRelationshipGraphEdge[]): Map<CoverRelationship
 }
 
 export function InventoryDetailPage() {
+  const { user } = useAuth();
   const { inventoryCopyId } = useParams<{ inventoryCopyId: string }>();
   const parsedInventoryCopyId = Number(inventoryCopyId);
 
@@ -3210,6 +3213,9 @@ export function InventoryDetailPage() {
                 {detail.inventory_intelligence ? (
                   <InventoryDetailIntelStrip intel={detail.inventory_intelligence} />
                 ) : null}
+                <div className="mt-4">
+                  <MarketIntelligenceFeedPanel ownerUserId={user?.id} mode="teaser" />
+                </div>
                 {detail.run_detection ? (
                   <InventoryRunDetectionCallout attachment={detail.run_detection} />
                 ) : null}

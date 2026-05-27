@@ -10,6 +10,7 @@ import {
 } from "../api/client";
 import { useMarketIntelligencePanels } from "../hooks/useMarketIntelligencePanels";
 import { checksumAlignedWithEnvelope } from "../lib/marketIntelTrace";
+import { MarketIntelligenceFeedPanel } from "./MarketIntelligenceFeedPanel";
 import { StatusBanner } from "./StatusBanner";
 
 function shortenChecksum(value: string | null | undefined): string {
@@ -740,6 +741,7 @@ export function MarketIntelligenceDashboard({ ownerUserId }: MarketIntelligenceD
       <MemoSignalsPanel state={panels.signals} onRetry={() => void reloadPanel("signals")} />
       <MemoOpportunitiesPanel state={panels.opportunities} onRetry={() => void reloadPanel("opportunities")} />
       <MemoCouplingPanel state={panels.coupling} onRetry={() => void reloadPanel("coupling")} />
+      <MarketIntelligenceFeedPanel ownerUserId={ownerUserId} mode="dashboard" />
     </>
   );
 }

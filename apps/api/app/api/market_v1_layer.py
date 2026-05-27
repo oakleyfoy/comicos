@@ -20,6 +20,7 @@ from app.schemas.market_api_v1 import MarketApiV1Envelope, wrap_object, wrap_sta
 from app.schemas.market_ingestion import MarketAcquisitionIngestionBatchCreatePayload
 from app.schemas.market_normalization import MarketNormalizationRunCreatePayload
 from app.schemas.market_opportunity import MarketAcquisitionOpportunityGeneratePayload
+from app.schemas.market_feed import MarketIntelligenceFeedReplayPayload
 from app.schemas.market_scoring import MarketAcquisitionScoreRunPayload
 from app.schemas.market_signal import MarketAcquisitionSignalGeneratePayload
 from app.schemas.portfolio_market_coupling import PortfolioMarketCouplingGeneratePayload
@@ -55,6 +56,13 @@ from app.services.market_opportunity import (
     list_opportunity_items_owner,
     list_snapshots_ops as list_market_opportunity_snapshots_ops,
     list_snapshots_owner as list_market_opportunity_snapshots_owner,
+)
+from app.services.market_feed import (
+    build_market_feed_timeline,
+    get_market_feed_event,
+    list_market_feed_events,
+    list_market_feed_snapshots,
+    replay_market_feed,
 )
 from app.services.market_scoring import (
     get_score_ops,
@@ -1528,3 +1536,197 @@ def v1_ops_get_portfolio_coupling_snapshot(
         snapshot_id=snap.id,
         checksum=snap.snapshot_checksum,
     )
+
+
+# --- Owner feed ---
+
+
+@market_v1_router.get("/market-feed/events", response_model=MarketApiV1Envelope)
+def v1_owner_list_market_feed_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    related_snapshot_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    lst = list_market_feed_events(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        severity=severity,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        related_snapshot_id=related_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(lst, owner_user_id=int(current_user.id))
+
+
+@market_v1_router.get("/market-feed/events/{event_id}", response_model=MarketApiV1Envelope)
+def v1_owner_get_market_feed_event(
+    event_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    row = get_market_feed_event(session, event_id=event_id, owner_user_id=int(current_user.id))
+    return wrap_object(row, owner_user_id=int(current_user.id), snapshot_id=row.event_sequence_id, checksum=row.event_checksum)
+
+
+@market_v1_router.get("/market-feed/timeline", response_model=MarketApiV1Envelope)
+def v1_owner_get_market_feed_timeline(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    event_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    related_snapshot_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    timeline = build_market_feed_timeline(
+        session,
+        owner_user_id=int(current_user.id),
+        event_type=event_type,
+        severity=severity,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        related_snapshot_id=related_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(timeline, owner_user_id=int(current_user.id))
+
+
+@market_v1_router.get("/market-feed/snapshots", response_model=MarketApiV1Envelope)
+def v1_owner_list_market_feed_snapshots(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    lst = list_market_feed_snapshots(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(lst, owner_user_id=int(current_user.id))
+
+
+@market_v1_router.post("/market-feed/replay", response_model=MarketApiV1Envelope)
+def v1_owner_replay_market_feed(
+    payload: MarketIntelligenceFeedReplayPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketApiV1Envelope:
+    assert current_user.id is not None
+    owner_user_id = int(current_user.id)
+    if payload.owner_user_id is not None and payload.owner_user_id != owner_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot replay another owner's feed.")
+    replay = replay_market_feed(
+        session,
+        payload=MarketIntelligenceFeedReplayPayload.model_validate(
+            {**payload.model_dump(mode="json"), "owner_user_id": owner_user_id}
+        ),
+    )
+    session.commit()
+    snap = replay.snapshot
+    return wrap_object(replay, owner_user_id=owner_user_id, snapshot_id=snap.id, checksum=snap.snapshot_checksum)
+
+
+# --- Ops feed ---
+
+
+@market_v1_router.get("/ops/market-feed/events", response_model=MarketApiV1Envelope)
+def v1_ops_list_market_feed_events(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    related_snapshot_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    lst = list_market_feed_events(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        severity=severity,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        related_snapshot_id=related_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(lst, owner_user_id=owner_user_id)
+
+
+@market_v1_router.get("/ops/market-feed/timeline", response_model=MarketApiV1Envelope)
+def v1_ops_get_market_feed_timeline(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    related_snapshot_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    timeline = build_market_feed_timeline(
+        session,
+        owner_user_id=owner_user_id,
+        event_type=event_type,
+        severity=severity,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        related_snapshot_id=related_snapshot_id,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(timeline, owner_user_id=owner_user_id)
+
+
+@market_v1_router.get("/ops/market-feed/snapshots", response_model=MarketApiV1Envelope)
+def v1_ops_list_market_feed_snapshots(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketApiV1Envelope:
+    ensure_ops_admin_access(current_user, settings)
+    lst = list_market_feed_snapshots(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return wrap_standard_list(lst, owner_user_id=owner_user_id)

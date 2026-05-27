@@ -23,6 +23,7 @@ from app.models import (
     MarketAcquisitionSignalSnapshot,
     Variant,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.market_signal import (
     InventoryMarketAcquisitionSignalTeaser,
     MarketAcquisitionSignalDetailRead,
@@ -623,6 +624,37 @@ def generate_market_signals_for_owner(
 
     for row in evidence_rows + history_rows:
         session.add(row)
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SIGNALS_GENERATED",
+        severity="INFO",
+        snapshot_date=snapshot_date,
+        event_payload_json={
+            "signal_snapshot_id": int(snapshot.id or 0),
+            "source_score_snapshot_id": int(score_snapshot.id or 0),
+            "snapshot_checksum": snapshot_checksum,
+            "total_signals": len(staged_rows),
+            "elite_signal_count": snapshot.elite_signal_count,
+            "high_signal_count": snapshot.high_signal_count,
+            "medium_signal_count": snapshot.medium_signal_count,
+            "low_signal_count": snapshot.low_signal_count,
+        },
+        signal_snapshot_id=int(snapshot.id or 0),
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SNAPSHOT_CREATED",
+        severity="INFO",
+        snapshot_date=snapshot_date,
+        event_payload_json={
+            "layer": "signals",
+            "signal_snapshot_id": int(snapshot.id or 0),
+            "snapshot_checksum": snapshot_checksum,
+        },
+        signal_snapshot_id=int(snapshot.id or 0),
+    )
     session.commit()
     session.refresh(snapshot)
     return MarketAcquisitionSignalGenerateResponse(

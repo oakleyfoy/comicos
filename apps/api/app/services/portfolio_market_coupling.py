@@ -36,6 +36,7 @@ from app.models import (
     Publisher,
     Variant,
 )
+from app.services.market_feed import append_market_feed_event
 from app.schemas.portfolio_market_coupling import (
     InventoryPortfolioMarketCouplingTeaserRead,
     PortfolioMarketCouplingDetailRead,
@@ -1170,6 +1171,38 @@ def generate_coupling_for_owner(
             high_fit_market_items=snap_row.high_fit_market_items,
             snapshot_date=sd,
         ),
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="COUPLING_GENERATED",
+        severity="WARNING" if snap_row.misaligned_opportunity_count > 0 else "INFO",
+        snapshot_date=sd,
+        event_payload_json={
+            "coupling_snapshot_id": int(snap_row.id or 0),
+            "opportunity_snapshot_id": int(snap_row.market_acquisition_opportunity_snapshot_id or 0),
+            "snapshot_checksum": chk,
+            "market_opportunity_count": len(opp_items),
+            "aligned_opportunity_count": int(snap_row.aligned_opportunity_count),
+            "misaligned_opportunity_count": int(snap_row.misaligned_opportunity_count),
+            "high_fit_market_items": int(snap_row.high_fit_market_items),
+            "low_fit_market_items": int(snap_row.low_fit_market_items),
+        },
+        coupling_snapshot_id=int(snap_row.id or 0),
+        opportunity_snapshot_id=int(snap_row.market_acquisition_opportunity_snapshot_id or 0),
+    )
+    append_market_feed_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="SNAPSHOT_CREATED",
+        severity="INFO",
+        snapshot_date=sd,
+        event_payload_json={
+            "layer": "coupling",
+            "coupling_snapshot_id": int(snap_row.id or 0),
+            "snapshot_checksum": chk,
+        },
+        coupling_snapshot_id=int(snap_row.id or 0),
     )
     session.commit()
     session.refresh(snap_row)
