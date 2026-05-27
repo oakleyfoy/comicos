@@ -3547,6 +3547,131 @@ export interface InventoryMarketAcquisitionScoreTeaser {
   grading_upside_score?: string | null;
   snapshot_date: string;
 }
+
+export type MarketAcquisitionSignalType =
+  | "VALUE_DISLOCATION"
+  | "LIQUIDITY_OPPORTUNITY"
+  | "PORTFOLIO_GAP_FILL"
+  | "CONCENTRATION_REDUCTION"
+  | "GRADING_UPSIDE"
+  | "REDUNDANT_ASSET"
+  | "HIGH_RISK_ASSET";
+export type MarketAcquisitionSignalStrength = "LOW" | "MEDIUM" | "HIGH" | "ELITE";
+
+export interface MarketAcquisitionSignalSnapshotRead {
+  id: number;
+  market_acquisition_score_snapshot_id: number;
+  owner_user_id: number;
+  total_signals: number;
+  elite_signal_count: number;
+  high_signal_count: number;
+  medium_signal_count: number;
+  low_signal_count: number;
+  value_dislocation_count: number;
+  liquidity_opportunity_count: number;
+  portfolio_gap_fill_count: number;
+  concentration_reduction_count: number;
+  grading_upside_count: number;
+  redundant_asset_count: number;
+  high_risk_asset_count: number;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionSignalRead {
+  id: number;
+  market_acquisition_signal_snapshot_id: number;
+  scored_candidate_id: number;
+  owner_user_id?: number | null;
+  signal_type: MarketAcquisitionSignalType | string;
+  signal_strength: MarketAcquisitionSignalStrength | string;
+  signal_score?: string | null;
+  confidence_level: MarketAcquisitionConfidenceLevel | string;
+  risk_level: MarketAcquisitionRiskLevel | string;
+  signal_reason_json: Record<string, unknown>;
+  supporting_factors_json: Record<string, unknown>;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionSignalEvidenceRead {
+  id: number;
+  market_acquisition_signal_id: number;
+  evidence_type: string;
+  source_id?: number | null;
+  source_table?: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketAcquisitionSignalHistoryRead {
+  id: number;
+  owner_user_id: number;
+  scored_candidate_id: number;
+  signal_type: MarketAcquisitionSignalType | string;
+  signal_strength: MarketAcquisitionSignalStrength | string;
+  signal_score?: string | null;
+  confidence_level: MarketAcquisitionConfidenceLevel | string;
+  risk_level: MarketAcquisitionRiskLevel | string;
+  checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionSignalDetailRead {
+  signal: MarketAcquisitionSignalRead;
+  evidence: MarketAcquisitionSignalEvidenceRead[];
+}
+
+export interface MarketAcquisitionSignalGeneratePayload {
+  score_snapshot_id?: number | null;
+  snapshot_date?: string | null;
+}
+
+export interface MarketAcquisitionSignalGenerateResponse {
+  replayed: boolean;
+  snapshot: MarketAcquisitionSignalSnapshotRead;
+  total_signals: number;
+}
+
+export interface MarketAcquisitionSignalListResponse {
+  items: MarketAcquisitionSignalRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketAcquisitionSignalSnapshotListResponse {
+  items: MarketAcquisitionSignalSnapshotRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketAcquisitionSignalEvidenceListResponse {
+  items: MarketAcquisitionSignalEvidenceRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketAcquisitionSignalHistoryListResponse {
+  items: MarketAcquisitionSignalHistoryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InventoryMarketAcquisitionSignalTeaser {
+  signal_type: string;
+  signal_strength: string;
+  signal_score?: string | null;
+  confidence_level: string;
+  risk_level: string;
+  snapshot_date: string;
+}
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -5679,6 +5804,7 @@ export interface InventoryDetail extends InventoryItem {
   concentration_risk?: InventoryConcentrationRiskTeaser | null;
   portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
   market_acquisition_score?: InventoryMarketAcquisitionScoreTeaser | null;
+  market_acquisition_signal?: InventoryMarketAcquisitionSignalTeaser | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -9994,6 +10120,139 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<MarketAcquisitionScoreHistoryListResponse>(`/ops/market-scoring/history${q}`);
+  },
+
+  generateMarketSignals(payload: MarketAcquisitionSignalGeneratePayload): Promise<MarketAcquisitionSignalGenerateResponse> {
+    return request<MarketAcquisitionSignalGenerateResponse>("/market-signals/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketSignals(params?: {
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalListResponse>(`/market-signals${q}`);
+  },
+
+  getMarketSignal(signalId: number): Promise<MarketAcquisitionSignalDetailRead> {
+    return request<MarketAcquisitionSignalDetailRead>(`/market-signals/${signalId}`);
+  },
+
+  listMarketSignalSnapshots(params?: {
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalSnapshotListResponse>(`/market-signal-snapshots${q}`);
+  },
+
+  listMarketSignalEvidence(params?: {
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    signal_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalEvidenceListResponse>(`/market-signal-evidence${q}`);
+  },
+
+  listMarketSignalHistory(params?: {
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalHistoryListResponse>(`/market-signal-history${q}`);
+  },
+
+  listOpsMarketSignals(params?: {
+    owner_user_id?: number;
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalListResponse>(`/ops/market-signals${q}`);
+  },
+
+  getOpsMarketSignal(signalId: number): Promise<MarketAcquisitionSignalDetailRead> {
+    return request<MarketAcquisitionSignalDetailRead>(`/ops/market-signals/${signalId}`);
+  },
+
+  listOpsMarketSignalSnapshots(params?: {
+    owner_user_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalSnapshotListResponse>(`/ops/market-signal-snapshots${q}`);
+  },
+
+  listOpsMarketSignalEvidence(params?: {
+    owner_user_id?: number;
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    signal_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalEvidenceListResponse>(`/ops/market-signal-evidence${q}`);
+  },
+
+  listOpsMarketSignalHistory(params?: {
+    owner_user_id?: number;
+    signal_type?: string;
+    signal_strength?: string;
+    confidence_level?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionSignalHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionSignalHistoryListResponse>(`/ops/market-signal-history${q}`);
   },
 
   getListingIntelligence(params?: {

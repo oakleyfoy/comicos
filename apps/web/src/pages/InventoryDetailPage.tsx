@@ -2909,6 +2909,25 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.market_acquisition_signal ? (
+                <div className="rounded-2xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-[11px] text-amber-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-amber-200/90">Market signal</p>
+                    <span className="rounded-full border border-amber-300/45 bg-amber-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-100">
+                      {detail.market_acquisition_signal.signal_type}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Strength {detail.market_acquisition_signal.signal_strength} · score{" "}
+                    {detail.market_acquisition_signal.signal_score ?? "—"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Confidence {detail.market_acquisition_signal.confidence_level} · risk{" "}
+                    {detail.market_acquisition_signal.risk_level} · snapshot{" "}
+                    {formatDate(detail.market_acquisition_signal.snapshot_date)}
+                  </p>
+                </div>
+              ) : null}
               {detail.concentration_risk ? (
                 <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
                   <div className="flex flex-wrap items-center gap-2">

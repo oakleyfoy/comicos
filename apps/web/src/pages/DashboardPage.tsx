@@ -53,6 +53,7 @@ import {
   type MarketAcquisitionIngestionBatchListResponse,
   type MarketNormalizationRunListResponse,
   type MarketAcquisitionScoreSnapshotListResponse,
+  type MarketAcquisitionSignalSnapshotListResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
@@ -863,6 +864,11 @@ export function DashboardPage() {
   );
   const [marketScoringLoading, setMarketScoringLoading] = useState(true);
   const [marketScoringError, setMarketScoringError] = useState<string | null>(null);
+  const [marketSignalSnapshots, setMarketSignalSnapshots] = useState<MarketAcquisitionSignalSnapshotListResponse | null>(
+    null,
+  );
+  const [marketSignalLoading, setMarketSignalLoading] = useState(true);
+  const [marketSignalError, setMarketSignalError] = useState<string | null>(null);
   const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
@@ -1189,6 +1195,7 @@ export function DashboardPage() {
     };
   }, [marketNormalizationRuns]);
   const latestMarketScoringSnapshot = marketScoringSnapshots?.items[0] ?? null;
+  const latestMarketSignalSnapshot = marketSignalSnapshots?.items[0] ?? null;
 
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1468,6 +1475,40 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketIngestionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketSignalSnapshots(null);
+          setMarketSignalLoading(false);
+          setMarketSignalError(null);
+        }
+        return;
+      }
+      setMarketSignalLoading(true);
+      setMarketSignalError(null);
+      try {
+        const snapshots = await apiClient.listMarketSignalSnapshots({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketSignalSnapshots(snapshots);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketSignalSnapshots(null);
+          setMarketSignalError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market signal summary.");
+        }
+      } finally {
+        if (!ignore) {
+          setMarketSignalLoading(false);
         }
       }
     })();
@@ -3539,6 +3580,58 @@ export function DashboardPage() {
                       label="Last scoring snapshot"
                       value={latestMarketScoringSnapshot.snapshot_date ? formatDate(latestMarketScoringSnapshot.snapshot_date) : "—"}
                     />
+                  </div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
+          {marketSignalLoading || marketSignalError || latestMarketSignalSnapshot ? (
+            <section className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/14 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/70">
+                    Market signal layer (P39-04)
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Explainable market signal layer</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic signal classification over persisted acquisition scores only. This layer interprets score
+                    outputs into explainable market signals without recalculating the scoring engine.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-signal-ops"
+                  className="rounded-full border border-amber-400/35 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300/60 hover:bg-amber-500/10"
+                >
+                  Open signal ops
+                </Link>
+              </div>
+              {marketSignalLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading market signal summary…</p>
+              ) : marketSignalError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketSignalError}</StatusBanner>
+                </div>
+              ) : latestMarketSignalSnapshot ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <StatCard label="VALUE_DISLOCATION" value={String(latestMarketSignalSnapshot.value_dislocation_count ?? 0)} />
+                    <StatCard
+                      label="LIQUIDITY_OPPORTUNITY"
+                      value={String(latestMarketSignalSnapshot.liquidity_opportunity_count ?? 0)}
+                    />
+                    <StatCard label="PORTFOLIO_GAP_FILL" value={String(latestMarketSignalSnapshot.portfolio_gap_fill_count ?? 0)} />
+                    <StatCard
+                      label="CONCENTRATION_REDUCTION"
+                      value={String(latestMarketSignalSnapshot.concentration_reduction_count ?? 0)}
+                    />
+                    <StatCard label="HIGH_RISK_ASSET" value={String(latestMarketSignalSnapshot.high_risk_asset_count ?? 0)} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard label="Elite signals" value={String(latestMarketSignalSnapshot.elite_signal_count ?? 0)} />
+                    <StatCard label="High signals" value={String(latestMarketSignalSnapshot.high_signal_count ?? 0)} />
+                    <StatCard label="Medium signals" value={String(latestMarketSignalSnapshot.medium_signal_count ?? 0)} />
+                    <StatCard label="Low signals" value={String(latestMarketSignalSnapshot.low_signal_count ?? 0)} />
                   </div>
                 </>
               ) : null}

@@ -16,6 +16,19 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Caching layers for larger owner datasets once score volume justifies dedicated materialized read paths
 - Real-time websocket score feeds instead of explicit read-only snapshot refreshes
 
+## P39-04 — Market signal classification system (2026-05-26)
+
+- Architecture note: deterministic signal mapping, evidence, snapshots, and append-safe history live in `docs/MARKET_SIGNAL_ARCHITECTURE.md`. The signal system must remain a pure interpreter over persisted P39-03 score rows and score evidence.
+- UI surfaces remain observational only: dashboard counts, ops drill-down, and a single inventory signal teaser. Do not expand this layer into action queues or autonomous recommendation workflows without a separate product decision.
+
+### Deferred scope (beyond P39-04)
+
+- ML-based signal classification
+- Predictive signal evolution or trend forecasting
+- Real-time signal streaming / websocket fan-out
+- External sentiment signals or marketplace commentary feeds
+- AI-driven signal weighting or adaptive signal priority tuning
+
 ## `apps/api/app/main.py` — Ruff / structure (updated 2026-05-23)
 
 Run: `python -m ruff check app/main.py` from `apps/api`.

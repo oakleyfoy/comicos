@@ -104,6 +104,11 @@ import {
   type MarketAcquisitionScoreHistoryRead,
   type MarketAcquisitionScoreRead,
   type MarketAcquisitionScoreSnapshotListResponse,
+  type MarketAcquisitionSignalDetailRead,
+  type MarketAcquisitionSignalEvidenceRead,
+  type MarketAcquisitionSignalHistoryRead,
+  type MarketAcquisitionSignalRead,
+  type MarketAcquisitionSignalSnapshotListResponse,
   type MarketNormalizationIssueRead,
   type MarketNormalizationRunDetailRead,
   type MarketNormalizationRunListResponse,
@@ -1666,6 +1671,16 @@ export function OperationsPage() {
   const [opsMarketScoringDetail, setOpsMarketScoringDetail] = useState<MarketAcquisitionScoreDetailRead | null>(null);
   const [opsMarketScoringDetailLoading, setOpsMarketScoringDetailLoading] = useState(false);
   const [opsMarketScoringDetailError, setOpsMarketScoringDetailError] = useState<string | null>(null);
+  const [opsMarketSignalSummary, setOpsMarketSignalSummary] = useState<MarketAcquisitionSignalSnapshotListResponse | null>(null);
+  const [opsMarketSignalLoading, setOpsMarketSignalLoading] = useState(true);
+  const [opsMarketSignalError, setOpsMarketSignalError] = useState<string | null>(null);
+  const [opsMarketSignalSelectedId, setOpsMarketSignalSelectedId] = useState<number | null>(null);
+  const [opsMarketSignals, setOpsMarketSignals] = useState<MarketAcquisitionSignalRead[]>([]);
+  const [opsMarketSignalHistory, setOpsMarketSignalHistory] = useState<MarketAcquisitionSignalHistoryRead[]>([]);
+  const [opsMarketSignalDetail, setOpsMarketSignalDetail] = useState<MarketAcquisitionSignalDetailRead | null>(null);
+  const [opsMarketSignalEvidence, setOpsMarketSignalEvidence] = useState<MarketAcquisitionSignalEvidenceRead[]>([]);
+  const [opsMarketSignalDetailLoading, setOpsMarketSignalDetailLoading] = useState(false);
+  const [opsMarketSignalDetailError, setOpsMarketSignalDetailError] = useState<string | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -2234,6 +2249,88 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketScoringSelectedId, opsMarketScoringSummary, opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketSignalLoading(true);
+      setOpsMarketSignalError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const summary = await apiClient.listOpsMarketSignalSnapshots({ limit: 40, offset: 0, ...scoped });
+        if (!ignore) {
+          setOpsMarketSignalSummary(summary);
+          setOpsMarketSignalSelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketSignalSummary(null);
+          setOpsMarketSignalSelectedId(null);
+          setOpsMarketSignalError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market signal snapshots.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketSignalLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsMarketSignalSelectedId || !opsMarketSignalSummary) {
+        if (!ignore) {
+          setOpsMarketSignals([]);
+          setOpsMarketSignalHistory([]);
+          setOpsMarketSignalDetail(null);
+          setOpsMarketSignalEvidence([]);
+          setOpsMarketSignalDetailLoading(false);
+          setOpsMarketSignalDetailError(null);
+        }
+        return;
+      }
+      setOpsMarketSignalDetailLoading(true);
+      setOpsMarketSignalDetailError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const [signals, history, evidence] = await Promise.all([
+          apiClient.listOpsMarketSignals({ ...scoped, limit: 200, offset: 0 }),
+          apiClient.listOpsMarketSignalHistory({ ...scoped, limit: 80, offset: 0 }),
+          apiClient.listOpsMarketSignalEvidence({ ...scoped, limit: 240, offset: 0 }),
+        ]);
+        const scopedSignals = signals.items.filter((row) => row.market_acquisition_signal_snapshot_id === opsMarketSignalSelectedId);
+        const leadSignal = scopedSignals[0] ?? null;
+        const detail = leadSignal ? await apiClient.getOpsMarketSignal(leadSignal.id) : null;
+        if (!ignore) {
+          setOpsMarketSignals(scopedSignals);
+          setOpsMarketSignalHistory(history.items.filter((row) => row.snapshot_date === leadSignal?.snapshot_date));
+          setOpsMarketSignalDetail(detail);
+          setOpsMarketSignalEvidence(
+            evidence.items.filter((row) => !leadSignal || row.market_acquisition_signal_id === leadSignal.id),
+          );
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketSignals([]);
+          setOpsMarketSignalHistory([]);
+          setOpsMarketSignalDetail(null);
+          setOpsMarketSignalEvidence([]);
+          setOpsMarketSignalDetailError(loadErr instanceof ApiError ? loadErr.message : "Unable to load market signal drill-down.");
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketSignalDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketSignalSelectedId, opsMarketSignalSummary, opsPortfolioOwnerApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -5534,6 +5631,7 @@ export function OperationsPage() {
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
           ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
           ["Market scoring", "#market-scoring-ops"],
+          ["Market signals", "#market-signal-ops"],
           ["Market normalization", "#market-normalization-ops"],
           ["Market ingestion", "#market-ingestion-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
@@ -9302,6 +9400,202 @@ export function OperationsPage() {
                             </span>
                           ))
                         )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="market-signal-ops"
+        className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market acquisition signal classification</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic interpretation layer over persisted acquisition scores. Use this view for dense signal tables,
+                score traceability, evidence, and checksum verification without recalculating the scoring engine.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+              Ops / P39-04
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-amber-200/15 pt-4">
+          {opsMarketSignalLoading ? (
+            <p className="text-sm text-slate-400">Loading market signal snapshots…</p>
+          ) : opsMarketSignalError ? (
+            <StatusBanner tone="error">{opsMarketSignalError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Snapshots tracked" value={String(opsMarketSignalSummary?.total_items ?? 0)} />
+                <StatCard label="Value dislocation" value={String(opsMarketSignalSummary?.items[0]?.value_dislocation_count ?? 0)} />
+                <StatCard
+                  label="Liquidity opportunity"
+                  value={String(opsMarketSignalSummary?.items[0]?.liquidity_opportunity_count ?? 0)}
+                />
+                <StatCard label="Portfolio gap fill" value={String(opsMarketSignalSummary?.items[0]?.portfolio_gap_fill_count ?? 0)} />
+                <StatCard label="High risk asset" value={String(opsMarketSignalSummary?.items[0]?.high_risk_asset_count ?? 0)} />
+              </div>
+
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Snapshot date</th>
+                      <th className="p-3 font-medium">Signals</th>
+                      <th className="p-3 font-medium">Strength mix</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketSignalSummary?.items.length ? (
+                      opsMarketSignalSummary.items.map((row) => {
+                        const isSelected = opsMarketSignalSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSelected
+                                    ? "border-amber-300/70 bg-amber-400/20 text-amber-50"
+                                    : "border-white/15 text-slate-200 hover:border-amber-300/35"
+                                }`}
+                                onClick={() => setOpsMarketSignalSelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSelected ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[11px] text-slate-400">@{row.owner_user_id}</td>
+                            <td className="p-3 align-top">{formatDate(row.snapshot_date)}</td>
+                            <td className="p-3 align-top">{row.total_signals}</td>
+                            <td className="p-3 align-top">
+                              <div>E {row.elite_signal_count} / H {row.high_signal_count}</div>
+                              <div className="mt-1 text-[11px] text-slate-500">M {row.medium_signal_count} / L {row.low_signal_count}</div>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.checksum)}</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={6}>
+                          No market-signal snapshots recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsMarketSignalDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading signal drill-down…</p>
+              ) : opsMarketSignalDetailError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{opsMarketSignalDetailError}</StatusBanner>
+                </div>
+              ) : opsMarketSignalSelectedId ? (
+                <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Signal table</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {opsMarketSignals.length === 0 ? (
+                        <p className="text-slate-500">No signals loaded for the selected snapshot.</p>
+                      ) : (
+                        opsMarketSignals.slice(0, 12).map((row) => (
+                          <div key={row.id} className="rounded-xl border border-white/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-semibold text-white">
+                                Score #{row.scored_candidate_id} · {row.signal_type}
+                              </p>
+                              <span className="text-[10px] text-slate-500">
+                                {row.signal_strength} · {row.signal_score ?? "—"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              Confidence {row.confidence_level} · risk {row.risk_level} · checksum{" "}
+                              {abbrevExportChecksum(row.checksum)}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Signal breakdown by type</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-200">
+                        {Object.entries(
+                          opsMarketSignals.reduce<Record<string, number>>((acc, row) => {
+                            acc[row.signal_type] = (acc[row.signal_type] ?? 0) + 1;
+                            return acc;
+                          }, {}),
+                        ).map(([key, count]) => (
+                          <span key={key} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-amber-100">
+                            {key}: {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Signal-to-score traceability</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-200">
+                      {!opsMarketSignalDetail ? (
+                        <p className="text-slate-500">No lead signal selected for traceability.</p>
+                      ) : (
+                        <>
+                          <div className="rounded-xl border border-white/10 px-3 py-2">
+                            <p className="font-semibold text-white">{opsMarketSignalDetail.signal.signal_type}</p>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              Source score #{opsMarketSignalDetail.signal.scored_candidate_id} · strength{" "}
+                              {opsMarketSignalDetail.signal.signal_strength} · signal score{" "}
+                              {opsMarketSignalDetail.signal.signal_score ?? "—"}
+                            </p>
+                          </div>
+                          {opsMarketSignalEvidence.map((row) => (
+                            <div key={row.id} className="rounded-xl border border-white/10 px-3 py-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-semibold text-white">{row.evidence_type}</p>
+                                <span className="text-[10px] text-slate-500">{formatDateTime(row.created_at)}</span>
+                              </div>
+                              <p className="mt-1 text-[10px] text-slate-400">{JSON.stringify(row.evidence_value_json).slice(0, 240)}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Checksum verification panel</p>
+                      <div className="mt-2 space-y-2 text-[11px] text-slate-200">
+                        <div className="rounded-xl border border-white/10 px-3 py-2">
+                          Snapshot checksum:{" "}
+                          <span className="font-mono text-[10px] text-amber-100">
+                            {opsMarketSignalSummary?.items.find((row) => row.id === opsMarketSignalSelectedId)?.checksum ?? "—"}
+                          </span>
+                        </div>
+                        <div className="rounded-xl border border-white/10 px-3 py-2">
+                          Lead signal checksum:{" "}
+                          <span className="font-mono text-[10px] text-amber-100">
+                            {opsMarketSignalDetail?.signal.checksum ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {opsMarketSignalHistory.slice(0, 12).map((row) => (
+                            <span key={row.id} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-amber-100">
+                              #{row.scored_candidate_id} {row.signal_type}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>

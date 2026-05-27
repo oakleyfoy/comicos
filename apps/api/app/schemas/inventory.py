@@ -26,6 +26,7 @@ from app.schemas.portfolio_liquidity import InventoryPortfolioLiquidityTeaser
 from app.schemas.concentration_risk import InventoryConcentrationRiskTeaser
 from app.schemas.portfolio_recommendation import InventoryPortfolioRecommendationTeaser
 from app.schemas.market_scoring import InventoryMarketAcquisitionScoreTeaser
+from app.schemas.market_signal import InventoryMarketAcquisitionSignalTeaser
 from app.schemas.run_detection import RunDetectionCopyAttachment
 
 ReleaseCalendarPresence = Literal["present", "missing"]
@@ -168,6 +169,7 @@ class InventoryDetailResponse(BaseModel):
     concentration_risk: InventoryConcentrationRiskTeaser | None = None
     portfolio_recommendation: InventoryPortfolioRecommendationTeaser | None = None
     market_acquisition_score: InventoryMarketAcquisitionScoreTeaser | None = None
+    market_acquisition_signal: InventoryMarketAcquisitionSignalTeaser | None = None
 
 
 class InventoryFmvSnapshotResponse(BaseModel):

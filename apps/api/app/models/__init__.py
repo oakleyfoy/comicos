@@ -155,6 +155,12 @@ from app.models.market_scoring import (
     MarketAcquisitionScoreHistory,
     MarketAcquisitionScoreSnapshot,
 )
+from app.models.market_signal import (
+    MarketAcquisitionSignal,
+    MarketAcquisitionSignalEvidence,
+    MarketAcquisitionSignalHistory,
+    MarketAcquisitionSignalSnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -376,6 +382,10 @@ __all__ = [
     "MarketAcquisitionScore",
     "MarketAcquisitionScoreEvidence",
     "MarketAcquisitionScoreHistory",
+    "MarketAcquisitionSignalSnapshot",
+    "MarketAcquisitionSignal",
+    "MarketAcquisitionSignalEvidence",
+    "MarketAcquisitionSignalHistory",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

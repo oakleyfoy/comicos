@@ -217,6 +217,15 @@ from app.schemas.market_scoring import (
     MarketAcquisitionScoreRunResponse,
     MarketAcquisitionScoreSnapshotListResponse,
 )
+from app.schemas.market_signal import (
+    MarketAcquisitionSignalDetailRead,
+    MarketAcquisitionSignalEvidenceListResponse,
+    MarketAcquisitionSignalGeneratePayload,
+    MarketAcquisitionSignalGenerateResponse,
+    MarketAcquisitionSignalHistoryListResponse,
+    MarketAcquisitionSignalListResponse,
+    MarketAcquisitionSignalSnapshotListResponse,
+)
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
     OperationalReportRunDetailRead,
@@ -747,6 +756,19 @@ from app.services.market_scoring import (
     list_snapshots_ops,
     list_snapshots_owner,
     run_market_acquisition_scoring_for_owner,
+)
+from app.services.market_signal import (
+    generate_market_signals_for_owner,
+    get_signal_ops,
+    get_signal_owner,
+    list_evidence_ops as list_market_signal_evidence_ops,
+    list_evidence_owner as list_market_signal_evidence_owner,
+    list_history_ops as list_market_signal_history_ops,
+    list_history_owner as list_market_signal_history_owner,
+    list_signals_ops,
+    list_signals_owner,
+    list_snapshots_ops as list_market_signal_snapshots_ops,
+    list_snapshots_owner as list_market_signal_snapshots_owner,
 )
 from app.services.market_sale_review_queue import (
     flag_duplicate_market_sale_record,
@@ -7245,6 +7267,261 @@ def ops_list_market_scoring_history_endpoint(
         session,
         owner_user_id=owner_user_id,
         recommendation_label=recommendation_label,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/market-signals/generate", response_model=MarketAcquisitionSignalGenerateResponse)
+def owner_generate_market_signals_endpoint(
+    payload: MarketAcquisitionSignalGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionSignalGenerateResponse:
+    assert current_user.id is not None
+    return generate_market_signals_for_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/market-signals", response_model=MarketAcquisitionSignalListResponse)
+def owner_list_market_signals_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalListResponse:
+    assert current_user.id is not None
+    return list_signals_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-signals/{signal_id}", response_model=MarketAcquisitionSignalDetailRead)
+def owner_get_market_signal_endpoint(
+    signal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionSignalDetailRead:
+    assert current_user.id is not None
+    return get_signal_owner(session, owner_user_id=int(current_user.id), signal_id=signal_id)
+
+
+@app.get("/market-signal-snapshots", response_model=MarketAcquisitionSignalSnapshotListResponse)
+def owner_list_market_signal_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalSnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_signal_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-signal-evidence", response_model=MarketAcquisitionSignalEvidenceListResponse)
+def owner_list_market_signal_evidence_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    signal_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalEvidenceListResponse:
+    assert current_user.id is not None
+    return list_market_signal_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        signal_id=signal_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-signal-history", response_model=MarketAcquisitionSignalHistoryListResponse)
+def owner_list_market_signal_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalHistoryListResponse:
+    assert current_user.id is not None
+    return list_market_signal_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-signals", response_model=MarketAcquisitionSignalListResponse)
+def ops_list_market_signals_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_signals_ops(
+        session,
+        owner_user_id=owner_user_id,
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-signals/{signal_id}", response_model=MarketAcquisitionSignalDetailRead)
+def ops_get_market_signal_endpoint(
+    signal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketAcquisitionSignalDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_signal_ops(session, signal_id=signal_id)
+
+
+@app.get("/ops/market-signal-snapshots", response_model=MarketAcquisitionSignalSnapshotListResponse)
+def ops_list_market_signal_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_signal_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-signal-evidence", response_model=MarketAcquisitionSignalEvidenceListResponse)
+def ops_list_market_signal_evidence_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    signal_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_signal_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        confidence_level=confidence_level,
+        risk_level=risk_level,
+        signal_id=signal_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-signal-history", response_model=MarketAcquisitionSignalHistoryListResponse)
+def ops_list_market_signal_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    confidence_level: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionSignalHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_signal_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        signal_type=signal_type,
+        signal_strength=signal_strength,
         confidence_level=confidence_level,
         risk_level=risk_level,
         snapshot_date_from=snapshot_date_from,
