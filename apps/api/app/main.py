@@ -202,6 +202,13 @@ from app.schemas.market_ingestion import (
     MarketAcquisitionIngestionBatchRead,
     MarketAcquisitionRawSourceListResponse,
 )
+from app.schemas.market_normalization import (
+    MarketAcquisitionNormalizedCandidateListResponse,
+    MarketNormalizationIssueListResponse,
+    MarketNormalizationRunCreatePayload,
+    MarketNormalizationRunDetailRead,
+    MarketNormalizationRunListResponse,
+)
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
     OperationalReportRunDetailRead,
@@ -710,6 +717,17 @@ from app.services.market_ingestion import (
     list_ingestion_batches_owner,
     list_ingestion_raw_ops,
     list_ingestion_raw_owner,
+)
+from app.services.market_normalization import (
+    execute_market_normalization_run_for_owner,
+    get_normalization_run_ops,
+    get_normalization_run_owner,
+    list_normalized_candidates_ops,
+    list_normalized_candidates_owner,
+    list_normalization_issues_ops,
+    list_normalization_issues_owner,
+    list_normalization_runs_ops,
+    list_normalization_runs_owner,
 )
 from app.services.market_sale_review_queue import (
     flag_duplicate_market_sale_record,
@@ -6823,6 +6841,205 @@ def ops_list_market_ingestion_raw_endpoint(
         limit=limit,
         offset=offset,
     )
+
+
+@app.post(
+    "/market-normalization/run",
+    response_model=MarketNormalizationRunDetailRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def owner_create_market_normalization_run_endpoint(
+    payload: MarketNormalizationRunCreatePayload,
+    response: Response,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketNormalizationRunDetailRead:
+    assert current_user.id is not None
+    body, fresh = execute_market_normalization_run_for_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    if not fresh:
+        response.status_code = status.HTTP_200_OK
+    return body
+
+
+@app.get("/market-normalization/runs", response_model=MarketNormalizationRunListResponse)
+def owner_list_market_normalization_runs_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    ingestion_batch_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketNormalizationRunListResponse:
+    assert current_user.id is not None
+    return list_normalization_runs_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        ingestion_batch_id=ingestion_batch_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-normalization/runs/{run_id}", response_model=MarketNormalizationRunDetailRead)
+def owner_get_market_normalization_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketNormalizationRunDetailRead:
+    assert current_user.id is not None
+    return get_normalization_run_owner(session, owner_user_id=int(current_user.id), run_id=run_id)
+
+
+@app.get("/market-normalization/candidates", response_model=MarketAcquisitionNormalizedCandidateListResponse)
+def owner_list_market_normalization_candidates_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    ingestion_batch_id: int | None = Query(default=None),
+    normalization_status: str | None = Query(default=None),
+    publisher: Annotated[
+        str | None,
+        Query(description="Canonical publisher exact match."),
+    ] = None,
+    condition_band: str | None = Query(default=None),
+    created_since: datetime | None = Query(default=None),
+    created_until: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionNormalizedCandidateListResponse:
+    assert current_user.id is not None
+    return list_normalized_candidates_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        ingestion_batch_id=ingestion_batch_id,
+        normalization_status=normalization_status,
+        canonical_publisher=publisher,
+        condition_band=condition_band,
+        created_since=created_since,
+        created_until=created_until,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-normalization/issues", response_model=MarketNormalizationIssueListResponse)
+def owner_list_market_normalization_issues_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    ingestion_batch_id: int | None = Query(default=None),
+    issue_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    created_since: datetime | None = Query(default=None),
+    created_until: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketNormalizationIssueListResponse:
+    assert current_user.id is not None
+    return list_normalization_issues_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        ingestion_batch_id=ingestion_batch_id,
+        issue_type=issue_type,
+        severity=severity,
+        created_since=created_since,
+        created_until=created_until,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-normalization/runs", response_model=MarketNormalizationRunListResponse)
+def ops_list_market_normalization_runs_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    ingestion_batch_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketNormalizationRunListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_normalization_runs_ops(
+        session,
+        owner_user_id_filter=owner_user_id,
+        ingestion_batch_id=ingestion_batch_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-normalization/candidates", response_model=MarketAcquisitionNormalizedCandidateListResponse)
+def ops_list_market_normalization_candidates_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    ingestion_batch_id: int | None = Query(default=None),
+    normalization_status: str | None = Query(default=None),
+    publisher: Annotated[
+        str | None,
+        Query(description="Canonical publisher exact match."),
+    ] = None,
+    condition_band: str | None = Query(default=None),
+    created_since: datetime | None = Query(default=None),
+    created_until: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionNormalizedCandidateListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_normalized_candidates_ops(
+        session,
+        owner_user_id_filter=owner_user_id,
+        ingestion_batch_id=ingestion_batch_id,
+        normalization_status=normalization_status,
+        canonical_publisher=publisher,
+        condition_band=condition_band,
+        created_since=created_since,
+        created_until=created_until,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-normalization/issues", response_model=MarketNormalizationIssueListResponse)
+def ops_list_market_normalization_issues_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    ingestion_batch_id: int | None = Query(default=None),
+    issue_type: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    created_since: datetime | None = Query(default=None),
+    created_until: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketNormalizationIssueListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_normalization_issues_ops(
+        session,
+        owner_user_id_filter=owner_user_id,
+        ingestion_batch_id=ingestion_batch_id,
+        issue_type=issue_type,
+        severity=severity,
+        created_since=created_since,
+        created_until=created_until,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-normalization/runs/{run_id}", response_model=MarketNormalizationRunDetailRead)
+def ops_get_market_normalization_run_endpoint(
+    run_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketNormalizationRunDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_normalization_run_ops(session, run_id=run_id)
 
 
 @app.get("/market-sales", response_model=MarketSaleListResponse)

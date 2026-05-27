@@ -51,6 +51,7 @@ import {
   type MarketTrendSnapshotListResponse,
   type MarketSaleSummaryRead,
   type MarketAcquisitionIngestionBatchListResponse,
+  type MarketNormalizationRunListResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
@@ -853,6 +854,9 @@ export function DashboardPage() {
   const [marketIngestionSummary, setMarketIngestionSummary] = useState<MarketAcquisitionIngestionBatchListResponse | null>(null);
   const [marketIngestionLoading, setMarketIngestionLoading] = useState(true);
   const [marketIngestionError, setMarketIngestionError] = useState<string | null>(null);
+  const [marketNormalizationRuns, setMarketNormalizationRuns] = useState<MarketNormalizationRunListResponse | null>(null);
+  const [marketNormalizationLoading, setMarketNormalizationLoading] = useState(true);
+  const [marketNormalizationError, setMarketNormalizationError] = useState<string | null>(null);
   const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
@@ -1153,6 +1157,32 @@ export function DashboardPage() {
     return summary;
   }, [acquisitionPriorityList]);
   const marketIngestionStatusCounts = marketIngestionSummary?.status_counts ?? {};
+  const marketNormalizationHealthRates = useMemo(() => {
+    const health = marketNormalizationRuns?.health;
+    const c = health?.candidate_status_counts ?? {};
+    const succ = c.SUCCESS ?? 0;
+    const part = c.PARTIAL ?? 0;
+    const fail = c.FAILED ?? 0;
+    const tot = succ + part + fail;
+    const pctStr = (n: number): string => (tot > 0 ? `${((100 * n) / tot).toFixed(1)}%` : "—");
+    const issues = health?.issue_type_counts ?? {};
+    const issueRecords = Object.values(issues).reduce((a, b) => a + b, 0);
+    const flags = health?.normalization_flag_counts ?? {};
+    return {
+      tot,
+      succ,
+      part,
+      fail,
+      successRate: pctStr(succ),
+      partialRate: pctStr(part),
+      failRate: pctStr(fail),
+      canonicalPct: health?.canonical_full_success_rate_pct ?? null,
+      issueRecords,
+      missingPublisher: flags.missing_publisher ?? 0,
+      ambiguousTitle: flags.ambiguous_title ?? 0,
+    };
+  }, [marketNormalizationRuns]);
+
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
     () => ({
@@ -1431,6 +1461,42 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketIngestionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketNormalizationRuns(null);
+          setMarketNormalizationLoading(false);
+          setMarketNormalizationError(null);
+        }
+        return;
+      }
+      setMarketNormalizationLoading(true);
+      setMarketNormalizationError(null);
+      try {
+        const runs = await apiClient.listMarketNormalizationRuns({ limit: 50, offset: 0 });
+        if (!ignore) {
+          setMarketNormalizationRuns(runs);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketNormalizationRuns(null);
+          setMarketNormalizationError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market normalization summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketNormalizationLoading(false);
         }
       }
     })();
@@ -3320,6 +3386,62 @@ export function DashboardPage() {
                   <StatCard
                     label="Last ingestion"
                     value={marketIngestionSummary?.last_ingestion_at ? formatDateTime(marketIngestionSummary.last_ingestion_at) : "—"}
+                  />
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {marketNormalizationLoading ||
+          marketNormalizationError ||
+          ((marketNormalizationRuns?.total_items ?? 0) > 0 ||
+            (marketNormalizationHealthRates.issueRecords ?? 0) > 0) ? (
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/14 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">
+                    Market acquisition normalization (P39-02)
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Normalization health & canonical coverage</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic normalization only — no ranking, scoring, or external lookups. Rows below aggregate
+                    across your completed ingestion batches when normalization runs exist.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-normalization-ops"
+                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                >
+                  Open normalization ops
+                </Link>
+              </div>
+              {marketNormalizationLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading normalization summary…</p>
+              ) : marketNormalizationError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketNormalizationError}</StatusBanner>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Normalization runs" value={String(marketNormalizationRuns?.total_items ?? 0)} />
+                  <StatCard label="Success rate (by row)" value={marketNormalizationHealthRates.successRate} />
+                  <StatCard label="Partial rate" value={marketNormalizationHealthRates.partialRate} />
+                  <StatCard label="Failed rate" value={marketNormalizationHealthRates.failRate} />
+                  <StatCard label="Normalized rows sampled" value={String(marketNormalizationHealthRates.tot)} />
+                  <StatCard
+                    label="Canonical success %"
+                    value={marketNormalizationHealthRates.canonicalPct != null ? `${marketNormalizationHealthRates.canonicalPct}%` : "—"}
+                  />
+                  <StatCard label="Issue rows" value={String(marketNormalizationHealthRates.issueRecords)} />
+                  <StatCard label="Missing publisher signals" value={String(marketNormalizationHealthRates.missingPublisher)} />
+                  <StatCard label="Ambiguous title signals" value={String(marketNormalizationHealthRates.ambiguousTitle)} />
+                  <StatCard
+                    label="Last completed run"
+                    value={
+                      marketNormalizationRuns?.health.last_normalization_completed_at
+                        ? formatDateTime(marketNormalizationRuns.health.last_normalization_completed_at)
+                        : "—"
+                    }
                   />
                 </div>
               )}

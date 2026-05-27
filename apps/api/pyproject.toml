@@ -45,3 +45,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/models/market_normalization.py" = ["E501"]
+"app/schemas/market_normalization.py" = ["E501"]
+"app/services/market_normalization.py" = ["E501"]

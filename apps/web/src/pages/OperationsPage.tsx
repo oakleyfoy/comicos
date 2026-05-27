@@ -99,6 +99,10 @@ import {
   type MarketAcquisitionIngestionBatchListResponse,
   type MarketAcquisitionIngestionBatchRead,
   type MarketAcquisitionRawSourceRead,
+  type MarketAcquisitionNormalizedCandidateRead,
+  type MarketNormalizationIssueRead,
+  type MarketNormalizationRunDetailRead,
+  type MarketNormalizationRunListResponse,
   type HighResReviewRequestSummary,
   type RelationshipConflictDetectResponse,
   type RelationshipConflictListResponse,
@@ -1638,6 +1642,15 @@ export function OperationsPage() {
   const [opsMarketIngestionDetailLoading, setOpsMarketIngestionDetailLoading] = useState(false);
   const [opsMarketIngestionDetailError, setOpsMarketIngestionDetailError] = useState<string | null>(null);
   const [opsMarketIngestionRaw, setOpsMarketIngestionRaw] = useState<MarketAcquisitionRawSourceRead[]>([]);
+  const [opsMarketNormSummary, setOpsMarketNormSummary] = useState<MarketNormalizationRunListResponse | null>(null);
+  const [opsMarketNormLoading, setOpsMarketNormLoading] = useState(true);
+  const [opsMarketNormError, setOpsMarketNormError] = useState<string | null>(null);
+  const [opsMarketNormSelectedId, setOpsMarketNormSelectedId] = useState<number | null>(null);
+  const [opsMarketNormDetail, setOpsMarketNormDetail] = useState<MarketNormalizationRunDetailRead | null>(null);
+  const [opsMarketNormDetailLoading, setOpsMarketNormDetailLoading] = useState(false);
+  const [opsMarketNormDetailError, setOpsMarketNormDetailError] = useState<string | null>(null);
+  const [opsMarketNormCandidates, setOpsMarketNormCandidates] = useState<MarketAcquisitionNormalizedCandidateRead[]>([]);
+  const [opsMarketNormIssues, setOpsMarketNormIssues] = useState<MarketNormalizationIssueRead[]>([]);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -2024,6 +2037,106 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketIngestionSelectedId]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketNormLoading(true);
+      setOpsMarketNormError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const summary = await apiClient.listOpsMarketNormalizationRuns({ limit: 80, offset: 0, ...scoped });
+        if (!ignore) {
+          setOpsMarketNormSummary(summary);
+          setOpsMarketNormSelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketNormSummary(null);
+          setOpsMarketNormSelectedId(null);
+          setOpsMarketNormError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market normalization runs.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketNormLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsMarketNormSelectedId || !opsMarketNormSummary) {
+        if (!ignore) {
+          setOpsMarketNormDetail(null);
+          setOpsMarketNormCandidates([]);
+          setOpsMarketNormIssues([]);
+          setOpsMarketNormDetailLoading(false);
+          setOpsMarketNormDetailError(null);
+        }
+        return;
+      }
+      const runRow = opsMarketNormSummary.items.find((item) => item.id === opsMarketNormSelectedId);
+      if (!runRow) {
+        if (!ignore) {
+          setOpsMarketNormDetail(null);
+          setOpsMarketNormCandidates([]);
+          setOpsMarketNormIssues([]);
+          setOpsMarketNormDetailLoading(false);
+          setOpsMarketNormDetailError("Selected normalization run is no longer available.");
+        }
+        return;
+      }
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      const batchId = runRow.ingestion_batch_id;
+      setOpsMarketNormDetailLoading(true);
+      setOpsMarketNormDetailError(null);
+      try {
+        const [detail, cands, iss] = await Promise.all([
+          apiClient.getOpsMarketNormalizationRun(opsMarketNormSelectedId),
+          apiClient.listOpsMarketNormalizationCandidates({
+            ...scoped,
+            ingestion_batch_id: batchId,
+            limit: 100,
+            offset: 0,
+          }),
+          apiClient.listOpsMarketNormalizationIssues({
+            ...scoped,
+            ingestion_batch_id: batchId,
+            limit: 100,
+            offset: 0,
+          }),
+        ]);
+        if (!ignore) {
+          setOpsMarketNormDetail(detail);
+          setOpsMarketNormCandidates(cands.items);
+          setOpsMarketNormIssues(iss.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketNormDetail(null);
+          setOpsMarketNormCandidates([]);
+          setOpsMarketNormIssues([]);
+          setOpsMarketNormDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load normalization drill-down.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketNormDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketNormSelectedId, opsPortfolioOwnerApplied, opsMarketNormSummary?.items]);
 
   useEffect(() => {
     let ignore = false;
@@ -5323,6 +5436,7 @@ export function OperationsPage() {
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
           ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
+          ["Market normalization", "#market-normalization-ops"],
           ["Market ingestion", "#market-ingestion-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
           ["Duplicate consolidation", "#duplicate-consolidation-ops"],
@@ -8933,6 +9047,202 @@ export function OperationsPage() {
                           </div>
                         ))
                       )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="market-normalization-ops"
+        className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market acquisition normalization engine</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic canonicalization pipeline (titles, aliases, deterministic condition bands). Read-only —
+                ingestion rows are never mutated. Use this drill-down for run timelines, canonical keys, and recorded
+                issues.
+              </p>
+            </div>
+            <span className="rounded-full border border-violet-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/90">
+              Ops / P39-02
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-violet-200/15 pt-4">
+          {opsMarketNormLoading ? (
+            <p className="text-sm text-slate-400">Loading normalization runs…</p>
+          ) : opsMarketNormError ? (
+            <StatusBanner tone="error">{opsMarketNormError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Runs tracked" value={String(opsMarketNormSummary?.total_items ?? 0)} />
+                <StatCard label="Run status: completed" value={String(opsMarketNormSummary?.status_counts.COMPLETED ?? 0)} />
+                <StatCard label="Run status: failed" value={String(opsMarketNormSummary?.status_counts.FAILED ?? 0)} />
+                <StatCard label="Normalization row success %" value={`${opsMarketNormSummary?.health.canonical_full_success_rate_pct ?? "—"}${opsMarketNormSummary?.health.canonical_full_success_rate_pct != null ? "%" : ""}`} />
+                <StatCard
+                  label="Issue rows sampled"
+                  value={String(Object.values(opsMarketNormSummary?.health.issue_type_counts ?? {}).reduce((a, b) => a + b, 0))}
+                />
+              </div>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Issue breakdown</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-200">
+                  {Object.keys(opsMarketNormSummary?.health.issue_type_counts ?? {}).length === 0 ? (
+                    <span className="text-slate-500">No issues recorded for the sampled scope.</span>
+                  ) : (
+                    Object.entries(opsMarketNormSummary?.health.issue_type_counts ?? {}).map(([k, v]) => (
+                      <span key={k} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-slate-100">
+                        {k}: {String(v)}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="mt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Failure signals</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-200">
+                    {Object.entries(opsMarketNormSummary?.health.normalization_flag_counts ?? {}).map(([k, v]) => (
+                      <span key={k} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px] text-violet-100">
+                        {k}: {String(v)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Batch</th>
+                      <th className="p-3 font-medium">Status</th>
+                      <th className="p-3 font-medium">Totals</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                      <th className="p-3 font-medium">Timeline</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketNormSummary?.items.length ? (
+                      opsMarketNormSummary.items.map((row) => {
+                        const isSel = opsMarketNormSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSel
+                                    ? "border-violet-300/70 bg-violet-400/20 text-violet-50"
+                                    : "border-white/15 text-slate-200 hover:border-violet-300/35"
+                                }`}
+                                onClick={() => setOpsMarketNormSelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSel ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[11px]">#{row.ingestion_batch_id}</td>
+                            <td className="p-3 align-top">{row.run_status}</td>
+                            <td className="p-3 align-top">
+                              <div>
+                                ✓ {row.successful_records} • ~ {row.partial_records} • ✗ {row.failed_records}
+                              </div>
+                              <div className="mt-1 text-[10px] text-slate-500">success / partial / failed</div>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.run_checksum)}</td>
+                            <td className="p-3 align-top text-[11px] text-slate-400">
+                              started {row.started_at ? formatDateTime(row.started_at) : "—"}
+                              <div className="mt-1">completed {row.completed_at ? formatDateTime(row.completed_at) : "—"}</div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={6}>
+                          No normalization runs recorded for the selected ops scope yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {opsMarketNormDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading selected normalization drill-down…</p>
+              ) : opsMarketNormDetailError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="warning">{opsMarketNormDetailError}</StatusBanner>
+                </div>
+              ) : opsMarketNormDetail ? (
+                <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Run timeline</p>
+                    <div className="mt-3 max-h-[320px] space-y-2 overflow-auto text-xs text-slate-200">
+                      {opsMarketNormDetail.events.map((evt) => (
+                        <div key={evt.id} className="rounded-xl border border-white/10 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold text-white">{evt.event_type}</p>
+                            <span className="text-[10px] text-slate-500">{formatDateTime(evt.created_at)}</span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-slate-400">{JSON.stringify(evt.metadata_json).slice(0, 220)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Canonical key coverage</p>
+                    <div className="mt-3 max-h-[220px] overflow-auto">
+                      <table className="w-full border-collapse text-left text-[11px]">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="py-2 pr-2 font-medium">Candidate</th>
+                            <th className="py-2 pr-2 font-medium">Status</th>
+                            <th className="py-2 pr-2 font-medium">Canonical key</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {(opsMarketNormCandidates ?? []).slice(0, 25).map((c) => (
+                            <tr key={c.id}>
+                              <td className="py-2 pr-2 font-mono text-[10px]">#{c.ingestion_candidate_id}</td>
+                              <td className="py-2 pr-2">{c.normalization_status}</td>
+                              <td className="py-2 pr-2 font-mono text-[10px] text-emerald-200/90">
+                                {abbrevExportChecksum(c.canonical_key)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Issues for selected batch scope
+                    </p>
+                    <div className="mt-3 max-h-[240px] overflow-auto">
+                      <table className="w-full border-collapse text-left text-[11px]">
+                        <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                          <tr>
+                            <th className="py-2 pr-2 font-medium">Candidate</th>
+                            <th className="py-2 pr-2 font-medium">Type</th>
+                            <th className="py-2 pr-2 font-medium">Severity</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/10 text-slate-200">
+                          {(opsMarketNormIssues ?? []).slice(0, 40).map((iss) => (
+                            <tr key={iss.id}>
+                              <td className="py-2 pr-2 font-mono text-[10px]">#{iss.ingestion_candidate_id}</td>
+                              <td className="py-2 pr-2">{iss.issue_type}</td>
+                              <td className="py-2 pr-2">{iss.severity}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>

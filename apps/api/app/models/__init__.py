@@ -143,6 +143,12 @@ from app.models.market_ingestion import (
     MarketAcquisitionIngestionEvent,
     MarketAcquisitionRawSource,
 )
+from app.models.market_normalization import (
+    MarketAcquisitionNormalizedCandidate,
+    MarketAcquisitionNormalizationEvent,
+    MarketAcquisitionNormalizationIssue,
+    MarketAcquisitionNormalizationRun,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -356,6 +362,10 @@ __all__ = [
     "MarketAcquisitionIngestionBatch",
     "MarketAcquisitionRawSource",
     "MarketAcquisitionIngestionEvent",
+    "MarketAcquisitionNormalizationRun",
+    "MarketAcquisitionNormalizedCandidate",
+    "MarketAcquisitionNormalizationIssue",
+    "MarketAcquisitionNormalizationEvent",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

@@ -312,6 +312,17 @@ Resolved routes:
 - External enrichment, predictive pricing, ML models, and market-fit intelligence remain out of scope for the foundation layer.
 - Live marketplace automation, webhook ingestion, and scheduled background imports remain deferred until replay-safe source contracts are defined.
 
+## P39-02 — Market normalization engine (2026-05-26)
+
+- Architecture note: deterministic canonicalization lanes, deterministic `canonical_key`, replay-safe `run_checksum`, append-only normalization issues/events, and strict non-mutation of ingestion tables are documented in `docs/MARKET_NORMALIZATION_ARCHITECTURE.md`.
+- **Deferred beyond P39-02:**
+  - ML-style entity resolution, fuzzy clustering, probabilistic completeness fills
+  - AI title inference / auto-correction pipelines
+  - External metadata enrichment APIs or live marketplace lookups
+  - Predictive normalization (guessing publishers, speculative variant labels, probabilistic grading hints)
+  - Automatic liquidity hints or grade-potential heuristics (fields stay null until deterministic rules ship)
+  - Rewriting ingestion/raw rows to coerce quality
+
 ## P37-09 — Grading reporting / production closeout (2026-05-26)
 
 - Architecture note: deterministic grading closeout reporting plus final stabilization lives in `docs/GRADING_CLOSEOUT_ARCHITECTURE.md` (`GradingOperationalReportRun|File|Item`, UTF-8 CSV checksums, row-level lineage, replay-safe generation, owner vs `/ops/grading-reports` parity, deterministic filename rules).

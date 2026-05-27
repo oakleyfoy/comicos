@@ -3333,6 +3333,103 @@ export interface MarketAcquisitionRawSourceListResponse {
   offset: number;
 }
 
+export type MarketNormalizationRunStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+export type MarketNormalizationCandidateStatus = "SUCCESS" | "PARTIAL" | "FAILED";
+export type MarketNormalizationConditionBand = "UNKNOWN" | "POOR" | "GOOD" | "VERY_GOOD" | "FINE" | "VF" | "NM";
+
+export interface MarketNormalizationRunSummaryRead {
+  id: number;
+  ingestion_batch_id: number;
+  owner_user_id?: number | null;
+  run_status: MarketNormalizationRunStatus | string;
+  total_records: number;
+  successful_records: number;
+  partial_records: number;
+  failed_records: number;
+  run_checksum: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketNormalizationEventRead {
+  id: number;
+  normalization_run_id: number;
+  event_type: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketNormalizationRunDetailRead extends MarketNormalizationRunSummaryRead {
+  events: MarketNormalizationEventRead[];
+}
+
+export interface MarketNormalizationHealthRead {
+  candidate_status_counts: Record<string, number>;
+  issue_type_counts: Record<string, number>;
+  normalization_flag_counts: Record<string, number>;
+  canonical_full_success_rate_pct?: string | null;
+  last_normalization_completed_at?: string | null;
+}
+
+export interface MarketNormalizationRunListResponse {
+  items: MarketNormalizationRunSummaryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+  status_counts: Record<string, number>;
+  health: MarketNormalizationHealthRead;
+}
+
+export interface MarketAcquisitionNormalizedCandidateRead {
+  id: number;
+  ingestion_candidate_id: number;
+  normalization_run_id: number;
+  owner_user_id?: number | null;
+  canonical_title: string;
+  canonical_publisher?: string | null;
+  canonical_issue_number?: string | null;
+  canonical_variant?: string | null;
+  normalized_condition_band: MarketNormalizationConditionBand | string;
+  normalized_price?: string | null;
+  normalized_currency?: string | null;
+  normalized_fmv_estimate?: string | null;
+  normalized_liquidity_hint?: string | null;
+  normalized_grade_potential?: string | null;
+  canonical_key: string;
+  normalization_flags_json?: Record<string, unknown> | null;
+  normalization_status: MarketNormalizationCandidateStatus | string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketNormalizationIssueRead {
+  id: number;
+  normalization_run_id: number;
+  ingestion_candidate_id: number;
+  issue_type: string;
+  severity: string;
+  issue_detail_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface MarketAcquisitionNormalizedCandidateListResponse {
+  items: MarketAcquisitionNormalizedCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketNormalizationIssueListResponse {
+  items: MarketNormalizationIssueRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketNormalizationRunCreatePayload {
+  ingestion_batch_id: number;
+}
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -9589,6 +9686,96 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return request<MarketAcquisitionRawSourceListResponse>(`/ops/market-ingestion/raw${q}`);
+  },
+
+  createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {
+    return request<MarketNormalizationRunDetailRead>("/market-normalization/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketNormalizationRuns(params?: {
+    ingestion_batch_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketNormalizationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<MarketNormalizationRunListResponse>(`/market-normalization/runs${q}`);
+  },
+
+  listMarketNormalizationCandidates(params?: {
+    ingestion_batch_id?: number;
+    normalization_status?: string;
+    publisher?: string;
+    condition_band?: string;
+    created_since?: string;
+    created_until?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionNormalizedCandidateListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionNormalizedCandidateListResponse>(`/market-normalization/candidates${q}`);
+  },
+
+  listMarketNormalizationIssues(params?: {
+    ingestion_batch_id?: number;
+    issue_type?: string;
+    severity?: string;
+    created_since?: string;
+    created_until?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketNormalizationIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketNormalizationIssueListResponse>(`/market-normalization/issues${q}`);
+  },
+
+  listOpsMarketNormalizationRuns(params?: {
+    owner_user_id?: number;
+    ingestion_batch_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketNormalizationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return request<MarketNormalizationRunListResponse>(`/ops/market-normalization/runs${q}`);
+  },
+
+  getOpsMarketNormalizationRun(runId: number): Promise<MarketNormalizationRunDetailRead> {
+    return request<MarketNormalizationRunDetailRead>(`/ops/market-normalization/runs/${runId}`);
+  },
+
+  listOpsMarketNormalizationCandidates(params?: {
+    owner_user_id?: number;
+    ingestion_batch_id?: number;
+    normalization_status?: string;
+    publisher?: string;
+    condition_band?: string;
+    created_since?: string;
+    created_until?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionNormalizedCandidateListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketAcquisitionNormalizedCandidateListResponse>(`/ops/market-normalization/candidates${q}`);
+  },
+
+  listOpsMarketNormalizationIssues(params?: {
+    owner_user_id?: number;
+    ingestion_batch_id?: number;
+    issue_type?: string;
+    severity?: string;
+    created_since?: string;
+    created_until?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketNormalizationIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return request<MarketNormalizationIssueListResponse>(`/ops/market-normalization/issues${q}`);
   },
 
   getListingIntelligence(params?: {
