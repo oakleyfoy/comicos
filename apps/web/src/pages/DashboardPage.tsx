@@ -54,6 +54,8 @@ import {
   type MarketNormalizationRunListResponse,
   type MarketAcquisitionScoreSnapshotListResponse,
   type MarketAcquisitionSignalSnapshotListResponse,
+  type MarketAcquisitionOpportunitySnapshotListResponse,
+  type PortfolioMarketCouplingSnapshotListResponse,
   type MarketSaleReviewQueueSummaryRead,
   type MarketFmvConfidenceBucket,
   type ScanPipelineDashboardResponse,
@@ -869,6 +871,14 @@ export function DashboardPage() {
   );
   const [marketSignalLoading, setMarketSignalLoading] = useState(true);
   const [marketSignalError, setMarketSignalError] = useState<string | null>(null);
+  const [marketOpportunitySnapshots, setMarketOpportunitySnapshots] =
+    useState<MarketAcquisitionOpportunitySnapshotListResponse | null>(null);
+  const [marketOpportunityLoading, setMarketOpportunityLoading] = useState(true);
+  const [marketOpportunityError, setMarketOpportunityError] = useState<string | null>(null);
+  const [marketPortfolioCouplingSnapshots, setMarketPortfolioCouplingSnapshots] =
+    useState<PortfolioMarketCouplingSnapshotListResponse | null>(null);
+  const [marketPortfolioCouplingLoading, setMarketPortfolioCouplingLoading] = useState(true);
+  const [marketPortfolioCouplingError, setMarketPortfolioCouplingError] = useState<string | null>(null);
   const [marketSaleReviewQueueSummary, setMarketSaleReviewQueueSummary] =
     useState<MarketSaleReviewQueueSummaryRead | null>(null);
   const [marketSaleReviewQueueSummaryLoading, setMarketSaleReviewQueueSummaryLoading] = useState(true);
@@ -1196,6 +1206,8 @@ export function DashboardPage() {
   }, [marketNormalizationRuns]);
   const latestMarketScoringSnapshot = marketScoringSnapshots?.items[0] ?? null;
   const latestMarketSignalSnapshot = marketSignalSnapshots?.items[0] ?? null;
+  const latestMarketOpportunitySnapshot = marketOpportunitySnapshots?.items[0] ?? null;
+  const latestMarketPortfolioCouplingSnapshot = marketPortfolioCouplingSnapshots?.items[0] ?? null;
 
 
   const inventoryQuery = useMemo<InventoryQueryParams>(
@@ -1509,6 +1521,78 @@ export function DashboardPage() {
       } finally {
         if (!ignore) {
           setMarketSignalLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketOpportunitySnapshots(null);
+          setMarketOpportunityLoading(false);
+          setMarketOpportunityError(null);
+        }
+        return;
+      }
+      setMarketOpportunityLoading(true);
+      setMarketOpportunityError(null);
+      try {
+        const snapshots = await apiClient.listMarketOpportunitySnapshots({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketOpportunitySnapshots(snapshots);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketOpportunitySnapshots(null);
+          setMarketOpportunityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market opportunity summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketOpportunityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!user) {
+        if (!ignore) {
+          setMarketPortfolioCouplingSnapshots(null);
+          setMarketPortfolioCouplingLoading(false);
+          setMarketPortfolioCouplingError(null);
+        }
+        return;
+      }
+      setMarketPortfolioCouplingLoading(true);
+      setMarketPortfolioCouplingError(null);
+      try {
+        const snapshots = await apiClient.listPortfolioMarketCouplingSnapshots({ limit: 1, offset: 0 });
+        if (!ignore) {
+          setMarketPortfolioCouplingSnapshots(snapshots);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setMarketPortfolioCouplingSnapshots(null);
+          setMarketPortfolioCouplingError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio-market coupling summary.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setMarketPortfolioCouplingLoading(false);
         }
       }
     })();
@@ -3435,7 +3519,7 @@ export function DashboardPage() {
             </section>
           ) : null}
 
-          {marketIngestionLoading || marketIngestionError || (marketIngestionSummary?.total_items ?? 0) > 0 ? (
+          {marketIngestionLoading || marketIngestionError || (marketIngestionSummary?.pagination.total_count ?? 0) > 0 ? (
             <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -3461,7 +3545,7 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <StatCard label="Total batches" value={String(marketIngestionSummary?.total_items ?? 0)} />
+                  <StatCard label="Total batches" value={String(marketIngestionSummary?.pagination.total_count ?? 0)} />
                   <StatCard label="Failed batches" value={String(marketIngestionStatusCounts.FAILED ?? 0)} />
                   <StatCard
                     label="Pending batches"
@@ -3478,7 +3562,7 @@ export function DashboardPage() {
 
           {marketNormalizationLoading ||
           marketNormalizationError ||
-          ((marketNormalizationRuns?.total_items ?? 0) > 0 ||
+          ((marketNormalizationRuns?.pagination.total_count ?? 0) > 0 ||
             (marketNormalizationHealthRates.issueRecords ?? 0) > 0) ? (
             <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/14 p-5 shadow-xl shadow-black/15">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -3507,7 +3591,7 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <StatCard label="Normalization runs" value={String(marketNormalizationRuns?.total_items ?? 0)} />
+                  <StatCard label="Normalization runs" value={String(marketNormalizationRuns?.pagination.total_count ?? 0)} />
                   <StatCard label="Success rate (by row)" value={marketNormalizationHealthRates.successRate} />
                   <StatCard label="Partial rate" value={marketNormalizationHealthRates.partialRate} />
                   <StatCard label="Failed rate" value={marketNormalizationHealthRates.failRate} />
@@ -3635,6 +3719,127 @@ export function DashboardPage() {
                   </div>
                 </>
               ) : null}
+            </section>
+          ) : null}
+
+          {marketOpportunityLoading || marketOpportunityError || marketOpportunitySnapshots ? (
+            <section className="mt-6 rounded-3xl border border-lime-400/25 bg-lime-950/14 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-lime-200/70">
+                    Opportunity layer (P39-05)
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Portfolio-aware opportunity snapshots</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Deterministic aggregation of persisted signals only — recap counts and portfolio impact summaries
+                    without rescoring or recomputing the signal classifier.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-opportunity-ops"
+                  className="rounded-full border border-lime-400/35 px-3 py-1.5 text-xs font-semibold text-lime-100 transition hover:border-lime-300/60 hover:bg-lime-500/10"
+                >
+                  Open opportunity ops
+                </Link>
+              </div>
+              {marketOpportunityLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading opportunity summary…</p>
+              ) : marketOpportunityError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketOpportunityError}</StatusBanner>
+                </div>
+              ) : latestMarketOpportunitySnapshot ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <StatCard
+                      label="ELITE opportunities"
+                      value={latestMarketOpportunitySnapshot.opportunity_classification === "ELITE_OPPORTUNITY" ? "1" : "0"}
+                    />
+                    <StatCard
+                      label="STRONG opportunities"
+                      value={latestMarketOpportunitySnapshot.opportunity_classification === "STRONG_OPPORTUNITY" ? "1" : "0"}
+                    />
+                    <StatCard label="Total signals (snapshot)" value={String(latestMarketOpportunitySnapshot.total_signals ?? 0)} />
+                    <StatCard
+                      label="Liquidity opportunity count"
+                      value={String(latestMarketOpportunitySnapshot.liquidity_opportunity_count ?? 0)}
+                    />
+                    <StatCard
+                      label="Diversification gain est."
+                      value={latestMarketOpportunitySnapshot.estimated_diversification_gain ?? "—"}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">
+                  No opportunity snapshots yet — run{" "}
+                  <span className="font-mono text-slate-400">POST /api/v1/market/market-opportunities/generate</span> after market
+                  signals exist.
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          {marketPortfolioCouplingLoading || marketPortfolioCouplingError || marketPortfolioCouplingSnapshots ? (
+            <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/14 p-5 shadow-xl shadow-black/15">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/70">
+                    Coupling layer (P39-06)
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Portfolio-market alignment bridge</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                    Relational coupling only — deterministic edges joining opportunity items to portfolio inventory
+                    context. Does not mutate scores, signals, or normalization rows.
+                  </p>
+                </div>
+                <Link
+                  to="/ops#market-portfolio-coupling-ops"
+                  className="rounded-full border border-sky-400/35 px-3 py-1.5 text-xs font-semibold text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-500/10"
+                >
+                  Open coupling ops
+                </Link>
+              </div>
+              {marketPortfolioCouplingLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading coupling summary…</p>
+              ) : marketPortfolioCouplingError ? (
+                <div className="mt-4">
+                  <StatusBanner tone="error">{marketPortfolioCouplingError}</StatusBanner>
+                </div>
+              ) : latestMarketPortfolioCouplingSnapshot ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                  <StatCard
+                    label="Portfolio-market alignment score"
+                    value={latestMarketPortfolioCouplingSnapshot.portfolio_market_alignment_score ?? "—"}
+                  />
+                  <StatCard
+                    label="High-fit market items"
+                    value={String(latestMarketPortfolioCouplingSnapshot.high_fit_market_items ?? 0)}
+                  />
+                  <StatCard
+                    label="Liquidity alignment score"
+                    value={latestMarketPortfolioCouplingSnapshot.liquidity_gap_alignment_score ?? "—"}
+                  />
+                  <StatCard
+                    label="Diversification gap alignment"
+                    value={latestMarketPortfolioCouplingSnapshot.diversification_gap_alignment_score ?? "—"}
+                  />
+                  <StatCard
+                    label="Concentration offset score"
+                    value={latestMarketPortfolioCouplingSnapshot.concentration_offset_score ?? "—"}
+                  />
+                  <StatCard
+                    label="Misaligned opportunities"
+                    value={String(latestMarketPortfolioCouplingSnapshot.misaligned_opportunity_count ?? 0)}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">
+                  No coupling snapshots yet — run{" "}
+                  <span className="font-mono text-slate-400">POST /api/v1/market/market-portfolio-coupling/generate</span> after an
+                  opportunity snapshot exists for this owner.
+                </p>
+              )}
             </section>
           ) : null}
 

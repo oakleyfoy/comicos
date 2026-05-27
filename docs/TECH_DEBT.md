@@ -29,6 +29,44 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - External sentiment signals or marketplace commentary feeds
 - AI-driven signal weighting or adaptive signal priority tuning
 
+## P39-05 — Market opportunity snapshot aggregation (2026-05-26)
+
+- Architecture note: deterministic rollup lives in `docs/MARKET_OPPORTUNITY_ARCHITECTURE.md`. Opportunities are pure aggregations over persisted scoring + signal snapshots; rerunning generation must remain idempotent for identical inputs.
+
+### Deferred scope (beyond P39-05)
+
+- Predictive opportunity ranking
+- AI investment optimization
+- Automated buying systems
+- Real-time market feeds
+- External pricing APIs
+- ML opportunity scoring
+
+## P39-06 — Portfolio ↔ market coupling engine (2026-05-26)
+
+- Architecture note: deterministic bridging layer lives in `docs/MARKET_PORTFOLIO_COUPLING_ARCHITECTURE.md`. Coupling must remain strictly read-only versus P38 registry context and persisted P39-05 opportunity payloads; regenerated snapshots replay idempotently on identical checksum payloads.
+- UI surfaces expose dashboard coupling metrics, coupled inventory teasers tied to portfolio items, and ops drill-down edges plus checksum parity — no execution knobs.
+
+### Deferred scope (beyond P39-06)
+
+- AI portfolio matching
+- Predictive coupling
+- Autonomous recommendations
+- External graph learning
+- ML similarity matching
+- Real-time market graph optimization
+
+## P39-07 — Market API exposure & standardization (2026-05-26)
+
+- Architecture note: unified envelope, versioning, pagination, scoped errors, and ops read-only **`v1`** surface are documented in `docs/MARKET_API_STANDARDIZATION_ARCHITECTURE.md`. Legacy unversioned P39 URLs remain unchanged; the SPA consumes **`/api/v1/market`** through `requestMarketV1`.
+- Deferred scope (beyond P39-07 API-only work):
+
+  - GraphQL layer
+  - Real-time streaming APIs or websocket feeds
+  - External API federation
+  - API auto-generation (OpenAPI client codegen as the single source of truth)
+  - AI-driven endpoint budgeting or speculative response shaping
+
 ## `apps/api/app/main.py` — Ruff / structure (updated 2026-05-23)
 
 Run: `python -m ruff check app/main.py` from `apps/api`.
@@ -90,7 +128,7 @@ Resolved routes:
 - **Known follow-ups**
   - If portfolio-scale exports exceed comfortable row counts, introduce cursor pagination while preserving lexical sort guarantees on stable keys (`inventory_copy_id`).
   - Consolidate SPA dashboard clustering for ops/owner previews when product finalizes telemetry density budgets (API contracts already stabilized).
-  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; `#listing-export-ops` accompanies listing registry/export surfaces — extend the list when new market ops sections ship (including `#portfolio-liquidity-ops` for P38-03 rollup tables).
+  - Operations market workspace: `#market-ops-quicknav` jump links require matching `id` anchors on each panel; `#listing-export-ops` accompanies listing registry/export surfaces — extend the list when new market ops sections ship (including `#portfolio-liquidity-ops` for P38-03 rollup tables and `#market-portfolio-coupling-ops` for P39-06 coupling inspection).
 
 ## P36-01 — Listing registry foundation (2026-05-25)
 

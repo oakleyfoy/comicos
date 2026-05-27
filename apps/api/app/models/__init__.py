@@ -161,6 +161,18 @@ from app.models.market_signal import (
     MarketAcquisitionSignalHistory,
     MarketAcquisitionSignalSnapshot,
 )
+from app.models.market_opportunity import (
+    MarketAcquisitionOpportunityEvidence,
+    MarketAcquisitionOpportunityHistory,
+    MarketAcquisitionOpportunityItem,
+    MarketAcquisitionOpportunitySnapshot,
+)
+from app.models.portfolio_market_coupling import (
+    PortfolioMarketCouplingEdge,
+    PortfolioMarketCouplingEvidence,
+    PortfolioMarketCouplingHistory,
+    PortfolioMarketCouplingSnapshot,
+)
 from app.models.convention_operations import (
     ConventionEvent,
     ConventionInventoryAssignment,
@@ -386,6 +398,14 @@ __all__ = [
     "MarketAcquisitionSignal",
     "MarketAcquisitionSignalEvidence",
     "MarketAcquisitionSignalHistory",
+    "MarketAcquisitionOpportunitySnapshot",
+    "MarketAcquisitionOpportunityItem",
+    "MarketAcquisitionOpportunityEvidence",
+    "MarketAcquisitionOpportunityHistory",
+    "PortfolioMarketCouplingSnapshot",
+    "PortfolioMarketCouplingEdge",
+    "PortfolioMarketCouplingEvidence",
+    "PortfolioMarketCouplingHistory",
     "Portfolio",
     "PortfolioAllocationSnapshot",
     "PortfolioExposureEvidence",

@@ -65,6 +65,8 @@ from app.services.portfolio_liquidity import inventory_portfolio_liquidity_tease
 from app.services.concentration_risk import inventory_concentration_risk_teaser
 from app.services.portfolio_recommendation import inventory_portfolio_recommendation_teaser
 from app.services.market_scoring import inventory_market_acquisition_score_teaser
+from app.services.market_opportunity import inventory_market_opportunity_teaser
+from app.services.portfolio_market_coupling import inventory_portfolio_market_coupling_teaser
 from app.services.market_signal import inventory_market_signal_teaser
 
 SORTABLE_FIELDS = {
@@ -912,6 +914,16 @@ def get_inventory_copy_detail(
         session,
         owner_user_id=int(current_user.id),
         inventory_item_id=inventory_copy_id,
+    )
+    merged["market_acquisition_opportunity"] = inventory_market_opportunity_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_item_id=inventory_copy_id,
+    )
+    merged["portfolio_market_coupling"] = inventory_portfolio_market_coupling_teaser(
+        session,
+        owner_user_id=int(current_user.id),
+        inventory_copy_id=inventory_copy_id,
     )
     return InventoryDetailResponse.model_validate(merged)
 

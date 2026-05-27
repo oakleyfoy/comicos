@@ -2928,6 +2928,36 @@ export function InventoryDetailPage() {
                   </p>
                 </div>
               ) : null}
+              {detail.market_acquisition_opportunity ? (
+                <div className="rounded-2xl border border-lime-500/35 bg-lime-950/25 px-4 py-3 text-[11px] text-lime-50">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-lime-200/90">Market opportunity</p>
+                    <span className="rounded-full border border-lime-300/45 bg-lime-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-lime-100">
+                      {detail.market_acquisition_opportunity.opportunity_classification}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Item signal strength {detail.market_acquisition_opportunity.signal_strength} · rollup snapshot{" "}
+                    {formatDate(detail.market_acquisition_opportunity.snapshot_date)}
+                  </p>
+                </div>
+              ) : null}
+              {detail.portfolio_market_coupling ? (
+                <div className="rounded-2xl border border-sky-500/35 bg-sky-950/22 px-4 py-3 text-[11px] text-sky-50">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold uppercase tracking-[0.12em] text-sky-200/90">Portfolio-market coupling</p>
+                    <span className="rounded-full border border-sky-300/45 bg-sky-950/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-100">
+                      #{detail.portfolio_market_coupling.coupling_snapshot_id}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-100">
+                    Alignment {detail.portfolio_market_coupling.portfolio_market_alignment_score ?? "—"} · high-fit{" "}
+                    {detail.portfolio_market_coupling.high_fit_market_items} · conflicts on this copy{" "}
+                    {detail.portfolio_market_coupling.concentration_conflicts} ·{" "}
+                    {formatDate(detail.portfolio_market_coupling.snapshot_date)}
+                  </p>
+                </div>
+              ) : null}
               {detail.concentration_risk ? (
                 <div className="rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/30 px-4 py-3 text-[11px] text-fuchsia-100">
                   <div className="flex flex-wrap items-center gap-2">

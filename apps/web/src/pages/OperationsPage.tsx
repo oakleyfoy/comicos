@@ -109,6 +109,15 @@ import {
   type MarketAcquisitionSignalHistoryRead,
   type MarketAcquisitionSignalRead,
   type MarketAcquisitionSignalSnapshotListResponse,
+  type MarketAcquisitionOpportunityDetailRead,
+  type MarketAcquisitionOpportunityEvidenceRead,
+  type MarketAcquisitionOpportunityHistoryRead,
+  type MarketAcquisitionOpportunityItemRead,
+  type MarketAcquisitionOpportunitySnapshotListResponse,
+  type PortfolioMarketCouplingSnapshotListResponse,
+  type PortfolioMarketCouplingDetailRead,
+  type PortfolioMarketCouplingEdgeRead,
+  type PortfolioMarketCouplingHistoryRead,
   type MarketNormalizationIssueRead,
   type MarketNormalizationRunDetailRead,
   type MarketNormalizationRunListResponse,
@@ -1681,6 +1690,35 @@ export function OperationsPage() {
   const [opsMarketSignalEvidence, setOpsMarketSignalEvidence] = useState<MarketAcquisitionSignalEvidenceRead[]>([]);
   const [opsMarketSignalDetailLoading, setOpsMarketSignalDetailLoading] = useState(false);
   const [opsMarketSignalDetailError, setOpsMarketSignalDetailError] = useState<string | null>(null);
+  const [opsMarketOpportunitySummary, setOpsMarketOpportunitySummary] =
+    useState<MarketAcquisitionOpportunitySnapshotListResponse | null>(null);
+  const [opsMarketOpportunityLoading, setOpsMarketOpportunityLoading] = useState(true);
+  const [opsMarketOpportunityError, setOpsMarketOpportunityError] = useState<string | null>(null);
+  const [opsMarketOpportunitySelectedId, setOpsMarketOpportunitySelectedId] = useState<number | null>(null);
+  const [opsMarketOpportunityItems, setOpsMarketOpportunityItems] = useState<MarketAcquisitionOpportunityItemRead[]>([]);
+  const [opsMarketOpportunityDetail, setOpsMarketOpportunityDetail] = useState<MarketAcquisitionOpportunityDetailRead | null>(
+    null,
+  );
+  const [opsMarketOpportunityEvidence, setOpsMarketOpportunityEvidence] = useState<MarketAcquisitionOpportunityEvidenceRead[]>(
+    [],
+  );
+  const [opsMarketOpportunityHistory, setOpsMarketOpportunityHistory] = useState<MarketAcquisitionOpportunityHistoryRead[]>(
+    [],
+  );
+  const [opsMarketOpportunityDetailLoading, setOpsMarketOpportunityDetailLoading] = useState(false);
+  const [opsMarketOpportunityDetailError, setOpsMarketOpportunityDetailError] = useState<string | null>(null);
+  const [opsPortfolioCouplingSummary, setOpsPortfolioCouplingSummary] =
+    useState<PortfolioMarketCouplingSnapshotListResponse | null>(null);
+  const [opsPortfolioCouplingLoading, setOpsPortfolioCouplingLoading] = useState(true);
+  const [opsPortfolioCouplingError, setOpsPortfolioCouplingError] = useState<string | null>(null);
+  const [opsPortfolioCouplingSelectedId, setOpsPortfolioCouplingSelectedId] = useState<number | null>(null);
+  const [opsPortfolioCouplingDetail, setOpsPortfolioCouplingDetail] = useState<PortfolioMarketCouplingDetailRead | null>(
+    null,
+  );
+  const [opsPortfolioCouplingEdges, setOpsPortfolioCouplingEdges] = useState<PortfolioMarketCouplingEdgeRead[]>([]);
+  const [opsPortfolioCouplingHistory, setOpsPortfolioCouplingHistory] = useState<PortfolioMarketCouplingHistoryRead[]>([]);
+  const [opsPortfolioCouplingDetailLoading, setOpsPortfolioCouplingDetailLoading] = useState(false);
+  const [opsPortfolioCouplingDetailError, setOpsPortfolioCouplingDetailError] = useState<string | null>(null);
   const [opsMarketSales, setOpsMarketSales] = useState<MarketSaleSummaryRead[]>([]);
   const [opsMarketSalesLoading, setOpsMarketSalesLoading] = useState(true);
   const [opsMarketSalesError, setOpsMarketSalesError] = useState<string | null>(null);
@@ -2331,6 +2369,195 @@ export function OperationsPage() {
       ignore = true;
     };
   }, [opsMarketSignalSelectedId, opsMarketSignalSummary, opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsMarketOpportunityLoading(true);
+      setOpsMarketOpportunityError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const summary = await apiClient.listOpsMarketOpportunitySnapshots({ limit: 40, offset: 0, ...scoped });
+        if (!ignore) {
+          setOpsMarketOpportunitySummary(summary);
+          setOpsMarketOpportunitySelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketOpportunitySummary(null);
+          setOpsMarketOpportunitySelectedId(null);
+          setOpsMarketOpportunityError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market opportunity snapshots.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketOpportunityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsMarketOpportunitySelectedId || !opsMarketOpportunitySummary) {
+        if (!ignore) {
+          setOpsMarketOpportunityItems([]);
+          setOpsMarketOpportunityEvidence([]);
+          setOpsMarketOpportunityHistory([]);
+          setOpsMarketOpportunityDetail(null);
+          setOpsMarketOpportunityDetailLoading(false);
+          setOpsMarketOpportunityDetailError(null);
+        }
+        return;
+      }
+      setOpsMarketOpportunityDetailLoading(true);
+      setOpsMarketOpportunityDetailError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const [itemsResp, evidence, history, snapDetail] = await Promise.all([
+          apiClient.listOpsMarketOpportunityItems({
+            ...scoped,
+            opportunity_snapshot_id: opsMarketOpportunitySelectedId,
+            limit: 200,
+            offset: 0,
+          }),
+          apiClient.listOpsMarketOpportunityEvidence({
+            ...scoped,
+            opportunity_snapshot_id: opsMarketOpportunitySelectedId,
+            limit: 80,
+            offset: 0,
+          }),
+          apiClient.listOpsMarketOpportunityHistory({
+            ...scoped,
+            opportunity_snapshot_id: opsMarketOpportunitySelectedId,
+            limit: 80,
+            offset: 0,
+          }),
+          apiClient.getOpsMarketOpportunitySnapshot(opsMarketOpportunitySelectedId),
+        ]);
+        const leadSnap = opsMarketOpportunitySummary.items.find((row) => row.id === opsMarketOpportunitySelectedId);
+        const snapshotDate = leadSnap?.snapshot_date;
+        if (!ignore) {
+          setOpsMarketOpportunityItems(itemsResp.items);
+          setOpsMarketOpportunityEvidence(evidence.items);
+          setOpsMarketOpportunityHistory(
+            history.items.filter((row) => !snapshotDate || row.snapshot_date === snapshotDate),
+          );
+          setOpsMarketOpportunityDetail(snapDetail);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsMarketOpportunityItems([]);
+          setOpsMarketOpportunityEvidence([]);
+          setOpsMarketOpportunityHistory([]);
+          setOpsMarketOpportunityDetail(null);
+          setOpsMarketOpportunityDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load market opportunity drill-down.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsMarketOpportunityDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsMarketOpportunitySelectedId, opsMarketOpportunitySummary, opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      setOpsPortfolioCouplingLoading(true);
+      setOpsPortfolioCouplingError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const summary = await apiClient.listOpsPortfolioMarketCouplingSnapshots({ limit: 40, offset: 0, ...scoped });
+        if (!ignore) {
+          setOpsPortfolioCouplingSummary(summary);
+          setOpsPortfolioCouplingSelectedId((cur) => cur ?? summary.items[0]?.id ?? null);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsPortfolioCouplingSummary(null);
+          setOpsPortfolioCouplingSelectedId(null);
+          setOpsPortfolioCouplingError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load portfolio-market coupling snapshots.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsPortfolioCouplingLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioOwnerApplied]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      if (!opsPortfolioCouplingSelectedId || !opsPortfolioCouplingSummary) {
+        if (!ignore) {
+          setOpsPortfolioCouplingDetail(null);
+          setOpsPortfolioCouplingEdges([]);
+          setOpsPortfolioCouplingHistory([]);
+          setOpsPortfolioCouplingDetailLoading(false);
+          setOpsPortfolioCouplingDetailError(null);
+        }
+        return;
+      }
+      setOpsPortfolioCouplingDetailLoading(true);
+      setOpsPortfolioCouplingDetailError(null);
+      const scoped = opsPortfolioOwnerApplied === undefined ? {} : { owner_user_id: opsPortfolioOwnerApplied };
+      try {
+        const [detail, edges, history] = await Promise.all([
+          apiClient.getOpsPortfolioMarketCouplingSnapshot(opsPortfolioCouplingSelectedId, scoped),
+          apiClient.listOpsPortfolioMarketCouplingEdges({
+            ...scoped,
+            coupling_snapshot_id: opsPortfolioCouplingSelectedId,
+            limit: 200,
+            offset: 0,
+          }),
+          apiClient.listOpsPortfolioMarketCouplingHistory({
+            ...scoped,
+            coupling_snapshot_id: opsPortfolioCouplingSelectedId,
+            limit: 40,
+            offset: 0,
+          }),
+        ]);
+        if (!ignore) {
+          setOpsPortfolioCouplingDetail(detail);
+          setOpsPortfolioCouplingEdges(edges.items);
+          setOpsPortfolioCouplingHistory(history.items);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setOpsPortfolioCouplingDetail(null);
+          setOpsPortfolioCouplingEdges([]);
+          setOpsPortfolioCouplingHistory([]);
+          setOpsPortfolioCouplingDetailError(
+            loadErr instanceof ApiError ? loadErr.message : "Unable to load coupling drill-down.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setOpsPortfolioCouplingDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [opsPortfolioCouplingSelectedId, opsPortfolioCouplingSummary, opsPortfolioOwnerApplied]);
 
   useEffect(() => {
     let ignore = false;
@@ -5632,6 +5859,8 @@ export function OperationsPage() {
           ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
           ["Market scoring", "#market-scoring-ops"],
           ["Market signals", "#market-signal-ops"],
+          ["Market opportunities", "#market-opportunity-ops"],
+          ["Portfolio-market coupling", "#market-portfolio-coupling-ops"],
           ["Market normalization", "#market-normalization-ops"],
           ["Market ingestion", "#market-ingestion-ops"],
           ["Portfolio registry", "#portfolio-registry-ops"],
@@ -9121,7 +9350,7 @@ export function OperationsPage() {
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-                <StatCard label="Batches" value={String(opsMarketIngestionSummary?.total_items ?? 0)} />
+                <StatCard label="Batches" value={String(opsMarketIngestionSummary?.pagination.total_count ?? 0)} />
                 <StatCard label="Completed" value={String(opsMarketIngestionSummary?.status_counts.COMPLETED ?? 0)} />
                 <StatCard label="Failed" value={String(opsMarketIngestionSummary?.status_counts.FAILED ?? 0)} />
                 <StatCard
@@ -9278,7 +9507,7 @@ export function OperationsPage() {
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <StatCard label="Snapshots tracked" value={String(opsMarketScoringSummary?.total_items ?? 0)} />
+                <StatCard label="Snapshots tracked" value={String(opsMarketScoringSummary?.pagination.total_count ?? 0)} />
                 <StatCard label="Top bucket: STRONG_BUY" value={String(opsMarketScoringSummary?.items[0]?.strong_buy_count ?? 0)} />
                 <StatCard label="Top bucket: BUY" value={String(opsMarketScoringSummary?.items[0]?.buy_count ?? 0)} />
                 <StatCard label="Avg score" value={opsMarketScoringSummary?.items[0]?.avg_score ?? "—"} />
@@ -9436,7 +9665,7 @@ export function OperationsPage() {
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <StatCard label="Snapshots tracked" value={String(opsMarketSignalSummary?.total_items ?? 0)} />
+                <StatCard label="Snapshots tracked" value={String(opsMarketSignalSummary?.pagination.total_count ?? 0)} />
                 <StatCard label="Value dislocation" value={String(opsMarketSignalSummary?.items[0]?.value_dislocation_count ?? 0)} />
                 <StatCard
                   label="Liquidity opportunity"
@@ -9607,6 +9836,358 @@ export function OperationsPage() {
       </details>
 
       <details
+        id="market-opportunity-ops"
+        className="mt-6 rounded-3xl border border-lime-400/35 bg-lime-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Market acquisition opportunity snapshots</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Read-only aggregation layer over deterministic signals — inspect classifications, liquidity and
+                diversification estimates, weighted items, layered evidence, and checksum stability without touching
+                scoring or signal tables.
+              </p>
+            </div>
+            <span className="rounded-full border border-lime-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-lime-100/90">
+              Ops / P39-05
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-lime-200/15 pt-4">
+          {opsMarketOpportunityLoading ? (
+            <p className="text-sm text-slate-400">Loading opportunity snapshots…</p>
+          ) : opsMarketOpportunityError ? (
+            <StatusBanner tone="error">{opsMarketOpportunityError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Snapshots tracked" value={String(opsMarketOpportunitySummary?.pagination.total_count ?? 0)} />
+                <StatCard
+                  label="Classification"
+                  value={String(opsMarketOpportunitySummary?.items[0]?.opportunity_classification ?? "—")}
+                />
+                <StatCard label="Liquidity opps." value={String(opsMarketOpportunitySummary?.items[0]?.liquidity_opportunity_count ?? 0)} />
+                <StatCard label="Portfolio gap fill" value={String(opsMarketOpportunitySummary?.items[0]?.portfolio_gap_fill_count ?? 0)} />
+                <StatCard label="Concentration reduc." value={String(opsMarketOpportunitySummary?.items[0]?.concentration_reduction_count ?? 0)} />
+              </div>
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Classification</th>
+                      <th className="p-3 font-medium">Signals</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsMarketOpportunitySummary?.items.length ? (
+                      opsMarketOpportunitySummary.items.map((row) => {
+                        const isSel = opsMarketOpportunitySelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSel
+                                    ? "border-lime-300/70 bg-lime-400/20 text-lime-50"
+                                    : "border-white/15 text-slate-200 hover:border-lime-300/35"
+                                }`}
+                                onClick={() => setOpsMarketOpportunitySelectedId((cur) => (cur === row.id ? null : row.id))}
+                              >
+                                {isSel ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[11px] text-slate-400">@{row.owner_user_id}</td>
+                            <td className="p-3 align-top">{row.opportunity_classification}</td>
+                            <td className="p-3 align-top">{row.total_signals}</td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">{abbrevExportChecksum(row.snapshot_checksum)}</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          No opportunity snapshots recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {opsMarketOpportunityDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading snapshot drill-down…</p>
+              ) : opsMarketOpportunityDetailError ? (
+                <StatusBanner tone="error">{opsMarketOpportunityDetailError}</StatusBanner>
+              ) : opsMarketOpportunitySelectedId && opsMarketOpportunityDetail ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Signal breakdown</p>
+                      <div className="mt-2 text-xs text-slate-200 space-y-1">
+                        <div>VALUE_DISLOCATION {opsMarketOpportunityDetail.snapshot.value_dislocation_count}</div>
+                        <div>LIQUIDITY_OPPORTUNITY {opsMarketOpportunityDetail.snapshot.liquidity_opportunity_count}</div>
+                        <div>PORTFOLIO_GAP_FILL {opsMarketOpportunityDetail.snapshot.portfolio_gap_fill_count}</div>
+                        <div>CONCENTRATION_REDUCTION {opsMarketOpportunityDetail.snapshot.concentration_reduction_count}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Portfolio impact est.</p>
+                      <div className="mt-2 text-xs text-slate-200 space-y-1">
+                        <div>Gap coverage index {opsMarketOpportunityDetail.snapshot.estimated_portfolio_gap_coverage}</div>
+                        <div>Liquidity gain {opsMarketOpportunityDetail.snapshot.estimated_liquidity_gain}</div>
+                        <div>Diversification {opsMarketOpportunityDetail.snapshot.estimated_diversification_gain}</div>
+                        <div>Risk adjustment {opsMarketOpportunityDetail.snapshot.estimated_risk_adjustment}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Checksum verification</p>
+                      <div className="mt-2 rounded-xl border border-white/10 px-3 py-2 font-mono text-[10px] text-lime-100">
+                        {opsMarketOpportunityDetail.snapshot.snapshot_checksum}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Weighted opportunity items</p>
+                    <div className="mt-2 max-h-52 overflow-auto text-xs text-slate-200 space-y-1">
+                      {opsMarketOpportunityItems.slice(0, 24).map((it) => (
+                        <div key={it.id}>
+                          Cand #{it.candidate_id} · {it.signal_type} · strength {it.signal_strength} · weight {it.contribution_weight}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Evidence panel</p>
+                      <div className="mt-2 space-y-2 text-[11px] text-slate-300">
+                        {opsMarketOpportunityEvidence.map((ev) => (
+                          <div key={ev.id} className="rounded-lg border border-white/10 px-2 py-1">
+                            <span className="font-semibold text-lime-200">{ev.evidence_type}</span>
+                            <span className="ml-2 text-slate-500">{JSON.stringify(ev.evidence_value_json).slice(0, 220)}…</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Append-safe history rows</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-200">
+                        {opsMarketOpportunityHistory.map((h) => (
+                          <span key={h.id} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[10px]">
+                            #{h.id} Δcand {h.total_candidates}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
+        id="market-portfolio-coupling-ops"
+        className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Portfolio-market coupling</h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-400">
+                Deterministic relational edges bridging opportunity aggregates (P39-05) and portfolio registry reads
+                (P38). All surfaces remain read-only; upstream signals, scoring, and normalization artifacts are never
+                updated from this lane.
+              </p>
+            </div>
+            <span className="rounded-full border border-sky-300/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-100/90">
+              Ops / P39-06
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-sky-200/15 pt-4">
+          {opsPortfolioCouplingLoading ? (
+            <p className="text-sm text-slate-400">Loading coupling snapshots…</p>
+          ) : opsPortfolioCouplingError ? (
+            <StatusBanner tone="error">{opsPortfolioCouplingError}</StatusBanner>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <StatCard label="Snapshots tracked" value={String(opsPortfolioCouplingSummary?.pagination.total_count ?? 0)} />
+                <StatCard
+                  label="Alignment score"
+                  value={String(opsPortfolioCouplingSummary?.items[0]?.portfolio_market_alignment_score ?? "—")}
+                />
+                <StatCard
+                  label="High-fit items"
+                  value={String(opsPortfolioCouplingSummary?.items[0]?.high_fit_market_items ?? "—")}
+                />
+                <StatCard label="Liquidity coupling" value={String(opsPortfolioCouplingSummary?.items[0]?.liquidity_gap_alignment_score ?? "—")} />
+                <StatCard
+                  label="Normalization coverage"
+                  value={String(opsPortfolioCouplingSummary?.items[0]?.normalization_coverage_ratio ?? "—")}
+                />
+              </div>
+              <div className="mt-6 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="p-3 font-medium">Inspect</th>
+                      <th className="p-3 font-medium">Owner</th>
+                      <th className="p-3 font-medium">Opportunity snap</th>
+                      <th className="p-3 font-medium">Alignment</th>
+                      <th className="p-3 font-medium">Checksum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {opsPortfolioCouplingSummary?.items.length ? (
+                      opsPortfolioCouplingSummary.items.map((row) => {
+                        const isSel = opsPortfolioCouplingSelectedId === row.id;
+                        return (
+                          <tr key={row.id}>
+                            <td className="p-3 align-top">
+                              <button
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                                  isSel
+                                    ? "border-sky-300/70 bg-sky-400/20 text-sky-50"
+                                    : "border-white/15 text-slate-200 hover:border-sky-300/35"
+                                }`}
+                                onClick={() =>
+                                  setOpsPortfolioCouplingSelectedId((cur) => (cur === row.id ? null : row.id))
+                                }
+                              >
+                                {isSel ? "Hide" : "View"}
+                              </button>
+                            </td>
+                            <td className="p-3 align-top font-mono text-[11px] text-slate-400">@{row.owner_user_id}</td>
+                            <td className="p-3 align-top font-mono text-[11px]">#{row.market_acquisition_opportunity_snapshot_id}</td>
+                            <td className="p-3 align-top">{row.portfolio_market_alignment_score ?? "—"}</td>
+                            <td className="p-3 align-top font-mono text-[10px] text-slate-400">
+                              {abbrevExportChecksum(row.snapshot_checksum)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="p-4 text-slate-500" colSpan={5}>
+                          No coupling snapshots recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {opsPortfolioCouplingDetailLoading ? (
+                <p className="mt-4 text-sm text-slate-400">Loading coupling drill-down…</p>
+              ) : opsPortfolioCouplingDetailError ? (
+                <StatusBanner tone="error">{opsPortfolioCouplingDetailError}</StatusBanner>
+              ) : opsPortfolioCouplingDetail ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4 space-y-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Alignment breakdown</p>
+                    <div className="mt-2 grid gap-2 text-[11px] text-slate-200 sm:grid-cols-3">
+                      <div className="rounded-xl border border-white/10 px-3 py-2">
+                        Liquidity alignment
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {opsPortfolioCouplingDetail.snapshot.liquidity_gap_alignment_score ?? "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 px-3 py-2">
+                        Diversification gap alignment
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {opsPortfolioCouplingDetail.snapshot.diversification_gap_alignment_score ?? "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 px-3 py-2">
+                        Concentration offset
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {opsPortfolioCouplingDetail.snapshot.concentration_offset_score ?? "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="overflow-auto rounded-2xl border border-white/10">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="p-3 font-medium">Candidate</th>
+                          <th className="p-3 font-medium">Portfolio item</th>
+                          <th className="p-3 font-medium">Type</th>
+                          <th className="p-3 font-medium">Strength</th>
+                          <th className="p-3 font-medium">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10 text-slate-200">
+                        {opsPortfolioCouplingEdges.length ? (
+                          opsPortfolioCouplingEdges.map((e) => (
+                            <tr key={e.id}>
+                              <td className="p-3 font-mono text-[11px]">#{e.market_candidate_id}</td>
+                              <td className="p-3 font-mono text-[11px]">{e.portfolio_item_id ?? "—"}</td>
+                              <td className="p-3">{e.coupling_type}</td>
+                              <td className="p-3">{e.coupling_strength}</td>
+                              <td className="p-3">{e.coupling_score}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-3 text-slate-500" colSpan={5}>
+                              No coupling edges recorded.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3 text-[11px] text-slate-200">
+                    <div className="rounded-xl border border-white/10 px-3 py-2">
+                      <p className="font-semibold text-slate-400">Portfolio vs market mapping</p>
+                      <p className="mt-1">
+                        Opportunities {opsPortfolioCouplingDetail.snapshot.market_opportunity_count} · aligned{" "}
+                        {opsPortfolioCouplingDetail.snapshot.aligned_opportunity_count} · misaligned{" "}
+                        {opsPortfolioCouplingDetail.snapshot.misaligned_opportunity_count}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 px-3 py-2">
+                      <p className="font-semibold text-slate-400">Conflict analysis</p>
+                      <p className="mt-1">
+                        CONCENTRATION_CONFLICT edges:{" "}
+                        {opsPortfolioCouplingEdges.filter((e) => e.coupling_type === "CONCENTRATION_CONFLICT").length}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 px-3 py-2">
+                      <p className="font-semibold text-slate-400">Coverage ratios</p>
+                      <p className="mt-1">
+                        Signal {opsPortfolioCouplingDetail.snapshot.signal_coverage_ratio ?? "—"} · scoring{" "}
+                        {opsPortfolioCouplingDetail.snapshot.scoring_coverage_ratio ?? "—"} · normalization{" "}
+                        {opsPortfolioCouplingDetail.snapshot.normalization_coverage_ratio ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Checksum validation</p>
+                    <div className="mt-2 space-y-2 text-[11px] text-slate-200">
+                      <div className="rounded-xl border border-white/10 px-3 py-2 font-mono text-[10px] text-sky-100">
+                        {opsPortfolioCouplingDetail.snapshot.snapshot_checksum}
+                      </div>
+                      <div className="rounded-xl border border-white/10 px-3 py-2 font-mono text-[10px] text-slate-400">
+                        {opsPortfolioCouplingHistory.map((h) => abbrevExportChecksum(h.snapshot_checksum)).join(" · ") || "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
         id="market-normalization-ops"
         className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/12 p-5 shadow-xl shadow-black/20 [&>summary::-webkit-details-marker]:hidden"
       >
@@ -9633,7 +10214,7 @@ export function OperationsPage() {
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <StatCard label="Runs tracked" value={String(opsMarketNormSummary?.total_items ?? 0)} />
+                <StatCard label="Runs tracked" value={String(opsMarketNormSummary?.pagination.total_count ?? 0)} />
                 <StatCard label="Run status: completed" value={String(opsMarketNormSummary?.status_counts.COMPLETED ?? 0)} />
                 <StatCard label="Run status: failed" value={String(opsMarketNormSummary?.status_counts.FAILED ?? 0)} />
                 <StatCard label="Normalization row success %" value={`${opsMarketNormSummary?.health.canonical_full_success_rate_pct ?? "—"}${opsMarketNormSummary?.health.canonical_full_success_rate_pct != null ? "%" : ""}`} />

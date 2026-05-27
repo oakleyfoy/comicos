@@ -1,6 +1,30 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const MARKET_API_V1_PREFIX = "/api/v1/market";
 
 export const TOKEN_STORAGE_KEY = "comic-os-access-token";
+
+/** P39-07 standardized pagination nested under list `data` for `/api/v1/market/*`. */
+export interface MarketApiV1Pagination {
+  total_count: number;
+  limit: number;
+  offset: number;
+  has_next: boolean;
+  next_cursor: string | null;
+}
+
+/** P39-07 response `meta` block (surfaced alongside `data` for market v1 endpoints). */
+export interface MarketApiV1Meta {
+  owner_user_id: string | null;
+  snapshot_id: string | null;
+  checksum: string | null;
+  generated_at: string;
+  engine_versions: Record<string, string>;
+}
+
+export interface MarketApiV1Envelope<T> {
+  data: T;
+  meta: MarketApiV1Meta;
+}
 
 /** Matches backend `metadata_enrichment.RELEASE_DATE_PAYLOAD_SEARCH_FRAGMENT`. */
 export const RELEASE_DATE_METADATA_WARNING_FRAGMENT = "Release date format was malformed";
@@ -3319,18 +3343,14 @@ export interface MarketAcquisitionIngestionBatchRead extends MarketAcquisitionIn
 
 export interface MarketAcquisitionIngestionBatchListResponse {
   items: MarketAcquisitionIngestionBatchSummaryRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
   status_counts: Record<string, number>;
   last_ingestion_at?: string | null;
 }
 
 export interface MarketAcquisitionRawSourceListResponse {
   items: MarketAcquisitionRawSourceRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export type MarketNormalizationRunStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
@@ -3374,9 +3394,7 @@ export interface MarketNormalizationHealthRead {
 
 export interface MarketNormalizationRunListResponse {
   items: MarketNormalizationRunSummaryRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
   status_counts: Record<string, number>;
   health: MarketNormalizationHealthRead;
 }
@@ -3415,16 +3433,12 @@ export interface MarketNormalizationIssueRead {
 
 export interface MarketAcquisitionNormalizedCandidateListResponse {
   items: MarketAcquisitionNormalizedCandidateRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketNormalizationIssueListResponse {
   items: MarketNormalizationIssueRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketNormalizationRunCreatePayload {
@@ -3518,23 +3532,17 @@ export interface MarketAcquisitionScoreRunResponse {
 
 export interface MarketAcquisitionScoreListResponse {
   items: MarketAcquisitionScoreRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketAcquisitionScoreSnapshotListResponse {
   items: MarketAcquisitionScoreSnapshotRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketAcquisitionScoreHistoryListResponse {
   items: MarketAcquisitionScoreHistoryRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface InventoryMarketAcquisitionScoreTeaser {
@@ -3638,30 +3646,22 @@ export interface MarketAcquisitionSignalGenerateResponse {
 
 export interface MarketAcquisitionSignalListResponse {
   items: MarketAcquisitionSignalRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketAcquisitionSignalSnapshotListResponse {
   items: MarketAcquisitionSignalSnapshotRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketAcquisitionSignalEvidenceListResponse {
   items: MarketAcquisitionSignalEvidenceRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface MarketAcquisitionSignalHistoryListResponse {
   items: MarketAcquisitionSignalHistoryRead[];
-  total_items: number;
-  limit: number;
-  offset: number;
+  pagination: MarketApiV1Pagination;
 }
 
 export interface InventoryMarketAcquisitionSignalTeaser {
@@ -3672,6 +3672,222 @@ export interface InventoryMarketAcquisitionSignalTeaser {
   risk_level: string;
   snapshot_date: string;
 }
+
+export interface MarketAcquisitionOpportunitySnapshotRead {
+  id: number;
+  market_acquisition_signal_snapshot_id: number;
+  owner_user_id?: number | null;
+  opportunity_classification: string;
+  total_candidates: number;
+  total_signals: number;
+  elite_signal_count: number;
+  high_signal_count: number;
+  medium_signal_count: number;
+  low_signal_count: number;
+  value_dislocation_count: number;
+  liquidity_opportunity_count: number;
+  portfolio_gap_fill_count: number;
+  concentration_reduction_count: number;
+  grading_upside_count: number;
+  redundant_asset_count: number;
+  high_risk_asset_count: number;
+  estimated_portfolio_gap_coverage: string;
+  estimated_liquidity_gain: string;
+  estimated_diversification_gain: string;
+  estimated_risk_adjustment: string;
+  avg_signal_strength?: string | null;
+  avg_acquisition_score?: string | null;
+  avg_confidence_level?: string | null;
+  avg_risk_level?: string | null;
+  snapshot_checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionOpportunityItemRead {
+  id: number;
+  market_acquisition_opportunity_snapshot_id: number;
+  candidate_id: number;
+  market_acquisition_signal_id: number;
+  owner_user_id?: number | null;
+  signal_type: string;
+  signal_strength: string;
+  acquisition_score?: string | null;
+  confidence_level: string;
+  risk_level: string;
+  contribution_weight: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionOpportunityEvidenceRead {
+  id: number;
+  market_acquisition_opportunity_snapshot_id: number;
+  evidence_type: string;
+  source_id?: number | null;
+  source_table?: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketAcquisitionOpportunityHistoryRead {
+  id: number;
+  owner_user_id?: number | null;
+  market_acquisition_opportunity_snapshot_id: number;
+  snapshot_checksum: string;
+  total_candidates: number;
+  elite_signal_count: number;
+  high_signal_count: number;
+  estimated_portfolio_gap_coverage: string;
+  estimated_diversification_gain: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface MarketAcquisitionOpportunityDetailRead {
+  snapshot: MarketAcquisitionOpportunitySnapshotRead;
+  items: MarketAcquisitionOpportunityItemRead[];
+}
+
+export interface MarketAcquisitionOpportunityGeneratePayload {
+  signal_snapshot_id?: number | null;
+  snapshot_date?: string | null;
+}
+
+export interface MarketAcquisitionOpportunityGenerateResponse {
+  replayed: boolean;
+  snapshot: MarketAcquisitionOpportunitySnapshotRead;
+  total_items: number;
+}
+
+export interface MarketAcquisitionOpportunityItemListResponse {
+  items: MarketAcquisitionOpportunityItemRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketAcquisitionOpportunitySnapshotListResponse {
+  items: MarketAcquisitionOpportunitySnapshotRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketAcquisitionOpportunityEvidenceListResponse {
+  items: MarketAcquisitionOpportunityEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketAcquisitionOpportunityHistoryListResponse {
+  items: MarketAcquisitionOpportunityHistoryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+/** P39-06 portfolio-market coupling (deterministic bridge only). */
+export interface PortfolioMarketCouplingSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  market_acquisition_opportunity_snapshot_id: number;
+  portfolio_total_value?: string | null;
+  portfolio_total_items: number;
+  portfolio_diversification_score?: string | null;
+  portfolio_concentration_score?: string | null;
+  portfolio_liquidity_score?: string | null;
+  market_opportunity_count: number;
+  aligned_opportunity_count: number;
+  misaligned_opportunity_count: number;
+  high_fit_market_items: number;
+  low_fit_market_items: number;
+  portfolio_market_alignment_score?: string | null;
+  diversification_gap_alignment_score?: string | null;
+  liquidity_gap_alignment_score?: string | null;
+  concentration_offset_score?: string | null;
+  signal_coverage_ratio?: string | null;
+  scoring_coverage_ratio?: string | null;
+  normalization_coverage_ratio?: string | null;
+  snapshot_checksum: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioMarketCouplingEdgeRead {
+  id: number;
+  snapshot_id: number;
+  market_candidate_id: number;
+  market_acquisition_opportunity_item_id: number;
+  portfolio_item_id?: number | null;
+  coupling_type: string;
+  coupling_strength: string;
+  coupling_score: number;
+  explanation_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PortfolioMarketCouplingEvidenceRead {
+  id: number;
+  snapshot_id: number;
+  evidence_type: string;
+  source_id?: number | null;
+  source_table?: string | null;
+  evidence_value_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PortfolioMarketCouplingDetailRead {
+  snapshot: PortfolioMarketCouplingSnapshotRead;
+  edges: PortfolioMarketCouplingEdgeRead[];
+  evidence: PortfolioMarketCouplingEvidenceRead[];
+}
+
+export interface PortfolioMarketCouplingGeneratePayload {
+  opportunity_snapshot_id?: number | null;
+}
+
+export interface PortfolioMarketCouplingGenerateResponse {
+  replayed: boolean;
+  snapshot: PortfolioMarketCouplingSnapshotRead;
+  total_edges: number;
+}
+
+export interface PortfolioMarketCouplingSnapshotListResponse {
+  items: PortfolioMarketCouplingSnapshotRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface PortfolioMarketCouplingEdgeListResponse {
+  items: PortfolioMarketCouplingEdgeRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface PortfolioMarketCouplingHistoryRead {
+  id: number;
+  owner_user_id: number;
+  snapshot_id: number;
+  snapshot_checksum: string;
+  alignment_score?: string | null;
+  market_opportunity_count: number;
+  high_fit_market_items: number;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface PortfolioMarketCouplingHistoryListResponse {
+  items: PortfolioMarketCouplingHistoryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface InventoryPortfolioMarketCouplingTeaserRead {
+  coupling_snapshot_id: number;
+  portfolio_market_alignment_score?: string | null;
+  high_fit_market_items: number;
+  concentration_conflicts: number;
+  snapshot_date: string;
+  snapshot_checksum: string;
+}
+
+export interface InventoryMarketAcquisitionOpportunityTeaser {
+  opportunity_classification: string;
+  signal_strength: string;
+  snapshot_date: string;
+}
+
 export type OperationalReportType =
   | "listing_summary"
   | "sales_summary"
@@ -5805,6 +6021,8 @@ export interface InventoryDetail extends InventoryItem {
   portfolio_recommendation?: InventoryPortfolioRecommendationTeaser | null;
   market_acquisition_score?: InventoryMarketAcquisitionScoreTeaser | null;
   market_acquisition_signal?: InventoryMarketAcquisitionSignalTeaser | null;
+  market_acquisition_opportunity?: InventoryMarketAcquisitionOpportunityTeaser | null;
+  portfolio_market_coupling?: InventoryPortfolioMarketCouplingTeaserRead | null;
 }
 
 export interface InventoryFmvSnapshot {
@@ -6298,6 +6516,18 @@ class ApiError extends Error {
   }
 }
 
+function parseStructuredApiError(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const rec = data as Record<string, unknown>;
+  const nested = rec.error;
+  if (nested && typeof nested === "object" && nested !== null) {
+    const m = (nested as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  if (typeof rec.detail === "string") return rec.detail;
+  return null;
+}
+
 function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
@@ -6340,10 +6570,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = "Request failed";
 
     try {
-      const data = (await response.json()) as { detail?: string };
-      if (typeof data.detail === "string") {
-        message = data.detail;
-      }
+      const data = (await response.json()) as unknown;
+      message = parseStructuredApiError(data) ?? message;
     } catch {
       // Ignore invalid error payloads.
     }
@@ -6352,6 +6580,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+async function requestMarketV1<T>(path: string, init?: RequestInit): Promise<T> {
+  const env = await request<MarketApiV1Envelope<T>>(`${MARKET_API_V1_PREFIX}${path}`, init);
+  return env.data;
 }
 
 async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
@@ -6384,10 +6617,8 @@ async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
     let message = "Request failed";
 
     try {
-      const data = (await response.json()) as { detail?: string };
-      if (typeof data.detail === "string") {
-        message = data.detail;
-      }
+      const data = (await response.json()) as unknown;
+      message = parseStructuredApiError(data) ?? message;
     } catch {
       // Ignore invalid error payloads.
     }
@@ -6418,10 +6649,8 @@ async function fetchBinary(path: string): Promise<Blob> {
   if (!response.ok) {
     let message = "Request failed";
     try {
-      const data = (await response.json()) as { detail?: string };
-      if (typeof data.detail === "string") {
-        message = data.detail;
-      }
+      const data = (await response.json()) as unknown;
+      message = parseStructuredApiError(data) ?? message;
     } catch {
       // ignore
     }
@@ -9881,7 +10110,7 @@ export const apiClient = {
   createMarketIngestionBatch(
     payload: MarketAcquisitionIngestionBatchCreatePayload,
   ): Promise<MarketAcquisitionIngestionBatchRead> {
-    return request<MarketAcquisitionIngestionBatchRead>("/market-ingestion/batch", {
+    return requestMarketV1<MarketAcquisitionIngestionBatchRead>("/market-ingestion/batch", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -9892,11 +10121,11 @@ export const apiClient = {
     offset?: number;
   }): Promise<MarketAcquisitionIngestionBatchListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return request<MarketAcquisitionIngestionBatchListResponse>(`/market-ingestion/batches${q}`);
+    return requestMarketV1<MarketAcquisitionIngestionBatchListResponse>(`/market-ingestion/batches${q}`);
   },
 
   getMarketIngestionBatch(batchId: number): Promise<MarketAcquisitionIngestionBatchRead> {
-    return request<MarketAcquisitionIngestionBatchRead>(`/market-ingestion/batches/${batchId}`);
+    return requestMarketV1<MarketAcquisitionIngestionBatchRead>(`/market-ingestion/batches/${batchId}`);
   },
 
   listMarketIngestionBatchRaw(
@@ -9904,7 +10133,7 @@ export const apiClient = {
     params?: { limit?: number; offset?: number },
   ): Promise<MarketAcquisitionRawSourceListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return request<MarketAcquisitionRawSourceListResponse>(`/market-ingestion/batches/${batchId}/raw${q}`);
+    return requestMarketV1<MarketAcquisitionRawSourceListResponse>(`/market-ingestion/batches/${batchId}/raw${q}`);
   },
 
   listOpsMarketIngestionBatches(params?: {
@@ -9913,11 +10142,11 @@ export const apiClient = {
     offset?: number;
   }): Promise<MarketAcquisitionIngestionBatchListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return request<MarketAcquisitionIngestionBatchListResponse>(`/ops/market-ingestion/batches${q}`);
+    return requestMarketV1<MarketAcquisitionIngestionBatchListResponse>(`/ops/market-ingestion/batches${q}`);
   },
 
   getOpsMarketIngestionBatch(batchId: number): Promise<MarketAcquisitionIngestionBatchRead> {
-    return request<MarketAcquisitionIngestionBatchRead>(`/ops/market-ingestion/batches/${batchId}`);
+    return requestMarketV1<MarketAcquisitionIngestionBatchRead>(`/ops/market-ingestion/batches/${batchId}`);
   },
 
   listOpsMarketIngestionRaw(params?: {
@@ -9929,11 +10158,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionRawSourceListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionRawSourceListResponse>(`/ops/market-ingestion/raw${q}`);
+    return requestMarketV1<MarketAcquisitionRawSourceListResponse>(`/ops/market-ingestion/raw${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {
-    return request<MarketNormalizationRunDetailRead>("/market-normalization/run", {
+    return requestMarketV1<MarketNormalizationRunDetailRead>("/market-normalization/run", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -9945,7 +10174,7 @@ export const apiClient = {
     offset?: number;
   }): Promise<MarketNormalizationRunListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return request<MarketNormalizationRunListResponse>(`/market-normalization/runs${q}`);
+    return requestMarketV1<MarketNormalizationRunListResponse>(`/market-normalization/runs${q}`);
   },
 
   listMarketNormalizationCandidates(params?: {
@@ -9960,7 +10189,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionNormalizedCandidateListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionNormalizedCandidateListResponse>(`/market-normalization/candidates${q}`);
+    return requestMarketV1<MarketAcquisitionNormalizedCandidateListResponse>(`/market-normalization/candidates${q}`);
   },
 
   listMarketNormalizationIssues(params?: {
@@ -9974,7 +10203,7 @@ export const apiClient = {
   }): Promise<MarketNormalizationIssueListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketNormalizationIssueListResponse>(`/market-normalization/issues${q}`);
+    return requestMarketV1<MarketNormalizationIssueListResponse>(`/market-normalization/issues${q}`);
   },
 
   listOpsMarketNormalizationRuns(params?: {
@@ -9984,11 +10213,11 @@ export const apiClient = {
     offset?: number;
   }): Promise<MarketNormalizationRunListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return request<MarketNormalizationRunListResponse>(`/ops/market-normalization/runs${q}`);
+    return requestMarketV1<MarketNormalizationRunListResponse>(`/ops/market-normalization/runs${q}`);
   },
 
   getOpsMarketNormalizationRun(runId: number): Promise<MarketNormalizationRunDetailRead> {
-    return request<MarketNormalizationRunDetailRead>(`/ops/market-normalization/runs/${runId}`);
+    return requestMarketV1<MarketNormalizationRunDetailRead>(`/ops/market-normalization/runs/${runId}`);
   },
 
   listOpsMarketNormalizationCandidates(params?: {
@@ -10004,7 +10233,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionNormalizedCandidateListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionNormalizedCandidateListResponse>(`/ops/market-normalization/candidates${q}`);
+    return requestMarketV1<MarketAcquisitionNormalizedCandidateListResponse>(`/ops/market-normalization/candidates${q}`);
   },
 
   listOpsMarketNormalizationIssues(params?: {
@@ -10019,11 +10248,11 @@ export const apiClient = {
   }): Promise<MarketNormalizationIssueListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketNormalizationIssueListResponse>(`/ops/market-normalization/issues${q}`);
+    return requestMarketV1<MarketNormalizationIssueListResponse>(`/ops/market-normalization/issues${q}`);
   },
 
   runMarketScoring(payload: MarketAcquisitionScoreRunPayload): Promise<MarketAcquisitionScoreRunResponse> {
-    return request<MarketAcquisitionScoreRunResponse>("/market-scoring/run", {
+    return requestMarketV1<MarketAcquisitionScoreRunResponse>("/market-scoring/run", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -10042,11 +10271,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreListResponse>(`/market-scoring/scores${q}`);
+    return requestMarketV1<MarketAcquisitionScoreListResponse>(`/market-scoring/scores${q}`);
   },
 
   getMarketScoringScore(scoreId: number): Promise<MarketAcquisitionScoreDetailRead> {
-    return request<MarketAcquisitionScoreDetailRead>(`/market-scoring/scores/${scoreId}`);
+    return requestMarketV1<MarketAcquisitionScoreDetailRead>(`/market-scoring/scores/${scoreId}`);
   },
 
   listMarketScoringSnapshots(params?: {
@@ -10057,7 +10286,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreSnapshotListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreSnapshotListResponse>(`/market-scoring/snapshots${q}`);
+    return requestMarketV1<MarketAcquisitionScoreSnapshotListResponse>(`/market-scoring/snapshots${q}`);
   },
 
   listMarketScoringHistory(params?: {
@@ -10071,7 +10300,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreHistoryListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreHistoryListResponse>(`/market-scoring/history${q}`);
+    return requestMarketV1<MarketAcquisitionScoreHistoryListResponse>(`/market-scoring/history${q}`);
   },
 
   listOpsMarketScoringScores(params?: {
@@ -10088,11 +10317,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreListResponse>(`/ops/market-scoring/scores${q}`);
+    return requestMarketV1<MarketAcquisitionScoreListResponse>(`/ops/market-scoring/scores${q}`);
   },
 
   getOpsMarketScoringScore(scoreId: number): Promise<MarketAcquisitionScoreDetailRead> {
-    return request<MarketAcquisitionScoreDetailRead>(`/ops/market-scoring/scores/${scoreId}`);
+    return requestMarketV1<MarketAcquisitionScoreDetailRead>(`/ops/market-scoring/scores/${scoreId}`);
   },
 
   listOpsMarketScoringSnapshots(params?: {
@@ -10104,7 +10333,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreSnapshotListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreSnapshotListResponse>(`/ops/market-scoring/snapshots${q}`);
+    return requestMarketV1<MarketAcquisitionScoreSnapshotListResponse>(`/ops/market-scoring/snapshots${q}`);
   },
 
   listOpsMarketScoringHistory(params?: {
@@ -10119,11 +10348,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionScoreHistoryListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionScoreHistoryListResponse>(`/ops/market-scoring/history${q}`);
+    return requestMarketV1<MarketAcquisitionScoreHistoryListResponse>(`/ops/market-scoring/history${q}`);
   },
 
   generateMarketSignals(payload: MarketAcquisitionSignalGeneratePayload): Promise<MarketAcquisitionSignalGenerateResponse> {
-    return request<MarketAcquisitionSignalGenerateResponse>("/market-signals/generate", {
+    return requestMarketV1<MarketAcquisitionSignalGenerateResponse>("/market-signals/generate", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -10141,11 +10370,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalListResponse>(`/market-signals${q}`);
+    return requestMarketV1<MarketAcquisitionSignalListResponse>(`/market-signals${q}`);
   },
 
   getMarketSignal(signalId: number): Promise<MarketAcquisitionSignalDetailRead> {
-    return request<MarketAcquisitionSignalDetailRead>(`/market-signals/${signalId}`);
+    return requestMarketV1<MarketAcquisitionSignalDetailRead>(`/market-signals/${signalId}`);
   },
 
   listMarketSignalSnapshots(params?: {
@@ -10156,7 +10385,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalSnapshotListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalSnapshotListResponse>(`/market-signal-snapshots${q}`);
+    return requestMarketV1<MarketAcquisitionSignalSnapshotListResponse>(`/market-signal-snapshots${q}`);
   },
 
   listMarketSignalEvidence(params?: {
@@ -10172,7 +10401,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalEvidenceListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalEvidenceListResponse>(`/market-signal-evidence${q}`);
+    return requestMarketV1<MarketAcquisitionSignalEvidenceListResponse>(`/market-signal-evidence${q}`);
   },
 
   listMarketSignalHistory(params?: {
@@ -10187,7 +10416,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalHistoryListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalHistoryListResponse>(`/market-signal-history${q}`);
+    return requestMarketV1<MarketAcquisitionSignalHistoryListResponse>(`/market-signal-history${q}`);
   },
 
   listOpsMarketSignals(params?: {
@@ -10203,11 +10432,11 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalListResponse>(`/ops/market-signals${q}`);
+    return requestMarketV1<MarketAcquisitionSignalListResponse>(`/ops/market-signals${q}`);
   },
 
   getOpsMarketSignal(signalId: number): Promise<MarketAcquisitionSignalDetailRead> {
-    return request<MarketAcquisitionSignalDetailRead>(`/ops/market-signals/${signalId}`);
+    return requestMarketV1<MarketAcquisitionSignalDetailRead>(`/ops/market-signals/${signalId}`);
   },
 
   listOpsMarketSignalSnapshots(params?: {
@@ -10219,7 +10448,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalSnapshotListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalSnapshotListResponse>(`/ops/market-signal-snapshots${q}`);
+    return requestMarketV1<MarketAcquisitionSignalSnapshotListResponse>(`/ops/market-signal-snapshots${q}`);
   },
 
   listOpsMarketSignalEvidence(params?: {
@@ -10236,7 +10465,7 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalEvidenceListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalEvidenceListResponse>(`/ops/market-signal-evidence${q}`);
+    return requestMarketV1<MarketAcquisitionSignalEvidenceListResponse>(`/ops/market-signal-evidence${q}`);
   },
 
   listOpsMarketSignalHistory(params?: {
@@ -10252,7 +10481,231 @@ export const apiClient = {
   }): Promise<MarketAcquisitionSignalHistoryListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return request<MarketAcquisitionSignalHistoryListResponse>(`/ops/market-signal-history${q}`);
+    return requestMarketV1<MarketAcquisitionSignalHistoryListResponse>(`/ops/market-signal-history${q}`);
+  },
+
+  generateMarketOpportunities(payload: MarketAcquisitionOpportunityGeneratePayload): Promise<MarketAcquisitionOpportunityGenerateResponse> {
+    return requestMarketV1<MarketAcquisitionOpportunityGenerateResponse>("/market-opportunities/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketOpportunityItems(params?: {
+    opportunity_snapshot_id?: number;
+    signal_type?: string;
+    signal_strength?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityItemListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityItemListResponse>(`/market-opportunities${q}`);
+  },
+
+  getMarketOpportunitySnapshot(snapshotId: number): Promise<MarketAcquisitionOpportunityDetailRead> {
+    return requestMarketV1<MarketAcquisitionOpportunityDetailRead>(`/market-opportunities/${snapshotId}`);
+  },
+
+  listMarketOpportunitySnapshots(params?: {
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunitySnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunitySnapshotListResponse>(`/market-opportunities/snapshots${q}`);
+  },
+
+  listMarketOpportunityEvidence(params?: {
+    opportunity_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityEvidenceListResponse>(`/market-opportunities/evidence${q}`);
+  },
+
+  listMarketOpportunityHistory(params?: {
+    opportunity_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityHistoryListResponse>(`/market-opportunities/history${q}`);
+  },
+
+  generatePortfolioMarketCoupling(
+    payload?: PortfolioMarketCouplingGeneratePayload,
+  ): Promise<PortfolioMarketCouplingGenerateResponse> {
+    return requestMarketV1<PortfolioMarketCouplingGenerateResponse>("/market-portfolio-coupling/generate", {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  listPortfolioMarketCouplingSnapshots(params?: {
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_alignment_score?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingSnapshotListResponse>(`/market-portfolio-coupling/snapshots${q}`);
+  },
+
+  getPortfolioMarketCouplingSnapshot(snapshotId: number): Promise<PortfolioMarketCouplingDetailRead> {
+    return requestMarketV1<PortfolioMarketCouplingDetailRead>(`/market-portfolio-coupling/${snapshotId}`);
+  },
+
+  listPortfolioMarketCouplingEdges(params?: {
+    coupling_snapshot_id?: number;
+    coupling_type?: string;
+    coupling_strength?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_coupling_score?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingEdgeListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingEdgeListResponse>(`/market-portfolio-coupling/edges${q}`);
+  },
+
+  listPortfolioMarketCouplingHistory(params?: {
+    coupling_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_alignment_score?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingHistoryListResponse>(`/market-portfolio-coupling/history${q}`);
+  },
+
+  listOpsPortfolioMarketCouplingSnapshots(params?: {
+    owner_user_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_alignment_score?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingSnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingSnapshotListResponse>(`/ops/market-portfolio-coupling/snapshots${q}`);
+  },
+
+  getOpsPortfolioMarketCouplingSnapshot(
+    snapshotId: number,
+    params?: { owner_user_id?: number },
+  ): Promise<PortfolioMarketCouplingDetailRead> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingDetailRead>(`/ops/market-portfolio-coupling/${snapshotId}${q}`);
+  },
+
+  listOpsPortfolioMarketCouplingEdges(params?: {
+    owner_user_id?: number;
+    coupling_snapshot_id?: number;
+    coupling_type?: string;
+    coupling_strength?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_coupling_score?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingEdgeListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingEdgeListResponse>(`/ops/market-portfolio-coupling/edges${q}`);
+  },
+
+  listOpsPortfolioMarketCouplingHistory(params?: {
+    owner_user_id?: number;
+    coupling_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    min_alignment_score?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioMarketCouplingHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<PortfolioMarketCouplingHistoryListResponse>(`/ops/market-portfolio-coupling/history${q}`);
+  },
+
+  listOpsMarketOpportunityItems(params?: {
+    owner_user_id?: number;
+    opportunity_snapshot_id?: number;
+    signal_type?: string;
+    signal_strength?: string;
+    risk_level?: string;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityItemListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityItemListResponse>(`/ops/market-opportunities${q}`);
+  },
+
+  getOpsMarketOpportunitySnapshot(snapshotId: number): Promise<MarketAcquisitionOpportunityDetailRead> {
+    return requestMarketV1<MarketAcquisitionOpportunityDetailRead>(`/ops/market-opportunities/${snapshotId}`);
+  },
+
+  listOpsMarketOpportunitySnapshots(params?: {
+    owner_user_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunitySnapshotListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunitySnapshotListResponse>(`/ops/market-opportunities/snapshots${q}`);
+  },
+
+  listOpsMarketOpportunityEvidence(params?: {
+    owner_user_id?: number;
+    opportunity_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityEvidenceListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityEvidenceListResponse>(`/ops/market-opportunities/evidence${q}`);
+  },
+
+  listOpsMarketOpportunityHistory(params?: {
+    owner_user_id?: number;
+    opportunity_snapshot_id?: number;
+    snapshot_date_from?: string;
+    snapshot_date_to?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketAcquisitionOpportunityHistoryListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestMarketV1<MarketAcquisitionOpportunityHistoryListResponse>(`/ops/market-opportunities/history${q}`);
   },
 
   getListingIntelligence(params?: {

@@ -226,6 +226,23 @@ from app.schemas.market_signal import (
     MarketAcquisitionSignalListResponse,
     MarketAcquisitionSignalSnapshotListResponse,
 )
+from app.schemas.market_opportunity import (
+    MarketAcquisitionOpportunityDetailRead,
+    MarketAcquisitionOpportunityEvidenceListResponse,
+    MarketAcquisitionOpportunityGeneratePayload,
+    MarketAcquisitionOpportunityGenerateResponse,
+    MarketAcquisitionOpportunityHistoryListResponse,
+    MarketAcquisitionOpportunityItemListResponse,
+    MarketAcquisitionOpportunitySnapshotListResponse,
+)
+from app.schemas.portfolio_market_coupling import (
+    PortfolioMarketCouplingDetailRead,
+    PortfolioMarketCouplingEdgeListResponse,
+    PortfolioMarketCouplingGeneratePayload,
+    PortfolioMarketCouplingGenerateResponse,
+    PortfolioMarketCouplingHistoryListResponse,
+    PortfolioMarketCouplingSnapshotListResponse,
+)
 from app.schemas.operational_reporting import (
     OperationalReportGeneratePayload,
     OperationalReportRunDetailRead,
@@ -770,6 +787,30 @@ from app.services.market_signal import (
     list_snapshots_ops as list_market_signal_snapshots_ops,
     list_snapshots_owner as list_market_signal_snapshots_owner,
 )
+from app.services.market_opportunity import (
+    generate_market_opportunities_for_owner,
+    get_opportunity_detail_ops,
+    get_opportunity_detail_owner,
+    list_evidence_ops as list_market_opportunity_evidence_ops,
+    list_evidence_owner as list_market_opportunity_evidence_owner,
+    list_history_ops as list_market_opportunity_history_ops,
+    list_history_owner as list_market_opportunity_history_owner,
+    list_opportunity_items_ops,
+    list_opportunity_items_owner,
+    list_snapshots_ops as list_market_opportunity_snapshots_ops,
+    list_snapshots_owner as list_market_opportunity_snapshots_owner,
+)
+from app.services.portfolio_market_coupling import (
+    generate_coupling_for_owner,
+    get_coupling_detail_ops,
+    get_coupling_detail_owner,
+    list_coupling_edges_ops,
+    list_coupling_edges_owner,
+    list_coupling_history_ops,
+    list_coupling_history_owner,
+    list_coupling_snapshots_ops,
+    list_coupling_snapshots_owner,
+)
 from app.services.market_sale_review_queue import (
     flag_duplicate_market_sale_record,
     get_market_sale_review_detail,
@@ -1062,6 +1103,9 @@ from app.services.variant_family_intelligence import (
     variant_family_candidates_for_ops,
 )
 
+from app.api.market_v1_layer import attach_market_v1_layer
+
+
 settings = get_settings()
 validate_production_settings(settings)
 
@@ -1073,6 +1117,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+attach_market_v1_layer(app)
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
@@ -7529,6 +7575,469 @@ def ops_list_market_signal_history_endpoint(
         limit=limit,
         offset=offset,
     )
+
+
+@app.post("/market-opportunities/generate", response_model=MarketAcquisitionOpportunityGenerateResponse)
+def owner_generate_market_opportunities_endpoint(
+    payload: MarketAcquisitionOpportunityGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionOpportunityGenerateResponse:
+    assert current_user.id is not None
+    return generate_market_opportunities_for_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+
+
+@app.get("/market-opportunities/snapshots", response_model=MarketAcquisitionOpportunitySnapshotListResponse)
+def owner_list_market_opportunity_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunitySnapshotListResponse:
+    assert current_user.id is not None
+    return list_market_opportunity_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-opportunities/evidence", response_model=MarketAcquisitionOpportunityEvidenceListResponse)
+def owner_list_market_opportunity_evidence_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityEvidenceListResponse:
+    assert current_user.id is not None
+    return list_market_opportunity_evidence_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        opportunity_snapshot_id=opportunity_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-opportunities/history", response_model=MarketAcquisitionOpportunityHistoryListResponse)
+def owner_list_market_opportunity_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityHistoryListResponse:
+    assert current_user.id is not None
+    return list_market_opportunity_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        opportunity_snapshot_id=opportunity_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-opportunities", response_model=MarketAcquisitionOpportunityItemListResponse)
+def owner_list_market_opportunity_items_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityItemListResponse:
+    assert current_user.id is not None
+    return list_opportunity_items_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_id=opportunity_snapshot_id,
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-opportunities/{snapshot_id}", response_model=MarketAcquisitionOpportunityDetailRead)
+def owner_get_market_opportunity_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MarketAcquisitionOpportunityDetailRead:
+    assert current_user.id is not None
+    return get_opportunity_detail_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        opportunity_snapshot_id=snapshot_id,
+    )
+
+
+@app.get("/ops/market-opportunities/snapshots", response_model=MarketAcquisitionOpportunitySnapshotListResponse)
+def ops_list_market_opportunity_snapshots_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunitySnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_opportunity_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-opportunities/evidence", response_model=MarketAcquisitionOpportunityEvidenceListResponse)
+def ops_list_market_opportunity_evidence_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityEvidenceListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_opportunity_evidence_ops(
+        session,
+        owner_user_id=owner_user_id,
+        opportunity_snapshot_id=opportunity_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-opportunities/history", response_model=MarketAcquisitionOpportunityHistoryListResponse)
+def ops_list_market_opportunity_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_market_opportunity_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        opportunity_snapshot_id=opportunity_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-opportunities", response_model=MarketAcquisitionOpportunityItemListResponse)
+def ops_list_market_opportunity_items_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    opportunity_snapshot_id: int | None = Query(default=None, ge=1),
+    signal_type: str | None = Query(default=None),
+    signal_strength: str | None = Query(default=None),
+    risk_level: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> MarketAcquisitionOpportunityItemListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_opportunity_items_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_id=opportunity_snapshot_id,
+        signal_type=signal_type,
+        signal_strength=signal_strength,
+        risk_level=risk_level,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-opportunities/{snapshot_id}", response_model=MarketAcquisitionOpportunityDetailRead)
+def ops_get_market_opportunity_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MarketAcquisitionOpportunityDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_opportunity_detail_ops(session, opportunity_snapshot_id=snapshot_id)
+
+
+@app.post("/market-portfolio-coupling/generate", response_model=PortfolioMarketCouplingGenerateResponse)
+def owner_generate_portfolio_market_coupling_endpoint(
+    payload: PortfolioMarketCouplingGeneratePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioMarketCouplingGenerateResponse:
+    assert current_user.id is not None
+    return generate_coupling_for_owner(session, owner_user_id=int(current_user.id), payload=payload)
+
+
+@app.get("/market-portfolio-coupling/snapshots", response_model=PortfolioMarketCouplingSnapshotListResponse)
+def owner_list_portfolio_market_coupling_snapshots_alias_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingSnapshotListResponse:
+    assert current_user.id is not None
+    return list_coupling_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-portfolio-coupling", response_model=PortfolioMarketCouplingSnapshotListResponse)
+def owner_list_portfolio_market_coupling_root_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingSnapshotListResponse:
+    assert current_user.id is not None
+    return list_coupling_snapshots_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-portfolio-coupling/edges", response_model=PortfolioMarketCouplingEdgeListResponse)
+def owner_list_portfolio_market_coupling_edges_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    coupling_snapshot_id: int | None = Query(default=None, ge=1),
+    coupling_type: str | None = Query(default=None),
+    coupling_strength: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_coupling_score: int | None = Query(default=None, ge=0, le=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingEdgeListResponse:
+    assert current_user.id is not None
+    return list_coupling_edges_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        coupling_snapshot_id=coupling_snapshot_id,
+        coupling_type=coupling_type,
+        coupling_strength=coupling_strength,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_coupling_score=min_coupling_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-portfolio-coupling/history", response_model=PortfolioMarketCouplingHistoryListResponse)
+def owner_list_portfolio_market_coupling_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    coupling_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingHistoryListResponse:
+    assert current_user.id is not None
+    return list_coupling_history_owner(
+        session,
+        owner_user_id=int(current_user.id),
+        coupling_snapshot_id=coupling_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/market-portfolio-coupling/{snapshot_id}", response_model=PortfolioMarketCouplingDetailRead)
+def owner_get_portfolio_market_coupling_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioMarketCouplingDetailRead:
+    assert current_user.id is not None
+    return get_coupling_detail_owner(session, owner_user_id=int(current_user.id), snapshot_id=snapshot_id)
+
+
+@app.get("/ops/market-portfolio-coupling/snapshots", response_model=PortfolioMarketCouplingSnapshotListResponse)
+def ops_list_portfolio_market_coupling_snapshots_alias_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_coupling_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-portfolio-coupling", response_model=PortfolioMarketCouplingSnapshotListResponse)
+def ops_list_portfolio_market_coupling_root_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingSnapshotListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_coupling_snapshots_ops(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-portfolio-coupling/edges", response_model=PortfolioMarketCouplingEdgeListResponse)
+def ops_list_portfolio_market_coupling_edges_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    coupling_snapshot_id: int | None = Query(default=None, ge=1),
+    coupling_type: str | None = Query(default=None),
+    coupling_strength: str | None = Query(default=None),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_coupling_score: int | None = Query(default=None, ge=0, le=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingEdgeListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_coupling_edges_ops(
+        session,
+        owner_user_id=owner_user_id,
+        coupling_snapshot_id=coupling_snapshot_id,
+        coupling_type=coupling_type,
+        coupling_strength=coupling_strength,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_coupling_score=min_coupling_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-portfolio-coupling/history", response_model=PortfolioMarketCouplingHistoryListResponse)
+def ops_list_portfolio_market_coupling_history_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+    coupling_snapshot_id: int | None = Query(default=None, ge=1),
+    snapshot_date_from: date | None = Query(default=None),
+    snapshot_date_to: date | None = Query(default=None),
+    min_alignment_score: Decimal | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PortfolioMarketCouplingHistoryListResponse:
+    ensure_ops_admin_access(current_user, settings)
+    return list_coupling_history_ops(
+        session,
+        owner_user_id=owner_user_id,
+        coupling_snapshot_id=coupling_snapshot_id,
+        snapshot_date_from=snapshot_date_from,
+        snapshot_date_to=snapshot_date_to,
+        min_alignment_score=min_alignment_score,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/ops/market-portfolio-coupling/{snapshot_id}", response_model=PortfolioMarketCouplingDetailRead)
+def ops_get_portfolio_market_coupling_snapshot_endpoint(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    owner_user_id: int | None = Query(default=None),
+) -> PortfolioMarketCouplingDetailRead:
+    ensure_ops_admin_access(current_user, settings)
+    return get_coupling_detail_ops(session, snapshot_id=snapshot_id, owner_filter=owner_user_id)
 
 
 @app.get("/market-sales", response_model=MarketSaleListResponse)
