@@ -88,6 +88,7 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { MarketIntelligenceDashboard } from "../components/MarketIntelligenceDashboard";
 import { PageHeader } from "../components/PageHeader";
+import { ScanIngestionSummaryCard } from "../components/ScanIngestionSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7630,6 +7631,7 @@ export function DashboardPage() {
           </div>
         </div>
       ) : null}
+      <ScanIngestionSummaryCard />
     </AppShell>
   );
 }

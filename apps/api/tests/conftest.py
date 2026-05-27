@@ -38,6 +38,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPS_ADMIN_EMAILS", "")
     monkeypatch.setenv("COVER_IMAGES_STORAGE_ROOT", str(tmp_path / "cover-images"))
+    monkeypatch.setenv("SCAN_INGESTION_STORAGE_ROOT", str(tmp_path / "scan-ingestion"))
     monkeypatch.setenv("LISTING_EXPORTS_STORAGE_ROOT", str(tmp_path / "listing-exports"))
     monkeypatch.setenv("OPERATIONAL_REPORTS_STORAGE_ROOT", str(tmp_path / "operational-reports"))
 

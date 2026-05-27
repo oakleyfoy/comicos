@@ -225,6 +225,7 @@ import { MarketIntelligenceFeedPanel } from "../components/MarketIntelligenceFee
 import { MarketIntelligenceOpsDiagnostics } from "../components/MarketIntelligenceOpsDiagnostics";
 import { OcrReviewWorkspace } from "../components/ocr-review/OcrReviewWorkspace";
 import { PageHeader } from "../components/PageHeader";
+import { ScanIngestionOpsPanel } from "../components/ScanIngestionOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17456,6 +17457,7 @@ export function OperationsPage() {
           </div>
         </>
       ) : null}
+      <ScanIngestionOpsPanel />
     </AppShell>
   );
 }

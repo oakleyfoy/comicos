@@ -173,6 +173,13 @@ from app.models.market_feed import (
     MarketIntelligenceFeedHistory,
     MarketIntelligenceFeedSnapshot,
 )
+from app.models.scan_ingestion import (
+    ScanImage,
+    ScanImageVariant,
+    ScanIngestionBatch,
+    ScanIngestionEvent,
+    ScanUploadSession,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -412,6 +419,11 @@ __all__ = [
     "MarketIntelligenceFeedSnapshot",
     "MarketIntelligenceFeedHistory",
     "MarketIntelligenceFeedCursor",
+    "ScanUploadSession",
+    "ScanIngestionBatch",
+    "ScanImage",
+    "ScanImageVariant",
+    "ScanIngestionEvent",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

@@ -2,6 +2,20 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40-01 — Scan ingestion layer (2026-05-27)
+
+- Architecture note: deterministic visual intake, immutable originals, append-only ingest events, storage-path abstraction, and duplicate detection are documented in `docs/SCAN_INGESTION_ARCHITECTURE.md`.
+- This layer remains ingestion-only. It records images, metadata, variants, and upload sessions without performing OCR, grading, or any scan intelligence.
+
+### Deferred scope (beyond P40-01)
+
+- Live scanner streaming
+- OCR processing
+- Defect analysis
+- AI scan interpretation
+- Cloud storage optimization
+- ML-based image deduplication
+
 ## P39-08 — Market Intelligence Dashboard UI integration (2026-05-26)
 
 - Architecture note: owner dashboard + ops diagnostics are documented in `docs/MARKET_DASHBOARD_UI_ARCHITECTURE.md`. The UI consumes only P39-07 envelopes and must not add intelligence or bypass standard list/detail shapes.

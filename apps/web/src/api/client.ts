@@ -1,5 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const MARKET_API_V1_PREFIX = "/api/v1/market";
+const SCAN_API_V1_PREFIX = "/api/v1";
 
 export const TOKEN_STORAGE_KEY = "comic-os-access-token";
 
@@ -6593,6 +6594,16 @@ async function requestMarketV1<T>(path: string, init?: RequestInit): Promise<T> 
   return envelope.data;
 }
 
+export async function fetchScanV1Envelope<T>(pathSuffix: string, init?: RequestInit): Promise<MarketApiV1Envelope<T>> {
+  const suffix = pathSuffix.startsWith("/") ? pathSuffix : `/${pathSuffix}`;
+  return request<MarketApiV1Envelope<T>>(`${SCAN_API_V1_PREFIX}${suffix}`, init);
+}
+
+async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
+  const envelope = await fetchScanV1Envelope<T>(path, init);
+  return envelope.data;
+}
+
 async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
   const token = getStoredToken();
   const headers = new Headers(init?.headers);
@@ -7430,6 +7441,123 @@ function buildQueryString(
 export function inventoryListingQueryToReportQueryString(filters: InventoryQueryParams): string {
   const { page: _page, page_size: _pageSize, ...rest } = filters;
   return buildQueryString(rest as Record<string, string | number | boolean | undefined>);
+}
+
+export type ScanIngestionSourceType = "EPSON" | "FUJITSU" | "MOBILE" | "ZIP_IMPORT" | "MANUAL_UPLOAD";
+export type ScanUploadSourceType = "drag_drop" | "zip_upload" | "scanner_batch" | "manual_upload";
+export type ScanIngestionBatchStatus = "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
+export type ScanImageProcessingStatus = "INGESTED" | "NORMALIZED" | "FAILED";
+
+export interface ScanBatchUploadPayload {
+  source_type: ScanIngestionSourceType;
+  upload_source: ScanUploadSourceType;
+  scanner_make?: string | null;
+  scanner_model?: string | null;
+  scanner_profile?: string | null;
+  color_mode?: string | null;
+  normalized_dpi?: number;
+  create_thumbnail?: boolean;
+  create_normalized_variant?: boolean;
+}
+
+export interface ScanImageVariantRead {
+  id: number;
+  parent_scan_image_id: number;
+  variant_type: string;
+  storage_backend: string;
+  storage_path: string;
+  width: number;
+  height: number;
+  checksum: string;
+  created_at: string;
+}
+
+export interface ScanImageSummaryRead {
+  id: number;
+  owner_user_id: number;
+  ingestion_batch_id: number;
+  sequence_index: number;
+  original_filename: string;
+  storage_backend: string;
+  storage_path: string;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  dpi_x: number | null;
+  dpi_y: number | null;
+  normalized_dpi_x: number | null;
+  normalized_dpi_y: number | null;
+  file_size_bytes: number;
+  sha256_checksum: string;
+  scanner_make: string | null;
+  scanner_model: string | null;
+  scanner_profile: string | null;
+  color_mode: string | null;
+  processing_status: ScanImageProcessingStatus | string;
+  is_duplicate: boolean;
+  duplicate_of_scan_image_id: number | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export interface ScanImageRead extends ScanImageSummaryRead {
+  variants: ScanImageVariantRead[];
+}
+
+export interface ScanIngestionEventRead {
+  id: number;
+  ingestion_batch_id: number;
+  scan_image_id: number | null;
+  event_type: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanUploadSessionRead {
+  id: number;
+  owner_user_id: number;
+  upload_source: ScanUploadSourceType | string;
+  session_checksum: string;
+  total_files: number;
+  successful_files: number;
+  failed_files: number;
+  duplicate_files: number;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface ScanIngestionBatchSummaryRead {
+  id: number;
+  owner_user_id: number;
+  upload_session_id: number;
+  source_type: ScanIngestionSourceType | string;
+  batch_status: ScanIngestionBatchStatus | string;
+  image_count: number;
+  failed_count: number;
+  duplicate_count: number;
+  ingestion_checksum: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanIngestionBatchRead extends ScanIngestionBatchSummaryRead {
+  upload_session: ScanUploadSessionRead;
+  images: ScanImageSummaryRead[];
+  events: ScanIngestionEventRead[];
+}
+
+export interface ScanIngestionBatchListResponse {
+  items: ScanIngestionBatchSummaryRead[];
+  pagination: MarketApiV1Pagination;
+  source_type_counts: Record<string, number>;
+  duplicate_image_count: number;
+  failed_image_count: number;
+}
+
+export interface ScanImageListResponse {
+  items: ScanImageSummaryRead[];
+  pagination: MarketApiV1Pagination;
 }
 
 export const apiClient = {
@@ -10165,6 +10293,56 @@ export const apiClient = {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
     return requestMarketV1<MarketAcquisitionRawSourceListResponse>(`/ops/market-ingestion/raw${q}`);
+  },
+
+  uploadScanBatch(payload: ScanBatchUploadPayload, files: File[]): Promise<ScanIngestionBatchRead> {
+    const form = new FormData();
+    form.append("payload", JSON.stringify(payload));
+    for (const file of files) {
+      form.append("files", file);
+    }
+    return requestScanV1<ScanIngestionBatchRead>("/scan-ingestion/upload", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  listScanBatches(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIngestionBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIngestionBatchListResponse>(`/scan-ingestion/batches${q}`);
+  },
+
+  getScanBatch(batchId: number): Promise<ScanIngestionBatchRead> {
+    return requestScanV1<ScanIngestionBatchRead>(`/scan-ingestion/batches/${batchId}`);
+  },
+
+  getScanImage(scanImageId: number): Promise<ScanImageRead> {
+    return requestScanV1<ScanImageRead>(`/scan-images/${scanImageId}`);
+  },
+
+  getScanUploadSession(uploadSessionId: number): Promise<ScanUploadSessionRead> {
+    return requestScanV1<ScanUploadSessionRead>(`/scan-upload-sessions/${uploadSessionId}`);
+  },
+
+  listOpsScanBatches(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIngestionBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIngestionBatchListResponse>(`/ops/scan-ingestion/batches${q}`);
+  },
+
+  listOpsScanFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanImageListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanImageListResponse>(`/ops/scan-ingestion/failures${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {
