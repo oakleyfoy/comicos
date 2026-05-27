@@ -221,6 +221,7 @@ import {
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { AppShell } from "../components/AppShell";
 import { LoadingState } from "../components/LoadingState";
+import { MarketIntelligenceOpsDiagnostics } from "../components/MarketIntelligenceOpsDiagnostics";
 import { OcrReviewWorkspace } from "../components/ocr-review/OcrReviewWorkspace";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -5857,6 +5858,7 @@ export function OperationsPage() {
           ["Dealer dashboard", "#dealer-dashboard-ops"],
           ["Grading dashboard", "#dealer-grading-dashboard-ops"],
           ["Strategy dashboard", "#portfolio-strategy-dashboard-ops"],
+          ["P39 checksum & trace", "#market-intelligence-p39-trace"],
           ["Market scoring", "#market-scoring-ops"],
           ["Market signals", "#market-signal-ops"],
           ["Market opportunities", "#market-opportunity-ops"],
@@ -9323,6 +9325,8 @@ export function OperationsPage() {
           )}
         </div>
       </section>
+
+      <MarketIntelligenceOpsDiagnostics ownerUserId={opsPortfolioOwnerApplied} />
 
       <details
         id="market-ingestion-ops"

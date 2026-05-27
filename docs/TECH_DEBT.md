@@ -2,6 +2,21 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P39-08 — Market Intelligence Dashboard UI integration (2026-05-26)
+
+- Architecture note: owner dashboard + ops diagnostics are documented in `docs/MARKET_DASHBOARD_UI_ARCHITECTURE.md`. The UI consumes only P39-07 envelopes and must not add intelligence or bypass standard list/detail shapes.
+- Operational drill-down remains in `OperationsPage`; dashboard panels are presentation + orchestration only.
+
+### Deferred scope (beyond P39-08 UI layer)
+
+- Real-time dashboard streaming via websockets or push channels
+- Live market tick ingestion into the dashboard surface
+- AI-driven UI personalization, adaptive layout, or speculative panel ordering
+- Predictive UI ordering based on model attention or user behavior
+- Animated intelligence graphs beyond simple static histograms
+- Cross-user dashboard synchronization or shared live cursors
+
+
 ## P39-03 — Market scoring engine (2026-05-26)
 
 - Architecture note: deterministic acquisition ranking, evidence, snapshots, and append-safe history live in `docs/MARKET_SCORING_ARCHITECTURE.md`. The scorer must remain a pure reader over P39-02 normalized candidates and persisted P38 context.

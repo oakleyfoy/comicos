@@ -6582,9 +6582,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** P39-07: full `{ data, meta }` envelope for owner/ops dashboard panels (deterministic snapshots + checksums). */
+export async function fetchMarketV1Envelope<T>(pathSuffix: string, init?: RequestInit): Promise<MarketApiV1Envelope<T>> {
+  const suffix = pathSuffix.startsWith("/") ? pathSuffix : `/${pathSuffix}`;
+  return request<MarketApiV1Envelope<T>>(`${MARKET_API_V1_PREFIX}${suffix}`, init);
+}
+
 async function requestMarketV1<T>(path: string, init?: RequestInit): Promise<T> {
-  const env = await request<MarketApiV1Envelope<T>>(`${MARKET_API_V1_PREFIX}${path}`, init);
-  return env.data;
+  const envelope = await fetchMarketV1Envelope<T>(path, init);
+  return envelope.data;
 }
 
 async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
