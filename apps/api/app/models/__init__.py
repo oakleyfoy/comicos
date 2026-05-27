@@ -200,6 +200,14 @@ from app.models.scan_ocr import (
     ScanOcrRun,
     ScanOcrTextRegion,
 )
+from app.models.scan_reconciliation import (
+    ScanReconciliationArtifact,
+    ScanReconciliationCandidate,
+    ScanReconciliationDecision,
+    ScanReconciliationHistory,
+    ScanReconciliationIssue,
+    ScanReconciliationRun,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -458,6 +466,12 @@ __all__ = [
     "ScanOcrArtifact",
     "ScanOcrIssue",
     "ScanOcrHistory",
+    "ScanReconciliationRun",
+    "ScanReconciliationCandidate",
+    "ScanReconciliationDecision",
+    "ScanReconciliationArtifact",
+    "ScanReconciliationIssue",
+    "ScanReconciliationHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

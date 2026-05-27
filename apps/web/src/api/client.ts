@@ -7901,6 +7901,143 @@ export interface ScanOcrFailureListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanReconciliationStatus =
+  | "PENDING"
+  | "MATCH_CONFIRMED"
+  | "MATCH_PROBABLE"
+  | "MATCH_AMBIGUOUS"
+  | "NO_MATCH_FOUND"
+  | "MULTIPLE_HIGH_CONFIDENCE_MATCHES"
+  | "FAILED";
+
+export interface ScanReconciliationRunCreate {
+  scan_image_id: number;
+  ocr_run_id?: number | null;
+}
+
+export interface ScanReconciliationRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  normalization_run_id: number;
+  boundary_run_id: number;
+  ocr_run_id: number;
+  source_checksum: string;
+  reconciliation_checksum: string;
+  reconciliation_status: ScanReconciliationStatus | string;
+  reconciliation_engine_version: string;
+  canonical_dataset_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanReconciliationCandidateRead {
+  id: number;
+  owner_user_id: number;
+  reconciliation_run_id: number;
+  candidate_rank: number;
+  canonical_comic_id: number | null;
+  publisher: string | null;
+  series_title: string | null;
+  issue_number: string | null;
+  variant_description: string | null;
+  publication_date: string | null;
+  confidence_score: number;
+  title_similarity_score: number;
+  issue_similarity_score: number;
+  publisher_similarity_score: number;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReconciliationDecisionRead {
+  id: number;
+  owner_user_id: number;
+  reconciliation_run_id: number;
+  selected_candidate_id: number | null;
+  decision_status: string;
+  final_confidence_score: number;
+  decision_reason: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReconciliationArtifactRead {
+  id: number;
+  owner_user_id: number;
+  reconciliation_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url: string | null;
+  created_at: string;
+}
+
+export interface ScanReconciliationIssueRead {
+  id: number;
+  owner_user_id: number;
+  reconciliation_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReconciliationHistoryRead {
+  id: number;
+  owner_user_id: number;
+  reconciliation_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReconciliationRunDetail extends ScanReconciliationRunRead {
+  candidates: ScanReconciliationCandidateRead[];
+  decision: ScanReconciliationDecisionRead | null;
+  artifacts: ScanReconciliationArtifactRead[];
+  issues: ScanReconciliationIssueRead[];
+  history: ScanReconciliationHistoryRead[];
+  original_scan_checksum: string | null;
+  normalization_checksum: string | null;
+  boundary_checksum: string | null;
+  ocr_checksum: string | null;
+  source_preview_data_url: string | null;
+  selected_candidate: ScanReconciliationCandidateRead | null;
+}
+
+export interface ScanReconciliationRunListResponse {
+  items: ScanReconciliationRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  ambiguous_match_count: number;
+  low_confidence_count: number;
+}
+
+export interface ScanReconciliationCandidateListResponse {
+  items: ScanReconciliationCandidateRead[];
+  pagination: MarketApiV1Pagination;
+  canonical_match_count: number;
+}
+
+export interface ScanReconciliationIssueListResponse {
+  items: ScanReconciliationIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanReconciliationFailureListResponse {
+  items: ScanReconciliationRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -10883,6 +11020,77 @@ export const apiClient = {
   }): Promise<ScanOcrFailureListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanOcrFailureListResponse>(`/ops/scan-ocr/failures${q}`);
+  },
+
+  runScanReconciliation(payload: ScanReconciliationRunCreate): Promise<ScanReconciliationRunDetail> {
+    return requestScanV1<ScanReconciliationRunDetail>("/scan-reconciliation/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanReconciliationRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationRunListResponse>(`/scan-reconciliation/runs${q}`);
+  },
+
+  getScanReconciliationRun(runId: number): Promise<ScanReconciliationRunDetail> {
+    return requestScanV1<ScanReconciliationRunDetail>(`/scan-reconciliation/runs/${runId}`);
+  },
+
+  listScanReconciliationCandidates(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationCandidateListResponse>(`/scan-reconciliation/candidates${q}`);
+  },
+
+  listScanReconciliationIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationIssueListResponse>(`/scan-reconciliation/issues${q}`);
+  },
+
+  getScanReconciliationArtifact(artifactId: number): Promise<ScanReconciliationArtifactRead> {
+    return requestScanV1<ScanReconciliationArtifactRead>(`/scan-reconciliation/artifacts/${artifactId}`);
+  },
+
+  listOpsScanReconciliationRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationRunListResponse>(`/ops/scan-reconciliation/runs${q}`);
+  },
+
+  listOpsScanReconciliationIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationIssueListResponse>(`/ops/scan-reconciliation/issues${q}`);
+  },
+
+  listOpsScanReconciliationFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReconciliationFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReconciliationFailureListResponse>(`/ops/scan-reconciliation/failures${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

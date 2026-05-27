@@ -13,6 +13,7 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "scan_normalization": "P40-02",
     "scan_boundary": "P40-03",
     "scan_ocr": "P40-04",
+    "scan_reconciliation": "P40-05",
 }
 
 

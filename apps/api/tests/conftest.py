@@ -42,6 +42,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("SCAN_NORMALIZATION_STORAGE_ROOT", str(tmp_path / "scan-normalization"))
     monkeypatch.setenv("SCAN_BOUNDARY_STORAGE_ROOT", str(tmp_path / "scan-boundary"))
     monkeypatch.setenv("SCAN_OCR_STORAGE_ROOT", str(tmp_path / "scan-ocr"))
+    monkeypatch.setenv("SCAN_RECONCILIATION_STORAGE_ROOT", str(tmp_path / "scan-reconciliation"))
     monkeypatch.setenv("LISTING_EXPORTS_STORAGE_ROOT", str(tmp_path / "listing-exports"))
     monkeypatch.setenv("OPERATIONAL_REPORTS_STORAGE_ROOT", str(tmp_path / "operational-reports"))
 

@@ -33,6 +33,22 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Semantic title inference
 - AI completion / reconstruction
 
+## P40-05 — OCR reconciliation / matching (2026-05-27)
+
+- Architecture note: deterministic canonical comic identity resolution, local dataset versioning, ranked candidate persistence, and replay-safe manifests are documented in `docs/SCAN_RECONCILIATION_ARCHITECTURE.md`.
+- This layer remains reconciliation-only. It resolves OCR candidates against local canonical comic reference data without grading, defect analysis, pricing, external APIs, or AI speculation.
+
+### Deferred scope (beyond P40-05)
+
+- External marketplace reconciliation
+- AI semantic matching
+- Fuzzy ML title inference
+- Cross-publisher probabilistic matching
+- Multilingual reconciliation
+- Collector-submitted alias learning
+- AI confidence boosting
+- Semantic storyline matching
+
 ## P40-02 — Image normalization engine (2026-05-27)
 
 - Architecture note: deterministic preprocessing, immutable originals, artifact lineage, checksum propagation, and issue tracking are documented in `docs/SCAN_NORMALIZATION_ARCHITECTURE.md`.

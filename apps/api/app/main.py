@@ -1108,6 +1108,7 @@ from app.api.scan_ingestion import attach_scan_ingestion_layer
 from app.api.scan_normalization import attach_scan_normalization_layer
 from app.api.scan_boundary import attach_scan_boundary_layer
 from app.api.scan_ocr import attach_scan_ocr_layer
+from app.api.scan_reconciliation import attach_scan_reconciliation_layer
 
 
 settings = get_settings()
@@ -1127,6 +1128,7 @@ attach_scan_ingestion_layer(app)
 attach_scan_normalization_layer(app)
 attach_scan_boundary_layer(app)
 attach_scan_ocr_layer(app)
+attach_scan_reconciliation_layer(app)
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
