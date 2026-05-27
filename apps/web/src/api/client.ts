@@ -7768,6 +7768,139 @@ export interface ScanBoundaryFailureListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanOcrStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanOcrRunCreate {
+  scan_image_id: number;
+  normalization_run_id?: number | null;
+  boundary_run_id?: number | null;
+}
+
+export interface ScanOcrRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  normalization_run_id: number;
+  boundary_run_id: number;
+  source_artifact_id: number;
+  source_checksum: string;
+  ocr_checksum: string;
+  ocr_status: ScanOcrStatus | string;
+  ocr_engine: string;
+  ocr_engine_version: string | null;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanOcrTextRegionRead {
+  id: number;
+  owner_user_id: number;
+  ocr_run_id: number;
+  region_type: string;
+  extracted_text: string;
+  normalized_text: string | null;
+  confidence_score: number;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  rotation_angle: number;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanOcrCandidateRead {
+  id: number;
+  owner_user_id: number;
+  ocr_run_id: number;
+  candidate_type: string;
+  candidate_value: string;
+  normalized_candidate_value: string | null;
+  confidence_score: number;
+  source_region_id: number | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanOcrArtifactRead {
+  id: number;
+  owner_user_id: number;
+  ocr_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url: string | null;
+  created_at: string;
+}
+
+export interface ScanOcrIssueRead {
+  id: number;
+  owner_user_id: number;
+  ocr_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanOcrHistoryRead {
+  id: number;
+  owner_user_id: number;
+  ocr_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanOcrRunDetail extends ScanOcrRunRead {
+  regions: ScanOcrTextRegionRead[];
+  candidates: ScanOcrCandidateRead[];
+  artifacts: ScanOcrArtifactRead[];
+  issues: ScanOcrIssueRead[];
+  history: ScanOcrHistoryRead[];
+  original_scan_checksum: string | null;
+  normalization_checksum: string | null;
+  boundary_checksum: string | null;
+  source_preview_data_url: string | null;
+  ocr_overlay_preview_data_url: string | null;
+  ocr_region_map_preview_data_url: string | null;
+  confidence_summary: Record<string, unknown>;
+}
+
+export interface ScanOcrRunListResponse {
+  items: ScanOcrRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_count: number;
+  unresolved_issue_count: number;
+}
+
+export interface ScanOcrCandidateListResponse {
+  items: ScanOcrCandidateRead[];
+  pagination: MarketApiV1Pagination;
+  candidate_type_counts: Record<string, number>;
+}
+
+export interface ScanOcrIssueListResponse {
+  items: ScanOcrIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanOcrFailureListResponse {
+  items: ScanOcrRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -10679,6 +10812,77 @@ export const apiClient = {
   }): Promise<ScanBoundaryFailureListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanBoundaryFailureListResponse>(`/ops/scan-boundary/failures${q}`);
+  },
+
+  runScanOcr(payload: ScanOcrRunCreate): Promise<ScanOcrRunDetail> {
+    return requestScanV1<ScanOcrRunDetail>("/scan-ocr/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanOcrRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrRunListResponse>(`/scan-ocr/runs${q}`);
+  },
+
+  getScanOcrRun(runId: number): Promise<ScanOcrRunDetail> {
+    return requestScanV1<ScanOcrRunDetail>(`/scan-ocr/runs/${runId}`);
+  },
+
+  listScanOcrCandidates(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrCandidateListResponse>(`/scan-ocr/candidates${q}`);
+  },
+
+  listScanOcrIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrIssueListResponse>(`/scan-ocr/issues${q}`);
+  },
+
+  getScanOcrArtifact(artifactId: number): Promise<ScanOcrArtifactRead> {
+    return requestScanV1<ScanOcrArtifactRead>(`/scan-ocr/artifacts/${artifactId}`);
+  },
+
+  listOpsScanOcrRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrRunListResponse>(`/ops/scan-ocr/runs${q}`);
+  },
+
+  listOpsScanOcrIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrIssueListResponse>(`/ops/scan-ocr/issues${q}`);
+  },
+
+  listOpsScanOcrFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanOcrFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanOcrFailureListResponse>(`/ops/scan-ocr/failures${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

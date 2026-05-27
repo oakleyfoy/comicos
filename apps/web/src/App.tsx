@@ -18,6 +18,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { ScanIngestionPage } from "./pages/ScanIngestionPage";
 import { ScanNormalizationPage } from "./pages/ScanNormalizationPage";
 import { ScanBoundaryPage } from "./pages/ScanBoundaryPage";
+import { ScanOcrPage } from "./pages/ScanOcrPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/scan-ingestion" element={<ScanIngestionPage />} />
         <Route path="/scan-normalization" element={<ScanNormalizationPage />} />
         <Route path="/scan-boundary" element={<ScanBoundaryPage />} />
+        <Route path="/scan-ocr" element={<ScanOcrPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />

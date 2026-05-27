@@ -228,6 +228,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ScanIngestionOpsPanel } from "../components/ScanIngestionOpsPanel";
 import { ScanNormalizationOpsPanel } from "../components/ScanNormalizationOpsPanel";
 import { ScanBoundaryOpsPanel } from "../components/ScanBoundaryOpsPanel";
+import { ScanOcrOpsPanel } from "../components/ScanOcrOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17462,6 +17463,7 @@ export function OperationsPage() {
       <ScanIngestionOpsPanel />
       <ScanNormalizationOpsPanel />
       <ScanBoundaryOpsPanel />
+      <ScanOcrOpsPanel />
     </AppShell>
   );
 }

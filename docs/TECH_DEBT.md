@@ -17,6 +17,22 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Automated cover matching
 - OCR-assisted boundary refinement
 
+## P40-04 — OCR intelligence layer (2026-05-27)
+
+- Architecture note: deterministic OCR extraction, provisional candidate generation, immutable upstream lineage, and append-only OCR history are documented in `docs/SCAN_OCR_ARCHITECTURE.md`.
+- This layer remains OCR-only. It extracts text regions and provisional metadata candidates without comic reconciliation, grading, defect analysis, or AI completion.
+
+### Deferred scope (beyond P40-04)
+
+- AI semantic OCR correction
+- External comic reconciliation
+- Fuzzy matching intelligence
+- Multilingual OCR
+- ML OCR enhancement
+- OCR-assisted grading
+- Semantic title inference
+- AI completion / reconstruction
+
 ## P40-02 — Image normalization engine (2026-05-27)
 
 - Architecture note: deterministic preprocessing, immutable originals, artifact lineage, checksum propagation, and issue tracking are documented in `docs/SCAN_NORMALIZATION_ARCHITECTURE.md`.

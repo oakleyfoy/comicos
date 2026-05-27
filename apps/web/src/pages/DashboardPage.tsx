@@ -91,6 +91,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ScanIngestionSummaryCard } from "../components/ScanIngestionSummaryCard";
 import { ScanNormalizationSummaryCard } from "../components/ScanNormalizationSummaryCard";
 import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
+import { ScanOcrSummaryCard } from "../components/ScanOcrSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7636,6 +7637,7 @@ export function DashboardPage() {
       <ScanIngestionSummaryCard />
       <ScanNormalizationSummaryCard />
       <ScanBoundarySummaryCard />
+      <ScanOcrSummaryCard />
     </AppShell>
   );
 }

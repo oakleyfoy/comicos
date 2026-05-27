@@ -192,6 +192,14 @@ from app.models.scan_boundary import (
     ScanBoundaryIssue,
     ScanBoundaryRun,
 )
+from app.models.scan_ocr import (
+    ScanOcrArtifact,
+    ScanOcrCandidate,
+    ScanOcrHistory,
+    ScanOcrIssue,
+    ScanOcrRun,
+    ScanOcrTextRegion,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -444,6 +452,12 @@ __all__ = [
     "ScanBoundaryArtifact",
     "ScanBoundaryIssue",
     "ScanBoundaryHistory",
+    "ScanOcrRun",
+    "ScanOcrTextRegion",
+    "ScanOcrCandidate",
+    "ScanOcrArtifact",
+    "ScanOcrIssue",
+    "ScanOcrHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",
