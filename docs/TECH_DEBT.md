@@ -2,6 +2,21 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40-03 — Boundary mapping / cover detect (2026-05-27)
+
+- Architecture note: deterministic cover-area geometry, immutable normalized inputs, overlay artifacts, and replay-safe checksum lineage are documented in `docs/SCAN_BOUNDARY_MAPPING_ARCHITECTURE.md`.
+- This layer remains spatial detection only. It maps cover boundaries and scanner background metadata without OCR, grading, defect analysis, or AI cover identification.
+
+### Deferred scope (beyond P40-03)
+
+- AI-based cover segmentation
+- Advanced contour reconstruction
+- ML-based background removal
+- Title/logo-aware boundary detection
+- Defect-aware boundary adjustment
+- Automated cover matching
+- OCR-assisted boundary refinement
+
 ## P40-02 — Image normalization engine (2026-05-27)
 
 - Architecture note: deterministic preprocessing, immutable originals, artifact lineage, checksum propagation, and issue tracking are documented in `docs/SCAN_NORMALIZATION_ARCHITECTURE.md`.

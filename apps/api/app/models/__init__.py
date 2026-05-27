@@ -186,6 +186,12 @@ from app.models.scan_normalization import (
     ScanNormalizationIssue,
     ScanNormalizationRun,
 )
+from app.models.scan_boundary import (
+    ScanBoundaryArtifact,
+    ScanBoundaryHistory,
+    ScanBoundaryIssue,
+    ScanBoundaryRun,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -434,6 +440,10 @@ __all__ = [
     "ScanNormalizationArtifact",
     "ScanNormalizationIssue",
     "ScanNormalizationHistory",
+    "ScanBoundaryRun",
+    "ScanBoundaryArtifact",
+    "ScanBoundaryIssue",
+    "ScanBoundaryHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

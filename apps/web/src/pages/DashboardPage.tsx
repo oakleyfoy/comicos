@@ -90,6 +90,7 @@ import { MarketIntelligenceDashboard } from "../components/MarketIntelligenceDas
 import { PageHeader } from "../components/PageHeader";
 import { ScanIngestionSummaryCard } from "../components/ScanIngestionSummaryCard";
 import { ScanNormalizationSummaryCard } from "../components/ScanNormalizationSummaryCard";
+import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7634,6 +7635,7 @@ export function DashboardPage() {
       ) : null}
       <ScanIngestionSummaryCard />
       <ScanNormalizationSummaryCard />
+      <ScanBoundarySummaryCard />
     </AppShell>
   );
 }

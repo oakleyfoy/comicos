@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "scan_ingestion": "P40-01",
     "scan_normalization": "P40-02",
+    "scan_boundary": "P40-03",
 }
 
 

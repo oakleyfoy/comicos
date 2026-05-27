@@ -7673,6 +7673,101 @@ export interface ScanNormalizationFailureListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanBoundaryStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanBoundaryRunCreate {
+  scan_image_id: number;
+  normalization_run_id?: number | null;
+}
+
+export interface ScanBoundaryRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  normalization_run_id: number;
+  source_artifact_id: number;
+  source_checksum: string;
+  boundary_checksum: string;
+  boundary_status: ScanBoundaryStatus | string;
+  algorithm_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ScanBoundaryArtifactRead {
+  id: number;
+  owner_user_id: number;
+  boundary_run_id: number;
+  scan_image_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  width_px: number;
+  height_px: number;
+  metadata_json: Record<string, unknown>;
+  preview_data_url: string | null;
+  created_at: string;
+}
+
+export interface ScanBoundaryIssueRead {
+  id: number;
+  owner_user_id: number;
+  boundary_run_id: number;
+  scan_image_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanBoundaryHistoryRead {
+  id: number;
+  owner_user_id: number;
+  boundary_run_id: number;
+  scan_image_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanBoundaryRunDetail extends ScanBoundaryRunRead {
+  artifacts: ScanBoundaryArtifactRead[];
+  issues: ScanBoundaryIssueRead[];
+  history: ScanBoundaryHistoryRead[];
+  original_scan_checksum: string | null;
+  normalized_source_checksum: string | null;
+  source_preview_data_url: string | null;
+  boundary_overlay_preview_data_url: string | null;
+  cover_box_preview_data_url: string | null;
+  geometry: Record<string, unknown>;
+  confidence_score: number | null;
+}
+
+export interface ScanBoundaryRunListResponse {
+  items: ScanBoundaryRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_run_count: number;
+  unresolved_issue_count: number;
+}
+
+export interface ScanBoundaryIssueListResponse {
+  items: ScanBoundaryIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanBoundaryFailureListResponse {
+  items: ScanBoundaryRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -10520,6 +10615,70 @@ export const apiClient = {
   }): Promise<ScanNormalizationFailureListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanNormalizationFailureListResponse>(`/ops/scan-normalization/failures${q}`);
+  },
+
+  runScanBoundaryMapping(payload: ScanBoundaryRunCreate): Promise<ScanBoundaryRunDetail> {
+    return requestScanV1<ScanBoundaryRunDetail>("/scan-boundary/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanBoundaryRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanBoundaryRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanBoundaryRunListResponse>(`/scan-boundary/runs${q}`);
+  },
+
+  getScanBoundaryRun(runId: number): Promise<ScanBoundaryRunDetail> {
+    return requestScanV1<ScanBoundaryRunDetail>(`/scan-boundary/runs/${runId}`);
+  },
+
+  listScanBoundaryIssues(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanBoundaryIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanBoundaryIssueListResponse>(`/scan-boundary/issues${q}`);
+  },
+
+  getScanBoundaryArtifact(artifactId: number): Promise<ScanBoundaryArtifactRead> {
+    return requestScanV1<ScanBoundaryArtifactRead>(`/scan-boundary/artifacts/${artifactId}`);
+  },
+
+  listOpsScanBoundaryRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanBoundaryRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanBoundaryRunListResponse>(`/ops/scan-boundary/runs${q}`);
+  },
+
+  listOpsScanBoundaryIssues(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanBoundaryIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanBoundaryIssueListResponse>(`/ops/scan-boundary/issues${q}`);
+  },
+
+  listOpsScanBoundaryFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanBoundaryFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanBoundaryFailureListResponse>(`/ops/scan-boundary/failures${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {
