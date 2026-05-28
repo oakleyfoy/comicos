@@ -162,6 +162,25 @@ Frontend app:
 
 - `http://127.0.0.1:5173`
 
+## Deploy Guardrails
+
+Run the repo-level deploy checks from the root before pushing code that should be safe for Render:
+
+```bash
+npm run verify:deploy
+```
+
+That verification blocks pushes when deploy-critical source files are still untracked, then smoke-tests the
+FastAPI app import path and the production web build.
+
+To install the local git `pre-push` hook once on your machine:
+
+```bash
+npm run hooks:install
+```
+
+GitHub Actions also runs the same deploy-readiness check for pull requests and pushes to `main`.
+
 ## Environment Files
 
 Copy the example environment files before adding real values:

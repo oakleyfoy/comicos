@@ -21,6 +21,8 @@
     "dev:worker:local": "apps\\api\\.venv\\Scripts\\python -m app.workers.rq_worker_local",
     "dev:web": "npm --workspace apps/web run dev -- --host 127.0.0.1 --port 5173 --strictPort",
     "build:web": "npm --workspace apps/web run build",
+    "verify:deploy": "python scripts/verify_deploy_readiness.py",
+    "hooks:install": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-git-hooks.ps1",
     "worker:local:cleanup": "apps\\api\\.venv\\Scripts\\python -m app.workers.cleanup_started_jobs",
     "worker:local:diagnose": "apps\\api\\.venv\\Scripts\\python -m app.workers.local_diagnostic",
     "worker:local:diagnose:gmail": "apps\\api\\.venv\\Scripts\\python -m app.workers.local_diagnostic_gmail"

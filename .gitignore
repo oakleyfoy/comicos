@@ -9,11 +9,18 @@ venv/
 # Node
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Environment
 .env
 .env.local
 .env.*.local
+
+# Local debug artifacts
+.tmp_cover_debug/
+.tmp_replay_debug.db
+apps/api/_*.db
+apps/api/test_creator_migration.db
 
 # IDE / OS
 .DS_Store
