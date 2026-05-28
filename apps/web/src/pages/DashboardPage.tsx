@@ -104,6 +104,8 @@ import { ScanVisualEvidenceSummaryCard } from "../components/ScanVisualEvidenceS
 import { ScanReviewSummaryCard } from "../components/ScanReviewSummaryCard";
 import { ScanHistoricalComparisonSummaryCard } from "../components/ScanHistoricalComparisonSummaryCard";
 import { ScanAuthenticationSummaryCard } from "../components/ScanAuthenticationSummaryCard";
+import { ScanIntelligenceFeedSummaryCard } from "../components/ScanIntelligenceFeedSummaryCard";
+import { ScanReplaySummaryCard } from "../components/ScanReplaySummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7662,6 +7664,8 @@ export function DashboardPage() {
       <ScanReviewSummaryCard />
       <ScanHistoricalComparisonSummaryCard />
       <ScanAuthenticationSummaryCard />
+      <ScanIntelligenceFeedSummaryCard />
+      <ScanReplaySummaryCard />
     </AppShell>
   );
 }

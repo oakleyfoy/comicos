@@ -25,6 +25,8 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "scan_review": "P40-14",
     "scan_historical_comparison": "P40-15",
     "scan_authentication": "P40-16",
+    "scan_intelligence_feed": "P41-17",
+    "scan_replay": "P40-18",
 }
 
 

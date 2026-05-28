@@ -31,6 +31,8 @@ import { ScanVisualEvidencePage } from "./pages/ScanVisualEvidencePage";
 import { ScanReviewWorkspacePage } from "./pages/ScanReviewWorkspacePage";
 import { ScanHistoricalComparisonPage } from "./pages/ScanHistoricalComparisonPage";
 import { ScanAuthenticationPage } from "./pages/ScanAuthenticationPage";
+import { ScanIntelligenceFeedPage } from "./pages/ScanIntelligenceFeedPage";
+import { ScanReplayPage } from "./pages/ScanReplayPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -72,6 +74,8 @@ export default function App() {
         <Route path="/scan-review" element={<ScanReviewWorkspacePage />} />
         <Route path="/scan-historical-comparison" element={<ScanHistoricalComparisonPage />} />
         <Route path="/scan-authentication" element={<ScanAuthenticationPage />} />
+        <Route path="/scan-intelligence-feed" element={<ScanIntelligenceFeedPage />} />
+        <Route path="/scan-replay" element={<ScanReplayPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />

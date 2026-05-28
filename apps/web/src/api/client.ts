@@ -9558,6 +9558,307 @@ export interface ScanAuthenticationIssueListResponse {
   issue_type_counts: Record<string, number>;
 }
 
+export interface ScanIntelligenceFeedRunCreate {
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  authentication_run_id?: number | null;
+}
+
+export interface ScanIntelligenceFeedRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  upload_session_id?: number | null;
+  ingestion_batch_id?: number | null;
+  normalization_run_id?: number | null;
+  boundary_run_id?: number | null;
+  ocr_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+  defect_run_id?: number | null;
+  spine_tick_run_id?: number | null;
+  corner_edge_run_id?: number | null;
+  surface_defect_run_id?: number | null;
+  structural_damage_run_id?: number | null;
+  defect_aggregation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  authentication_run_id?: number | null;
+  source_checksum: string;
+  feed_checksum: string;
+  feed_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  total_events: number;
+  total_issues: number;
+  review_required_count: number;
+  error_count: number;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanIntelligenceFeedEventRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  event_rank: number;
+  timeline_rank: number;
+  event_category: string;
+  event_type: string;
+  severity: string;
+  source_system: string;
+  event_occurred_at: string;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  lineage_checksum?: string | null;
+  event_key: string;
+  event_payload_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedArtifactRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  media_type?: string | null;
+  text_preview?: string | null;
+  body_base64?: string | null;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedIssueRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  issue_type: string;
+  severity: string;
+  source_system: string;
+  source_record_id?: number | null;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedHistoryRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedRunDetail extends ScanIntelligenceFeedRunRead {
+  events: ScanIntelligenceFeedEventRead[];
+  artifacts: ScanIntelligenceFeedArtifactRead[];
+  issues: ScanIntelligenceFeedIssueRead[];
+  history: ScanIntelligenceFeedHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  ocr_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  defect_checksum?: string | null;
+  spine_tick_checksum?: string | null;
+  corner_edge_checksum?: string | null;
+  surface_defect_checksum?: string | null;
+  structural_damage_checksum?: string | null;
+  defect_aggregation_checksum?: string | null;
+  grading_assistance_checksum?: string | null;
+  visual_evidence_checksum?: string | null;
+  review_checksum?: string | null;
+  historical_comparison_checksum?: string | null;
+  authentication_checksum?: string | null;
+}
+
+export interface ScanIntelligenceFeedRunListResponse {
+  items: ScanIntelligenceFeedRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  total_event_count: number;
+  total_review_required_count: number;
+  total_error_count: number;
+}
+
+export interface ScanIntelligenceFeedEventListResponse {
+  items: ScanIntelligenceFeedEventRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  category_counts: Record<string, number>;
+  source_system_counts: Record<string, number>;
+}
+
+export interface ScanIntelligenceFeedIssueListResponse {
+  items: ScanIntelligenceFeedIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  issue_type_counts: Record<string, number>;
+  source_system_counts: Record<string, number>;
+}
+
+export interface ScanReplayRunCreate {
+  scan_image_id?: number | null;
+  replay_scope: "SINGLE_SCAN" | "FULL_P40_PIPELINE" | "SELECTED_STAGE" | "OPS_AUDIT" | "BATCH_REPLAY";
+  selected_phase_key?: string | null;
+}
+
+export interface ScanReplayRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id?: number | null;
+  replay_scope: string;
+  source_checksum: string;
+  replay_checksum: string;
+  replay_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanReplayStepRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_rank: number;
+  phase_key: string;
+  source_record_id?: number | null;
+  expected_checksum?: string | null;
+  observed_checksum?: string | null;
+  replay_step_status: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayCheckRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_id?: number | null;
+  check_type: string;
+  check_status: string;
+  expected_value?: string | null;
+  observed_value?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayDiscrepancyRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_id?: number | null;
+  discrepancy_type: string;
+  severity: string;
+  expected_value?: string | null;
+  observed_value?: string | null;
+  discrepancy_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayArtifactRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  media_type?: string | null;
+  text_preview?: string | null;
+  body_base64?: string | null;
+  created_at: string;
+}
+
+export interface ScanReplayIssueRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayHistoryRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayRunDetail extends ScanReplayRunRead {
+  steps: ScanReplayStepRead[];
+  checks: ScanReplayCheckRead[];
+  discrepancies: ScanReplayDiscrepancyRead[];
+  artifacts: ScanReplayArtifactRead[];
+  issues: ScanReplayIssueRead[];
+  history: ScanReplayHistoryRead[];
+  original_scan_checksum?: string | null;
+  scan_feed_checksum?: string | null;
+  lineage_chain: Array<Record<string, unknown>>;
+  critical_discrepancy_count: number;
+}
+
+export interface ScanReplayRunListResponse {
+  items: ScanReplayRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  critical_discrepancy_count: number;
+  mismatch_count: number;
+}
+
+export interface ScanReplayStepListResponse {
+  items: ScanReplayStepRead[];
+  pagination: MarketApiV1Pagination;
+  step_status_counts: Record<string, number>;
+}
+
+export interface ScanReplayCheckListResponse {
+  items: ScanReplayCheckRead[];
+  pagination: MarketApiV1Pagination;
+  check_status_counts: Record<string, number>;
+  check_type_counts: Record<string, number>;
+}
+
+export interface ScanReplayDiscrepancyListResponse {
+  items: ScanReplayDiscrepancyRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  discrepancy_type_counts: Record<string, number>;
+}
+
+export interface ScanReplayIssueListResponse {
+  items: ScanReplayIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  issue_type_counts: Record<string, number>;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -13514,6 +13815,228 @@ export const apiClient = {
   }): Promise<ScanAuthenticationRunListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanAuthenticationRunListResponse>(`/ops/scan-authentication/conflicts${q}`);
+  },
+
+  runScanIntelligenceFeed(payload: ScanIntelligenceFeedRunCreate): Promise<ScanIntelligenceFeedRunDetail> {
+    return requestScanV1<ScanIntelligenceFeedRunDetail>("/scan-intelligence-feed/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanIntelligenceFeedRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedRunListResponse>(`/scan-intelligence-feed/runs${q}`);
+  },
+
+  getScanIntelligenceFeedRun(runId: number): Promise<ScanIntelligenceFeedRunDetail> {
+    return requestScanV1<ScanIntelligenceFeedRunDetail>(`/scan-intelligence-feed/runs/${runId}`);
+  },
+
+  listScanIntelligenceFeedEvents(params?: {
+    run_id?: number;
+    severity?: string;
+    event_category?: string;
+    source_system?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/scan-intelligence-feed/events${q}`);
+  },
+
+  listScanIntelligenceFeedIssues(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedIssueListResponse>(`/scan-intelligence-feed/issues${q}`);
+  },
+
+  getScanIntelligenceFeedArtifact(artifactId: number): Promise<ScanIntelligenceFeedArtifactRead> {
+    return requestScanV1<ScanIntelligenceFeedArtifactRead>(`/scan-intelligence-feed/artifacts/${artifactId}`);
+  },
+
+  listOpsScanIntelligenceFeedRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedRunListResponse>(`/ops/scan-intelligence-feed/runs${q}`);
+  },
+
+  listOpsScanIntelligenceFeedEvents(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    event_category?: string;
+    source_system?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/events${q}`);
+  },
+
+  listOpsScanIntelligenceFeedIssues(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedIssueListResponse>(`/ops/scan-intelligence-feed/issues${q}`);
+  },
+
+  listOpsScanIntelligenceFeedFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/failures${q}`);
+  },
+
+  listOpsScanIntelligenceFeedReviewRequired(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/review-required${q}`);
+  },
+
+  runScanReplay(payload: ScanReplayRunCreate): Promise<ScanReplayRunDetail> {
+    return requestScanV1<ScanReplayRunDetail>("/scan-replay/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanReplayRuns(params?: {
+    scan_image_id?: number;
+    replay_scope?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayRunListResponse>(`/scan-replay/runs${q}`);
+  },
+
+  getScanReplayRun(runId: number): Promise<ScanReplayRunDetail> {
+    return requestScanV1<ScanReplayRunDetail>(`/scan-replay/runs/${runId}`);
+  },
+
+  listScanReplaySteps(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayStepListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayStepListResponse>(`/scan-replay/steps${q}`);
+  },
+
+  listScanReplayChecks(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayCheckListResponse>(`/scan-replay/checks${q}`);
+  },
+
+  listScanReplayDiscrepancies(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/scan-replay/discrepancies${q}`);
+  },
+
+  listScanReplayIssues(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayIssueListResponse>(`/scan-replay/issues${q}`);
+  },
+
+  getScanReplayArtifact(artifactId: number): Promise<ScanReplayArtifactRead> {
+    return requestScanV1<ScanReplayArtifactRead>(`/scan-replay/artifacts/${artifactId}`);
+  },
+
+  listOpsScanReplayRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    replay_scope?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayRunListResponse>(`/ops/scan-replay/runs${q}`);
+  },
+
+  listOpsScanReplayDiscrepancies(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/discrepancies${q}`);
+  },
+
+  listOpsScanReplayIssues(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayIssueListResponse>(`/ops/scan-replay/issues${q}`);
+  },
+
+  listOpsScanReplayFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/failures${q}`);
+  },
+
+  listOpsScanReplayCritical(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/critical${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

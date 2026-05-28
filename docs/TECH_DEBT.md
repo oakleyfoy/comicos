@@ -2,6 +2,49 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40 closeout summary
+
+This section consolidates the remaining non-blocking work across the completed P40 stack.
+
+### High operational impact
+
+- Replay and feed verification remain test-driven rather than continuously scheduled in production.
+- Large regression runs are still expensive in local SQLite-backed environments.
+- Web bundle size still triggers a non-blocking Rollup warning during build.
+- Query-plan tuning and large-scale performance profiling remain future work.
+
+### Medium operational impact
+
+- External audit export destinations are deferred.
+- Cloud-storage expansion for replay/feed artifacts remains a future enhancement.
+- Batch / realtime orchestration remains deferred until the platform-wide automation phase.
+- Additional monitoring, alerting, and background replay monitors remain deferred.
+
+### Low operational impact
+
+- Documentation is now consolidated, but some phase-specific closeout notes remain intentionally duplicated for ease of per-phase lookup.
+- Optional-phase gaps are expected and surfaced explicitly; they are not defects unless required lineage is missing.
+
+### P40 deferred work by phase
+
+- P40-16: official authentication certification, counterfeit classification, restoration detection, external database checks, slab-label claims, customer-facing authenticity certificate, ML counterfeit detection.
+- P41-17: cross-scan batch feed generation, live streaming feed updates, richer charting, external export destinations, subscription workflows, artifact retention policies, workflow automation from feed events.
+- P40-18: automated artifact repair, scheduled replay jobs, batch replay orchestration, cryptographic signing, external audit exports, replay diff visualization v2, background replay monitors, compliance-grade audit certification.
+- P40-19: continuous hardening automation, performance regression tooling, production-scale query tuning, and future build warning elimination if warranted.
+
+### P40 deferred work by severity
+
+- Critical: none expected after the closeout verification sweep.
+- Warning: build-size warning, expensive local regressions, optional-phase gaps in partial workflows.
+- Info: documentation/visibility improvements, future automation polish, and cloud/storage evolution.
+
+### P40 deferred work by operational impact
+
+- Reliability: replay scheduling, hardening automation, batch replay orchestration.
+- Scale: query tuning, large regression performance, storage expansion, cloud migration planning.
+- Observability: monitoring, replay monitors, external audit exports.
+- UX / ops workflow: richer charts, subscription workflows, automation helpers, replay diff UX.
+
 ## P40-16 — Authentication assistance layer (2026-05-27)
 
 - Architecture note: deterministic authentication-support signals, identity consistency checks, metadata conflicts, lineage integrity, historical consistency summaries, review-required flags, and replay-safe manifests are documented in `docs/SCAN_AUTHENTICATION_ASSISTANCE_ARCHITECTURE.md`.
@@ -17,6 +60,51 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 - Slab-label authentication claims
 - Customer-facing authenticity certificate
 - ML-based counterfeit detection
+
+## P41-17 — Scan intelligence feed layer (2026-05-28)
+
+- Architecture note: deterministic cross-system scan timeline aggregation, immutable feed events/issues/artifacts, replay-safe manifests, and owner/ops feed surfaces are documented in `docs/SCAN_INTELLIGENCE_FEED_ARCHITECTURE.md`.
+- This layer is a chronology/orchestration surface only. It does not assign official grades, certify authenticity, estimate FMV, or mutate upstream ledgers.
+
+### Deferred scope (beyond P41-17)
+
+- P40-18 determinism / replay orchestration layer
+- Cross-scan batch feed generation
+- Live streaming / websocket feed updates
+- Rich charting and timeline clustering
+- External export destinations
+- Feed subscription / notification workflows
+- Artifact retention policies
+- Reviewer assignment or workflow automation driven from feed events
+
+## P40-18 — Determinism / replay layer (2026-05-28)
+
+- Architecture note: deterministic replay verification, checksum audits, lineage validation, immutable artifact checks, discrepancy persistence, and ops diagnostics are documented in `docs/SCAN_REPLAY_ARCHITECTURE.md`.
+- This layer is verification-only. It does not create new intelligence, assign grades, certify authenticity, estimate FMV, or mutate upstream ledgers.
+
+### Deferred scope (beyond P40-18)
+
+- Automated artifact repair
+- Scheduled replay jobs
+- Batch replay orchestration
+- Cryptographic signing
+- External audit exports
+- Replay diff visualization v2
+- Background replay monitors
+- Compliance-grade audit certification
+
+## P40-19 — Tests / hardening sweep (2026-05-28)
+
+- Hardening report: deterministic validation sweep, replay stability checks, isolation checks, envelope consistency checks, and production-readiness notes are documented in `docs/P40_HARDENING_REPORT.md`.
+- This sweep is validation-only. It does not add features or rewrite completed phase behavior.
+
+### Remaining non-blocking limitations
+
+- Full regression runs are still expensive relative to the focused phase tests and may take significant time in local SQLite-backed test environments.
+- The web bundle remains large enough to trigger a Rollup chunk-size warning during build, though the build succeeds.
+- Hardening diagnostics remain test-driven rather than continuously scheduled.
+- Artifact exports are deterministic and append-only, but external export destinations remain deferred.
+- Replay and feed verification are deterministic, but production-scale benchmarking and query-plan tuning remain future work.
 
 ## P40-15 — Historical comparison engine (2026-05-27)
 

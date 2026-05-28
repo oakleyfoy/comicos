@@ -294,6 +294,22 @@ from app.models.scan_authentication import (
     ScanAuthenticationRun,
     ScanAuthenticationSignal,
 )
+from app.models.scan_intelligence_feed import (
+    ScanIntelligenceFeedArtifact,
+    ScanIntelligenceFeedEvent,
+    ScanIntelligenceFeedHistory,
+    ScanIntelligenceFeedIssue,
+    ScanIntelligenceFeedRun,
+)
+from app.models.scan_replay import (
+    ScanReplayArtifact,
+    ScanReplayCheck,
+    ScanReplayDiscrepancy,
+    ScanReplayHistory,
+    ScanReplayIssue,
+    ScanReplayRun,
+    ScanReplayStep,
+)
 from app.models.portfolio_market_coupling import (
     PortfolioMarketCouplingEdge,
     PortfolioMarketCouplingEvidence,
@@ -622,6 +638,18 @@ __all__ = [
     "ScanAuthenticationArtifact",
     "ScanAuthenticationIssue",
     "ScanAuthenticationHistory",
+    "ScanIntelligenceFeedRun",
+    "ScanIntelligenceFeedEvent",
+    "ScanIntelligenceFeedArtifact",
+    "ScanIntelligenceFeedIssue",
+    "ScanIntelligenceFeedHistory",
+    "ScanReplayRun",
+    "ScanReplayStep",
+    "ScanReplayCheck",
+    "ScanReplayDiscrepancy",
+    "ScanReplayArtifact",
+    "ScanReplayIssue",
+    "ScanReplayHistory",
     "PortfolioMarketCouplingSnapshot",
     "PortfolioMarketCouplingEdge",
     "PortfolioMarketCouplingEvidence",

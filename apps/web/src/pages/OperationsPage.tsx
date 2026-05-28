@@ -241,6 +241,8 @@ import { ScanVisualEvidenceOpsPanel } from "../components/ScanVisualEvidenceOpsP
 import { ScanReviewOpsPanel } from "../components/ScanReviewOpsPanel";
 import { ScanHistoricalComparisonOpsPanel } from "../components/ScanHistoricalComparisonOpsPanel";
 import { ScanAuthenticationOpsPanel } from "../components/ScanAuthenticationOpsPanel";
+import { ScanIntelligenceFeedOpsPanel } from "../components/ScanIntelligenceFeedOpsPanel";
+import { ScanReplayOpsPanel } from "../components/ScanReplayOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17488,6 +17490,8 @@ export function OperationsPage() {
       <ScanReviewOpsPanel />
       <ScanHistoricalComparisonOpsPanel />
       <ScanAuthenticationOpsPanel />
+      <ScanIntelligenceFeedOpsPanel />
+      <ScanReplayOpsPanel />
     </AppShell>
   );
 }
