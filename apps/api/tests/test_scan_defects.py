@@ -23,6 +23,10 @@ def _png_bytes(
     shadow: bool = False,
     glare: bool = False,
     blur: bool = False,
+    spine_stress: bool = False,
+    corner_wear: bool = False,
+    surface_defect: bool = False,
+    structural_damage: bool = False,
 ) -> bytes:
     image = Image.new("RGB", size, (244, 244, 244))
     draw = ImageDraw.Draw(image)
@@ -30,6 +34,33 @@ def _png_bytes(
     draw.rectangle((border + 12, border + 12, size[0] - border - 12, border + 54), fill=(230, 225, 110))
     if shadow:
         draw.rectangle((border, border, border + 28, size[1] - border - 1), fill=(20, 20, 28))
+    if spine_stress:
+        for y in (72, 148, 228, 312):
+            draw.line((border + 2, y, border + 22, y), fill=(0, 0, 0), width=2)
+    if corner_wear:
+        b = border
+        r = size[0] - border - 1
+        bt = size[1] - border - 1
+        draw.polygon([(b, b), (b + 14, b + 6), (b + 6, b + 14)], fill=(120, 120, 120))
+        draw.polygon([(r, b), (r - 14, b + 6), (r - 6, b + 14)], fill=(120, 120, 120))
+        draw.polygon([(b, bt), (b + 14, bt - 6), (b + 6, bt - 14)], fill=(120, 120, 120))
+        draw.polygon([(r, bt), (r - 14, bt - 6), (r - 6, bt - 14)], fill=(120, 120, 120))
+        for x in (80, 140, 200):
+            draw.line((x, b, x + 10, b + 4), fill=(30, 30, 30), width=2)
+        draw.line((b, 180, b + 5, 200), fill=(30, 30, 30), width=2)
+    if surface_defect:
+        draw.line((96, 118, 186, 142), fill=(248, 248, 248), width=3)
+        draw.line((118, 238, 218, 248), fill=(28, 28, 28), width=4)
+        draw.ellipse((156, 172, 220, 228), fill=(150, 128, 95))
+        draw.rectangle((92, 266, 154, 308), fill=(40, 70, 120))
+        draw.rectangle((174, 284, 236, 334), fill=(235, 235, 235))
+    if structural_damage:
+        draw.line((46, 92, 238, 122), fill=(240, 240, 240), width=5)
+        draw.line((64, 212, 232, 198), fill=(24, 24, 24), width=5)
+        draw.line((36, 42, 44, 356), fill=(10, 10, 10), width=3)
+        draw.line((52, 78, 60, 96), fill=(8, 8, 8), width=3)
+        draw.line((52, 302, 60, 322), fill=(8, 8, 8), width=3)
+        draw.rectangle((228, 64, 246, 348), fill=(210, 210, 210))
     if glare:
         draw.ellipse((size[0] - 120, border + 12, size[0] - 24, border + 108), fill=(255, 255, 255))
     if blur:
