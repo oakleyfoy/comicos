@@ -1110,6 +1110,16 @@ from app.api.scan_boundary import attach_scan_boundary_layer
 from app.api.scan_ocr import attach_scan_ocr_layer
 from app.api.scan_reconciliation import attach_scan_reconciliation_layer
 from app.api.scan_defects import attach_scan_defects_layer
+from app.api.scan_spine_ticks import attach_scan_spine_ticks_layer
+from app.api.scan_corner_edges import attach_scan_corner_edges_layer
+from app.api.scan_surface_defects import attach_scan_surface_defects_layer
+from app.api.scan_structural_damage import attach_scan_structural_damage_layer
+from app.api.scan_defect_aggregation import attach_scan_defect_aggregation_layer
+from app.api.scan_grading_assistance import attach_scan_grading_assistance_layer
+from app.api.scan_visual_evidence import attach_scan_visual_evidence_layer
+from app.api.scan_review import attach_scan_review_layer
+from app.api.scan_historical_comparison import attach_scan_historical_comparison_layer
+from app.api.scan_authentication import attach_scan_authentication_layer
 
 
 settings = get_settings()
@@ -1131,6 +1141,16 @@ attach_scan_boundary_layer(app)
 attach_scan_ocr_layer(app)
 attach_scan_reconciliation_layer(app)
 attach_scan_defects_layer(app)
+attach_scan_spine_ticks_layer(app)
+attach_scan_corner_edges_layer(app)
+attach_scan_surface_defects_layer(app)
+attach_scan_structural_damage_layer(app)
+attach_scan_defect_aggregation_layer(app)
+attach_scan_grading_assistance_layer(app)
+attach_scan_visual_evidence_layer(app)
+attach_scan_review_layer(app)
+attach_scan_historical_comparison_layer(app)
+attach_scan_authentication_layer(app)
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:

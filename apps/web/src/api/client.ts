@@ -8184,6 +8184,1380 @@ export interface ScanDefectFailureListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export type ScanSpineTickStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanSpineTickRunCreate {
+  scan_image_id: number;
+  defect_run_id?: number | null;
+}
+
+export interface ScanSpineTickRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  defect_run_id: number;
+  source_checksum: string;
+  spine_tick_checksum: string;
+  detection_status: ScanSpineTickStatus | string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanSpineTickEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  spine_tick_run_id: number;
+  defect_evidence_id?: number | null;
+  tick_rank: number;
+  confidence_score: number;
+  severity_hint: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  angle_degrees: number;
+  edge_distance_px: number;
+  spine_overlap_ratio: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSpineTickArtifactRead {
+  id: number;
+  owner_user_id: number;
+  spine_tick_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanSpineTickIssueRead {
+  id: number;
+  owner_user_id: number;
+  spine_tick_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSpineTickHistoryRead {
+  id: number;
+  owner_user_id: number;
+  spine_tick_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSpineTickRunDetail extends ScanSpineTickRunRead {
+  evidence: ScanSpineTickEvidenceRead[];
+  artifacts: ScanSpineTickArtifactRead[];
+  issues: ScanSpineTickIssueRead[];
+  history: ScanSpineTickHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  spine_region_preview_data_url?: string | null;
+  evidence_summary: Record<string, unknown>;
+}
+
+export interface ScanSpineTickRunListResponse {
+  items: ScanSpineTickRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_count: number;
+  high_density_anomaly_count: number;
+}
+
+export interface ScanSpineTickEvidenceListResponse {
+  items: ScanSpineTickEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  severity_hint_counts: Record<string, number>;
+  low_confidence_count: number;
+}
+
+export interface ScanSpineTickIssueListResponse {
+  items: ScanSpineTickIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanSpineTickFailureListResponse {
+  items: ScanSpineTickRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type ScanCornerEdgeStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanCornerEdgeRunCreate {
+  scan_image_id: number;
+  defect_run_id?: number | null;
+}
+
+export interface ScanCornerEdgeRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  defect_run_id: number;
+  source_checksum: string;
+  corner_edge_checksum: string;
+  detection_status: ScanCornerEdgeStatus | string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanCornerEdgeEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  corner_edge_run_id: number;
+  defect_evidence_id?: number | null;
+  evidence_rank: number;
+  evidence_type: string;
+  confidence_score: number;
+  severity_hint: string;
+  region_type: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  edge_distance_px: number;
+  corner_overlap_ratio: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanCornerEdgeArtifactRead {
+  id: number;
+  owner_user_id: number;
+  corner_edge_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanCornerEdgeIssueRead {
+  id: number;
+  owner_user_id: number;
+  corner_edge_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanCornerEdgeHistoryRead {
+  id: number;
+  owner_user_id: number;
+  corner_edge_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanCornerEdgeRunDetail extends ScanCornerEdgeRunRead {
+  evidence: ScanCornerEdgeEvidenceRead[];
+  artifacts: ScanCornerEdgeArtifactRead[];
+  issues: ScanCornerEdgeIssueRead[];
+  history: ScanCornerEdgeHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  corner_region_preview_data_url?: string | null;
+  edge_region_preview_data_url?: string | null;
+  evidence_summary: Record<string, unknown>;
+}
+
+export interface ScanCornerEdgeRunListResponse {
+  items: ScanCornerEdgeRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_count: number;
+  high_density_wear_count: number;
+}
+
+export interface ScanCornerEdgeEvidenceListResponse {
+  items: ScanCornerEdgeEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  evidence_type_counts: Record<string, number>;
+  severity_hint_counts: Record<string, number>;
+  low_confidence_count: number;
+}
+
+export interface ScanCornerEdgeIssueListResponse {
+  items: ScanCornerEdgeIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanCornerEdgeFailureListResponse {
+  items: ScanCornerEdgeRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type ScanSurfaceDefectStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanSurfaceDefectRunCreate {
+  scan_image_id: number;
+  defect_run_id?: number | null;
+}
+
+export interface ScanSurfaceDefectRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  defect_run_id: number;
+  source_checksum: string;
+  surface_defect_checksum: string;
+  detection_status: ScanSurfaceDefectStatus | string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanSurfaceDefectEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  surface_defect_run_id: number;
+  defect_evidence_id?: number | null;
+  evidence_rank: number;
+  evidence_type: string;
+  evidence_category: string;
+  confidence_score: number;
+  severity_hint: string;
+  region_type: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  surface_area_ratio: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSurfaceDefectArtifactRead {
+  id: number;
+  owner_user_id: number;
+  surface_defect_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanSurfaceDefectIssueRead {
+  id: number;
+  owner_user_id: number;
+  surface_defect_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSurfaceDefectHistoryRead {
+  id: number;
+  owner_user_id: number;
+  surface_defect_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanSurfaceDefectRunDetail extends ScanSurfaceDefectRunRead {
+  evidence: ScanSurfaceDefectEvidenceRead[];
+  artifacts: ScanSurfaceDefectArtifactRead[];
+  issues: ScanSurfaceDefectIssueRead[];
+  history: ScanSurfaceDefectHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  surface_region_preview_data_url?: string | null;
+  evidence_summary: Record<string, unknown>;
+}
+
+export interface ScanSurfaceDefectRunListResponse {
+  items: ScanSurfaceDefectRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_count: number;
+  high_density_surface_count: number;
+}
+
+export interface ScanSurfaceDefectEvidenceListResponse {
+  items: ScanSurfaceDefectEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  evidence_type_counts: Record<string, number>;
+  evidence_category_counts: Record<string, number>;
+  severity_hint_counts: Record<string, number>;
+  low_confidence_count: number;
+}
+
+export interface ScanSurfaceDefectIssueListResponse {
+  items: ScanSurfaceDefectIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanSurfaceDefectFailureListResponse {
+  items: ScanSurfaceDefectRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type ScanStructuralDamageStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanStructuralDamageRunCreate {
+  scan_image_id: number;
+  defect_run_id?: number | null;
+}
+
+export interface ScanStructuralDamageRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  defect_run_id: number;
+  source_checksum: string;
+  structural_damage_checksum: string;
+  detection_status: ScanStructuralDamageStatus | string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanStructuralDamageEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  structural_damage_run_id: number;
+  defect_evidence_id?: number | null;
+  evidence_rank: number;
+  evidence_type: string;
+  evidence_category: string;
+  confidence_score: number;
+  severity_hint: string;
+  region_type: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  width_px: number;
+  height_px: number;
+  structural_area_ratio: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanStructuralDamageArtifactRead {
+  id: number;
+  owner_user_id: number;
+  structural_damage_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanStructuralDamageIssueRead {
+  id: number;
+  owner_user_id: number;
+  structural_damage_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanStructuralDamageHistoryRead {
+  id: number;
+  owner_user_id: number;
+  structural_damage_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanStructuralDamageRunDetail extends ScanStructuralDamageRunRead {
+  evidence: ScanStructuralDamageEvidenceRead[];
+  artifacts: ScanStructuralDamageArtifactRead[];
+  issues: ScanStructuralDamageIssueRead[];
+  history: ScanStructuralDamageHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  structural_region_preview_data_url?: string | null;
+  evidence_summary: Record<string, unknown>;
+}
+
+export interface ScanStructuralDamageRunListResponse {
+  items: ScanStructuralDamageRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_count: number;
+  major_structural_count: number;
+}
+
+export interface ScanStructuralDamageEvidenceListResponse {
+  items: ScanStructuralDamageEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  evidence_type_counts: Record<string, number>;
+  evidence_category_counts: Record<string, number>;
+  severity_hint_counts: Record<string, number>;
+  low_confidence_count: number;
+}
+
+export interface ScanStructuralDamageIssueListResponse {
+  items: ScanStructuralDamageIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanStructuralDamageFailureListResponse {
+  items: ScanStructuralDamageRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type ScanDefectAggregationStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanDefectAggregationRunCreate {
+  scan_image_id: number;
+  defect_run_id?: number | null;
+}
+
+export interface ScanDefectAggregationRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  source_checksum: string;
+  aggregation_checksum: string;
+  aggregation_status: ScanDefectAggregationStatus | string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanDefectAggregateClusterRead {
+  id: number;
+  owner_user_id: number;
+  aggregation_run_id: number;
+  cluster_rank: number;
+  cluster_type: string;
+  cluster_region: string;
+  cluster_confidence: number;
+  aggregate_severity_hint: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  cluster_area_ratio: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectAggregateEvidenceRead {
+  id: number;
+  owner_user_id: number;
+  aggregation_run_id: number;
+  cluster_id: number;
+  source_detector: string;
+  source_evidence_id: number;
+  evidence_type: string;
+  confidence_score: number;
+  contribution_weight: number;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectAggregationArtifactRead {
+  id: number;
+  owner_user_id: number;
+  aggregation_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanDefectAggregationIssueRead {
+  id: number;
+  owner_user_id: number;
+  aggregation_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectAggregationHistoryRead {
+  id: number;
+  owner_user_id: number;
+  aggregation_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanDefectAggregationRunDetail extends ScanDefectAggregationRunRead {
+  clusters: ScanDefectAggregateClusterRead[];
+  evidence: ScanDefectAggregateEvidenceRead[];
+  artifacts: ScanDefectAggregationArtifactRead[];
+  issues: ScanDefectAggregationIssueRead[];
+  history: ScanDefectAggregationHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  spine_tick_checksum?: string | null;
+  corner_edge_checksum?: string | null;
+  surface_defect_checksum?: string | null;
+  structural_damage_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  region_summaries: Record<string, unknown>;
+}
+
+export interface ScanDefectAggregationRunListResponse {
+  items: ScanDefectAggregationRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  low_confidence_clusters: number;
+  unresolved_issue_count: number;
+  aggregate_anomaly_density: number;
+}
+
+export interface ScanDefectAggregateClusterListResponse {
+  items: ScanDefectAggregateClusterRead[];
+  pagination: MarketApiV1Pagination;
+  cluster_type_counts: Record<string, number>;
+  severity_hint_counts: Record<string, number>;
+  mixed_cluster_count: number;
+}
+
+export interface ScanDefectAggregateEvidenceListResponse {
+  items: ScanDefectAggregateEvidenceRead[];
+  pagination: MarketApiV1Pagination;
+  source_detector_counts: Record<string, number>;
+}
+
+export interface ScanDefectAggregationIssueListResponse {
+  items: ScanDefectAggregationIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanDefectAggregationFailureListResponse {
+  items: ScanDefectAggregationRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type ScanGradingAssistanceStatus = "PENDING" | "COMPLETE" | "FAILED";
+
+export interface ScanGradingAssistanceRunCreate {
+  scan_image_id: number;
+  aggregation_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+}
+
+export interface ScanGradingAssistanceRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  aggregation_run_id: number;
+  reconciliation_run_id?: number | null;
+  source_checksum: string;
+  grading_assistance_checksum: string;
+  assistance_status: ScanGradingAssistanceStatus | string;
+  engine_version: string;
+  rubric_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanGradingAssistanceCategoryRead {
+  id: number;
+  owner_user_id: number;
+  grading_assistance_run_id: number;
+  category_type: string;
+  category_status: string;
+  suggested_range_low: number;
+  suggested_range_high: number;
+  confidence_score: number;
+  evidence_count: number;
+  summary_text: string;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanGradingAssistanceFindingRead {
+  id: number;
+  owner_user_id: number;
+  grading_assistance_run_id: number;
+  category_id: number;
+  source_cluster_id?: number | null;
+  source_detector: string;
+  finding_type: string;
+  finding_severity_hint: string;
+  confidence_score: number;
+  grade_pressure_hint: string;
+  finding_text: string;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanGradingAssistanceArtifactRead {
+  id: number;
+  owner_user_id: number;
+  grading_assistance_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanGradingAssistanceIssueRead {
+  id: number;
+  owner_user_id: number;
+  grading_assistance_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanGradingAssistanceHistoryRead {
+  id: number;
+  owner_user_id: number;
+  grading_assistance_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanGradingAssistanceRunDetail extends ScanGradingAssistanceRunRead {
+  categories: ScanGradingAssistanceCategoryRead[];
+  findings: ScanGradingAssistanceFindingRead[];
+  artifacts: ScanGradingAssistanceArtifactRead[];
+  issues: ScanGradingAssistanceIssueRead[];
+  history: ScanGradingAssistanceHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  defect_checksum?: string | null;
+  spine_tick_checksum?: string | null;
+  corner_edge_checksum?: string | null;
+  surface_defect_checksum?: string | null;
+  structural_damage_checksum?: string | null;
+  aggregation_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  overall_support: Record<string, unknown>;
+  review_flags: Array<Record<string, unknown>>;
+}
+
+export interface ScanGradingAssistanceRunListResponse {
+  items: ScanGradingAssistanceRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  review_required_count: number;
+  low_confidence_support_count: number;
+}
+
+export interface ScanGradingAssistanceCategoryListResponse {
+  items: ScanGradingAssistanceCategoryRead[];
+  pagination: MarketApiV1Pagination;
+  category_type_counts: Record<string, number>;
+  category_status_counts: Record<string, number>;
+}
+
+export interface ScanGradingAssistanceFindingListResponse {
+  items: ScanGradingAssistanceFindingRead[];
+  pagination: MarketApiV1Pagination;
+  finding_type_counts: Record<string, number>;
+  grade_pressure_hint_counts: Record<string, number>;
+}
+
+export interface ScanGradingAssistanceIssueListResponse {
+  items: ScanGradingAssistanceIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanGradingAssistanceFailureListResponse {
+  items: ScanGradingAssistanceRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ScanVisualEvidenceRunCreate {
+  scan_image_id: number;
+  aggregation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+}
+
+export interface ScanVisualEvidenceRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  aggregation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  source_checksum: string;
+  visual_evidence_checksum: string;
+  evidence_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanVisualEvidencePackageRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  package_type: string;
+  package_status: string;
+  package_title: string;
+  package_summary: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceItemRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  package_id: number;
+  item_rank: number;
+  source_system: string;
+  source_record_id: number;
+  item_type: string;
+  item_title: string;
+  item_summary: string;
+  confidence_score: number;
+  severity_hint?: string | null;
+  region_type?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceAnnotationRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  item_id: number;
+  annotation_type: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  label: string;
+  confidence_score: number;
+  display_order: number;
+  style_hint: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceArtifactRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceIssueRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceHistoryRead {
+  id: number;
+  owner_user_id: number;
+  visual_evidence_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanVisualEvidenceRunDetail extends ScanVisualEvidenceRunRead {
+  packages: ScanVisualEvidencePackageRead[];
+  items: ScanVisualEvidenceItemRead[];
+  annotations: ScanVisualEvidenceAnnotationRead[];
+  artifacts: ScanVisualEvidenceArtifactRead[];
+  issues: ScanVisualEvidenceIssueRead[];
+  history: ScanVisualEvidenceHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  ocr_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  defect_checksum?: string | null;
+  aggregation_checksum?: string | null;
+  grading_assistance_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  overlay_preview_data_url?: string | null;
+}
+
+export interface ScanVisualEvidenceRunListResponse {
+  items: ScanVisualEvidenceRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  incomplete_review_packet_count: number;
+  low_confidence_package_count: number;
+}
+
+export interface ScanVisualEvidencePackageListResponse {
+  items: ScanVisualEvidencePackageRead[];
+  pagination: MarketApiV1Pagination;
+  package_type_counts: Record<string, number>;
+}
+
+export interface ScanVisualEvidenceItemListResponse {
+  items: ScanVisualEvidenceItemRead[];
+  pagination: MarketApiV1Pagination;
+  source_system_counts: Record<string, number>;
+}
+
+export interface ScanVisualEvidenceAnnotationListResponse {
+  items: ScanVisualEvidenceAnnotationRead[];
+  pagination: MarketApiV1Pagination;
+  annotation_type_counts: Record<string, number>;
+}
+
+export interface ScanVisualEvidenceIssueListResponse {
+  items: ScanVisualEvidenceIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanVisualEvidenceFailureListResponse {
+  items: ScanVisualEvidenceRunRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ScanReviewSessionCreate {
+  scan_image_id: number;
+  visual_evidence_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+}
+
+export interface ScanReviewDecisionCreate {
+  decision_type: string;
+  decision_status: string;
+  decision_value: string;
+  confidence_score?: number | null;
+  reason_text: string;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface ScanReviewNoteCreate {
+  note_type: string;
+  note_text: string;
+  source_system?: string | null;
+  source_record_id?: number | null;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface ScanReviewEvidenceActionCreate {
+  source_system: string;
+  source_record_id: number;
+  action_type: string;
+  action_status: string;
+  reason_text: string;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface ScanReviewSessionRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  visual_evidence_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+  review_status: string;
+  review_checksum: string;
+  snapshot_checksum: string;
+  reviewer_user_id?: number | null;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanReviewDecisionRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  decision_type: string;
+  decision_status: string;
+  decision_value: string;
+  confidence_score?: number | null;
+  reason_text: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReviewNoteRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  note_type: string;
+  note_text: string;
+  source_system?: string | null;
+  source_record_id?: number | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReviewEvidenceActionRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  source_system: string;
+  source_record_id: number;
+  action_type: string;
+  action_status: string;
+  reason_text: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReviewArtifactRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanReviewIssueRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReviewHistoryRead {
+  id: number;
+  owner_user_id: number;
+  review_session_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReviewSessionDetail extends ScanReviewSessionRead {
+  decisions: ScanReviewDecisionRead[];
+  notes: ScanReviewNoteRead[];
+  evidence_actions: ScanReviewEvidenceActionRead[];
+  artifacts: ScanReviewArtifactRead[];
+  issues: ScanReviewIssueRead[];
+  history: ScanReviewHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  ocr_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  defect_checksum?: string | null;
+  aggregation_checksum?: string | null;
+  grading_assistance_checksum?: string | null;
+  visual_evidence_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  review_snapshot: Record<string, unknown>;
+}
+
+export interface ScanReviewSessionListResponse {
+  items: ScanReviewSessionRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  blocked_review_count: number;
+  rescan_request_count: number;
+  completed_review_count: number;
+}
+
+export interface ScanReviewIssueListResponse {
+  items: ScanReviewIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanHistoricalComparisonRunCreate {
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  max_prior_scans?: number;
+}
+
+export interface ScanHistoricalComparisonRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  source_checksum: string;
+  historical_comparison_checksum: string;
+  comparison_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanHistoricalComparisonPairRead {
+  id: number;
+  owner_user_id: number;
+  comparison_run_id: number;
+  current_scan_image_id: number;
+  prior_scan_image_id: number;
+  current_identity_key: string;
+  prior_identity_key: string;
+  match_basis: string;
+  match_confidence: number;
+  current_checksum: string;
+  prior_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanHistoricalComparisonDeltaRead {
+  id: number;
+  owner_user_id: number;
+  comparison_run_id: number;
+  pair_id: number;
+  delta_rank: number;
+  delta_type: string;
+  delta_category: string;
+  delta_direction: string;
+  confidence_score: number;
+  severity_hint: string;
+  region_type?: string | null;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanHistoricalComparisonArtifactRead {
+  id: number;
+  owner_user_id: number;
+  comparison_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanHistoricalComparisonIssueRead {
+  id: number;
+  owner_user_id: number;
+  comparison_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanHistoricalComparisonHistoryRead {
+  id: number;
+  owner_user_id: number;
+  comparison_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanHistoricalComparisonRunDetail extends ScanHistoricalComparisonRunRead {
+  pairs: ScanHistoricalComparisonPairRead[];
+  deltas: ScanHistoricalComparisonDeltaRead[];
+  artifacts: ScanHistoricalComparisonArtifactRead[];
+  issues: ScanHistoricalComparisonIssueRead[];
+  history: ScanHistoricalComparisonHistoryRead[];
+  current_original_scan_checksum?: string | null;
+  current_normalization_checksum?: string | null;
+  current_boundary_checksum?: string | null;
+  current_reconciliation_checksum?: string | null;
+  current_aggregation_checksum?: string | null;
+  current_grading_assistance_checksum?: string | null;
+  current_review_checksum?: string | null;
+  prior_lineage: Array<Record<string, unknown>>;
+  current_preview_data_url?: string | null;
+  side_by_side_preview_data_url?: string | null;
+  delta_overlay_preview_data_url?: string | null;
+}
+
+export interface ScanHistoricalComparisonRunListResponse {
+  items: ScanHistoricalComparisonRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  inconclusive_count: number;
+  scans_with_prior_history_count: number;
+}
+
+export interface ScanHistoricalComparisonPairListResponse {
+  items: ScanHistoricalComparisonPairRead[];
+  pagination: MarketApiV1Pagination;
+  match_basis_counts: Record<string, number>;
+}
+
+export interface ScanHistoricalComparisonDeltaListResponse {
+  items: ScanHistoricalComparisonDeltaRead[];
+  pagination: MarketApiV1Pagination;
+  delta_type_counts: Record<string, number>;
+  delta_direction_counts: Record<string, number>;
+}
+
+export interface ScanHistoricalComparisonIssueListResponse {
+  items: ScanHistoricalComparisonIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface ScanAuthenticationRunCreate {
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  review_session_id?: number | null;
+}
+
+export interface ScanAuthenticationRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  review_session_id?: number | null;
+  source_checksum: string;
+  authentication_checksum: string;
+  authentication_status: string;
+  engine_version: string;
+  rubric_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanAuthenticationSignalRead {
+  id: number;
+  owner_user_id: number;
+  authentication_run_id: number;
+  signal_rank: number;
+  signal_type: string;
+  signal_category: string;
+  signal_status: string;
+  confidence_score: number;
+  source_system: string;
+  source_record_id?: number | null;
+  measurement_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanAuthenticationFindingRead {
+  id: number;
+  owner_user_id: number;
+  authentication_run_id: number;
+  finding_rank: number;
+  finding_type: string;
+  finding_status: string;
+  confidence_score: number;
+  review_priority: string;
+  finding_text: string;
+  source_signal_ids_json: number[];
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanAuthenticationArtifactRead {
+  id: number;
+  owner_user_id: number;
+  authentication_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  preview_data_url?: string | null;
+  created_at: string;
+}
+
+export interface ScanAuthenticationIssueRead {
+  id: number;
+  owner_user_id: number;
+  authentication_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanAuthenticationHistoryRead {
+  id: number;
+  owner_user_id: number;
+  authentication_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanAuthenticationRunDetail extends ScanAuthenticationRunRead {
+  signals: ScanAuthenticationSignalRead[];
+  findings: ScanAuthenticationFindingRead[];
+  artifacts: ScanAuthenticationArtifactRead[];
+  issues: ScanAuthenticationIssueRead[];
+  history: ScanAuthenticationHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  ocr_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  visual_evidence_checksum?: string | null;
+  historical_comparison_checksum?: string | null;
+  review_checksum?: string | null;
+  source_preview_data_url?: string | null;
+  review_flag_count: number;
+}
+
+export interface ScanAuthenticationRunListResponse {
+  items: ScanAuthenticationRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  unresolved_conflict_count: number;
+  review_required_count: number;
+}
+
+export interface ScanAuthenticationSignalListResponse {
+  items: ScanAuthenticationSignalRead[];
+  pagination: MarketApiV1Pagination;
+  signal_status_counts: Record<string, number>;
+}
+
+export interface ScanAuthenticationFindingListResponse {
+  items: ScanAuthenticationFindingRead[];
+  pagination: MarketApiV1Pagination;
+  finding_status_counts: Record<string, number>;
+  review_priority_counts: Record<string, number>;
+}
+
+export interface ScanAuthenticationIssueListResponse {
+  items: ScanAuthenticationIssueRead[];
+  pagination: MarketApiV1Pagination;
+  issue_type_counts: Record<string, number>;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -11336,6 +12710,810 @@ export const apiClient = {
   }): Promise<ScanDefectIssueListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanDefectIssueListResponse>(`/ops/scan-defects/quality-gates${q}`);
+  },
+
+  runScanSpineTickDetection(payload: ScanSpineTickRunCreate): Promise<ScanSpineTickRunDetail> {
+    return requestScanV1<ScanSpineTickRunDetail>("/scan-spine-ticks/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanSpineTickRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickRunListResponse>(`/scan-spine-ticks/runs${q}`);
+  },
+
+  getScanSpineTickRun(runId: number): Promise<ScanSpineTickRunDetail> {
+    return requestScanV1<ScanSpineTickRunDetail>(`/scan-spine-ticks/runs/${runId}`);
+  },
+
+  listScanSpineTickEvidence(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickEvidenceListResponse>(`/scan-spine-ticks/evidence${q}`);
+  },
+
+  listScanSpineTickIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickIssueListResponse>(`/scan-spine-ticks/issues${q}`);
+  },
+
+  getScanSpineTickArtifact(artifactId: number): Promise<ScanSpineTickArtifactRead> {
+    return requestScanV1<ScanSpineTickArtifactRead>(`/scan-spine-ticks/artifacts/${artifactId}`);
+  },
+
+  listOpsScanSpineTickRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickRunListResponse>(`/ops/scan-spine-ticks/runs${q}`);
+  },
+
+  listOpsScanSpineTickIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickIssueListResponse>(`/ops/scan-spine-ticks/issues${q}`);
+  },
+
+  listOpsScanSpineTickFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSpineTickFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSpineTickFailureListResponse>(`/ops/scan-spine-ticks/failures${q}`);
+  },
+
+  runScanCornerEdgeDetection(payload: ScanCornerEdgeRunCreate): Promise<ScanCornerEdgeRunDetail> {
+    return requestScanV1<ScanCornerEdgeRunDetail>("/scan-corner-edges/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanCornerEdgeRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeRunListResponse>(`/scan-corner-edges/runs${q}`);
+  },
+
+  getScanCornerEdgeRun(runId: number): Promise<ScanCornerEdgeRunDetail> {
+    return requestScanV1<ScanCornerEdgeRunDetail>(`/scan-corner-edges/runs/${runId}`);
+  },
+
+  listScanCornerEdgeEvidence(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeEvidenceListResponse>(`/scan-corner-edges/evidence${q}`);
+  },
+
+  listScanCornerEdgeIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeIssueListResponse>(`/scan-corner-edges/issues${q}`);
+  },
+
+  getScanCornerEdgeArtifact(artifactId: number): Promise<ScanCornerEdgeArtifactRead> {
+    return requestScanV1<ScanCornerEdgeArtifactRead>(`/scan-corner-edges/artifacts/${artifactId}`);
+  },
+
+  listOpsScanCornerEdgeRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeRunListResponse>(`/ops/scan-corner-edges/runs${q}`);
+  },
+
+  listOpsScanCornerEdgeIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeIssueListResponse>(`/ops/scan-corner-edges/issues${q}`);
+  },
+
+  listOpsScanCornerEdgeFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanCornerEdgeFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCornerEdgeFailureListResponse>(`/ops/scan-corner-edges/failures${q}`);
+  },
+
+  runScanSurfaceDefectDetection(payload: ScanSurfaceDefectRunCreate): Promise<ScanSurfaceDefectRunDetail> {
+    return requestScanV1<ScanSurfaceDefectRunDetail>("/scan-surface-defects/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanSurfaceDefectRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectRunListResponse>(`/scan-surface-defects/runs${q}`);
+  },
+
+  getScanSurfaceDefectRun(runId: number): Promise<ScanSurfaceDefectRunDetail> {
+    return requestScanV1<ScanSurfaceDefectRunDetail>(`/scan-surface-defects/runs/${runId}`);
+  },
+
+  listScanSurfaceDefectEvidence(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectEvidenceListResponse>(`/scan-surface-defects/evidence${q}`);
+  },
+
+  listScanSurfaceDefectIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectIssueListResponse>(`/scan-surface-defects/issues${q}`);
+  },
+
+  getScanSurfaceDefectArtifact(artifactId: number): Promise<ScanSurfaceDefectArtifactRead> {
+    return requestScanV1<ScanSurfaceDefectArtifactRead>(`/scan-surface-defects/artifacts/${artifactId}`);
+  },
+
+  listOpsScanSurfaceDefectRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectRunListResponse>(`/ops/scan-surface-defects/runs${q}`);
+  },
+
+  listOpsScanSurfaceDefectIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectIssueListResponse>(`/ops/scan-surface-defects/issues${q}`);
+  },
+
+  listOpsScanSurfaceDefectFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanSurfaceDefectFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanSurfaceDefectFailureListResponse>(`/ops/scan-surface-defects/failures${q}`);
+  },
+
+  runScanStructuralDamageDetection(payload: ScanStructuralDamageRunCreate): Promise<ScanStructuralDamageRunDetail> {
+    return requestScanV1<ScanStructuralDamageRunDetail>("/scan-structural-damage/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanStructuralDamageRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageRunListResponse>(`/scan-structural-damage/runs${q}`);
+  },
+
+  getScanStructuralDamageRun(runId: number): Promise<ScanStructuralDamageRunDetail> {
+    return requestScanV1<ScanStructuralDamageRunDetail>(`/scan-structural-damage/runs/${runId}`);
+  },
+
+  listScanStructuralDamageEvidence(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageEvidenceListResponse>(`/scan-structural-damage/evidence${q}`);
+  },
+
+  listScanStructuralDamageIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageIssueListResponse>(`/scan-structural-damage/issues${q}`);
+  },
+
+  getScanStructuralDamageArtifact(artifactId: number): Promise<ScanStructuralDamageArtifactRead> {
+    return requestScanV1<ScanStructuralDamageArtifactRead>(`/scan-structural-damage/artifacts/${artifactId}`);
+  },
+
+  listOpsScanStructuralDamageRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageRunListResponse>(`/ops/scan-structural-damage/runs${q}`);
+  },
+
+  listOpsScanStructuralDamageIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageIssueListResponse>(`/ops/scan-structural-damage/issues${q}`);
+  },
+
+  listOpsScanStructuralDamageFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanStructuralDamageFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanStructuralDamageFailureListResponse>(`/ops/scan-structural-damage/failures${q}`);
+  },
+
+  runScanDefectAggregation(payload: ScanDefectAggregationRunCreate): Promise<ScanDefectAggregationRunDetail> {
+    return requestScanV1<ScanDefectAggregationRunDetail>("/scan-defect-aggregation/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanDefectAggregationRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregationRunListResponse>(`/scan-defect-aggregation/runs${q}`);
+  },
+
+  getScanDefectAggregationRun(runId: number): Promise<ScanDefectAggregationRunDetail> {
+    return requestScanV1<ScanDefectAggregationRunDetail>(`/scan-defect-aggregation/runs/${runId}`);
+  },
+
+  listScanDefectAggregateClusters(params?: {
+    scan_image_id?: number;
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregateClusterListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregateClusterListResponse>(`/scan-defect-aggregation/clusters${q}`);
+  },
+
+  listScanDefectAggregationEvidence(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregateEvidenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregateEvidenceListResponse>(`/scan-defect-aggregation/evidence${q}`);
+  },
+
+  listScanDefectAggregationIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregationIssueListResponse>(`/scan-defect-aggregation/issues${q}`);
+  },
+
+  getScanDefectAggregationArtifact(artifactId: number): Promise<ScanDefectAggregationArtifactRead> {
+    return requestScanV1<ScanDefectAggregationArtifactRead>(`/scan-defect-aggregation/artifacts/${artifactId}`);
+  },
+
+  listOpsScanDefectAggregationRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregationRunListResponse>(`/ops/scan-defect-aggregation/runs${q}`);
+  },
+
+  listOpsScanDefectAggregationIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregationIssueListResponse>(`/ops/scan-defect-aggregation/issues${q}`);
+  },
+
+  listOpsScanDefectAggregationFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanDefectAggregationFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanDefectAggregationFailureListResponse>(`/ops/scan-defect-aggregation/failures${q}`);
+  },
+
+  runScanGradingAssistance(payload: ScanGradingAssistanceRunCreate): Promise<ScanGradingAssistanceRunDetail> {
+    return requestScanV1<ScanGradingAssistanceRunDetail>("/scan-grading-assistance/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanGradingAssistanceRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceRunListResponse>(`/scan-grading-assistance/runs${q}`);
+  },
+
+  getScanGradingAssistanceRun(runId: number): Promise<ScanGradingAssistanceRunDetail> {
+    return requestScanV1<ScanGradingAssistanceRunDetail>(`/scan-grading-assistance/runs/${runId}`);
+  },
+
+  listScanGradingAssistanceCategories(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceCategoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceCategoryListResponse>(`/scan-grading-assistance/categories${q}`);
+  },
+
+  listScanGradingAssistanceFindings(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceFindingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceFindingListResponse>(`/scan-grading-assistance/findings${q}`);
+  },
+
+  listScanGradingAssistanceIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceIssueListResponse>(`/scan-grading-assistance/issues${q}`);
+  },
+
+  getScanGradingAssistanceArtifact(artifactId: number): Promise<ScanGradingAssistanceArtifactRead> {
+    return requestScanV1<ScanGradingAssistanceArtifactRead>(`/scan-grading-assistance/artifacts/${artifactId}`);
+  },
+
+  listOpsScanGradingAssistanceRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceRunListResponse>(`/ops/scan-grading-assistance/runs${q}`);
+  },
+
+  listOpsScanGradingAssistanceIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceIssueListResponse>(`/ops/scan-grading-assistance/issues${q}`);
+  },
+
+  listOpsScanGradingAssistanceFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanGradingAssistanceFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanGradingAssistanceFailureListResponse>(`/ops/scan-grading-assistance/failures${q}`);
+  },
+
+  runScanVisualEvidence(payload: ScanVisualEvidenceRunCreate): Promise<ScanVisualEvidenceRunDetail> {
+    return requestScanV1<ScanVisualEvidenceRunDetail>("/scan-visual-evidence/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanVisualEvidenceRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceRunListResponse>(`/scan-visual-evidence/runs${q}`);
+  },
+
+  getScanVisualEvidenceRun(runId: number): Promise<ScanVisualEvidenceRunDetail> {
+    return requestScanV1<ScanVisualEvidenceRunDetail>(`/scan-visual-evidence/runs/${runId}`);
+  },
+
+  listScanVisualEvidencePackages(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidencePackageListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidencePackageListResponse>(`/scan-visual-evidence/packages${q}`);
+  },
+
+  listScanVisualEvidenceItems(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceItemListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceItemListResponse>(`/scan-visual-evidence/items${q}`);
+  },
+
+  listScanVisualEvidenceAnnotations(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceAnnotationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceAnnotationListResponse>(`/scan-visual-evidence/annotations${q}`);
+  },
+
+  listScanVisualEvidenceIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceIssueListResponse>(`/scan-visual-evidence/issues${q}`);
+  },
+
+  getScanVisualEvidenceArtifact(artifactId: number): Promise<ScanVisualEvidenceArtifactRead> {
+    return requestScanV1<ScanVisualEvidenceArtifactRead>(`/scan-visual-evidence/artifacts/${artifactId}`);
+  },
+
+  listOpsScanVisualEvidenceRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceRunListResponse>(`/ops/scan-visual-evidence/runs${q}`);
+  },
+
+  listOpsScanVisualEvidenceIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceIssueListResponse>(`/ops/scan-visual-evidence/issues${q}`);
+  },
+
+  listOpsScanVisualEvidenceFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanVisualEvidenceFailureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanVisualEvidenceFailureListResponse>(`/ops/scan-visual-evidence/failures${q}`);
+  },
+
+  createScanReviewSession(payload: ScanReviewSessionCreate): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>("/scan-review/sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanReviewSessions(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewSessionListResponse>(`/scan-review/sessions${q}`);
+  },
+
+  getScanReviewSession(reviewSessionId: number): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>(`/scan-review/sessions/${reviewSessionId}`);
+  },
+
+  recordScanReviewDecision(reviewSessionId: number, payload: ScanReviewDecisionCreate): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>(`/scan-review/sessions/${reviewSessionId}/decisions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  recordScanReviewNote(reviewSessionId: number, payload: ScanReviewNoteCreate): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>(`/scan-review/sessions/${reviewSessionId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  recordScanReviewEvidenceAction(reviewSessionId: number, payload: ScanReviewEvidenceActionCreate): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>(`/scan-review/sessions/${reviewSessionId}/evidence-actions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeScanReviewSession(reviewSessionId: number): Promise<ScanReviewSessionDetail> {
+    return requestScanV1<ScanReviewSessionDetail>(`/scan-review/sessions/${reviewSessionId}/complete`, {
+      method: "POST",
+    });
+  },
+
+  listScanReviewIssues(params?: {
+    review_session_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewIssueListResponse>(`/scan-review/issues${q}`);
+  },
+
+  getScanReviewArtifact(artifactId: number): Promise<ScanReviewArtifactRead> {
+    return requestScanV1<ScanReviewArtifactRead>(`/scan-review/artifacts/${artifactId}`);
+  },
+
+  listOpsScanReviewSessions(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewSessionListResponse>(`/ops/scan-review/sessions${q}`);
+  },
+
+  listOpsScanReviewIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewIssueListResponse>(`/ops/scan-review/issues${q}`);
+  },
+
+  listOpsScanReviewBlocked(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewSessionListResponse>(`/ops/scan-review/blocked${q}`);
+  },
+
+  listOpsScanReviewRescans(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReviewSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReviewSessionListResponse>(`/ops/scan-review/rescans${q}`);
+  },
+
+  runScanHistoricalComparison(payload: ScanHistoricalComparisonRunCreate): Promise<ScanHistoricalComparisonRunDetail> {
+    return requestScanV1<ScanHistoricalComparisonRunDetail>("/scan-historical-comparison/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanHistoricalComparisonRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonRunListResponse>(`/scan-historical-comparison/runs${q}`);
+  },
+
+  getScanHistoricalComparisonRun(runId: number): Promise<ScanHistoricalComparisonRunDetail> {
+    return requestScanV1<ScanHistoricalComparisonRunDetail>(`/scan-historical-comparison/runs/${runId}`);
+  },
+
+  listScanHistoricalComparisonPairs(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonPairListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonPairListResponse>(`/scan-historical-comparison/pairs${q}`);
+  },
+
+  listScanHistoricalComparisonDeltas(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonDeltaListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonDeltaListResponse>(`/scan-historical-comparison/deltas${q}`);
+  },
+
+  listScanHistoricalComparisonIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonIssueListResponse>(`/scan-historical-comparison/issues${q}`);
+  },
+
+  getScanHistoricalComparisonArtifact(artifactId: number): Promise<ScanHistoricalComparisonArtifactRead> {
+    return requestScanV1<ScanHistoricalComparisonArtifactRead>(`/scan-historical-comparison/artifacts/${artifactId}`);
+  },
+
+  listOpsScanHistoricalComparisonRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonRunListResponse>(`/ops/scan-historical-comparison/runs${q}`);
+  },
+
+  listOpsScanHistoricalComparisonIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonIssueListResponse>(`/ops/scan-historical-comparison/issues${q}`);
+  },
+
+  listOpsScanHistoricalComparisonFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonRunListResponse>(`/ops/scan-historical-comparison/failures${q}`);
+  },
+
+  listOpsScanHistoricalComparisonInconclusive(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanHistoricalComparisonRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanHistoricalComparisonRunListResponse>(`/ops/scan-historical-comparison/inconclusive${q}`);
+  },
+
+  runScanAuthentication(payload: ScanAuthenticationRunCreate): Promise<ScanAuthenticationRunDetail> {
+    return requestScanV1<ScanAuthenticationRunDetail>("/scan-authentication/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanAuthenticationRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationRunListResponse>(`/scan-authentication/runs${q}`);
+  },
+
+  getScanAuthenticationRun(runId: number): Promise<ScanAuthenticationRunDetail> {
+    return requestScanV1<ScanAuthenticationRunDetail>(`/scan-authentication/runs/${runId}`);
+  },
+
+  listScanAuthenticationSignals(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationSignalListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationSignalListResponse>(`/scan-authentication/signals${q}`);
+  },
+
+  listScanAuthenticationFindings(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationFindingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationFindingListResponse>(`/scan-authentication/findings${q}`);
+  },
+
+  listScanAuthenticationIssues(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationIssueListResponse>(`/scan-authentication/issues${q}`);
+  },
+
+  getScanAuthenticationArtifact(artifactId: number): Promise<ScanAuthenticationArtifactRead> {
+    return requestScanV1<ScanAuthenticationArtifactRead>(`/scan-authentication/artifacts/${artifactId}`);
+  },
+
+  listOpsScanAuthenticationRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationRunListResponse>(`/ops/scan-authentication/runs${q}`);
+  },
+
+  listOpsScanAuthenticationIssues(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationIssueListResponse>(`/ops/scan-authentication/issues${q}`);
+  },
+
+  listOpsScanAuthenticationFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationRunListResponse>(`/ops/scan-authentication/failures${q}`);
+  },
+
+  listOpsScanAuthenticationConflicts(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanAuthenticationRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanAuthenticationRunListResponse>(`/ops/scan-authentication/conflicts${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

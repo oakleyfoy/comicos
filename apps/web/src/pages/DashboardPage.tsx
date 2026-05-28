@@ -94,6 +94,16 @@ import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
 import { ScanOcrSummaryCard } from "../components/ScanOcrSummaryCard";
 import { ScanReconciliationSummaryCard } from "../components/ScanReconciliationSummaryCard";
 import { ScanDefectsSummaryCard } from "../components/ScanDefectsSummaryCard";
+import { ScanSpineTicksSummaryCard } from "../components/ScanSpineTicksSummaryCard";
+import { ScanCornerEdgesSummaryCard } from "../components/ScanCornerEdgesSummaryCard";
+import { ScanSurfaceDefectsSummaryCard } from "../components/ScanSurfaceDefectsSummaryCard";
+import { ScanStructuralDamageSummaryCard } from "../components/ScanStructuralDamageSummaryCard";
+import { ScanDefectAggregationSummaryCard } from "../components/ScanDefectAggregationSummaryCard";
+import { ScanGradingAssistanceSummaryCard } from "../components/ScanGradingAssistanceSummaryCard";
+import { ScanVisualEvidenceSummaryCard } from "../components/ScanVisualEvidenceSummaryCard";
+import { ScanReviewSummaryCard } from "../components/ScanReviewSummaryCard";
+import { ScanHistoricalComparisonSummaryCard } from "../components/ScanHistoricalComparisonSummaryCard";
+import { ScanAuthenticationSummaryCard } from "../components/ScanAuthenticationSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7642,6 +7652,16 @@ export function DashboardPage() {
       <ScanOcrSummaryCard />
       <ScanReconciliationSummaryCard />
       <ScanDefectsSummaryCard />
+      <ScanSpineTicksSummaryCard />
+      <ScanCornerEdgesSummaryCard />
+      <ScanSurfaceDefectsSummaryCard />
+      <ScanStructuralDamageSummaryCard />
+      <ScanDefectAggregationSummaryCard />
+      <ScanGradingAssistanceSummaryCard />
+      <ScanVisualEvidenceSummaryCard />
+      <ScanReviewSummaryCard />
+      <ScanHistoricalComparisonSummaryCard />
+      <ScanAuthenticationSummaryCard />
     </AppShell>
   );
 }

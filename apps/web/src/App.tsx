@@ -21,6 +21,16 @@ import { ScanBoundaryPage } from "./pages/ScanBoundaryPage";
 import { ScanOcrPage } from "./pages/ScanOcrPage";
 import { ScanReconciliationPage } from "./pages/ScanReconciliationPage";
 import { ScanDefectsPage } from "./pages/ScanDefectsPage";
+import { ScanSpineTicksPage } from "./pages/ScanSpineTicksPage";
+import { ScanCornerEdgesPage } from "./pages/ScanCornerEdgesPage";
+import { ScanSurfaceDefectsPage } from "./pages/ScanSurfaceDefectsPage";
+import { ScanStructuralDamagePage } from "./pages/ScanStructuralDamagePage";
+import { ScanDefectAggregationPage } from "./pages/ScanDefectAggregationPage";
+import { ScanGradingAssistancePage } from "./pages/ScanGradingAssistancePage";
+import { ScanVisualEvidencePage } from "./pages/ScanVisualEvidencePage";
+import { ScanReviewWorkspacePage } from "./pages/ScanReviewWorkspacePage";
+import { ScanHistoricalComparisonPage } from "./pages/ScanHistoricalComparisonPage";
+import { ScanAuthenticationPage } from "./pages/ScanAuthenticationPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -52,6 +62,16 @@ export default function App() {
         <Route path="/scan-ocr" element={<ScanOcrPage />} />
         <Route path="/scan-reconciliation" element={<ScanReconciliationPage />} />
         <Route path="/scan-defects" element={<ScanDefectsPage />} />
+        <Route path="/scan-spine-ticks" element={<ScanSpineTicksPage />} />
+        <Route path="/scan-corner-edges" element={<ScanCornerEdgesPage />} />
+        <Route path="/scan-surface-defects" element={<ScanSurfaceDefectsPage />} />
+        <Route path="/scan-structural-damage" element={<ScanStructuralDamagePage />} />
+        <Route path="/scan-defect-aggregation" element={<ScanDefectAggregationPage />} />
+        <Route path="/scan-grading-assistance" element={<ScanGradingAssistancePage />} />
+        <Route path="/scan-visual-evidence" element={<ScanVisualEvidencePage />} />
+        <Route path="/scan-review" element={<ScanReviewWorkspacePage />} />
+        <Route path="/scan-historical-comparison" element={<ScanHistoricalComparisonPage />} />
+        <Route path="/scan-authentication" element={<ScanAuthenticationPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />

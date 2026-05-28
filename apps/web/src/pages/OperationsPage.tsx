@@ -231,6 +231,16 @@ import { ScanBoundaryOpsPanel } from "../components/ScanBoundaryOpsPanel";
 import { ScanOcrOpsPanel } from "../components/ScanOcrOpsPanel";
 import { ScanReconciliationOpsPanel } from "../components/ScanReconciliationOpsPanel";
 import { ScanDefectsOpsPanel } from "../components/ScanDefectsOpsPanel";
+import { ScanSpineTicksOpsPanel } from "../components/ScanSpineTicksOpsPanel";
+import { ScanCornerEdgesOpsPanel } from "../components/ScanCornerEdgesOpsPanel";
+import { ScanSurfaceDefectsOpsPanel } from "../components/ScanSurfaceDefectsOpsPanel";
+import { ScanStructuralDamageOpsPanel } from "../components/ScanStructuralDamageOpsPanel";
+import { ScanDefectAggregationOpsPanel } from "../components/ScanDefectAggregationOpsPanel";
+import { ScanGradingAssistanceOpsPanel } from "../components/ScanGradingAssistanceOpsPanel";
+import { ScanVisualEvidenceOpsPanel } from "../components/ScanVisualEvidenceOpsPanel";
+import { ScanReviewOpsPanel } from "../components/ScanReviewOpsPanel";
+import { ScanHistoricalComparisonOpsPanel } from "../components/ScanHistoricalComparisonOpsPanel";
+import { ScanAuthenticationOpsPanel } from "../components/ScanAuthenticationOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17468,6 +17478,16 @@ export function OperationsPage() {
       <ScanOcrOpsPanel />
       <ScanReconciliationOpsPanel />
       <ScanDefectsOpsPanel />
+      <ScanSpineTicksOpsPanel />
+      <ScanCornerEdgesOpsPanel />
+      <ScanSurfaceDefectsOpsPanel />
+      <ScanStructuralDamageOpsPanel />
+      <ScanDefectAggregationOpsPanel />
+      <ScanGradingAssistanceOpsPanel />
+      <ScanVisualEvidenceOpsPanel />
+      <ScanReviewOpsPanel />
+      <ScanHistoricalComparisonOpsPanel />
+      <ScanAuthenticationOpsPanel />
     </AppShell>
   );
 }

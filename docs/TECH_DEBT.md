@@ -2,6 +2,162 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P40-16 — Authentication assistance layer (2026-05-27)
+
+- Architecture note: deterministic authentication-support signals, identity consistency checks, metadata conflicts, lineage integrity, historical consistency summaries, review-required flags, and replay-safe manifests are documented in `docs/SCAN_AUTHENTICATION_ASSISTANCE_ARCHITECTURE.md`.
+- This layer is review support only. It does not certify authenticity, detect restoration, assign grades, or mutate immutable upstream evidence.
+
+### Deferred scope (beyond P40-16)
+
+- Official authentication certification
+- Counterfeit classification
+- Restoration detection
+- External database authentication checks
+- Expert reviewer workflows
+- Slab-label authentication claims
+- Customer-facing authenticity certificate
+- ML-based counterfeit detection
+
+## P40-15 — Historical comparison engine (2026-05-27)
+
+- Architecture note: deterministic scan-history comparison, prior-scan selection, evidence deltas, geometry normalization, reliability issues, and replay-safe manifests are documented in `docs/SCAN_HISTORICAL_COMPARISON_ARCHITECTURE.md`.
+- This layer compares immutable scan history only. It does not assign grades, estimate FMV, or mutate historical records.
+
+### Deferred scope (beyond P40-15)
+
+- Multi-angle scan comparison
+- Slabbed/raw transformation comparison
+- Restoration inference
+- Value-change modeling
+- AI-based change interpretation
+- Automated rescan recommendations
+- Customer-facing historical condition reports
+- Batch comparison jobs
+
+## P40-14 — Review workspace (2026-05-27)
+
+- Architecture note: deterministic review sessions, decisions, notes, evidence actions, completion snapshots, append-only history, and replay-safe lineage are documented in `docs/SCAN_REVIEW_WORKSPACE_ARCHITECTURE.md`.
+- This layer remains human-review only. It records reviewer actions over immutable evidence without assigning official grades or mutating upstream artifacts.
+
+### Deferred scope (beyond P40-14)
+
+- Multi-reviewer approvals
+- Customer-facing review reports
+- Official certification workflow
+- Slab-label workflow
+- Role-based reviewer permissions
+- Grading override audit UI
+- Reviewer assignment queues
+- Review SLA automation
+
+## P40-13 — Visual evidence system (2026-05-27)
+
+- Architecture note: deterministic evidence packages, annotation overlays, review packet exports, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_VISUAL_EVIDENCE_ARCHITECTURE.md`.
+- This layer packages existing upstream evidence only. It does not detect new defects, assign grades, or alter source images.
+
+### Deferred scope (beyond P40-13)
+
+- PDF review packet export
+- Human review annotations
+- Customer-facing report generation
+- Official grading certificate views
+- Slab-label integration
+- AI narrative summaries
+- Multi-scan comparison overlays
+- Authentication presentation packages (full UI)
+
+## P40-12 — Grading assistance engine (2026-05-27)
+
+- Architecture note: deterministic support-band mapping, category pressure summaries, review-required flags, rubric versioning, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_GRADING_ASSISTANCE_ARCHITECTURE.md`.
+- This layer remains assistance-only. It provides support ranges without assigning an official grade, guaranteeing certification outcomes, pricing condition, or replacing human review.
+
+### Deferred scope (beyond P40-12)
+
+- Official grade assignment
+- PSA outcome prediction
+- ML grading models
+- Human review workflow
+- Certification workflow
+- Restoration determination
+- FMV/ROI grading coupling
+- Slab label generation
+- Marketplace valuation integration
+
+## P40-11 — Defect aggregation engine (2026-05-27)
+
+- Architecture note: deterministic cross-detector evidence loading, cluster formation, condition-region summaries, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_DEFECT_AGGREGATION_ARCHITECTURE.md`.
+- This layer remains evidence-only. It consolidates prior detector output without assigning grades, pricing impact, restoration labels, or final condition judgments.
+
+### Deferred scope (beyond P40-11)
+
+- Grading inference
+- Market-value modeling
+- AI evidence weighting
+- Restoration classification
+- ML condition scoring
+- Probabilistic grading models
+- Cross-scan comparative grading
+
+## P40-10 — Structural damage detection (2026-05-27)
+
+- Architecture note: deterministic structural-region isolation, geometry/anomaly segmentation, measurements, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_STRUCTURAL_DAMAGE_ARCHITECTURE.md`.
+- This layer remains evidence-only. It detects probable structural deformation and integrity anomalies without assigning grades, pricing impact, restoration labels, or final condition judgments.
+
+### Deferred scope (beyond P40-10)
+
+- AI structural reconstruction
+- Restoration detection
+- Staple rust analysis
+- Page-stack deformation analysis
+- Grade-impact modeling
+- ML-based structural classification
+- Advanced paper physics modeling
+
+## P40-08 — Corner / edge wear detection (2026-05-27)
+
+- Architecture note: deterministic corner/edge region isolation, wear segmentation, measurements, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_CORNER_EDGE_ARCHITECTURE.md`.
+- This layer remains evidence-only. It detects probable corner rounding and edge wear without assigning grades, pricing impact, restoration labels, or final condition judgments.
+
+### Deferred scope (beyond P40-08)
+
+- AI contour reconstruction
+- Restoration detection
+- Paper-fiber analysis
+- Grade-impact modeling
+- ML-based wear classification
+- Microscopic edge analysis
+
+## P40-09 — Surface defect detection (2026-05-27)
+
+- Architecture note: deterministic surface-region isolation, surface anomaly segmentation, measurements, append-only artifacts, and replay-safe lineage are documented in `docs/SCAN_SURFACE_DEFECT_ARCHITECTURE.md`.
+- This layer remains evidence-only. It detects probable surface-level interruptions without assigning grades, pricing impact, restoration labels, or final condition judgments.
+
+### Deferred scope (beyond P40-09)
+
+- AI surface segmentation
+- Restoration detection
+- Ink restoration analysis
+- Paper-fiber analysis
+- Grade-impact modeling
+- ML-based surface classification
+- Microscopic surface analysis
+- Multi-angle gloss / reflection analysis
+
+## P40-07 — Spine tick detection (2026-05-27)
+
+- Architecture note: deterministic spine-region isolation, tick segmentation, measurements, append-only spine artifacts, and replay-safe lineage are documented in `docs/SCAN_SPINE_TICK_ARCHITECTURE.md`.
+- This layer remains evidence-only. It detects probable spine stress ticks without assigning grades, pricing impact, restoration labels, or final condition judgments.
+
+### Deferred scope (beyond P40-07)
+
+- AI spine segmentation
+- Restoration detection
+- Print-break differentiation
+- Advanced paper-fiber analysis
+- Grade impact modeling
+- ML-based spine classification
+- Microscopic crease reconstruction
+
 ## P40-06 — Defect detection foundation (2026-05-27)
 
 - Architecture note: deterministic condition regions, scan-quality gates, baseline evidence anchors, append-only defect artifacts, and replay-safe lineage are documented in `docs/SCAN_DEFECT_FOUNDATION_ARCHITECTURE.md`.
@@ -9,9 +165,6 @@ Operational notes for intentional deferrals and known cleanup work. Entries shou
 
 ### Deferred scope (beyond P40-06)
 
-- Specialized spine tick detection
-- Specialized corner wear detection
-- Surface defect classification
 - Structural damage classification
 - AI defect segmentation
 - Grade-impact modeling

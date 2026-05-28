@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     scan_ocr_storage_root_raw: str = Field(default="", alias="SCAN_OCR_STORAGE_ROOT")
     scan_reconciliation_storage_root_raw: str = Field(default="", alias="SCAN_RECONCILIATION_STORAGE_ROOT")
     scan_defects_storage_root_raw: str = Field(default="", alias="SCAN_DEFECTS_STORAGE_ROOT")
+    scan_spine_ticks_storage_root_raw: str = Field(default="", alias="SCAN_SPINE_TICKS_STORAGE_ROOT")
+    scan_corner_edges_storage_root_raw: str = Field(default="", alias="SCAN_CORNER_EDGES_STORAGE_ROOT")
+    scan_surface_defects_storage_root_raw: str = Field(default="", alias="SCAN_SURFACE_DEFECTS_STORAGE_ROOT")
+    scan_structural_damage_storage_root_raw: str = Field(default="", alias="SCAN_STRUCTURAL_DAMAGE_STORAGE_ROOT")
+    scan_defect_aggregation_storage_root_raw: str = Field(default="", alias="SCAN_DEFECT_AGGREGATION_STORAGE_ROOT")
+    scan_grading_assistance_storage_root_raw: str = Field(default="", alias="SCAN_GRADING_ASSISTANCE_STORAGE_ROOT")
+    scan_visual_evidence_storage_root_raw: str = Field(default="", alias="SCAN_VISUAL_EVIDENCE_STORAGE_ROOT")
+    scan_review_storage_root_raw: str = Field(default="", alias="SCAN_REVIEW_STORAGE_ROOT")
+    scan_historical_comparison_storage_root_raw: str = Field(default="", alias="SCAN_HISTORICAL_COMPARISON_STORAGE_ROOT")
+    scan_authentication_storage_root_raw: str = Field(default="", alias="SCAN_AUTHENTICATION_STORAGE_ROOT")
     listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
@@ -137,6 +147,76 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "scan_defects"
+
+    @property
+    def scan_spine_ticks_storage_root(self) -> Path:
+        trimmed = self.scan_spine_ticks_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_spine_ticks"
+
+    @property
+    def scan_corner_edges_storage_root(self) -> Path:
+        trimmed = self.scan_corner_edges_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_corner_edges"
+
+    @property
+    def scan_surface_defects_storage_root(self) -> Path:
+        trimmed = self.scan_surface_defects_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_surface_defects"
+
+    @property
+    def scan_structural_damage_storage_root(self) -> Path:
+        trimmed = self.scan_structural_damage_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_structural_damage"
+
+    @property
+    def scan_defect_aggregation_storage_root(self) -> Path:
+        trimmed = self.scan_defect_aggregation_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_defect_aggregation"
+
+    @property
+    def scan_grading_assistance_storage_root(self) -> Path:
+        trimmed = self.scan_grading_assistance_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_grading_assistance"
+
+    @property
+    def scan_visual_evidence_storage_root(self) -> Path:
+        trimmed = self.scan_visual_evidence_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_visual_evidence"
+
+    @property
+    def scan_review_storage_root(self) -> Path:
+        trimmed = self.scan_review_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_review"
+
+    @property
+    def scan_historical_comparison_storage_root(self) -> Path:
+        trimmed = self.scan_historical_comparison_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_historical_comparison"
+
+    @property
+    def scan_authentication_storage_root(self) -> Path:
+        trimmed = self.scan_authentication_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_authentication"
 
     @property
     def listing_exports_storage_root(self) -> Path:

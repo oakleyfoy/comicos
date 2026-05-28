@@ -15,6 +15,16 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "scan_ocr": "P40-04",
     "scan_reconciliation": "P40-05",
     "scan_defects": "P40-06",
+    "scan_spine_ticks": "P40-07",
+    "scan_corner_edges": "P40-08",
+    "scan_surface_defects": "P40-09",
+    "scan_structural_damage": "P40-10",
+    "scan_defect_aggregation": "P40-11",
+    "scan_grading_assistance": "P40-12",
+    "scan_visual_evidence": "P40-13",
+    "scan_review": "P40-14",
+    "scan_historical_comparison": "P40-15",
+    "scan_authentication": "P40-16",
 }
 
 
