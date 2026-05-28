@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Body, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -1120,6 +1120,17 @@ from app.api.scan_visual_evidence import attach_scan_visual_evidence_layer
 from app.api.scan_review import attach_scan_review_layer
 from app.api.scan_historical_comparison import attach_scan_historical_comparison_layer
 from app.api.scan_authentication import attach_scan_authentication_layer
+from app.api.scan_intelligence_feed import attach_scan_intelligence_feed_layer
+from app.api.automation_batch import attach_automation_batch_layer
+from app.api.automation_notifications import attach_automation_notifications_layer
+from app.api.automation_ops import attach_automation_ops_layer
+from app.api.automation_analytics import attach_automation_analytics_layer
+from app.api.automation_rules import attach_automation_rules_layer
+from app.api.automation_jobs import attach_automation_jobs_layer
+from app.api.automation_recovery import attach_automation_recovery_layer
+from app.api.automation_scheduling import attach_automation_scheduling_layer
+from app.api.automation_workers import attach_automation_workers_layer
+from app.api.scan_replay import attach_scan_replay_layer
 
 
 settings = get_settings()
@@ -1151,6 +1162,44 @@ attach_scan_visual_evidence_layer(app)
 attach_scan_review_layer(app)
 attach_scan_historical_comparison_layer(app)
 attach_scan_authentication_layer(app)
+attach_scan_intelligence_feed_layer(app)
+attach_automation_batch_layer(app)
+attach_automation_notifications_layer(app)
+attach_automation_ops_layer(app)
+attach_automation_analytics_layer(app)
+attach_automation_rules_layer(app)
+attach_automation_jobs_layer(app)
+attach_automation_recovery_layer(app)
+attach_automation_scheduling_layer(app)
+attach_automation_workers_layer(app)
+attach_scan_replay_layer(app)
+
+
+@app.exception_handler(HTTPException)
+async def _v1_http_exception_dispatcher(request: Request, exc: HTTPException):
+    from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
+
+    path = request.url.path
+    if not (path.startswith("/api/v1/") or path.startswith("/ops/") or path.startswith("/market-")):
+        return await default_http_exception_handler(request, exc)
+
+    if isinstance(exc.detail, str):
+        message = exc.detail
+        details = None
+    elif isinstance(exc.detail, dict):
+        message = str(exc.detail.get("message") or exc.detail.get("msg") or "Request failed")
+        details = exc.detail
+    elif isinstance(exc.detail, list):
+        message = "Request failed"
+        details = exc.detail
+    else:
+        message = str(exc.detail)
+        details = None
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": f"HTTP_{exc.status_code}", "message": message, "details": details}},
+    )
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:

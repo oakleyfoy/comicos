@@ -104,6 +104,17 @@ import { ScanVisualEvidenceSummaryCard } from "../components/ScanVisualEvidenceS
 import { ScanReviewSummaryCard } from "../components/ScanReviewSummaryCard";
 import { ScanHistoricalComparisonSummaryCard } from "../components/ScanHistoricalComparisonSummaryCard";
 import { ScanAuthenticationSummaryCard } from "../components/ScanAuthenticationSummaryCard";
+import { ScanIntelligenceFeedSummaryCard } from "../components/ScanIntelligenceFeedSummaryCard";
+import { ScanReplaySummaryCard } from "../components/ScanReplaySummaryCard";
+import { AutomationBatchSummaryCard } from "../components/AutomationBatchSummaryCard";
+import { AutomationNotificationsSummaryCard } from "../components/AutomationNotificationsSummaryCard";
+import { AutomationAnalyticsSummaryCard } from "../components/AutomationAnalyticsSummaryCard";
+import { AutomationOpsSummaryCard } from "../components/AutomationOpsSummaryCard";
+import { AutomationRulesSummaryCard } from "../components/AutomationRulesSummaryCard";
+import { AutomationJobsSummaryCard } from "../components/AutomationJobsSummaryCard";
+import { AutomationRecoverySummaryCard } from "../components/AutomationRecoverySummaryCard";
+import { AutomationWorkersSummaryCard } from "../components/AutomationWorkersSummaryCard";
+import { AutomationWorkflowsSummaryCard } from "../components/AutomationWorkflowsSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7662,6 +7673,17 @@ export function DashboardPage() {
       <ScanReviewSummaryCard />
       <ScanHistoricalComparisonSummaryCard />
       <ScanAuthenticationSummaryCard />
+      <ScanIntelligenceFeedSummaryCard />
+      <ScanReplaySummaryCard />
+      <AutomationBatchSummaryCard />
+      <AutomationNotificationsSummaryCard />
+      <AutomationAnalyticsSummaryCard />
+      <AutomationOpsSummaryCard />
+      <AutomationRulesSummaryCard />
+      <AutomationJobsSummaryCard />
+      <AutomationRecoverySummaryCard />
+      <AutomationWorkersSummaryCard />
+      <AutomationWorkflowsSummaryCard />
     </AppShell>
   );
 }

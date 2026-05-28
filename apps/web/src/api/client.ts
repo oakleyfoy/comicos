@@ -9558,6 +9558,1432 @@ export interface ScanAuthenticationIssueListResponse {
   issue_type_counts: Record<string, number>;
 }
 
+export interface ScanIntelligenceFeedRunCreate {
+  scan_image_id: number;
+  reconciliation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  authentication_run_id?: number | null;
+}
+
+export interface ScanIntelligenceFeedRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id: number;
+  upload_session_id?: number | null;
+  ingestion_batch_id?: number | null;
+  normalization_run_id?: number | null;
+  boundary_run_id?: number | null;
+  ocr_run_id?: number | null;
+  reconciliation_run_id?: number | null;
+  defect_run_id?: number | null;
+  spine_tick_run_id?: number | null;
+  corner_edge_run_id?: number | null;
+  surface_defect_run_id?: number | null;
+  structural_damage_run_id?: number | null;
+  defect_aggregation_run_id?: number | null;
+  grading_assistance_run_id?: number | null;
+  visual_evidence_run_id?: number | null;
+  review_session_id?: number | null;
+  historical_comparison_run_id?: number | null;
+  authentication_run_id?: number | null;
+  source_checksum: string;
+  feed_checksum: string;
+  feed_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  total_events: number;
+  total_issues: number;
+  review_required_count: number;
+  error_count: number;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanIntelligenceFeedEventRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  event_rank: number;
+  timeline_rank: number;
+  event_category: string;
+  event_type: string;
+  severity: string;
+  source_system: string;
+  event_occurred_at: string;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  lineage_checksum?: string | null;
+  event_key: string;
+  event_payload_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedArtifactRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  media_type?: string | null;
+  text_preview?: string | null;
+  body_base64?: string | null;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedIssueRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  issue_type: string;
+  severity: string;
+  source_system: string;
+  source_record_id?: number | null;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedHistoryRead {
+  id: number;
+  owner_user_id: number;
+  feed_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanIntelligenceFeedRunDetail extends ScanIntelligenceFeedRunRead {
+  events: ScanIntelligenceFeedEventRead[];
+  artifacts: ScanIntelligenceFeedArtifactRead[];
+  issues: ScanIntelligenceFeedIssueRead[];
+  history: ScanIntelligenceFeedHistoryRead[];
+  original_scan_checksum?: string | null;
+  normalization_checksum?: string | null;
+  boundary_checksum?: string | null;
+  ocr_checksum?: string | null;
+  reconciliation_checksum?: string | null;
+  defect_checksum?: string | null;
+  spine_tick_checksum?: string | null;
+  corner_edge_checksum?: string | null;
+  surface_defect_checksum?: string | null;
+  structural_damage_checksum?: string | null;
+  defect_aggregation_checksum?: string | null;
+  grading_assistance_checksum?: string | null;
+  visual_evidence_checksum?: string | null;
+  review_checksum?: string | null;
+  historical_comparison_checksum?: string | null;
+  authentication_checksum?: string | null;
+}
+
+export interface ScanIntelligenceFeedRunListResponse {
+  items: ScanIntelligenceFeedRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  total_event_count: number;
+  total_review_required_count: number;
+  total_error_count: number;
+}
+
+export interface ScanIntelligenceFeedEventListResponse {
+  items: ScanIntelligenceFeedEventRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  category_counts: Record<string, number>;
+  source_system_counts: Record<string, number>;
+}
+
+export interface ScanIntelligenceFeedIssueListResponse {
+  items: ScanIntelligenceFeedIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  issue_type_counts: Record<string, number>;
+  source_system_counts: Record<string, number>;
+}
+
+export interface ScanReplayRunCreate {
+  scan_image_id?: number | null;
+  replay_scope: "SINGLE_SCAN" | "FULL_P40_PIPELINE" | "SELECTED_STAGE" | "OPS_AUDIT" | "BATCH_REPLAY";
+  selected_phase_key?: string | null;
+}
+
+export interface ScanReplayRunRead {
+  id: number;
+  owner_user_id: number;
+  scan_image_id?: number | null;
+  replay_scope: string;
+  source_checksum: string;
+  replay_checksum: string;
+  replay_status: string;
+  engine_version: string;
+  input_manifest_json: Record<string, unknown>;
+  output_manifest_json: Record<string, unknown>;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface ScanReplayStepRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_rank: number;
+  phase_key: string;
+  source_record_id?: number | null;
+  expected_checksum?: string | null;
+  observed_checksum?: string | null;
+  replay_step_status: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayCheckRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_id?: number | null;
+  check_type: string;
+  check_status: string;
+  expected_value?: string | null;
+  observed_value?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayDiscrepancyRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  step_id?: number | null;
+  discrepancy_type: string;
+  severity: string;
+  expected_value?: string | null;
+  observed_value?: string | null;
+  discrepancy_message: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayArtifactRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  media_type?: string | null;
+  text_preview?: string | null;
+  body_base64?: string | null;
+  created_at: string;
+}
+
+export interface ScanReplayIssueRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayHistoryRead {
+  id: number;
+  owner_user_id: number;
+  replay_run_id: number;
+  event_type: string;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanReplayRunDetail extends ScanReplayRunRead {
+  steps: ScanReplayStepRead[];
+  checks: ScanReplayCheckRead[];
+  discrepancies: ScanReplayDiscrepancyRead[];
+  artifacts: ScanReplayArtifactRead[];
+  issues: ScanReplayIssueRead[];
+  history: ScanReplayHistoryRead[];
+  original_scan_checksum?: string | null;
+  scan_feed_checksum?: string | null;
+  lineage_chain: Array<Record<string, unknown>>;
+  critical_discrepancy_count: number;
+}
+
+export interface ScanReplayRunListResponse {
+  items: ScanReplayRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  critical_discrepancy_count: number;
+  mismatch_count: number;
+}
+
+export interface ScanReplayStepListResponse {
+  items: ScanReplayStepRead[];
+  pagination: MarketApiV1Pagination;
+  step_status_counts: Record<string, number>;
+}
+
+export interface ScanReplayCheckListResponse {
+  items: ScanReplayCheckRead[];
+  pagination: MarketApiV1Pagination;
+  check_status_counts: Record<string, number>;
+  check_type_counts: Record<string, number>;
+}
+
+export interface ScanReplayDiscrepancyListResponse {
+  items: ScanReplayDiscrepancyRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  discrepancy_type_counts: Record<string, number>;
+}
+
+export interface ScanReplayIssueListResponse {
+  items: ScanReplayIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+  issue_type_counts: Record<string, number>;
+}
+
+export interface AutomationJobCreate {
+  queue_key: string;
+  queue_name?: string | null;
+  queue_category:
+    | "SCAN_PIPELINE"
+    | "REPLAY"
+    | "NOTIFICATION"
+    | "MAINTENANCE"
+    | "BATCH"
+    | "REVIEW"
+    | "SYSTEM";
+  organization_id?: number | null;
+  parent_job_id?: number | null;
+  job_key: string;
+  job_type: string;
+  priority: "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
+  payload_snapshot_json: Record<string, unknown>;
+  source_record_type?: string | null;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  available_at?: string | null;
+  max_attempts?: number;
+  replay_safe?: boolean;
+  idempotency_key?: string | null;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface AutomationQueueRead {
+  id: number;
+  queue_key: string;
+  queue_name: string;
+  queue_category: string;
+  queue_status: string;
+  deterministic_ordering_enabled: boolean;
+  max_concurrency: number;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  total_jobs: number;
+  pending_jobs: number;
+  failed_jobs: number;
+  dead_letter_jobs: number;
+  reserved_jobs: number;
+}
+
+export interface AutomationJobAttemptRead {
+  id: number;
+  job_id: number;
+  attempt_number: number;
+  attempt_status: string;
+  worker_identifier?: string | null;
+  started_at: string;
+  completed_at?: string | null;
+  failure_reason?: string | null;
+  execution_time_ms?: number | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationJobDependencyRead {
+  id: number;
+  job_id: number;
+  depends_on_job_id: number;
+  dependency_status: string;
+  created_at: string;
+}
+
+export interface AutomationJobArtifactRead {
+  id: number;
+  job_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  media_type?: string | null;
+  text_preview?: string | null;
+  body_base64?: string | null;
+  created_at: string;
+}
+
+export interface AutomationJobIssueRead {
+  id: number;
+  job_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationJobHistoryRead {
+  id: number;
+  job_id: number;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationJobRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  queue_id: number;
+  parent_job_id?: number | null;
+  job_key: string;
+  job_type: string;
+  job_status: string;
+  priority: string;
+  deterministic_rank: number;
+  payload_snapshot_json: Record<string, unknown>;
+  payload_checksum: string;
+  source_record_type?: string | null;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  reservation_token?: string | null;
+  reserved_until?: string | null;
+  available_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  failed_at?: string | null;
+  max_attempts: number;
+  current_attempt_count: number;
+  replay_safe: boolean;
+  idempotency_key?: string | null;
+  job_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  queue_key?: string | null;
+  queue_name?: string | null;
+  queue_status?: string | null;
+}
+
+export interface AutomationJobDetail extends AutomationJobRead {
+  attempts: AutomationJobAttemptRead[];
+  dependencies: AutomationJobDependencyRead[];
+  artifacts: AutomationJobArtifactRead[];
+  issues: AutomationJobIssueRead[];
+  history: AutomationJobHistoryRead[];
+  dependency_graph: Array<Record<string, unknown>>;
+}
+
+export interface AutomationJobListResponse {
+  items: AutomationJobRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  priority_counts: Record<string, number>;
+  queue_counts: Record<string, number>;
+  failed_job_count: number;
+  dead_letter_count: number;
+  reserved_job_count: number;
+}
+
+export interface AutomationQueueListResponse {
+  items: AutomationQueueRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  queue_category_counts: Record<string, number>;
+}
+
+export interface AutomationJobAttemptListResponse {
+  items: AutomationJobAttemptRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AutomationJobHistoryListResponse {
+  items: AutomationJobHistoryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AutomationJobIssueListResponse {
+  items: AutomationJobIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationWorkerRead {
+  id: number;
+  worker_key: string;
+  worker_identifier: string;
+  worker_type: string;
+  worker_status: string;
+  process_identifier?: string | null;
+  hostname?: string | null;
+  queue_scope_json: Record<string, unknown>;
+  current_job_id?: number | null;
+  max_concurrency: number;
+  last_heartbeat_at?: string | null;
+  startup_at: string;
+  shutdown_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  active_lease_count: number;
+  active_execution_count: number;
+  stale: boolean;
+  heartbeat_age_seconds?: number | null;
+}
+
+export interface AutomationWorkerHeartbeatRead {
+  id: number;
+  worker_id: number;
+  heartbeat_status: string;
+  active_job_count: number;
+  memory_usage_mb?: number | null;
+  cpu_usage_percent?: number | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkerLeaseRead {
+  id: number;
+  worker_id: number;
+  job_id: number;
+  reservation_token: string;
+  lease_status: string;
+  lease_expires_at: string;
+  acquired_at: string;
+  released_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkerExecutionRead {
+  id: number;
+  worker_id: number;
+  job_id: number;
+  execution_status: string;
+  execution_rank: number;
+  started_at: string;
+  completed_at?: string | null;
+  execution_time_ms?: number | null;
+  execution_snapshot_json: Record<string, unknown>;
+  execution_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkerIssueRead {
+  id: number;
+  worker_id: number;
+  job_id?: number | null;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkerHistoryRead {
+  id: number;
+  worker_id: number;
+  job_id?: number | null;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkerDetail extends AutomationWorkerRead {
+  heartbeats: AutomationWorkerHeartbeatRead[];
+  leases: AutomationWorkerLeaseRead[];
+  executions: AutomationWorkerExecutionRead[];
+  issues: AutomationWorkerIssueRead[];
+  history: AutomationWorkerHistoryRead[];
+}
+
+export interface AutomationWorkerListResponse {
+  items: AutomationWorkerRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  worker_type_counts: Record<string, number>;
+  stale_count: number;
+  active_execution_count: number;
+  runtime_issue_count: number;
+}
+
+export interface AutomationWorkerExecutionListResponse {
+  items: AutomationWorkerExecutionRead[];
+  pagination: MarketApiV1Pagination;
+  execution_status_counts: Record<string, number>;
+}
+
+export interface AutomationWorkerHistoryListResponse {
+  items: AutomationWorkerHistoryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AutomationWorkerIssueListResponse {
+  items: AutomationWorkerIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationScheduleCreate {
+  schedule_name: string;
+  schedule_type: string;
+  cron_expression?: string | null;
+  interval_seconds?: number | null;
+  next_run_at?: string | null;
+  replay_safe?: boolean;
+  metadata_json?: Record<string, unknown>;
+  workflow_key?: string | null;
+}
+
+export interface AutomationTriggerCreate {
+  trigger_type: string;
+  source_event_type: string;
+  source_record_type?: string | null;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  trigger_payload_json?: Record<string, unknown>;
+  metadata_json?: Record<string, unknown>;
+  workflow_key?: string | null;
+}
+
+export interface AutomationScheduleRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  schedule_key: string;
+  schedule_name: string;
+  schedule_type: string;
+  schedule_status: string;
+  cron_expression?: string | null;
+  interval_seconds?: number | null;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  replay_safe: boolean;
+  deterministic_ordering_enabled: boolean;
+  schedule_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationTriggerRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  trigger_key: string;
+  trigger_type: string;
+  trigger_status: string;
+  source_event_type: string;
+  source_record_type?: string | null;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  trigger_payload_json: Record<string, unknown>;
+  trigger_checksum: string;
+  triggered_at: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkflowStepRead {
+  id: number;
+  workflow_id: number;
+  step_rank: number;
+  step_key: string;
+  job_type: string;
+  dependency_mode: string;
+  delay_seconds?: number | null;
+  required_success: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkflowExecutionRead {
+  id: number;
+  workflow_id: number;
+  trigger_id?: number | null;
+  schedule_id?: number | null;
+  execution_status: string;
+  execution_checksum: string;
+  execution_manifest_json: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkflowIssueRead {
+  id: number;
+  workflow_id: number;
+  execution_id?: number | null;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkflowHistoryRead {
+  id: number;
+  workflow_id: number;
+  execution_id?: number | null;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationWorkflowRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  workflow_key: string;
+  workflow_name: string;
+  workflow_status: string;
+  workflow_category: string;
+  replay_safe: boolean;
+  deterministic_ordering_enabled: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  steps: AutomationWorkflowStepRead[];
+  latest_execution?: AutomationWorkflowExecutionRead | null;
+  blocked_step_count: number;
+  pending_trigger_count: number;
+}
+
+export interface AutomationScheduleListResponse {
+  items: AutomationScheduleRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  type_counts: Record<string, number>;
+}
+
+export interface AutomationTriggerListResponse {
+  items: AutomationTriggerRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  type_counts: Record<string, number>;
+  pending_trigger_count: number;
+}
+
+export interface AutomationWorkflowListResponse {
+  items: AutomationWorkflowRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  category_counts: Record<string, number>;
+  blocked_workflow_count: number;
+  failed_execution_count: number;
+}
+
+export interface AutomationWorkflowExecutionListResponse {
+  items: AutomationWorkflowExecutionRead[];
+  pagination: MarketApiV1Pagination;
+  execution_status_counts: Record<string, number>;
+}
+
+export interface AutomationWorkflowHistoryListResponse {
+  items: AutomationWorkflowHistoryRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AutomationWorkflowIssueListResponse {
+  items: AutomationWorkflowIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationRetryPolicyRead {
+  id: number;
+  policy_key: string;
+  policy_name: string;
+  retry_mode: string;
+  max_attempts: number;
+  base_delay_seconds: number;
+  max_delay_seconds: number;
+  deterministic_backoff_enabled: boolean;
+  dead_letter_enabled: boolean;
+  replay_safe: boolean;
+  policy_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRecoveryArtifactRead {
+  id: number;
+  recovery_run_id: number;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRecoveryHistoryRead {
+  id: number;
+  recovery_run_id: number;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRecoveryIssueRead {
+  id: number;
+  recovery_run_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationFailureEventRead {
+  id: number;
+  job_id?: number | null;
+  worker_execution_id?: number | null;
+  failure_type: string;
+  failure_severity: string;
+  failure_snapshot_json: Record<string, unknown>;
+  failure_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationDeadLetterRead {
+  id: number;
+  original_job_id: number;
+  dead_letter_reason: string;
+  dead_letter_status: string;
+  failure_count: number;
+  source_checksum?: string | null;
+  dead_letter_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRecoveryRunRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  job_id: number;
+  worker_execution_id?: number | null;
+  retry_policy_id?: number | null;
+  recovery_status: string;
+  recovery_type: string;
+  recovery_rank: number;
+  recovery_checksum: string;
+  recovery_manifest_json: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  retry_policy?: AutomationRetryPolicyRead | null;
+  dead_letter?: AutomationDeadLetterRead | null;
+  failure_events: AutomationFailureEventRead[];
+  artifacts: AutomationRecoveryArtifactRead[];
+  issues: AutomationRecoveryIssueRead[];
+  history: AutomationRecoveryHistoryRead[];
+}
+
+export interface AutomationRecoveryListResponse {
+  items: AutomationRecoveryRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  recovery_type_counts: Record<string, number>;
+  dead_letter_count: number;
+  critical_failure_count: number;
+}
+
+export interface AutomationDeadLetterListResponse {
+  items: AutomationDeadLetterRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+}
+
+export interface AutomationFailureEventListResponse {
+  items: AutomationFailureEventRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationRecoveryIssueListResponse {
+  items: AutomationRecoveryIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationBatchArtifactRead {
+  id: number;
+  batch_run_id?: number | null;
+  maintenance_job_id?: number | null;
+  artifact_type: string;
+  storage_backend: string;
+  storage_path: string;
+  artifact_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationBatchIssueRead {
+  id: number;
+  batch_run_id?: number | null;
+  maintenance_job_id?: number | null;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationBatchHistoryRead {
+  id: number;
+  batch_run_id?: number | null;
+  maintenance_job_id?: number | null;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationBatchChunkRead {
+  id: number;
+  batch_run_id: number;
+  chunk_rank: number;
+  chunk_status: string;
+  partition_key: string;
+  item_start: number;
+  item_end: number;
+  item_count: number;
+  chunk_checksum: string;
+  worker_execution_id?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationMaintenanceResultRead {
+  id: number;
+  maintenance_job_id: number;
+  result_type: string;
+  result_status: string;
+  result_snapshot_json: Record<string, unknown>;
+  result_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationMaintenanceJobRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  maintenance_key: string;
+  maintenance_type: string;
+  maintenance_status: string;
+  maintenance_scope: string;
+  replay_safe: boolean;
+  maintenance_checksum: string;
+  metadata_json: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+  created_at: string;
+  results: AutomationMaintenanceResultRead[];
+}
+
+export interface AutomationBatchRunRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  batch_key: string;
+  batch_type: string;
+  batch_status: string;
+  source_scope: string;
+  deterministic_partitioning_enabled: boolean;
+  replay_safe: boolean;
+  total_item_count: number;
+  completed_item_count: number;
+  failed_item_count: number;
+  batch_checksum: string;
+  manifest_json: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  chunks: AutomationBatchChunkRead[];
+  maintenance_jobs: AutomationMaintenanceJobRead[];
+  artifacts: AutomationBatchArtifactRead[];
+  issues: AutomationBatchIssueRead[];
+  history: AutomationBatchHistoryRead[];
+}
+
+export interface AutomationBatchListResponse {
+  items: AutomationBatchRunRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  batch_type_counts: Record<string, number>;
+  failed_batch_count: number;
+  maintenance_job_count: number;
+  integrity_audit_count: number;
+}
+
+export interface AutomationBatchChunkListResponse {
+  items: AutomationBatchChunkRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+}
+
+export interface AutomationMaintenanceJobListResponse {
+  items: AutomationMaintenanceJobRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  maintenance_type_counts: Record<string, number>;
+}
+
+export interface AutomationMaintenanceResultListResponse {
+  items: AutomationMaintenanceResultRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+}
+
+export interface AutomationBatchIssueListResponse {
+  items: AutomationBatchIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationNotificationArtifactRead {
+  artifact_type: string;
+  storage_path: string;
+  artifact_checksum: string;
+}
+
+export interface AutomationNotificationDeliveryRead {
+  id: number;
+  notification_id: number;
+  delivery_channel: string;
+  delivery_status: string;
+  delivery_rank: number;
+  destination_key: string;
+  attempted_at?: string | null;
+  delivered_at?: string | null;
+  failure_reason?: string | null;
+  delivery_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationNotificationPreferenceRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  preference_key: string;
+  notification_type: string;
+  delivery_channel: string;
+  enabled: boolean;
+  escalation_enabled: boolean;
+  quiet_hours_json?: Record<string, unknown> | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAlertRead {
+  id: number;
+  alert_key: string;
+  alert_type: string;
+  alert_severity: string;
+  alert_status: string;
+  source_notification_id?: number | null;
+  escalation_level: string;
+  alert_checksum: string;
+  replay_safe: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  acknowledged_at?: string | null;
+}
+
+export interface AutomationNotificationIssueRead {
+  id: number;
+  notification_id?: number | null;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationNotificationHistoryRead {
+  id: number;
+  notification_id?: number | null;
+  alert_id?: number | null;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  event_message: string;
+  event_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationNotificationRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  notification_key: string;
+  notification_type: string;
+  notification_status: string;
+  source_event_type: string;
+  source_record_type?: string | null;
+  source_record_id?: number | null;
+  source_checksum?: string | null;
+  notification_payload_json: Record<string, unknown>;
+  notification_checksum: string;
+  replay_safe: boolean;
+  created_at: string;
+  delivered_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  rendered_subject?: string | null;
+  rendered_body?: string | null;
+  notification_manifest_json: Record<string, unknown>;
+  deliveries: AutomationNotificationDeliveryRead[];
+  alerts: AutomationAlertRead[];
+  issues: AutomationNotificationIssueRead[];
+  history: AutomationNotificationHistoryRead[];
+  artifacts: AutomationNotificationArtifactRead[];
+}
+
+export interface AutomationNotificationListResponse {
+  items: AutomationNotificationRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  type_counts: Record<string, number>;
+  queued_count: number;
+  failed_delivery_count: number;
+  active_alert_count: number;
+  critical_alert_count: number;
+}
+
+export interface AutomationAlertListResponse {
+  items: AutomationAlertRead[];
+  pagination: MarketApiV1Pagination;
+  status_counts: Record<string, number>;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationNotificationPreferenceListResponse {
+  items: AutomationNotificationPreferenceRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AutomationNotificationIssueListResponse {
+  items: AutomationNotificationIssueRead[];
+  pagination: MarketApiV1Pagination;
+  severity_counts: Record<string, number>;
+}
+
+export interface AutomationOpsSnapshotRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  snapshot_key: string;
+  snapshot_type: string;
+  snapshot_status: string;
+  queue_depth: number;
+  active_workers: number;
+  active_workflows: number;
+  failed_jobs: number;
+  dead_letter_count: number;
+  replay_warning_count: number;
+  checksum_warning_count: number;
+  snapshot_checksum: string;
+  snapshot_manifest_json: Record<string, unknown>;
+  replay_safe: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationOpsMetricRead {
+  id: number;
+  snapshot_id: number;
+  metric_key: string;
+  metric_category: string;
+  metric_value: string;
+  metric_status: string;
+  metric_rank: number;
+  metric_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationOpsAuditRead {
+  id: number;
+  owner_user_id?: number | null;
+  snapshot_id?: number | null;
+  audit_key: string;
+  audit_type: string;
+  audit_status: string;
+  audit_scope: string;
+  replay_safe: boolean;
+  audit_checksum: string;
+  audit_result_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationOpsIssueRead {
+  id: number;
+  snapshot_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationOpsListResponse {
+  items: AutomationOpsSnapshotRead[] | AutomationOpsMetricRead[] | AutomationOpsAuditRead[] | AutomationOpsIssueRead[];
+  pagination: MarketApiV1Pagination;
+  replay_warning_count?: number;
+  critical_issue_count?: number;
+  failed_audit_count?: number;
+}
+
+export interface AutomationOpsSystemHealthRead {
+  snapshot_status: string;
+  queue_depth: number;
+  active_workers: number;
+  failed_jobs: number;
+  dead_letter_count: number;
+  replay_warning_count: number;
+  checksum_warning_count: number;
+  critical_issue_count: number;
+  failed_audit_count: number;
+  latest_snapshot_id?: number | null;
+  latest_snapshot_checksum?: string | null;
+}
+
+export interface AutomationAnalyticsSnapshotRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  snapshot_key: string;
+  analytics_type: string;
+  analytics_scope: string;
+  analytics_status: string;
+  replay_safe: boolean;
+  deterministic_ordering_enabled: boolean;
+  snapshot_checksum: string;
+  snapshot_manifest_json: Record<string, unknown>;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAnalyticsMetricRead {
+  id: number;
+  snapshot_id: number;
+  metric_key: string;
+  metric_category: string;
+  metric_value: string;
+  metric_delta?: string | null;
+  metric_status: string;
+  metric_rank: number;
+  metric_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAnalyticsTrendRead {
+  id: number;
+  snapshot_id: number;
+  trend_key: string;
+  trend_type: string;
+  trend_direction: string;
+  historical_window: number;
+  trend_value: string;
+  trend_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAnalyticsComparisonRead {
+  id: number;
+  snapshot_id: number;
+  comparison_key: string;
+  comparison_type: string;
+  baseline_snapshot_id?: number | null;
+  comparison_result_json: Record<string, unknown>;
+  comparison_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAnalyticsIssueRead {
+  id: number;
+  snapshot_id: number;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationAnalyticsListResponse {
+  items: AutomationAnalyticsSnapshotRead[] | AutomationAnalyticsMetricRead[] | AutomationAnalyticsTrendRead[] | AutomationAnalyticsComparisonRead[] | AutomationAnalyticsIssueRead[];
+  pagination: MarketApiV1Pagination;
+  replay_drift_count?: number;
+  failure_warning_count?: number;
+  utilization_warning_count?: number;
+}
+
+export interface AutomationAnalyticsSystemIntelligenceRead {
+  analytics_status: string;
+  queue_throughput: number;
+  worker_utilization: string;
+  failure_rate: string;
+  replay_warning_trend_count: number;
+  dead_letter_growth: number;
+  workflow_throughput: number;
+  notification_delivery_rate: string;
+  batch_completion_rate: string;
+  latest_snapshot_id?: number | null;
+  latest_snapshot_checksum?: string | null;
+}
+
+export interface AutomationRuleVersionRead {
+  id: number;
+  rule_id: number;
+  version_number: number;
+  version_status: string;
+  condition_expression: string;
+  action_definition_json: Array<Record<string, unknown>>;
+  evaluation_scope: string;
+  replay_safe: boolean;
+  version_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRuleRead {
+  id: number;
+  owner_user_id?: number | null;
+  organization_id?: number | null;
+  rule_key: string;
+  rule_name: string;
+  rule_category: string;
+  rule_status: string;
+  current_version_id?: number | null;
+  replay_safe: boolean;
+  deterministic_ordering_enabled: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  current_version?: AutomationRuleVersionRead | null;
+}
+
+export interface AutomationRuleEvaluationRead {
+  id: number;
+  rule_id: number;
+  rule_version_id: number;
+  evaluation_type: string;
+  evaluation_status: string;
+  evaluation_scope: string;
+  evaluation_input_json: Record<string, unknown>;
+  evaluation_result_json: Record<string, unknown>;
+  matched: boolean;
+  evaluation_rank: number;
+  evaluation_checksum: string;
+  replay_safe: boolean;
+  started_at: string;
+  completed_at?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRuleActionRead {
+  id: number;
+  evaluation_id: number;
+  action_type: string;
+  action_status: string;
+  action_rank: number;
+  target_scope: string;
+  action_payload_json: Record<string, unknown>;
+  action_checksum: string;
+  replay_safe: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRuleIssueRead {
+  id: number;
+  rule_id: number;
+  rule_version_id?: number | null;
+  evaluation_id?: number | null;
+  issue_type: string;
+  severity: string;
+  issue_message: string;
+  issue_checksum: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AutomationRuleListResponse {
+  items: Array<AutomationRuleRead | AutomationRuleVersionRead | AutomationRuleEvaluationRead | AutomationRuleActionRead | AutomationRuleIssueRead>;
+  pagination: MarketApiV1Pagination;
+  active_rule_count?: number;
+  failed_evaluation_count?: number;
+  replay_drift_count?: number;
+  action_failure_count?: number;
+  paused_rule_count?: number;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -13514,6 +14940,766 @@ export const apiClient = {
   }): Promise<ScanAuthenticationRunListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanAuthenticationRunListResponse>(`/ops/scan-authentication/conflicts${q}`);
+  },
+
+  runScanIntelligenceFeed(payload: ScanIntelligenceFeedRunCreate): Promise<ScanIntelligenceFeedRunDetail> {
+    return requestScanV1<ScanIntelligenceFeedRunDetail>("/scan-intelligence-feed/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanIntelligenceFeedRuns(params?: {
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedRunListResponse>(`/scan-intelligence-feed/runs${q}`);
+  },
+
+  getScanIntelligenceFeedRun(runId: number): Promise<ScanIntelligenceFeedRunDetail> {
+    return requestScanV1<ScanIntelligenceFeedRunDetail>(`/scan-intelligence-feed/runs/${runId}`);
+  },
+
+  listScanIntelligenceFeedEvents(params?: {
+    run_id?: number;
+    severity?: string;
+    event_category?: string;
+    source_system?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/scan-intelligence-feed/events${q}`);
+  },
+
+  listScanIntelligenceFeedIssues(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedIssueListResponse>(`/scan-intelligence-feed/issues${q}`);
+  },
+
+  getScanIntelligenceFeedArtifact(artifactId: number): Promise<ScanIntelligenceFeedArtifactRead> {
+    return requestScanV1<ScanIntelligenceFeedArtifactRead>(`/scan-intelligence-feed/artifacts/${artifactId}`);
+  },
+
+  listOpsScanIntelligenceFeedRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedRunListResponse>(`/ops/scan-intelligence-feed/runs${q}`);
+  },
+
+  listOpsScanIntelligenceFeedEvents(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    event_category?: string;
+    source_system?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/events${q}`);
+  },
+
+  listOpsScanIntelligenceFeedIssues(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedIssueListResponse>(`/ops/scan-intelligence-feed/issues${q}`);
+  },
+
+  listOpsScanIntelligenceFeedFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/failures${q}`);
+  },
+
+  listOpsScanIntelligenceFeedReviewRequired(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanIntelligenceFeedEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanIntelligenceFeedEventListResponse>(`/ops/scan-intelligence-feed/review-required${q}`);
+  },
+
+  runScanReplay(payload: ScanReplayRunCreate): Promise<ScanReplayRunDetail> {
+    return requestScanV1<ScanReplayRunDetail>("/scan-replay/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listScanReplayRuns(params?: {
+    scan_image_id?: number;
+    replay_scope?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayRunListResponse>(`/scan-replay/runs${q}`);
+  },
+
+  getScanReplayRun(runId: number): Promise<ScanReplayRunDetail> {
+    return requestScanV1<ScanReplayRunDetail>(`/scan-replay/runs/${runId}`);
+  },
+
+  listScanReplaySteps(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayStepListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayStepListResponse>(`/scan-replay/steps${q}`);
+  },
+
+  listScanReplayChecks(params?: {
+    run_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayCheckListResponse>(`/scan-replay/checks${q}`);
+  },
+
+  listScanReplayDiscrepancies(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/scan-replay/discrepancies${q}`);
+  },
+
+  listScanReplayIssues(params?: {
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayIssueListResponse>(`/scan-replay/issues${q}`);
+  },
+
+  getScanReplayArtifact(artifactId: number): Promise<ScanReplayArtifactRead> {
+    return requestScanV1<ScanReplayArtifactRead>(`/scan-replay/artifacts/${artifactId}`);
+  },
+
+  listOpsScanReplayRuns(params?: {
+    owner_user_id?: number;
+    scan_image_id?: number;
+    replay_scope?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayRunListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayRunListResponse>(`/ops/scan-replay/runs${q}`);
+  },
+
+  listOpsScanReplayDiscrepancies(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/discrepancies${q}`);
+  },
+
+  listOpsScanReplayIssues(params?: {
+    owner_user_id?: number;
+    run_id?: number;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayIssueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ScanReplayIssueListResponse>(`/ops/scan-replay/issues${q}`);
+  },
+
+  listOpsScanReplayFailures(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/failures${q}`);
+  },
+
+  listOpsScanReplayCritical(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ScanReplayDiscrepancyListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanReplayDiscrepancyListResponse>(`/ops/scan-replay/critical${q}`);
+  },
+
+  createAutomationJob(payload: AutomationJobCreate): Promise<AutomationJobDetail> {
+    return requestScanV1<AutomationJobDetail>("/automation/jobs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listAutomationJobs(params?: {
+    queue_key?: string;
+    job_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationJobListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<AutomationJobListResponse>(`/automation/jobs${q}`);
+  },
+
+  getAutomationJob(jobId: number): Promise<AutomationJobDetail> {
+    return requestScanV1<AutomationJobDetail>(`/automation/jobs/${jobId}`);
+  },
+
+  listAutomationJobAttempts(jobId: number): Promise<AutomationJobAttemptListResponse> {
+    return requestScanV1<AutomationJobAttemptListResponse>(`/automation/jobs/${jobId}/attempts`);
+  },
+
+  listAutomationJobHistory(jobId: number): Promise<AutomationJobHistoryListResponse> {
+    return requestScanV1<AutomationJobHistoryListResponse>(`/automation/jobs/${jobId}/history`);
+  },
+
+  listAutomationJobIssues(jobId: number): Promise<AutomationJobIssueListResponse> {
+    return requestScanV1<AutomationJobIssueListResponse>(`/automation/jobs/${jobId}/issues`);
+  },
+
+  getAutomationJobArtifact(jobId: number, artifactId: number): Promise<AutomationJobArtifactRead> {
+    return requestScanV1<AutomationJobArtifactRead>(`/automation/jobs/${jobId}/artifacts/${artifactId}`);
+  },
+
+  listAutomationQueues(params?: { limit?: number; offset?: number }): Promise<AutomationQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationQueueListResponse>(`/ops/automation/queues${q}`);
+  },
+
+  listOpsAutomationJobs(params?: {
+    owner_user_id?: number;
+    organization_id?: number;
+    queue_key?: string;
+    job_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationJobListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<AutomationJobListResponse>(`/ops/automation/jobs${q}`);
+  },
+
+  listOpsAutomationFailedJobs(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationJobListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationJobListResponse>(`/ops/automation/jobs/failed${q}`);
+  },
+
+  listOpsAutomationDeadLetterJobs(params?: {
+    owner_user_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationJobListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationJobListResponse>(`/ops/automation/jobs/dead-letter${q}`);
+  },
+
+  listOpsAutomationIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationJobIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationJobIssueListResponse>(`/ops/automation/issues${q}`);
+  },
+
+  getOpsAutomationQueueHealth(params?: { limit?: number; offset?: number }): Promise<AutomationQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationQueueListResponse>(`/ops/automation/queue-health${q}`);
+  },
+
+  listAutomationWorkers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerListResponse>(`/automation/workers${q}`);
+  },
+
+  getAutomationWorker(workerId: number): Promise<AutomationWorkerDetail> {
+    return requestScanV1<AutomationWorkerDetail>(`/automation/workers/${workerId}`);
+  },
+
+  listAutomationWorkerExecutions(workerId: number, params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerExecutionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerExecutionListResponse>(`/automation/workers/${workerId}/executions${q}`);
+  },
+
+  listAutomationWorkerHistory(workerId: number, params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerHistoryListResponse>(`/automation/workers/${workerId}/history${q}`);
+  },
+
+  listAutomationWorkerIssues(workerId: number, params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerIssueListResponse>(`/automation/workers/${workerId}/issues${q}`);
+  },
+
+  listOpsAutomationWorkers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerListResponse>(`/ops/automation/workers${q}`);
+  },
+
+  listOpsAutomationWorkerIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerIssueListResponse>(`/ops/automation/workers/issues${q}`);
+  },
+
+  listOpsAutomationStaleWorkers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkerListResponse>(`/ops/automation/workers/stale${q}`);
+  },
+
+  createAutomationSchedule(payload: AutomationScheduleCreate): Promise<AutomationScheduleRead> {
+    return requestScanV1<AutomationScheduleRead>("/automation/schedules", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listAutomationSchedules(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationScheduleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationScheduleListResponse>(`/automation/schedules${q}`);
+  },
+
+  getAutomationSchedule(scheduleId: number): Promise<AutomationScheduleRead> {
+    return requestScanV1<AutomationScheduleRead>(`/automation/schedules/${scheduleId}`);
+  },
+
+  createAutomationTrigger(payload: AutomationTriggerCreate): Promise<AutomationTriggerRead> {
+    return requestScanV1<AutomationTriggerRead>("/automation/triggers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listAutomationTriggers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationTriggerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationTriggerListResponse>(`/automation/triggers${q}`);
+  },
+
+  listAutomationWorkflows(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkflowListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowListResponse>(`/automation/workflows${q}`);
+  },
+
+  getAutomationWorkflow(workflowId: number): Promise<AutomationWorkflowRead> {
+    return requestScanV1<AutomationWorkflowRead>(`/automation/workflows/${workflowId}`);
+  },
+
+  listAutomationWorkflowExecutions(
+    workflowId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<AutomationWorkflowExecutionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowExecutionListResponse>(`/automation/workflows/${workflowId}/executions${q}`);
+  },
+
+  listAutomationWorkflowHistory(
+    workflowId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<AutomationWorkflowHistoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowHistoryListResponse>(`/automation/workflows/${workflowId}/history${q}`);
+  },
+
+  listOpsAutomationWorkflows(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkflowListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowListResponse>(`/ops/automation/workflows${q}`);
+  },
+
+  listOpsAutomationTriggers(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationTriggerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationTriggerListResponse>(`/ops/automation/triggers${q}`);
+  },
+
+  listOpsBlockedAutomationWorkflows(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkflowListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowListResponse>(`/ops/automation/workflows/blocked${q}`);
+  },
+
+  listOpsAutomationWorkflowIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationWorkflowIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationWorkflowIssueListResponse>(`/ops/automation/workflows/issues${q}`);
+  },
+
+  listAutomationRecoveryRuns(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationRecoveryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRecoveryListResponse>(`/automation/recovery/runs${q}`);
+  },
+
+  getAutomationRecoveryRun(runId: number): Promise<AutomationRecoveryRunRead> {
+    return requestScanV1<AutomationRecoveryRunRead>(`/automation/recovery/runs/${runId}`);
+  },
+
+  listAutomationDeadLetterJobs(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationDeadLetterListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationDeadLetterListResponse>(`/automation/dead-letter${q}`);
+  },
+
+  listAutomationFailureEvents(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationFailureEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationFailureEventListResponse>(`/automation/failures${q}`);
+  },
+
+  listAutomationRecoveryIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationRecoveryIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRecoveryIssueListResponse>(`/automation/recovery/issues${q}`);
+  },
+
+  listOpsAutomationRecoveryRuns(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationRecoveryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRecoveryListResponse>(`/ops/automation/recovery/runs${q}`);
+  },
+
+  listOpsAutomationFailureEvents(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationFailureEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationFailureEventListResponse>(`/ops/automation/failures${q}`);
+  },
+
+  listOpsAutomationRecoveryCritical(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationRecoveryIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRecoveryIssueListResponse>(`/ops/automation/recovery/critical${q}`);
+  },
+
+  listAutomationBatchRuns(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationBatchListResponse>(`/automation/batch/runs${q}`);
+  },
+
+  getAutomationBatchRun(batchRunId: number): Promise<AutomationBatchRunRead> {
+    return requestScanV1<AutomationBatchRunRead>(`/automation/batch/runs/${batchRunId}`);
+  },
+
+  listAutomationBatchChunks(
+    batchRunId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<AutomationBatchChunkListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationBatchChunkListResponse>(`/automation/batch/runs/${batchRunId}/chunks${q}`);
+  },
+
+  listAutomationMaintenanceJobs(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationMaintenanceJobListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationMaintenanceJobListResponse>(`/automation/maintenance/jobs${q}`);
+  },
+
+  listAutomationMaintenanceResults(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationMaintenanceResultListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationMaintenanceResultListResponse>(`/automation/maintenance/results${q}`);
+  },
+
+  listAutomationBatchIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationBatchIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationBatchIssueListResponse>(`/automation/batch/issues${q}`);
+  },
+
+  listOpsAutomationBatchRuns(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationBatchListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationBatchListResponse>(`/ops/automation/batch/runs${q}`);
+  },
+
+  listOpsAutomationIntegrityAudits(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationMaintenanceJobListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationMaintenanceJobListResponse>(`/ops/automation/integrity-audit${q}`);
+  },
+
+  listOpsAutomationStorageAudits(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationMaintenanceJobListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationMaintenanceJobListResponse>(`/ops/automation/storage-audit${q}`);
+  },
+
+  listAutomationNotifications(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationNotificationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationNotificationListResponse>(`/automation/notifications${q}`);
+  },
+
+  getAutomationNotification(notificationId: number): Promise<AutomationNotificationRead> {
+    return requestScanV1<AutomationNotificationRead>(`/automation/notifications/${notificationId}`);
+  },
+
+  listAutomationAlerts(params?: { limit?: number; offset?: number }): Promise<AutomationAlertListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAlertListResponse>(`/automation/alerts${q}`);
+  },
+
+  listAutomationNotificationPreferences(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationNotificationPreferenceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationNotificationPreferenceListResponse>(`/automation/preferences${q}`);
+  },
+
+  listAutomationNotificationIssues(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationNotificationIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationNotificationIssueListResponse>(`/automation/notification/issues${q}`);
+  },
+
+  listOpsAutomationNotifications(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationNotificationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationNotificationListResponse>(`/ops/automation/notifications${q}`);
+  },
+
+  listOpsAutomationCriticalAlerts(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationAlertListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAlertListResponse>(`/ops/automation/alerts/critical${q}`);
+  },
+
+  listAutomationOpsSnapshots(params?: { limit?: number; offset?: number }): Promise<AutomationOpsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationOpsListResponse>(`/automation/ops/snapshots${q}`);
+  },
+
+  getAutomationOpsSnapshot(snapshotId: number): Promise<AutomationOpsSnapshotRead> {
+    return requestScanV1<AutomationOpsSnapshotRead>(`/automation/ops/snapshots/${snapshotId}`);
+  },
+
+  listAutomationOpsMetrics(params?: {
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationOpsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationOpsListResponse>(`/automation/ops/metrics${q}`);
+  },
+
+  listAutomationOpsAudits(params?: { limit?: number; offset?: number }): Promise<AutomationOpsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationOpsListResponse>(`/automation/ops/audits${q}`);
+  },
+
+  listAutomationOpsIssues(params?: {
+    snapshot_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<AutomationOpsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationOpsListResponse>(`/automation/ops/issues${q}`);
+  },
+
+  listOpsAutomationSystemHealth(params?: { owner_user_id?: number }): Promise<AutomationOpsSystemHealthRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationOpsSystemHealthRead>(`/ops/automation/system-health${q}`);
+  },
+
+  listAutomationAnalyticsSnapshots(params?: { limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/automation/analytics/snapshots${q}`);
+  },
+
+  getAutomationAnalyticsSnapshot(snapshotId: number): Promise<AutomationAnalyticsSnapshotRead> {
+    return requestScanV1<AutomationAnalyticsSnapshotRead>(`/automation/analytics/snapshots/${snapshotId}`);
+  },
+
+  listAutomationAnalyticsMetrics(params?: { snapshot_id?: number; limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/automation/analytics/metrics${q}`);
+  },
+
+  listAutomationAnalyticsTrends(params?: { snapshot_id?: number; limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/automation/analytics/trends${q}`);
+  },
+
+  listAutomationAnalyticsComparisons(params?: { snapshot_id?: number; limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/automation/analytics/comparisons${q}`);
+  },
+
+  listAutomationAnalyticsIssues(params?: { snapshot_id?: number; limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/automation/analytics/issues${q}`);
+  },
+
+  listOpsAutomationAnalytics(params?: { limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/ops/automation/analytics/snapshots${q}`);
+  },
+
+  listOpsAutomationAnalyticsFailures(params?: { limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationAnalyticsListResponse>(`/ops/automation/analytics/failures${q}`);
+  },
+
+  listAutomationRules(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/automation/rules${q}`);
+  },
+
+  getAutomationRule(ruleId: number): Promise<AutomationRuleRead> {
+    return requestScanV1<AutomationRuleRead>(`/automation/rules/${ruleId}`);
+  },
+
+  listAutomationRuleVersions(ruleId: number, params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/automation/rules/${ruleId}/versions${q}`);
+  },
+
+  listAutomationRuleEvaluations(ruleId: number, params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/automation/rules/${ruleId}/evaluations${q}`);
+  },
+
+  listAutomationRuleActions(ruleId: number, params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/automation/rules/${ruleId}/actions${q}`);
+  },
+
+  listAutomationRuleIssues(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/automation/rules/issues${q}`);
+  },
+
+  listOpsAutomationRules(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/ops/automation/rules${q}`);
+  },
+
+  listOpsAutomationRuleFailures(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/ops/automation/rules/failures${q}`);
+  },
+
+  listOpsAutomationRuleDrift(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AutomationRuleListResponse>(`/ops/automation/rules/drift${q}`);
   },
 
   createMarketNormalizationRun(payload: MarketNormalizationRunCreatePayload): Promise<MarketNormalizationRunDetailRead> {

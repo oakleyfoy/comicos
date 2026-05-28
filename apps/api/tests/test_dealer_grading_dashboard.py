@@ -9,7 +9,6 @@ from sqlmodel import Session, select
 
 from test_grading_reconciliation import complete_submission_batch
 from test_grading_recommendation import _seed_recommendation_inputs
-from test_grading_risk import _generate_recommendation
 from test_grading_submission_batches import create_submission_batch, inventory_id_from_latest_order, make_ready_candidate
 from test_inventory import auth_headers, register_and_login
 
@@ -26,12 +25,38 @@ from app.models import (
     GradingReconciliationRecord,
 )
 
+# Dashboard tests aggregate rows with snapshot_date <= this date; seeded rec/risk must match.
+DASHBOARD_SNAPSHOT_DATE = "2026-05-26"
+
+
+def _generate_recommendation(
+    client: TestClient,
+    token: str,
+    candidate_id: int,
+    replay_key: str,
+) -> dict:
+    rsp = client.post(
+        "/grading-recommendations/generate",
+        headers=auth_headers(token),
+        json={
+            "grading_candidate_id": candidate_id,
+            "replay_key": replay_key,
+            "snapshot_date": DASHBOARD_SNAPSHOT_DATE,
+        },
+    )
+    assert rsp.status_code == 201, rsp.text
+    return rsp.json()
+
 
 def _generate_risk(client: TestClient, token: str, recommendation_id: int, replay_key: str) -> dict:
     rsp = client.post(
         "/grading-risk/generate",
         headers=auth_headers(token),
-        json={"recommendation_id": recommendation_id, "replay_key": replay_key},
+        json={
+            "recommendation_id": recommendation_id,
+            "replay_key": replay_key,
+            "snapshot_date": DASHBOARD_SNAPSHOT_DATE,
+        },
     )
     assert rsp.status_code == 201, rsp.text
     return rsp.json()
@@ -141,7 +166,7 @@ def test_generate_dealer_grading_dashboard_snapshot_alerts_and_feed(client: Test
     rsp = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(token),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-001"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-001"},
     )
     assert rsp.status_code == 201, rsp.text
     snapshot = rsp.json()["snapshot"]
@@ -224,13 +249,13 @@ def test_checksum_stability_and_replay_safety(client: TestClient, session: Sessi
     first = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(token),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-replay-001"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-replay-001"},
     )
     assert first.status_code == 201, first.text
     second = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(token),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-replay-001"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-replay-001"},
     )
     assert second.status_code == 201, second.text
     assert second.json()["snapshot"]["id"] == first.json()["snapshot"]["id"]
@@ -239,7 +264,7 @@ def test_checksum_stability_and_replay_safety(client: TestClient, session: Sessi
     third = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(token),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-replay-002"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-replay-002"},
     )
     assert third.status_code == 201, third.text
     assert third.json()["snapshot"]["id"] == first.json()["snapshot"]["id"]
@@ -259,13 +284,13 @@ def test_owner_scoping_and_ops_visibility(client: TestClient, session: Session, 
     owner_gen = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(owner),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-scope-owner"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-scope-owner"},
     )
     assert owner_gen.status_code == 201, owner_gen.text
     other_gen = client.post(
         "/dealer-grading-dashboard/generate",
         headers=auth_headers(other),
-        json={"snapshot_date": "2026-05-26", "replay_key": "grading-dashboard-scope-other"},
+        json={"snapshot_date": DASHBOARD_SNAPSHOT_DATE, "replay_key": "grading-dashboard-scope-other"},
     )
     assert other_gen.status_code == 201, other_gen.text
 

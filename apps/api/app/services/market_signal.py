@@ -438,6 +438,7 @@ def generate_market_signals_for_owner(
         score_snapshot_id=payload.score_snapshot_id,
         snapshot_date=payload.snapshot_date,
     )
+    snapshot_date = score_snapshot.snapshot_date
     inputs = _load_signal_inputs(session, score_snapshot_id=int(score_snapshot.id or 0))
 
     staged_rows: list[dict[str, Any]] = []
