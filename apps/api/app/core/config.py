@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     scan_review_storage_root_raw: str = Field(default="", alias="SCAN_REVIEW_STORAGE_ROOT")
     scan_historical_comparison_storage_root_raw: str = Field(default="", alias="SCAN_HISTORICAL_COMPARISON_STORAGE_ROOT")
     scan_authentication_storage_root_raw: str = Field(default="", alias="SCAN_AUTHENTICATION_STORAGE_ROOT")
+    scan_intelligence_feed_storage_root_raw: str = Field(default="", alias="SCAN_INTELLIGENCE_FEED_STORAGE_ROOT")
+    scan_replay_storage_root_raw: str = Field(default="", alias="SCAN_REPLAY_STORAGE_ROOT")
     listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
@@ -217,6 +219,20 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "scan_authentication"
+
+    @property
+    def scan_intelligence_feed_storage_root(self) -> Path:
+        trimmed = self.scan_intelligence_feed_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_intelligence_feed"
+
+    @property
+    def scan_replay_storage_root(self) -> Path:
+        trimmed = self.scan_replay_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "scan_replay"
 
     @property
     def listing_exports_storage_root(self) -> Path:

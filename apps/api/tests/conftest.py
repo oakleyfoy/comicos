@@ -1,7 +1,14 @@
+import sys
+from pathlib import Path
+
 import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
+
+API_ROOT = Path(__file__).resolve().parents[1]
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
 
 from app.core.config import get_settings
 from app.db.session import get_engine
@@ -54,6 +61,8 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("SCAN_REVIEW_STORAGE_ROOT", str(tmp_path / "scan-review"))
     monkeypatch.setenv("SCAN_HISTORICAL_COMPARISON_STORAGE_ROOT", str(tmp_path / "scan-historical-comparison"))
     monkeypatch.setenv("SCAN_AUTHENTICATION_STORAGE_ROOT", str(tmp_path / "scan-authentication"))
+    monkeypatch.setenv("SCAN_INTELLIGENCE_FEED_STORAGE_ROOT", str(tmp_path / "scan-intelligence-feed"))
+    monkeypatch.setenv("SCAN_REPLAY_STORAGE_ROOT", str(tmp_path / "scan-replay"))
     monkeypatch.setenv("LISTING_EXPORTS_STORAGE_ROOT", str(tmp_path / "listing-exports"))
     monkeypatch.setenv("OPERATIONAL_REPORTS_STORAGE_ROOT", str(tmp_path / "operational-reports"))
 

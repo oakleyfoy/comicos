@@ -1120,6 +1120,8 @@ from app.api.scan_visual_evidence import attach_scan_visual_evidence_layer
 from app.api.scan_review import attach_scan_review_layer
 from app.api.scan_historical_comparison import attach_scan_historical_comparison_layer
 from app.api.scan_authentication import attach_scan_authentication_layer
+from app.api.scan_intelligence_feed import attach_scan_intelligence_feed_layer
+from app.api.scan_replay import attach_scan_replay_layer
 
 
 settings = get_settings()
@@ -1151,6 +1153,8 @@ attach_scan_visual_evidence_layer(app)
 attach_scan_review_layer(app)
 attach_scan_historical_comparison_layer(app)
 attach_scan_authentication_layer(app)
+attach_scan_intelligence_feed_layer(app)
+attach_scan_replay_layer(app)
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
