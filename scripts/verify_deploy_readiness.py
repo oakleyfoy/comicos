@@ -83,6 +83,9 @@ def verify_web_build() -> None:
     web_root = REPO_ROOT / "apps" / "web"
     typescript_bin = REPO_ROOT / "node_modules" / "typescript" / "bin" / "tsc"
     vite_bin = REPO_ROOT / "node_modules" / "vite" / "bin" / "vite.js"
+    if not typescript_bin.exists() or not vite_bin.exists():
+        print("\nLocal web toolchain not found. Running npm ci at the repo root...")
+        run(["npm", "ci"], cwd=REPO_ROOT)
     run(["node", str(typescript_bin), "-b"], cwd=web_root)
     run(["node", str(vite_bin), "build"], cwd=web_root)
 
