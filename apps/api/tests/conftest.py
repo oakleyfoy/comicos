@@ -63,6 +63,12 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("SCAN_AUTHENTICATION_STORAGE_ROOT", str(tmp_path / "scan-authentication"))
     monkeypatch.setenv("SCAN_INTELLIGENCE_FEED_STORAGE_ROOT", str(tmp_path / "scan-intelligence-feed"))
     monkeypatch.setenv("SCAN_REPLAY_STORAGE_ROOT", str(tmp_path / "scan-replay"))
+    monkeypatch.setenv("AUTOMATION_JOBS_STORAGE_ROOT", str(tmp_path / "automation-jobs"))
+    monkeypatch.setenv("AUTOMATION_WORKERS_STORAGE_ROOT", str(tmp_path / "automation-workers"))
+    monkeypatch.setenv("AUTOMATION_WORKFLOWS_STORAGE_ROOT", str(tmp_path / "automation-workflows"))
+    monkeypatch.setenv("AUTOMATION_RECOVERY_STORAGE_ROOT", str(tmp_path / "automation-recovery"))
+    monkeypatch.setenv("AUTOMATION_BATCH_STORAGE_ROOT", str(tmp_path / "automation-batch"))
+    monkeypatch.setenv("AUTOMATION_NOTIFICATIONS_STORAGE_ROOT", str(tmp_path / "automation-notifications"))
     monkeypatch.setenv("LISTING_EXPORTS_STORAGE_ROOT", str(tmp_path / "listing-exports"))
     monkeypatch.setenv("OPERATIONAL_REPORTS_STORAGE_ROOT", str(tmp_path / "operational-reports"))
 

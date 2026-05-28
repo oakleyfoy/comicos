@@ -140,6 +140,7 @@ def test_ops_listing_endpoints_require_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OPS_ADMIN_EMAILS", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
     get_settings.cache_clear()
     token = register_and_login(client, "not-ops-listing@example.com")
     assert client.get("/ops/listings", headers=auth_headers(token)).status_code == 403

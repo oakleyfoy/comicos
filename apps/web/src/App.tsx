@@ -33,6 +33,15 @@ import { ScanHistoricalComparisonPage } from "./pages/ScanHistoricalComparisonPa
 import { ScanAuthenticationPage } from "./pages/ScanAuthenticationPage";
 import { ScanIntelligenceFeedPage } from "./pages/ScanIntelligenceFeedPage";
 import { ScanReplayPage } from "./pages/ScanReplayPage";
+import { AutomationJobsPage } from "./pages/AutomationJobsPage";
+import { AutomationBatchPage } from "./pages/AutomationBatchPage";
+import { AutomationNotificationsPage } from "./pages/AutomationNotificationsPage";
+import { AutomationAnalyticsPage } from "./pages/AutomationAnalyticsPage";
+import { AutomationOpsDashboardPage } from "./pages/AutomationOpsDashboardPage";
+import { AutomationRulesPage } from "./pages/AutomationRulesPage";
+import { AutomationRecoveryPage } from "./pages/AutomationRecoveryPage";
+import { AutomationWorkersPage } from "./pages/AutomationWorkersPage";
+import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -76,6 +85,15 @@ export default function App() {
         <Route path="/scan-authentication" element={<ScanAuthenticationPage />} />
         <Route path="/scan-intelligence-feed" element={<ScanIntelligenceFeedPage />} />
         <Route path="/scan-replay" element={<ScanReplayPage />} />
+        <Route path="/automation-jobs" element={<AutomationJobsPage />} />
+        <Route path="/automation-batch" element={<AutomationBatchPage />} />
+        <Route path="/automation-notifications" element={<AutomationNotificationsPage />} />
+        <Route path="/automation-analytics" element={<AutomationAnalyticsPage />} />
+        <Route path="/automation-ops" element={<AutomationOpsDashboardPage />} />
+        <Route path="/automation-rules" element={<AutomationRulesPage />} />
+        <Route path="/automation-recovery" element={<AutomationRecoveryPage />} />
+        <Route path="/automation-workers" element={<AutomationWorkersPage />} />
+        <Route path="/automation-workflows" element={<AutomationWorkflowsPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />

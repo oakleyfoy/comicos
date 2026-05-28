@@ -94,6 +94,7 @@ def test_market_report_reads_do_not_increment_metadata_audits(client: TestClient
 
 def test_ops_only_market_exports_reject_regular_users(client: TestClient, monkeypatch) -> None:
     monkeypatch.delenv("OPS_ADMIN_EMAILS", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
     get_settings.cache_clear()
 
     ops_headers = auth_headers(register_and_login(client, "market-report-regular@example.com"))

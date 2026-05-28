@@ -178,6 +178,7 @@ def test_export_ops_download(client: TestClient, monkeypatch: pytest.MonkeyPatch
 
 def test_export_requires_ops(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPS_ADMIN_EMAILS", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
     get_settings.cache_clear()
 
     tok = register_and_login(client, "export-notops@example.com")

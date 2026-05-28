@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     scan_authentication_storage_root_raw: str = Field(default="", alias="SCAN_AUTHENTICATION_STORAGE_ROOT")
     scan_intelligence_feed_storage_root_raw: str = Field(default="", alias="SCAN_INTELLIGENCE_FEED_STORAGE_ROOT")
     scan_replay_storage_root_raw: str = Field(default="", alias="SCAN_REPLAY_STORAGE_ROOT")
+    automation_jobs_storage_root_raw: str = Field(default="", alias="AUTOMATION_JOBS_STORAGE_ROOT")
+    automation_workers_storage_root_raw: str = Field(default="", alias="AUTOMATION_WORKERS_STORAGE_ROOT")
+    automation_workflows_storage_root_raw: str = Field(default="", alias="AUTOMATION_WORKFLOWS_STORAGE_ROOT")
+    automation_recovery_storage_root_raw: str = Field(default="", alias="AUTOMATION_RECOVERY_STORAGE_ROOT")
+    automation_batch_storage_root_raw: str = Field(default="", alias="AUTOMATION_BATCH_STORAGE_ROOT")
+    automation_notifications_storage_root_raw: str = Field(default="", alias="AUTOMATION_NOTIFICATIONS_STORAGE_ROOT")
+    automation_ops_storage_root_raw: str = Field(default="", alias="AUTOMATION_OPS_STORAGE_ROOT")
+    automation_rules_storage_root_raw: str = Field(default="", alias="AUTOMATION_RULES_STORAGE_ROOT")
+    automation_analytics_storage_root_raw: str = Field(default="", alias="AUTOMATION_ANALYTICS_STORAGE_ROOT")
     listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
@@ -233,6 +242,69 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "scan_replay"
+
+    @property
+    def automation_jobs_storage_root(self) -> Path:
+        trimmed = self.automation_jobs_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_jobs"
+
+    @property
+    def automation_workers_storage_root(self) -> Path:
+        trimmed = self.automation_workers_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_workers"
+
+    @property
+    def automation_workflows_storage_root(self) -> Path:
+        trimmed = self.automation_workflows_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_workflows"
+
+    @property
+    def automation_recovery_storage_root(self) -> Path:
+        trimmed = self.automation_recovery_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_recovery"
+
+    @property
+    def automation_batch_storage_root(self) -> Path:
+        trimmed = self.automation_batch_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_batch"
+
+    @property
+    def automation_notifications_storage_root(self) -> Path:
+        trimmed = self.automation_notifications_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_notifications"
+
+    @property
+    def automation_ops_storage_root(self) -> Path:
+        trimmed = self.automation_ops_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_ops"
+
+    @property
+    def automation_rules_storage_root(self) -> Path:
+        trimmed = self.automation_rules_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_rules"
+
+    @property
+    def automation_analytics_storage_root(self) -> Path:
+        trimmed = self.automation_analytics_storage_root_raw.strip()
+        if trimmed:
+            return Path(trimmed).expanduser()
+        return REPO_ROOT / "data" / "automation_analytics"
 
     @property
     def listing_exports_storage_root(self) -> Path:

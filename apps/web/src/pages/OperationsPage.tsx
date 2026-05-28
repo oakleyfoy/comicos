@@ -243,6 +243,15 @@ import { ScanHistoricalComparisonOpsPanel } from "../components/ScanHistoricalCo
 import { ScanAuthenticationOpsPanel } from "../components/ScanAuthenticationOpsPanel";
 import { ScanIntelligenceFeedOpsPanel } from "../components/ScanIntelligenceFeedOpsPanel";
 import { ScanReplayOpsPanel } from "../components/ScanReplayOpsPanel";
+import { AutomationJobsOpsPanel } from "../components/AutomationJobsOpsPanel";
+import { AutomationBatchOpsPanel } from "../components/AutomationBatchOpsPanel";
+import { AutomationNotificationsOpsPanel } from "../components/AutomationNotificationsOpsPanel";
+import { AutomationAnalyticsOpsPanel } from "../components/AutomationAnalyticsOpsPanel";
+import { AutomationOpsOpsPanel } from "../components/AutomationOpsOpsPanel";
+import { AutomationRulesOpsPanel } from "../components/AutomationRulesOpsPanel";
+import { AutomationRecoveryOpsPanel } from "../components/AutomationRecoveryOpsPanel";
+import { AutomationWorkersOpsPanel } from "../components/AutomationWorkersOpsPanel";
+import { AutomationWorkflowsOpsPanel } from "../components/AutomationWorkflowsOpsPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatCanonicalReleaseCalendar(value: string | null): string {
@@ -17492,6 +17501,15 @@ export function OperationsPage() {
       <ScanAuthenticationOpsPanel />
       <ScanIntelligenceFeedOpsPanel />
       <ScanReplayOpsPanel />
+      <AutomationJobsOpsPanel />
+      <AutomationBatchOpsPanel />
+      <AutomationNotificationsOpsPanel />
+      <AutomationAnalyticsOpsPanel />
+      <AutomationOpsOpsPanel />
+      <AutomationRulesOpsPanel />
+      <AutomationRecoveryOpsPanel />
+      <AutomationWorkersOpsPanel />
+      <AutomationWorkflowsOpsPanel />
     </AppShell>
   );
 }

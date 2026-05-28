@@ -28,6 +28,12 @@ This section consolidates the remaining non-blocking work across the completed P
 ### P40 deferred work by phase
 
 - P40-16: official authentication certification, counterfeit classification, restoration detection, external database checks, slab-label claims, customer-facing authenticity certificate, ML counterfeit detection.
+- P41-01: realtime workers, distributed queues, websocket queue updates, scheduled orchestration, retry automation, queue autoscaling, worker pools, priority aging, distributed locks.
+- P41-02: distributed worker clusters, realtime websocket runtime, autoscaling workers, Kubernetes orchestration, distributed locking, queue sharding, dynamic concurrency tuning, worker autoscaling, external execution engines.
+- P41-03: distributed orchestration clusters, realtime orchestration, external event buses, workflow visual editors, dynamic workflow editing, orchestration autoscaling, external cron providers, distributed dependency locking.
+- P41-04: distributed retry orchestration, randomized retry jitter, ML-driven retry optimization, automatic dead-letter replay, external recovery queues, distributed replay recovery, autoscaling retry workers.
+- P41-05: distributed batch clusters, autoscaling maintenance workers, ML-driven partitioning, destructive cleanup automation, cloud-scale replay sweeps, external maintenance schedulers, realtime maintenance telemetry.
+- P41-06: external email providers, SMS integrations, push notifications, realtime websockets, distributed alert routing, ML-driven alert prioritization, external notification brokers.
 - P41-17: cross-scan batch feed generation, live streaming feed updates, richer charting, external export destinations, subscription workflows, artifact retention policies, workflow automation from feed events.
 - P40-18: automated artifact repair, scheduled replay jobs, batch replay orchestration, cryptographic signing, external audit exports, replay diff visualization v2, background replay monitors, compliance-grade audit certification.
 - P40-19: continuous hardening automation, performance regression tooling, production-scale query tuning, and future build warning elimination if warranted.
@@ -76,6 +82,203 @@ This section consolidates the remaining non-blocking work across the completed P
 - Feed subscription / notification workflows
 - Artifact retention policies
 - Reviewer assignment or workflow automation driven from feed events
+
+## P41 closeout summary (2026-05-28)
+
+P41 automation is feature-complete through P41-09 with P41-10 documentation and verification closeout. Consolidated deferred work below is **intentional**; it is not blocking single-deployment deterministic automation.
+
+### By recommended future phase
+
+| Future phase | Deferred capability |
+| --- | --- |
+| P42+ multi-tenant / dealer | Org-wide RBAC, dealer ops roles, shared automation visibility |
+| Platform scale | Distributed queue scaling, queue sharding, worker autoscaling |
+| Observability | Real-time telemetry, websocket feeds, advanced ops observability |
+| Integrations | External email/SMS/push providers, external notification brokers, external cron |
+| UX / authoring | Workflow visual editor, visual rule builders |
+| Operations | Destructive cleanup tooling, enterprise automation controls |
+| Cloud / replay at scale | Cloud-scale replay sweeps, artifact retention automation |
+
+### By severity
+
+| Severity | Items |
+| --- | --- |
+| Critical | None for P41 core automation after focused suite pass |
+| Warning | Full-repo pytest failures outside P41; long local regression time; web bundle size warning |
+| Info | Cloud storage backends for artifacts, richer analytics (non-ML), documentation duplication for per-phase lookup |
+
+### By operational impact
+
+| Impact | Deferred items |
+| --- | --- |
+| Reliability at scale | Distributed workers, sharding, external recovery queues |
+| Observability | Realtime streams, ML anomaly/prioritization systems |
+| Operator efficiency | Visual editors, destructive cleanup, autoscaling admin |
+| Compliance / messaging | External providers, enterprise controls, cloud telemetry |
+
+### Consolidated P41 deferred backlog (all phases)
+
+- Distributed queue scaling and queue sharding
+- Worker autoscaling and distributed worker clusters
+- Real-time telemetry and websocket queue/runtime updates
+- External notification providers (email, SMS, push) and brokers
+- Workflow visual editor and dynamic workflow editing
+- Destructive cleanup tooling (purge queue, delete dead letter, force replay overwrite)
+- Cloud-scale replay sweeps and scheduled maintenance at fleet scale
+- Advanced ops observability and ML-driven anomaly detection
+- Enterprise automation controls and adaptive policies
+- Predictive analytics / ML forecasting (P41-09 explicit non-goals)
+
+Per-phase architecture notes remain in sections P41-01 through P41-09 below for detailed context.
+
+## P41-10 — Closeout / docs (2026-05-28)
+
+- Index and closeout docs: `docs/P41_ARCHITECTURE_INDEX.md`, dependency graph, lifecycle, operations guide, API reference, storage, determinism guarantees, production readiness, hardening report.
+- No new automation features in this phase.
+
+### Deferred scope (unchanged — see consolidated backlog above)
+
+Documentation-only closeout; deferrals listed in **P41 closeout summary**.
+
+## P41-01 — Automation queue foundation (2026-05-28)
+
+- Architecture note: deterministic job ledger ordering, reservation-safe queue selection, append-only job history, immutable payload snapshots, dependency edges, and replay-safe artifacts are documented in `docs/P41_AUTOMATION_QUEUE_ARCHITECTURE.md`.
+- This layer is queue-foundation only. It does not execute jobs, schedule jobs, open realtime streams, or add hidden retry logic.
+
+### Deferred scope (beyond P41-01)
+
+- Realtime workers
+- Distributed queues
+- Websocket queue updates
+- Scheduled orchestration
+- Retry automation
+- Queue autoscaling
+- Worker pools
+- Priority aging
+- Distributed locks
+
+## P41-02 — Worker runtime engine (2026-05-28)
+
+- Architecture note: deterministic worker registration, lease ownership, heartbeat visibility, execution lineage, append-only runtime history, and replay-safe execution checksums are documented in `docs/P41_WORKER_RUNTIME_ARCHITECTURE.md`.
+- This layer is runtime-only. It does not implement scheduling, distributed worker orchestration, realtime sockets, or autoscaling.
+
+### Deferred scope (beyond P41-02)
+
+- Distributed worker clusters
+- Realtime websocket runtime
+- Autoscaling workers
+- Kubernetes orchestration
+- Distributed locking
+- Queue sharding
+- Dynamic concurrency tuning
+- Worker autoscaling
+- External execution engines
+
+## P41-03 — Workflow scheduling / trigger orchestration (2026-05-28)
+
+- Architecture note: deterministic schedule activation, immutable trigger lineage, dependency-aware workflow sequencing, append-only execution history, and replay-safe orchestration manifests are documented in `docs/P41_WORKFLOW_SCHEDULING_ARCHITECTURE.md`.
+- This layer is orchestration-only. It does not add distributed orchestration, realtime sockets, external event buses, or hidden retries.
+
+### Deferred scope (beyond P41-03)
+
+- Distributed orchestration clusters
+- Realtime orchestration
+- External event buses
+- Workflow visual editors
+- Dynamic workflow editing
+- Orchestration autoscaling
+- External cron providers
+- Distributed dependency locking
+
+## P41-04 — Retry / failure / dead-letter / replay recovery (2026-05-28)
+
+- Architecture note: deterministic retry policies, replay-safe recovery runs, dead-letter lineage, stale execution recovery, and append-only failure history are documented in `docs/P41_RECOVERY_ARCHITECTURE.md`.
+- This layer is recovery-only. It does not add distributed retry systems, random jitter, autoscaling workers, or external recovery queues.
+
+### Deferred scope (beyond P41-04)
+
+- Distributed retry orchestration
+- Randomized retry jitter
+- ML-driven retry optimization
+- Automatic dead-letter replay
+- External recovery queues
+- Distributed replay recovery
+- Autoscaling retry workers
+
+## P41-05 — Batch processing / maintenance jobs (2026-05-28)
+
+- Architecture note: deterministic batch partitioning, replay-safe maintenance lineage, append-only chunk/history ledgers, integrity audit visibility, and immutable batch artifacts are documented in `docs/P41_BATCH_PROCESSING_ARCHITECTURE.md`.
+- This layer is batch/maintenance only. It does not add distributed compute, autoscaling, external schedulers, or destructive cleanup.
+
+### Deferred scope (beyond P41-05)
+
+- Distributed batch clusters
+- Autoscaling maintenance workers
+- ML-driven partitioning
+- Destructive cleanup automation
+- Cloud-scale replay sweeps
+- External maintenance schedulers
+- Realtime maintenance telemetry
+
+## P41-06 — Notifications / alerting / operational messaging (2026-05-28)
+
+- Architecture note: deterministic notification ledger, delivery lineage, alert escalation, template resolution, preference evaluation, and replay-safe manifests are documented in `docs/P41_NOTIFICATION_ARCHITECTURE.md`.
+- This layer is messaging-only. It does not add external email/SMS providers, push infrastructure, or websocket delivery.
+
+### Deferred scope (beyond P41-06)
+
+- External email providers
+- SMS integrations
+- Push notifications
+- Realtime websockets
+- Distributed alert routing
+- ML-driven alert prioritization
+- External notification brokers
+
+## P41-07 — Ops automation dashboard / admin controls (2026-05-28)
+
+- Architecture note: unified ops snapshots, deterministic metrics, integrity audits, safe admin controls, artifact manifests, and append-only history are documented in `docs/P41_OPS_DASHBOARD_ARCHITECTURE.md`.
+- This layer is visibility and safe control only. It does not add destructive admin tooling, realtime websockets, or distributed infrastructure management.
+
+### Deferred scope (beyond P41-07)
+
+- Destructive admin tooling
+- Realtime telemetry
+- Distributed ops coordination
+- Autoscaling admin systems
+- ML-driven anomaly detection
+- External observability systems
+- Cloud-scale operational telemetry
+
+## P41-08 — Automation rules engine (2026-05-28)
+
+- Architecture note: deterministic rule creation, immutable versioning, replay-safe evaluation lineage, ordered action execution, and rules-engine non-goals are documented in `docs/P41_RULES_ENGINE_ARCHITECTURE.md`.
+- This layer is deterministic policy infrastructure only. It does not add ML-generated rules, realtime streaming evaluation, distributed rule clusters, or arbitrary scripting.
+
+### Deferred scope (beyond P41-08)
+
+- ML-driven rule systems
+- Realtime stream processing
+- Distributed rule clusters
+- Arbitrary scripting engines
+- Visual rule builders
+- Cloud-scale rule orchestration
+- Adaptive automation policies
+
+## P41-09 — Automation analytics / intelligence layer (2026-05-28)
+
+- Architecture note: deterministic analytics aggregation, replay-safe trends, historical comparisons, immutable snapshots, and analytics non-goals are documented in `docs/P41_ANALYTICS_ARCHITECTURE.md`.
+- This layer is deterministic operational intelligence only. It does not add predictive AI, ML forecasting, realtime streaming analytics, distributed analytics clusters, or adaptive intelligence.
+
+### Deferred scope (beyond P41-09)
+
+- Predictive AI analytics
+- ML forecasting
+- Realtime analytics streaming
+- Distributed analytics clusters
+- Adaptive operational intelligence
+- Cloud-scale telemetry systems
+- Anomaly prediction systems
 
 ## P40-18 — Determinism / replay layer (2026-05-28)
 

@@ -27,6 +27,15 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "scan_authentication": "P40-16",
     "scan_intelligence_feed": "P41-17",
     "scan_replay": "P40-18",
+    "automation_jobs": "P41-01",
+    "automation_workers": "P41-02",
+    "automation_scheduling": "P41-03",
+    "automation_recovery": "P41-04",
+    "automation_batch": "P41-05",
+    "automation_notifications": "P41-06",
+    "automation_ops": "P41-07",
+    "automation_rules": "P41-08",
+    "automation_analytics": "P41-09",
 }
 
 

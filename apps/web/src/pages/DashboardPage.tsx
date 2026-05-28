@@ -106,6 +106,15 @@ import { ScanHistoricalComparisonSummaryCard } from "../components/ScanHistorica
 import { ScanAuthenticationSummaryCard } from "../components/ScanAuthenticationSummaryCard";
 import { ScanIntelligenceFeedSummaryCard } from "../components/ScanIntelligenceFeedSummaryCard";
 import { ScanReplaySummaryCard } from "../components/ScanReplaySummaryCard";
+import { AutomationBatchSummaryCard } from "../components/AutomationBatchSummaryCard";
+import { AutomationNotificationsSummaryCard } from "../components/AutomationNotificationsSummaryCard";
+import { AutomationAnalyticsSummaryCard } from "../components/AutomationAnalyticsSummaryCard";
+import { AutomationOpsSummaryCard } from "../components/AutomationOpsSummaryCard";
+import { AutomationRulesSummaryCard } from "../components/AutomationRulesSummaryCard";
+import { AutomationJobsSummaryCard } from "../components/AutomationJobsSummaryCard";
+import { AutomationRecoverySummaryCard } from "../components/AutomationRecoverySummaryCard";
+import { AutomationWorkersSummaryCard } from "../components/AutomationWorkersSummaryCard";
+import { AutomationWorkflowsSummaryCard } from "../components/AutomationWorkflowsSummaryCard";
 import { StatusBanner } from "../components/StatusBanner";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7666,6 +7675,15 @@ export function DashboardPage() {
       <ScanAuthenticationSummaryCard />
       <ScanIntelligenceFeedSummaryCard />
       <ScanReplaySummaryCard />
+      <AutomationBatchSummaryCard />
+      <AutomationNotificationsSummaryCard />
+      <AutomationAnalyticsSummaryCard />
+      <AutomationOpsSummaryCard />
+      <AutomationRulesSummaryCard />
+      <AutomationJobsSummaryCard />
+      <AutomationRecoverySummaryCard />
+      <AutomationWorkersSummaryCard />
+      <AutomationWorkflowsSummaryCard />
     </AppShell>
   );
 }
