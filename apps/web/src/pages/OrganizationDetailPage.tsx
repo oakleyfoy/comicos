@@ -210,6 +210,14 @@ export function OrganizationDetailPage(): JSX.Element {
                 Activity feed
               </Link>
             ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplaces`}
+                className="rounded-2xl border border-indigo-400/30 px-4 py-2 text-sm font-semibold text-indigo-100"
+              >
+                Marketplace accounts
+              </Link>
+            ) : null}
             {organization && hasOrganizationPermission(organization, "audit:view") ? (
               <Link
                 to={`/organizations/${organization.id}/audit`}

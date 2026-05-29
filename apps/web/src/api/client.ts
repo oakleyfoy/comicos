@@ -11350,6 +11350,87 @@ export interface PublicStorefrontInventoryListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export interface MarketplaceAccountConnectRequest {
+  marketplace_type: string;
+  marketplace_account_id: string;
+  display_name: string;
+  credential_type: string;
+  credential_reference: string;
+}
+
+export interface MarketplaceAccountDisconnectRequest {
+  account_id: number;
+  reason?: string | null;
+}
+
+export interface MarketplaceAccountVerifyRequest {
+  account_id: number;
+  verification_status?: string;
+  reason?: string | null;
+}
+
+export interface MarketplaceRegistryEntryResponse {
+  marketplace_key: string;
+  display_name: string;
+  status: string;
+  capability_flags: string[];
+}
+
+export interface MarketplacePermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+  role_keys: string[];
+  permission_keys: string[];
+}
+
+export interface MarketplaceCredentialResponse {
+  id: number;
+  marketplace_account_id: number;
+  credential_type: string;
+  credential_reference: string;
+  credential_status: string;
+  rotated_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketplaceConnectionEventResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id?: number | null;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceAccountResponse {
+  id: number;
+  organization_id: number;
+  marketplace_type: string;
+  marketplace_account_id: string;
+  display_name: string;
+  account_status: string;
+  verification_status: string;
+  connected_at: string;
+  disconnected_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketplaceAccountDetailResponse {
+  account: MarketplaceAccountResponse;
+  credentials: MarketplaceCredentialResponse[];
+  connection_events: MarketplaceConnectionEventResponse[];
+  registry_entry: MarketplaceRegistryEntryResponse;
+  permissions: MarketplacePermissionResponse;
+}
+
+export interface MarketplaceAccountListResponse {
+  items: MarketplaceAccountResponse[];
+  registry: MarketplaceRegistryEntryResponse[];
+  permissions: MarketplacePermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
 export interface OrganizationListResponse {
   items: OrganizationResponse[];
   pagination: MarketApiV1Pagination;
@@ -16178,6 +16259,45 @@ export const apiClient = {
 
   getOrganization(organizationId: number): Promise<OrganizationResponse> {
     return requestScanV1<OrganizationResponse>(`/organizations/${organizationId}`);
+  },
+
+  listMarketplaceAccounts(organizationId: number, params?: { limit?: number; offset?: number }): Promise<MarketplaceAccountListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceAccountListResponse>(`/organizations/${organizationId}/marketplaces${q}`);
+  },
+
+  getMarketplaceAccount(organizationId: number, accountId: number): Promise<MarketplaceAccountDetailResponse> {
+    return requestScanV1<MarketplaceAccountDetailResponse>(`/organizations/${organizationId}/marketplaces/${accountId}`);
+  },
+
+  connectMarketplaceAccount(
+    organizationId: number,
+    payload: MarketplaceAccountConnectRequest,
+  ): Promise<MarketplaceAccountDetailResponse> {
+    return requestScanV1<MarketplaceAccountDetailResponse>(`/organizations/${organizationId}/marketplaces/connect`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  disconnectMarketplaceAccount(
+    organizationId: number,
+    payload: MarketplaceAccountDisconnectRequest,
+  ): Promise<MarketplaceAccountDetailResponse> {
+    return requestScanV1<MarketplaceAccountDetailResponse>(`/organizations/${organizationId}/marketplaces/disconnect`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  verifyMarketplaceAccount(
+    organizationId: number,
+    payload: MarketplaceAccountVerifyRequest,
+  ): Promise<MarketplaceAccountDetailResponse> {
+    return requestScanV1<MarketplaceAccountDetailResponse>(`/organizations/${organizationId}/marketplaces/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   inviteOrganizationMember(organizationId: number, payload: OrganizationInviteRequest): Promise<OrganizationInvitationResponse> {

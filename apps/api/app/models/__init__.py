@@ -392,6 +392,11 @@ from app.models.organization_permissions import (
     OrganizationPermissionAudit,
     OrganizationRole,
 )
+from app.models.marketplace_accounts import (
+    MarketplaceAccount,
+    MarketplaceConnectionEvent,
+    MarketplaceCredential,
+)
 from app.models.organization_inventory import (
     OrganizationInventoryAssignment,
     OrganizationInventoryQueue,
@@ -745,6 +750,9 @@ __all__ = [
     "OrganizationRole",
     "OrganizationMembershipRole",
     "OrganizationPermissionAudit",
+    "MarketplaceAccount",
+    "MarketplaceCredential",
+    "MarketplaceConnectionEvent",
     "OrganizationInventoryAssignment",
     "OrganizationInventoryQueue",
     "OrganizationInventoryWorkflowEvent",

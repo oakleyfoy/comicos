@@ -28,7 +28,7 @@ interface AuthContextValue {
   user: User | null;
   securityContext: OrganizationSecurityContextRead | null;
   isOpsAdmin: boolean;
-  login: (payload: LoginPayload) => Promise<void>;
+  login: (payload: LoginPayload) => Promise<OrganizationSecurityContextRead | null>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -104,8 +104,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tokenResponse = await apiClient.login(payload);
     setStoredToken(tokenResponse.access_token);
     setIsLoading(true);
-    await refreshUser();
-  }, [refreshUser]);
+    try {
+      const currentUser = await apiClient.getCurrentUser();
+      setUser(currentUser);
+      const nextContext = await hydrateSecurityContext();
+      setSecurityContext(nextContext);
+      return nextContext;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
     await apiClient.register(payload);

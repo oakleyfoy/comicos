@@ -45,6 +45,7 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "organization_activity_feed": "P42-07",
     "organization_audit_ledger": "P42-08",
     "organization_dealer_dashboard": "P42-09",
+    "marketplace_account_foundation": "P43-01",
 }
 
 

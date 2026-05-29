@@ -1131,6 +1131,7 @@ from app.api.automation_recovery import attach_automation_recovery_layer
 from app.api.automation_scheduling import attach_automation_scheduling_layer
 from app.api.automation_workers import attach_automation_workers_layer
 from app.api.organization import attach_organization_layer
+from app.api.marketplace_accounts import attach_marketplace_accounts_layer
 from app.api.routes.auth_sessions import attach_auth_sessions_layer
 from app.api.shared_inventory import attach_shared_inventory_layer
 from app.api.reviews import attach_reviews_layer
@@ -1182,6 +1183,7 @@ attach_automation_recovery_layer(app)
 attach_automation_scheduling_layer(app)
 attach_automation_workers_layer(app)
 attach_organization_layer(app)
+attach_marketplace_accounts_layer(app)
 attach_auth_sessions_layer(app)
 attach_shared_inventory_layer(app)
 attach_reviews_layer(app)

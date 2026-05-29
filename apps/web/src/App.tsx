@@ -45,6 +45,7 @@ import { AutomationRecoveryPage } from "./pages/AutomationRecoveryPage";
 import { AutomationWorkersPage } from "./pages/AutomationWorkersPage";
 import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
 import { OrganizationDetailPage } from "./pages/OrganizationDetailPage";
+import { MarketplaceAccountsPage } from "./pages/MarketplaceAccountsPage";
 import { OrganizationInventoryPage } from "./pages/OrganizationInventoryPage";
 import { OrganizationReviewsPage } from "./pages/OrganizationReviewsPage";
 import { OrganizationActivityPage } from "./pages/OrganizationActivityPage";
@@ -55,7 +56,7 @@ import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
 function HomeRedirect() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, securityContext } = useAuth();
 
   if (isLoading) {
     return (
@@ -65,7 +66,15 @@ function HomeRedirect() {
     );
   }
 
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (securityContext?.active_organization_id) {
+    return <Navigate to={`/organizations/${securityContext.active_organization_id}`} replace />;
+  }
+
+  return <Navigate to="/organizations" replace />;
 }
 
 export default function App() {
@@ -106,6 +115,7 @@ export default function App() {
         <Route path="/automation-workflows" element={<AutomationWorkflowsPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+        <Route path="/organizations/:organizationId/marketplaces" element={<MarketplaceAccountsPage />} />
         <Route path="/organizations/:organizationId/inventory" element={<OrganizationInventoryPage />} />
         <Route path="/organizations/:organizationId/reviews" element={<OrganizationReviewsPage />} />
         <Route path="/organizations/:organizationId/activity" element={<OrganizationActivityPage />} />

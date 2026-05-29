@@ -22,14 +22,24 @@ export function LoginPage() {
 
   const from = (location.state as LocationState | null)?.from?.pathname ?? "/dashboard";
 
+  function resolvePostLoginPath(activeOrganizationId?: number | null): string {
+    if (from && from !== "/dashboard") {
+      return from;
+    }
+    if (activeOrganizationId) {
+      return `/organizations/${activeOrganizationId}`;
+    }
+    return "/organizations";
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
 
     try {
-      await login({ email, password });
-      navigate(from, { replace: true });
+      const securityContext = await login({ email, password });
+      navigate(resolvePostLoginPath(securityContext?.active_organization_id), { replace: true });
     } catch (submissionError) {
       if (submissionError instanceof ApiError) {
         setError(submissionError.message);
