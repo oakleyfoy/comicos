@@ -4,6 +4,8 @@ import { useAuth } from "./auth/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { OpsProtectedRoute } from "./components/OpsProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DealerProfileSettingsPage } from "./pages/DealerProfileSettingsPage";
+import { DealerStorefrontPage } from "./pages/DealerStorefrontPage";
 import { EmailImportsPage } from "./pages/EmailImportsPage";
 import { InventoryDetailPage } from "./pages/InventoryDetailPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
@@ -42,6 +44,13 @@ import { AutomationRulesPage } from "./pages/AutomationRulesPage";
 import { AutomationRecoveryPage } from "./pages/AutomationRecoveryPage";
 import { AutomationWorkersPage } from "./pages/AutomationWorkersPage";
 import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
+import { OrganizationDetailPage } from "./pages/OrganizationDetailPage";
+import { OrganizationInventoryPage } from "./pages/OrganizationInventoryPage";
+import { OrganizationReviewsPage } from "./pages/OrganizationReviewsPage";
+import { OrganizationActivityPage } from "./pages/OrganizationActivityPage";
+import { OrganizationAuditPage } from "./pages/OrganizationAuditPage";
+import { DealerOperationsDashboardPage } from "./pages/DealerOperationsDashboardPage";
+import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
@@ -65,6 +74,7 @@ export default function App() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/scan-ingestion" element={<ScanIngestionPage />} />
@@ -94,6 +104,14 @@ export default function App() {
         <Route path="/automation-recovery" element={<AutomationRecoveryPage />} />
         <Route path="/automation-workers" element={<AutomationWorkersPage />} />
         <Route path="/automation-workflows" element={<AutomationWorkflowsPage />} />
+        <Route path="/organizations" element={<OrganizationsPage />} />
+        <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+        <Route path="/organizations/:organizationId/inventory" element={<OrganizationInventoryPage />} />
+        <Route path="/organizations/:organizationId/reviews" element={<OrganizationReviewsPage />} />
+        <Route path="/organizations/:organizationId/activity" element={<OrganizationActivityPage />} />
+        <Route path="/organizations/:organizationId/audit" element={<OrganizationAuditPage />} />
+        <Route path="/organizations/:organizationId/dashboard" element={<DealerOperationsDashboardPage />} />
+        <Route path="/organizations/:organizationId/storefront" element={<DealerProfileSettingsPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />

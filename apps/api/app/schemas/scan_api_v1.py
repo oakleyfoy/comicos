@@ -36,6 +36,15 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "automation_ops": "P41-07",
     "automation_rules": "P41-08",
     "automation_analytics": "P41-09",
+    "organization_foundation": "P42-01",
+    "organization_authorization": "P42-02",
+    "auth_security_context": "P42-03",
+    "shared_inventory_workflow": "P42-04",
+    "organization_review_workflow": "P42-05",
+    "dealer_storefront": "P42-06",
+    "organization_activity_feed": "P42-07",
+    "organization_audit_ledger": "P42-08",
+    "organization_dealer_dashboard": "P42-09",
 }
 
 

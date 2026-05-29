@@ -381,6 +381,53 @@ from app.models.automation_analytics import (
     AutomationAnalyticsSnapshot,
     AutomationAnalyticsTrend,
 )
+from app.models.organization import (
+    Organization,
+    OrganizationInvitation,
+    OrganizationMember,
+)
+from app.models.organization_events import OrganizationEvent
+from app.models.organization_permissions import (
+    OrganizationMembershipRole,
+    OrganizationPermissionAudit,
+    OrganizationRole,
+)
+from app.models.organization_inventory import (
+    OrganizationInventoryAssignment,
+    OrganizationInventoryQueue,
+    OrganizationInventoryWorkflowEvent,
+)
+from app.models.organization_reviews import (
+    OrganizationApprovalQueue,
+    OrganizationReview,
+    OrganizationReviewDecision,
+    OrganizationReviewEvent,
+)
+from app.models.dealer_profiles import (
+    DealerProfile,
+    DealerStorefrontEvent,
+    DealerStorefrontSettings,
+)
+from app.models.organization_activity import (
+    OrganizationActivityEvent,
+    OrganizationNotification,
+    OrganizationNotificationReceipt,
+)
+from app.models.organization_audit import (
+    OrganizationAuditAccessLog,
+    OrganizationAuditLedger,
+    OrganizationComplianceEvent,
+)
+from app.models.organization_dealer_dashboard import (
+    OrganizationDealerDashboardEvent,
+    OrganizationDealerDashboardSnapshot,
+    OrganizationDealerOperationalMetric,
+)
+from app.models.auth_sessions import (
+    OrganizationSecurityContext,
+    UserAuthSession,
+    UserAuthSessionEvent,
+)
 from app.models.scan_replay import (
     ScanReplayArtifact,
     ScanReplayCheck,
@@ -691,6 +738,35 @@ __all__ = [
     "AutomationAnalyticsArtifact",
     "AutomationAnalyticsIssue",
     "AutomationAnalyticsHistory",
+    "Organization",
+    "OrganizationMember",
+    "OrganizationInvitation",
+    "OrganizationEvent",
+    "OrganizationRole",
+    "OrganizationMembershipRole",
+    "OrganizationPermissionAudit",
+    "OrganizationInventoryAssignment",
+    "OrganizationInventoryQueue",
+    "OrganizationInventoryWorkflowEvent",
+    "OrganizationReview",
+    "OrganizationReviewDecision",
+    "OrganizationApprovalQueue",
+    "OrganizationReviewEvent",
+    "OrganizationActivityEvent",
+    "OrganizationNotification",
+    "OrganizationNotificationReceipt",
+    "OrganizationAuditLedger",
+    "OrganizationComplianceEvent",
+    "OrganizationAuditAccessLog",
+    "OrganizationDealerDashboardSnapshot",
+    "OrganizationDealerOperationalMetric",
+    "OrganizationDealerDashboardEvent",
+    "DealerProfile",
+    "DealerStorefrontSettings",
+    "DealerStorefrontEvent",
+    "UserAuthSession",
+    "UserAuthSessionEvent",
+    "OrganizationSecurityContext",
     "ScanUploadSession",
     "ScanIngestionBatch",
     "ScanImage",

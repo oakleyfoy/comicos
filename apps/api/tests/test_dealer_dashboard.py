@@ -1,182 +1,167 @@
 from __future__ import annotations
 
-from datetime import date
-from functools import partial
+from datetime import datetime, timezone
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models import Listing, ListingImage, ListingInventoryLink, User
-from app.services import dealer_dashboard as dealer_dashboard_service
-
+from app.models import (
+    OrganizationDealerDashboardEvent,
+    OrganizationDealerDashboardSnapshot,
+    OrganizationDealerOperationalMetric,
+)
+from app.schemas.organization_dealer_dashboard import LINEAGE_DASHBOARD_PREFIX
+from app.services.dealer_dashboard_service import (
+    _require_dashboard_access,
+    generate_dashboard_snapshot,
+    generate_operational_metrics,
+)
 from test_inventory import auth_headers, create_order, register_and_login
 
 
-def _inventory_copy_id(client: TestClient, token: str) -> int:
-    response = client.get("/inventory", headers=auth_headers(token))
-    assert response.status_code == 200
-    return int(response.json()["items"][0]["inventory_copy_id"])
-
-
-def _create_ready_listing(
-    client: TestClient,
-    session: Session,
-    token: str,
-    *,
-    title: str,
-    replay_key: str,
-    with_primary_image: bool,
-) -> int:
-    create_order(client, token)
-    inventory_copy_id = _inventory_copy_id(client, token)
-    rsp = client.post(
-        "/listings",
-        json={
-            "inventory_copy_id": inventory_copy_id,
-            "source_type": "manual",
-            "title": title,
-            "description": "Deterministic dealer dashboard listing description meets length minimums.",
-            "condition_summary": "Near Mint",
-            "asking_price_amount": "29.99",
-            "asking_price_currency": "USD",
-            "replay_key": replay_key,
-        },
+def _create_organization(client: TestClient, token: str, *, slug: str) -> int:
+    response = client.post(
+        "/api/v1/organizations",
         headers=auth_headers(token),
+        json={"display_name": slug.title(), "slug": slug, "organization_type": "DEALER"},
     )
-    assert rsp.status_code in (200, 201)
-    listing_id = int(rsp.json()["id"])
-    client.patch(f"/listings/{listing_id}", json={"status": "READY"}, headers=auth_headers(token))
-    client.patch(f"/listings/{listing_id}", json={"status": "ACTIVE"}, headers=auth_headers(token))
+    assert response.status_code == 201, response.text
+    return int(response.json()["data"]["id"])
 
-    listing = session.get(Listing, listing_id)
-    assert listing is not None
-    link = session.exec(select(ListingInventoryLink).where(ListingInventoryLink.listing_id == listing_id)).first()
-    if link is None:
-        session.add(
-            ListingInventoryLink(listing_id=listing_id, inventory_copy_id=inventory_copy_id, quantity_allocated=1),
-        )
-    if with_primary_image:
-        has_img = session.exec(select(ListingImage).where(ListingImage.listing_id == listing_id)).first()
-        if has_img is None:
-            session.add(ListingImage(listing_id=listing_id, display_order=0, role="primary"))
+
+def _inventory_copy_id(client: TestClient, token: str) -> int:
+    create_order(client, token)
+    listing = client.get("/inventory?page=1&page_size=1", headers=auth_headers(token))
+    assert listing.status_code == 200, listing.text
+    return int(listing.json()["items"][0]["inventory_copy_id"])
+
+
+def _invite_staff(client: TestClient, owner: str, organization_id: int, email: str) -> tuple[str, int]:
+    invite = client.post(
+        f"/api/v1/organizations/{organization_id}/invite",
+        headers=auth_headers(owner),
+        json={"email": email},
+    )
+    assert invite.status_code == 201, invite.text
+    token = invite.json()["data"]["invitation_token"]
+    staff = register_and_login(client, email)
+    accepted = client.post(f"/api/v1/organizations/invitations/{token}/accept", headers=auth_headers(staff))
+    assert accepted.status_code == 200, accepted.text
+    return staff, int(accepted.json()["data"]["user_id"])
+
+
+def test_dashboard_snapshot_and_metric_generation(client: TestClient) -> None:
+    owner = register_and_login(client, "dash-owner@example.com")
+    organization_id = _create_organization(client, owner, slug="dash-org")
+    staff, staff_user_id = _invite_staff(client, owner, organization_id, "dash-staff@example.com")
+    inventory_item_id = _inventory_copy_id(client, owner)
+
+    assigned = client.post(
+        f"/api/v1/organizations/{organization_id}/inventory/assign",
+        headers=auth_headers(owner),
+        json={"inventory_item_id": inventory_item_id, "assigned_user_id": staff_user_id},
+    )
+    assert assigned.status_code in {200, 201}, assigned.text
+
+    dashboard = client.get(
+        f"/api/v1/organizations/{organization_id}/dashboard?refresh=true",
+        headers=auth_headers(owner),
+    )
+    assert dashboard.status_code == 200, dashboard.text
+    data = dashboard.json()["data"]
+    assert data["organization_id"] == organization_id
+    assert len(data["sections"]) >= 6
+    section_keys = [row["section_key"] for row in data["sections"]]
+    assert section_keys == ["inventory", "reviews", "activity", "storefront", "notifications", "security"]
+    inventory_section = next(row for row in data["sections"] if row["section_key"] == "inventory")
+    assert inventory_section["metrics"]["active_inventory_count"] >= 1
+    assert inventory_section["metrics"]["active_staff_count"] >= 2
+
+    metrics = client.get(
+        f"/api/v1/organizations/{organization_id}/dashboard/metrics?limit=50&offset=0",
+        headers=auth_headers(owner),
+    )
+    assert metrics.status_code == 200, metrics.text
+    metric_keys = {row["metric_key"] for row in metrics.json()["data"]["items"]}
+    assert "assigned_inventory_count" in metric_keys
+    assert "pending_reviews_count" in metric_keys
+    assigned_row = next(row for row in metrics.json()["data"]["items"] if row["metric_key"] == "assigned_inventory_count")
+    assert int(assigned_row["metric_value_json"]["value"]) >= 1
+
+
+def test_org_isolation_and_unauthorized_dashboard_denial(client: TestClient) -> None:
+    owner = register_and_login(client, "dash-isolation-owner@example.com")
+    outsider = register_and_login(client, "dash-isolation-outsider@example.com")
+    organization_id = _create_organization(client, owner, slug="dash-isolation-org")
+    other_org_id = _create_organization(client, outsider, slug="dash-isolation-other")
+    staff, _staff_user_id = _invite_staff(client, owner, organization_id, "dash-isolation-staff@example.com")
+
+    denied = client.get(f"/api/v1/organizations/{organization_id}/dashboard", headers=auth_headers(staff))
+    assert denied.status_code == 403, denied.text
+
+    cross = client.get(f"/api/v1/organizations/{other_org_id}/dashboard", headers=auth_headers(owner))
+    assert cross.status_code == 403, cross.text
+
+    owner_view = client.get(f"/api/v1/organizations/{organization_id}/dashboard/snapshots", headers=auth_headers(owner))
+    assert owner_view.status_code == 200, owner_view.text
+    assert all(row["organization_id"] == organization_id for row in owner_view.json()["data"]["items"])
+
+
+def test_deterministic_snapshot_ordering(client: TestClient, session: Session) -> None:
+    owner = register_and_login(client, "dash-order-owner@example.com")
+    organization_id = _create_organization(client, owner, slug="dash-order-org")
+
+    base_time = datetime(2026, 7, 2, 10, 0, 0, tzinfo=timezone.utc)
+    first = generate_dashboard_snapshot(session, organization_id=organization_id)
+    first.generated_at = base_time
+    session.add(first)
+    second = generate_dashboard_snapshot(session, organization_id=organization_id)
+    second.generated_at = base_time
+    session.add(second)
     session.commit()
 
-    rng = {"snapshot_date": "2026-05-01", "replay_key": f"intel-{replay_key}"}
-    irsp = client.post("/listing-intelligence/generate", json=rng, headers=auth_headers(token))
-    assert irsp.status_code in (200, 201), irsp.text
-    return listing_id
-
-
-def test_dealer_dashboard_checksum_payload_stable(client: TestClient, session: Session) -> None:
-    pl = dealer_dashboard_service._compute_payload(session, owner_user_id=404, snapshot_date=date(2026, 1, 15))
-    pl2 = dealer_dashboard_service._compute_payload(session, owner_user_id=404, snapshot_date=date(2026, 1, 15))
-    assert dealer_dashboard_service._hash_payload(pl) == dealer_dashboard_service._hash_payload(pl2)
-
-
-def test_generate_replay_returns_same_snapshot(
-    client: TestClient,
-    session: Session,
-) -> None:
-    token = register_and_login(client, "dealer-owner-replay@example.com")
-    _create_ready_listing(
-        client,
-        session,
-        token,
-        title="Captain Dealer #100",
-        replay_key="replay-listing-primary",
-        with_primary_image=True,
+    listing = client.get(
+        f"/api/v1/organizations/{organization_id}/dashboard/snapshots?limit=10&offset=0",
+        headers=auth_headers(owner),
     )
-
-    payload = partial(
-        client.post,
-        "/dealer-dashboard/generate",
-        json={"snapshot_date": "2026-05-01", "replay_key": "replay-dash-aa"},
-        headers=auth_headers(token),
-    )
-
-    rsp1 = payload()
-    assert rsp1.status_code in (200, 201)
-    chk1 = rsp1.json()["snapshot"]["checksum"]
-    id1 = rsp1.json()["snapshot"]["id"]
-
-    rsp2 = payload()
-    assert rsp2.status_code in (200, 201)
-    assert rsp2.json()["snapshot"]["id"] == id1
-    assert rsp2.json()["snapshot"]["checksum"] == chk1
+    assert listing.status_code == 200, listing.text
+    ids = [row["id"] for row in listing.json()["data"]["items"]]
+    assert ids == sorted(ids, reverse=True)
 
 
-def test_dealer_dashboard_feed_ordering_and_no_listing_mutation(
-    client: TestClient,
-    session: Session,
-) -> None:
-    token_a = register_and_login(client, "dealer-owner-a@example.com")
-    _create_ready_listing(
-        client,
-        session,
-        token_a,
-        title="Book One Dealer",
-        replay_key="ddb-listing-one",
-        with_primary_image=True,
-    )
+def test_append_only_dashboard_lineage(client: TestClient, session: Session) -> None:
+    owner = register_and_login(client, "dash-lineage-owner@example.com")
+    organization_id = _create_organization(client, owner, slug="dash-lineage-org")
+    staff, staff_user_id = _invite_staff(client, owner, organization_id, "dash-lineage-staff@example.com")
 
-    before = session.exec(select(func.count(Listing.id))).one()
+    generate_operational_metrics(session, organization_id=organization_id)
+    generate_dashboard_snapshot(session, organization_id=organization_id)
+    session.commit()
 
-    gen = client.post(
-        "/dealer-dashboard/generate",
-        json={"snapshot_date": "2026-05-01", "replay_key": "fresh-dash-unique"},
-        headers=auth_headers(token_a),
-    )
-    assert gen.status_code == 201, gen.text
+    denied = client.get(f"/api/v1/organizations/{organization_id}/dashboard", headers=auth_headers(staff))
+    assert denied.status_code == 403, denied.text
 
-    after_lc = session.exec(select(func.count(Listing.id))).one()
-    assert int(after_lc or 0) == int(before or 0)
+    with pytest.raises(HTTPException) as exc:
+        _require_dashboard_access(
+            session,
+            organization_id=organization_id,
+            actor_user_id=staff_user_id,
+            record_access=False,
+        )
+    assert exc.value.status_code == 403
 
-    feed = client.get("/dealer-dashboard/feed?limit=50", headers=auth_headers(token_a))
-    assert feed.status_code == 200
-    items = feed.json()["items"]
-    keys = [(row["created_at"], row["id"]) for row in items]
-    assert keys == sorted(keys, reverse=True)
+    lineage = session.exec(
+        select(OrganizationDealerDashboardEvent)
+        .where(OrganizationDealerDashboardEvent.organization_id == organization_id)
+        .where(OrganizationDealerDashboardEvent.event_type.like(f"{LINEAGE_DASHBOARD_PREFIX}%"))
+        .order_by(OrganizationDealerDashboardEvent.id.asc())
+    ).all()
+    types = [row.event_type for row in lineage]
+    assert "lineage.dashboard_metric_generated" in types
+    assert "lineage.dashboard_snapshot_generated" in types
+    assert "lineage.unauthorized_dashboard_access_attempt" in types
 
-
-def test_owner_ops_dashboard_scoping(monkeypatch, client: TestClient, session: Session) -> None:
-    monkeypatch.setenv("OPS_ADMIN_EMAILS", "dealer-ops@example.com")
-    from app.core.config import get_settings
-
-    get_settings.cache_clear()
-
-    owner_token = register_and_login(client, "dealer-owner-scope@example.com")
-    ops_token = register_and_login(client, "dealer-ops@example.com")
-    outsider_token = register_and_login(client, "dealer-outsider-scope@example.com")
-
-    uid = session.exec(select(User).where(User.email == "dealer-owner-scope@example.com")).first()
-    assert uid is not None
-    oid = int(uid.id)
-
-    _create_ready_listing(
-        client,
-        session,
-        owner_token,
-        title="Scope Case #1",
-        replay_key="scope-listing-dash",
-        with_primary_image=False,
-    )
-    rsp = client.post(
-        "/dealer-dashboard/generate",
-        json={"snapshot_date": "2026-05-01", "replay_key": "scope-dash-gen"},
-        headers=auth_headers(owner_token),
-    )
-    assert rsp.status_code == 201, rsp.text
-
-    owner_alerts = client.get("/dealer-dashboard/alerts", headers=auth_headers(owner_token))
-    outsider_alerts = client.get("/dealer-dashboard/alerts", headers=auth_headers(outsider_token))
-    assert owner_alerts.json()["total_items"] >= 1
-    assert outsider_alerts.json()["total_items"] == 0
-
-    scoped = client.get(f"/ops/dealer-dashboard/alerts?owner_user_id={oid}", headers=auth_headers(ops_token))
-    assert scoped.status_code == 200
-    assert scoped.json()["total_items"] >= 1
-
-    unscoped = client.get("/ops/dealer-dashboard/alerts", headers=auth_headers(ops_token))
-    assert unscoped.status_code == 200
-    assert unscoped.json()["total_items"] >= scoped.json()["total_items"]
+    assert session.exec(select(OrganizationDealerDashboardSnapshot).where(OrganizationDealerDashboardSnapshot.organization_id == organization_id)).all()
+    assert session.exec(select(OrganizationDealerOperationalMetric).where(OrganizationDealerOperationalMetric.organization_id == organization_id)).all()

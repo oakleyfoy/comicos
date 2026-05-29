@@ -23,7 +23,7 @@ from app.api.report_params import (
     parse_timeline_export_params,
 )
 from app.core.config import Settings, get_settings, validate_production_settings
-from app.core.security import create_access_token, get_password_hash, verify_password
+from app.core.security import create_access_token, get_password_hash, token_expiration_utc, verify_password
 from app.db.session import get_session
 from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, PortfolioStrategyDashboardSnapshot, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
@@ -1130,7 +1130,16 @@ from app.api.automation_jobs import attach_automation_jobs_layer
 from app.api.automation_recovery import attach_automation_recovery_layer
 from app.api.automation_scheduling import attach_automation_scheduling_layer
 from app.api.automation_workers import attach_automation_workers_layer
+from app.api.organization import attach_organization_layer
+from app.api.routes.auth_sessions import attach_auth_sessions_layer
+from app.api.shared_inventory import attach_shared_inventory_layer
+from app.api.reviews import attach_reviews_layer
+from app.api.storefronts import attach_storefronts_layer
+from app.api.activity import attach_activity_layer
+from app.api.audit import attach_audit_layer
+from app.api.dealer_dashboard import attach_dealer_dashboard_layer
 from app.api.scan_replay import attach_scan_replay_layer
+from app.security.session_manager import build_device_label, create_session, detect_device_type
 
 
 settings = get_settings()
@@ -1172,6 +1181,14 @@ attach_automation_jobs_layer(app)
 attach_automation_recovery_layer(app)
 attach_automation_scheduling_layer(app)
 attach_automation_workers_layer(app)
+attach_organization_layer(app)
+attach_auth_sessions_layer(app)
+attach_shared_inventory_layer(app)
+attach_reviews_layer(app)
+attach_storefronts_layer(app)
+attach_activity_layer(app)
+attach_audit_layer(app)
+attach_dealer_dashboard_layer(app)
 attach_scan_replay_layer(app)
 
 
@@ -1295,7 +1312,7 @@ def register(payload: UserRegister, session: Session = Depends(get_session)) -> 
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-def login(payload: UserLogin, session: Session = Depends(get_session)) -> TokenResponse:
+def login(request: Request, payload: UserLogin, session: Session = Depends(get_session)) -> TokenResponse:
     user = session.exec(select(User).where(User.email == payload.email)).first()
     if (
         user is None
@@ -1308,7 +1325,18 @@ def login(payload: UserLogin, session: Session = Depends(get_session)) -> TokenR
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    assert user.id is not None
     access_token = create_access_token(subject=str(user.id))
+    create_session(
+        session,
+        user_id=int(user.id),
+        raw_token=access_token,
+        expires_at=token_expiration_utc(access_token),
+        device_label=build_device_label(request.headers.get("user-agent")),
+        device_type=detect_device_type(request.headers.get("user-agent")),
+        ip_address=request.client.host if request.client is not None else None,
+        user_agent=request.headers.get("user-agent"),
+    )
     return TokenResponse(access_token=access_token)
 
 
@@ -5267,6 +5295,7 @@ def get_inventory(
     ] = None,
     sort_by: str | None = None,
     sort_dir: Literal["asc", "desc"] = "asc",
+    organization_id: Annotated[int | None, Query(description="Organization scope for shared dealer inventory visibility.")] = None,
 ) -> InventoryListResponse:
     return list_inventory(
         session=session,
@@ -5290,6 +5319,7 @@ def get_inventory(
         arrival_classification=arrival_classification,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        organization_id=organization_id,
     )
 
 

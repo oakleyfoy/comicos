@@ -12,10 +12,14 @@ from app.models import (
     InventoryFmvSnapshot,
     Order,
     OrderItem,
+    OrganizationMember,
     Publisher,
     User,
     Variant,
 )
+from app.services.organization_inventory_access import resolve_inventory_visibility
+from app.services.shared_inventory_service import assignment_metadata_for_inventory_ids
+from app.services.review_workflow_service import review_metadata_for_inventory_ids
 from app.schemas.inventory import (
     BulkInventoryUpdateRequest,
     BulkInventoryUpdateResponse,
@@ -116,9 +120,10 @@ def _asset_state_case_expression():
     )
 
 
-def build_inventory_base_query(current_user: User):
+def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int, ...] | None = None):
     gain_loss_expr = gain_loss_expression().label("gain_loss")
     asset_state_expr = _asset_state_case_expression().label("asset_state")
+    scope_ids = owner_user_ids if owner_user_ids is not None else (int(current_user.id),)
 
     return (
         select(
@@ -159,7 +164,7 @@ def build_inventory_base_query(current_user: User):
         .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
         .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
         .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == current_user.id)
+        .where(InventoryCopy.user_id.in_(scope_ids))
     )
 
 
@@ -491,7 +496,37 @@ def list_inventory(
     arrival_classification: OrderArrivalClassification | None,
     sort_by: str | None,
     sort_dir: str,
+    organization_id: int | None = None,
 ) -> InventoryListResponse:
+    org_scope_ids: tuple[int, ...] | None = None
+    org_assignment_metadata: dict[int, dict[str, object]] = {}
+    org_review_metadata: dict[int, dict[str, object]] = {}
+    if organization_id is not None:
+        assert current_user.id is not None
+        visible_ids = resolve_inventory_visibility(
+            session,
+            organization_id=organization_id,
+            actor_user_id=int(current_user.id),
+        )
+        if not visible_ids:
+            return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
+        member_rows = session.exec(
+            select(OrganizationMember.user_id)
+            .where(OrganizationMember.organization_id == organization_id)
+            .where(OrganizationMember.membership_status == "ACTIVE")
+            .order_by(OrganizationMember.user_id.asc())
+        ).all()
+        org_scope_ids = tuple(int(row) for row in member_rows)
+        org_assignment_metadata = assignment_metadata_for_inventory_ids(
+            session,
+            organization_id=organization_id,
+            inventory_item_ids=visible_ids,
+        )
+        org_review_metadata = review_metadata_for_inventory_ids(
+            session,
+            organization_id=organization_id,
+            inventory_item_ids=visible_ids,
+        )
     _, _, _, intel_signals = compute_inventory_intelligence(
         session,
         current_user=current_user,
@@ -589,7 +624,7 @@ def list_inventory(
             return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
 
     filtered_stmt = apply_inventory_filters(
-        build_inventory_base_query(current_user),
+        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
         search=search,
         publisher=publisher,
         hold_status=hold_status,
@@ -607,7 +642,7 @@ def list_inventory(
         .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
         .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
         .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == current_user.id)
+        .where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (int(current_user.id),)))
     )
     total_stmt = apply_inventory_filters(
         total_stmt,
@@ -668,6 +703,18 @@ def list_inventory(
         row_map["fmv_currency_code"] = fmv_attachment.fmv_currency_code
         row_map["valuation_scope"] = fmv_attachment.valuation_scope
         row_map["valuation_evidence_json"] = fmv_attachment.valuation_evidence_json
+        if organization_id is not None:
+            meta = org_assignment_metadata.get(inv_pk, {})
+            row_map["organization_assignment_id"] = meta.get("organization_assignment_id")
+            row_map["organization_assigned_user_id"] = meta.get("organization_assigned_user_id")
+            row_map["organization_assignment_status"] = meta.get("organization_assignment_status")
+            row_map["organization_queue_name"] = meta.get("organization_queue_name")
+            row_map["organization_queue_position"] = meta.get("organization_queue_position")
+            review_meta = org_review_metadata.get(inv_pk, {})
+            row_map["organization_active_review_id"] = review_meta.get("organization_active_review_id")
+            row_map["organization_review_status"] = review_meta.get("organization_review_status")
+            row_map["organization_review_type"] = review_meta.get("organization_review_type")
+            row_map["organization_review_queue_name"] = review_meta.get("organization_review_queue_name")
         inventory_rows.append(InventoryRow.model_validate(row_map))
 
     def _fmv_row_matches(row: InventoryRow) -> bool:

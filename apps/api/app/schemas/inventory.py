@@ -79,6 +79,15 @@ class InventoryRow(BaseModel):
     inventory_risks: list[InventoryRiskRead] = Field(default_factory=list)
     order_arrival_classifications: list[OrderArrivalClassification] = Field(default_factory=list)
     inventory_action_center: InventoryActionCenterAttachment | None = None
+    organization_assignment_id: int | None = None
+    organization_assigned_user_id: int | None = None
+    organization_assignment_status: str | None = None
+    organization_queue_name: str | None = None
+    organization_queue_position: int | None = None
+    organization_active_review_id: int | None = None
+    organization_review_status: str | None = None
+    organization_review_type: str | None = None
+    organization_review_queue_name: str | None = None
 
 
 class InventoryListResponse(BaseModel):

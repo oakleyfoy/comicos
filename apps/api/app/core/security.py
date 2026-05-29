@@ -22,9 +22,15 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(subject: str) -> str:
     settings = get_settings()
+    issued_at = datetime.now(timezone.utc)
     expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
-    expire = datetime.now(timezone.utc) + expires_delta
-    payload = {"sub": subject, "exp": expire}
+    expire = issued_at + expires_delta
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "iat": issued_at,
+        "jti": sha256(f"{subject}:{issued_at.isoformat()}".encode("utf-8")).hexdigest()[:24],
+    }
 
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
@@ -32,6 +38,16 @@ def create_access_token(subject: str) -> str:
 def decode_access_token(token: str) -> dict:
     settings = get_settings()
     return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+
+
+def token_expiration_utc(token: str) -> datetime:
+    payload = decode_access_token(token)
+    exp = payload.get("exp")
+    if isinstance(exp, datetime):
+        return exp if exp.tzinfo else exp.replace(tzinfo=timezone.utc)
+    if isinstance(exp, (int, float)):
+        return datetime.fromtimestamp(exp, tz=timezone.utc)
+    raise ValueError("Access token is missing a valid expiration claim")
 
 
 def create_oauth_state_token(

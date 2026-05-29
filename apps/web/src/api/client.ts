@@ -3,6 +3,7 @@ const MARKET_API_V1_PREFIX = "/api/v1/market";
 const SCAN_API_V1_PREFIX = "/api/v1";
 
 export const TOKEN_STORAGE_KEY = "comic-os-access-token";
+const ACTIVE_ORGANIZATION_STORAGE_KEY = "comic-os.active-organization-id";
 
 /** P39-07 standardized pagination nested under list `data` for `/api/v1/market/*`. */
 export interface MarketApiV1Pagination {
@@ -65,6 +66,49 @@ export interface User {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+}
+
+export interface UserAuthSessionRead {
+  id: number;
+  user_id: number;
+  device_label: string;
+  device_type: string;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  organization_id?: number | null;
+  session_status: string;
+  issued_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  is_current: boolean;
+}
+
+export interface OrganizationSecurityContextRead {
+  id: number;
+  user_id: number;
+  active_organization_id?: number | null;
+  active_organization_slug?: string | null;
+  active_organization_display_name?: string | null;
+  last_org_switch_at?: string | null;
+  session_id: number;
+  session_status: string;
+  session_expires_at: string;
+  role_keys: string[];
+  permission_keys: string[];
+}
+
+export interface UserAuthSessionListResponse {
+  items: UserAuthSessionRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface RevokeAuthSessionRequest {
+  session_id: number;
+}
+
+export interface SwitchOrganizationRequest {
+  organization_id: number;
 }
 
 export interface AiParseOrderPayload {
@@ -2156,6 +2200,15 @@ export interface InventoryItem {
   inventory_risks?: InventoryRiskRead[] | null;
   order_arrival_classifications?: OrderArrivalClassification[] | null;
   inventory_action_center?: InventoryActionCenterAttachment | null;
+  organization_assignment_id?: number | null;
+  organization_assigned_user_id?: number | null;
+  organization_assignment_status?: string | null;
+  organization_queue_name?: string | null;
+  organization_queue_position?: number | null;
+  organization_active_review_id?: number | null;
+  organization_review_status?: string | null;
+  organization_review_type?: string | null;
+  organization_review_queue_name?: string | null;
 }
 
 export type ScanSessionType =
@@ -6486,6 +6539,7 @@ export interface InventoryQueryParams {
   arrival_classification?: OrderArrivalClassification;
   sort_by?: SortBy;
   sort_dir?: "asc" | "desc";
+  organization_id?: number;
 }
 
 export type InventoryReportExportParams = Omit<InventoryQueryParams, "page" | "page_size"> & {
@@ -6539,6 +6593,7 @@ export function setStoredToken(token: string): void {
 
 export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -10898,6 +10953,428 @@ export interface AutomationAnalyticsSystemIntelligenceRead {
   latest_snapshot_checksum?: string | null;
 }
 
+export interface OrganizationCreateRequest {
+  display_name: string;
+  slug?: string | null;
+  organization_type?: string;
+}
+
+export interface OrganizationInviteRequest {
+  email: string;
+  expires_in_days?: number;
+}
+
+export interface OrganizationArchiveRequest {
+  reason?: string | null;
+}
+
+export interface OrganizationRoleAssignmentRequest {
+  role_key: string;
+}
+
+export interface OrganizationResponse {
+  id: number;
+  public_id: string;
+  owner_user_id: number;
+  display_name: string;
+  slug: string;
+  organization_type: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+  active_member_count: number;
+  pending_invitation_count: number;
+  current_user_role_keys: string[];
+  current_user_permission_keys: string[];
+}
+
+export interface OrganizationMemberResponse {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  user_email: string;
+  membership_status: string;
+  joined_at: string;
+  invited_by_user_id?: number | null;
+  removed_at?: string | null;
+  is_owner: boolean;
+  role_keys: string[];
+  effective_permission_keys: string[];
+}
+
+export interface OrganizationInvitationResponse {
+  id: number;
+  organization_id: number;
+  email: string;
+  invitation_token: string;
+  status: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  invited_by_user_id: number;
+  created_at: string;
+}
+
+export interface OrganizationEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrganizationRoleResponse {
+  id: number;
+  organization_id: number;
+  role_key: string;
+  display_name: string;
+  system_managed: boolean;
+  created_at: string;
+  permission_keys: string[];
+}
+
+export interface OrganizationMembershipRoleResponse {
+  id: number;
+  organization_member_id: number;
+  organization_role_id: number;
+  role_key: string;
+  display_name: string;
+  assigned_by_user_id: number;
+  assigned_at: string;
+  permission_keys: string[];
+}
+
+export type OrganizationInventoryQueueName =
+  | "intake"
+  | "grading_review"
+  | "scan_review"
+  | "marketplace_ready"
+  | "archived";
+
+export interface OrganizationInventoryAssignmentResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id: number;
+  assigned_user_id: number;
+  assigned_by_user_id: number;
+  assignment_status: string;
+  assignment_notes?: string | null;
+  assigned_at: string;
+  completed_at?: string | null;
+}
+
+export interface OrganizationInventoryQueueResponse {
+  id: number;
+  organization_id: number;
+  queue_name: OrganizationInventoryQueueName | string;
+  inventory_item_id: number;
+  queue_position: number;
+  queue_status: string;
+  created_at: string;
+}
+
+export interface OrganizationInventoryWorkflowEventResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id?: number | null;
+  actor_user_id?: number | null;
+  workflow_event_type: string;
+  workflow_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrganizationInventoryAssignmentListResponse {
+  items: OrganizationInventoryAssignmentResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationInventoryQueueListResponse {
+  items: OrganizationInventoryQueueResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationInventoryWorkflowEventListResponse {
+  items: OrganizationInventoryWorkflowEventResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type OrganizationReviewQueueName =
+  | "intake_review"
+  | "grading_review"
+  | "authentication_review"
+  | "marketplace_approval"
+  | "archival_review";
+
+export interface OrganizationReviewResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id: number;
+  review_type: string;
+  review_status: string;
+  assigned_user_id?: number | null;
+  created_by_user_id: number;
+  requested_at: string;
+  completed_at?: string | null;
+  approval_queue_name?: string | null;
+  approval_queue_position?: number | null;
+}
+
+export interface OrganizationReviewDecisionResponse {
+  id: number;
+  organization_review_id: number;
+  actor_user_id: number;
+  decision_type: string;
+  decision_notes?: string | null;
+  created_at: string;
+}
+
+export interface OrganizationApprovalQueueResponse {
+  id: number;
+  organization_id: number;
+  queue_name: OrganizationReviewQueueName | string;
+  review_id: number;
+  queue_position: number;
+  queue_status: string;
+  created_at: string;
+}
+
+export interface OrganizationReviewListResponse {
+  items: OrganizationReviewResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationReviewDecisionListResponse {
+  items: OrganizationReviewDecisionResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationApprovalQueueListResponse {
+  items: OrganizationApprovalQueueResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type OrganizationActivityCategory =
+  | "organization"
+  | "inventory"
+  | "reviews"
+  | "storefront"
+  | "security"
+  | "permissions";
+
+export interface OrganizationActivityEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id?: number | null;
+  activity_type: string;
+  activity_payload_json: Record<string, unknown>;
+  visibility_scope: string;
+  created_at: string;
+  category?: string | null;
+}
+
+export interface OrganizationActivityListResponse {
+  items: OrganizationActivityEventResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationNotificationResponse {
+  id: number;
+  organization_id: number;
+  target_user_id: number;
+  notification_type: string;
+  notification_title: string;
+  notification_body: string;
+  notification_status: string;
+  activity_event_id?: number | null;
+  created_at: string;
+  read_at?: string | null;
+  acknowledged_at?: string | null;
+}
+
+export interface OrganizationNotificationListResponse {
+  items: OrganizationNotificationResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationNotificationUnreadCountResponse {
+  unread_count: number;
+}
+
+export interface OrganizationDealerDashboardSectionSummary {
+  section_key: string;
+  metrics: Record<string, number | string | boolean | null>;
+}
+
+export interface OrganizationDealerDashboardSnapshotResponse {
+  id: number;
+  organization_id: number;
+  snapshot_type: string;
+  snapshot_payload_json: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface OrganizationDealerDashboardSummaryResponse {
+  organization_id: number;
+  snapshot?: OrganizationDealerDashboardSnapshotResponse | null;
+  sections: OrganizationDealerDashboardSectionSummary[];
+  generated_at: string;
+}
+
+export interface OrganizationDealerOperationalMetricResponse {
+  id: number;
+  organization_id: number;
+  metric_key: string;
+  metric_value_json: Record<string, unknown>;
+  metric_group: string;
+  metric_period: string;
+  generated_at: string;
+}
+
+export interface OrganizationDealerOperationalMetricListResponse {
+  items: OrganizationDealerOperationalMetricResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationDealerDashboardSnapshotListResponse {
+  items: OrganizationDealerDashboardSnapshotResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export type OrganizationAuditCategory =
+  | "organization"
+  | "permissions"
+  | "inventory"
+  | "reviews"
+  | "storefront"
+  | "security"
+  | "sessions"
+  | "notifications";
+
+export type OrganizationComplianceSeverity = "info" | "warning" | "elevated" | "critical";
+
+export interface OrganizationAuditLedgerResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id?: number | null;
+  audit_category: string;
+  audit_action: string;
+  resource_type: string;
+  resource_id?: string | null;
+  audit_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrganizationAuditLedgerListResponse {
+  items: OrganizationAuditLedgerResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationComplianceEventResponse {
+  id: number;
+  organization_id: number;
+  compliance_event_type: string;
+  severity_level: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrganizationComplianceEventListResponse {
+  items: OrganizationComplianceEventResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationAuditAccessLogResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number;
+  accessed_resource_type: string;
+  accessed_resource_id?: string | null;
+  access_result: string;
+  created_at: string;
+}
+
+export interface OrganizationAuditAccessLogListResponse {
+  items: OrganizationAuditAccessLogResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface PublicStorefrontResponse {
+  profile: DealerProfileResponse;
+  settings: DealerStorefrontSettingsResponse;
+}
+
+export interface DealerProfileResponse {
+  id: number;
+  organization_id: number;
+  public_slug: string;
+  display_name: string;
+  tagline?: string | null;
+  description?: string | null;
+  logo_asset_id?: number | null;
+  banner_asset_id?: number | null;
+  website_url?: string | null;
+  instagram_url?: string | null;
+  whatnot_url?: string | null;
+  location_label?: string | null;
+  profile_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DealerStorefrontSettingsResponse {
+  id: number;
+  organization_id: number;
+  storefront_visibility: string;
+  public_inventory_enabled: boolean;
+  featured_inventory_limit: number;
+  featured_inventory_sort: string;
+  featured_manual_inventory_ids: number[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublicStorefrontInventoryItem {
+  inventory_copy_id: number;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  cover_name?: string | null;
+  grade_status: string;
+  current_fmv?: string | null;
+  release_year?: number | null;
+}
+
+export interface PublicStorefrontInventoryListResponse {
+  items: PublicStorefrontInventoryItem[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationListResponse {
+  items: OrganizationResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationMemberListResponse {
+  items: OrganizationMemberResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationEventListResponse {
+  items: OrganizationEventResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationRoleListResponse {
+  items: OrganizationRoleResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OrganizationMembershipRoleListResponse {
+  items: OrganizationMembershipRoleResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
 export interface AutomationRuleVersionRead {
   id: number;
   rule_id: number;
@@ -11001,6 +11478,35 @@ export const apiClient = {
 
   getCurrentUser(): Promise<User> {
     return request<User>("/auth/me");
+  },
+
+  listAuthSessions(params?: { limit?: number; offset?: number }): Promise<UserAuthSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<UserAuthSessionListResponse>(`/auth/sessions${q}`);
+  },
+
+  getSecurityContext(): Promise<OrganizationSecurityContextRead> {
+    return requestScanV1<OrganizationSecurityContextRead>("/auth/security-context");
+  },
+
+  revokeAuthSession(payload: RevokeAuthSessionRequest): Promise<UserAuthSessionRead> {
+    return requestScanV1<UserAuthSessionRead>("/auth/sessions/revoke", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  revokeAllAuthSessions(): Promise<UserAuthSessionListResponse> {
+    return requestScanV1<UserAuthSessionListResponse>("/auth/sessions/revoke-all", {
+      method: "POST",
+    });
+  },
+
+  switchActiveOrganization(payload: SwitchOrganizationRequest): Promise<OrganizationSecurityContextRead> {
+    return requestScanV1<OrganizationSecurityContextRead>("/auth/security-context/switch-organization", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   getGmailConnectStart(): Promise<GmailConnectStartResponse> {
@@ -15656,6 +16162,391 @@ export const apiClient = {
   listOpsAutomationAnalyticsFailures(params?: { limit?: number; offset?: number }): Promise<AutomationAnalyticsListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<AutomationAnalyticsListResponse>(`/ops/automation/analytics/failures${q}`);
+  },
+
+  createOrganization(payload: OrganizationCreateRequest): Promise<OrganizationResponse> {
+    return requestScanV1<OrganizationResponse>("/organizations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOrganizations(params?: { limit?: number; offset?: number }): Promise<OrganizationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationListResponse>(`/organizations${q}`);
+  },
+
+  getOrganization(organizationId: number): Promise<OrganizationResponse> {
+    return requestScanV1<OrganizationResponse>(`/organizations/${organizationId}`);
+  },
+
+  inviteOrganizationMember(organizationId: number, payload: OrganizationInviteRequest): Promise<OrganizationInvitationResponse> {
+    return requestScanV1<OrganizationInvitationResponse>(`/organizations/${organizationId}/invite`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  archiveOrganization(organizationId: number, payload: OrganizationArchiveRequest): Promise<OrganizationResponse> {
+    return requestScanV1<OrganizationResponse>(`/organizations/${organizationId}/archive`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  acceptOrganizationInvitation(token: string): Promise<OrganizationMemberResponse> {
+    return requestScanV1<OrganizationMemberResponse>(`/organizations/invitations/${encodeURIComponent(token)}/accept`, {
+      method: "POST",
+    });
+  },
+
+  listOrganizationMembers(organizationId: number, params?: { limit?: number; offset?: number }): Promise<OrganizationMemberListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationMemberListResponse>(`/organizations/${organizationId}/members${q}`);
+  },
+
+  listOrganizationEvents(organizationId: number, params?: { limit?: number; offset?: number }): Promise<OrganizationEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationEventListResponse>(`/organizations/${organizationId}/events${q}`);
+  },
+
+  listOrganizationRoles(organizationId: number, params?: { limit?: number; offset?: number }): Promise<OrganizationRoleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationRoleListResponse>(`/organizations/${organizationId}/roles${q}`);
+  },
+
+  listOrganizationMemberRoles(
+    organizationId: number,
+    memberId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OrganizationMembershipRoleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationMembershipRoleListResponse>(`/organizations/${organizationId}/members/${memberId}/roles${q}`);
+  },
+
+  assignOrganizationMemberRole(
+    organizationId: number,
+    memberId: number,
+    payload: OrganizationRoleAssignmentRequest,
+  ): Promise<OrganizationMembershipRoleResponse> {
+    return requestScanV1<OrganizationMembershipRoleResponse>(`/organizations/${organizationId}/members/${memberId}/roles`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  removeOrganizationMemberRole(
+    organizationId: number,
+    memberId: number,
+    roleId: number,
+  ): Promise<OrganizationMembershipRoleResponse> {
+    return requestScanV1<OrganizationMembershipRoleResponse>(`/organizations/${organizationId}/members/${memberId}/roles/${roleId}`, {
+      method: "DELETE",
+    });
+  },
+
+  listOrganizationInventoryAssignments(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; assignment_status?: string },
+  ): Promise<OrganizationInventoryAssignmentListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationInventoryAssignmentListResponse>(`/organizations/${organizationId}/inventory/assignments${q}`);
+  },
+
+  listOrganizationInventoryQueues(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; queue_name?: string },
+  ): Promise<OrganizationInventoryQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationInventoryQueueListResponse>(`/organizations/${organizationId}/inventory/queues${q}`);
+  },
+
+  listOrganizationInventoryWorkflowEvents(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OrganizationInventoryWorkflowEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationInventoryWorkflowEventListResponse>(`/organizations/${organizationId}/inventory/workflow-events${q}`);
+  },
+
+  assignOrganizationInventoryItem(
+    organizationId: number,
+    payload: { inventory_item_id: number; assigned_user_id: number; assignment_notes?: string | null },
+  ): Promise<OrganizationInventoryAssignmentResponse> {
+    return requestScanV1<OrganizationInventoryAssignmentResponse>(`/organizations/${organizationId}/inventory/assign`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  unassignOrganizationInventoryItem(
+    organizationId: number,
+    payload: { inventory_item_id: number; assignment_notes?: string | null },
+  ): Promise<OrganizationInventoryAssignmentResponse> {
+    return requestScanV1<OrganizationInventoryAssignmentResponse>(`/organizations/${organizationId}/inventory/unassign`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeOrganizationInventoryAssignment(
+    organizationId: number,
+    payload: { inventory_item_id: number; assignment_notes?: string | null },
+  ): Promise<OrganizationInventoryAssignmentResponse> {
+    return requestScanV1<OrganizationInventoryAssignmentResponse>(`/organizations/${organizationId}/inventory/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  moveOrganizationInventoryQueue(
+    organizationId: number,
+    payload: { inventory_item_id: number; queue_name: OrganizationInventoryQueueName; queue_position?: number },
+  ): Promise<OrganizationInventoryQueueResponse> {
+    return requestScanV1<OrganizationInventoryQueueResponse>(`/organizations/${organizationId}/inventory/queues/move`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOrganizationReviews(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; review_status?: string },
+  ): Promise<OrganizationReviewListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationReviewListResponse>(`/organizations/${organizationId}/reviews${q}`);
+  },
+
+  listOrganizationReviewQueues(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; queue_name?: string },
+  ): Promise<OrganizationApprovalQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationApprovalQueueListResponse>(`/organizations/${organizationId}/reviews/queues${q}`);
+  },
+
+  listOrganizationReviewDecisions(
+    organizationId: number,
+    reviewId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OrganizationReviewDecisionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationReviewDecisionListResponse>(
+      `/organizations/${organizationId}/reviews/${reviewId}/decisions${q}`,
+    );
+  },
+
+  createOrganizationReview(
+    organizationId: number,
+    payload: {
+      inventory_item_id: number;
+      review_type: string;
+      assigned_user_id?: number | null;
+      queue_name?: OrganizationReviewQueueName | null;
+    },
+  ): Promise<OrganizationReviewResponse> {
+    return requestScanV1<OrganizationReviewResponse>(`/organizations/${organizationId}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  assignOrganizationReview(
+    organizationId: number,
+    reviewId: number,
+    payload: { assigned_user_id: number },
+  ): Promise<OrganizationReviewResponse> {
+    return requestScanV1<OrganizationReviewResponse>(`/organizations/${organizationId}/reviews/${reviewId}/assign`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  approveOrganizationReview(
+    organizationId: number,
+    reviewId: number,
+    payload: { decision_notes?: string | null },
+  ): Promise<OrganizationReviewResponse> {
+    return requestScanV1<OrganizationReviewResponse>(`/organizations/${organizationId}/reviews/${reviewId}/approve`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  rejectOrganizationReview(
+    organizationId: number,
+    reviewId: number,
+    payload: { decision_notes?: string | null },
+  ): Promise<OrganizationReviewResponse> {
+    return requestScanV1<OrganizationReviewResponse>(`/organizations/${organizationId}/reviews/${reviewId}/reject`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  moveOrganizationReviewQueue(
+    organizationId: number,
+    payload: { review_id: number; queue_name: OrganizationReviewQueueName; queue_position?: number },
+  ): Promise<OrganizationApprovalQueueResponse> {
+    return requestScanV1<OrganizationApprovalQueueResponse>(`/organizations/${organizationId}/reviews/queues/move`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOrganizationActivity(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; category?: OrganizationActivityCategory },
+  ): Promise<OrganizationActivityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationActivityListResponse>(`/organizations/${organizationId}/activity${q}`);
+  },
+
+  listOrganizationNotifications(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OrganizationNotificationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationNotificationListResponse>(`/organizations/${organizationId}/notifications${q}`);
+  },
+
+  getOrganizationNotificationUnreadCount(
+    organizationId: number,
+  ): Promise<OrganizationNotificationUnreadCountResponse> {
+    return requestScanV1<OrganizationNotificationUnreadCountResponse>(
+      `/organizations/${organizationId}/notifications/unread-count`,
+    );
+  },
+
+  markOrganizationNotificationRead(
+    organizationId: number,
+    notificationId: number,
+  ): Promise<{ notification_id: number; notification_status: string; read_at?: string | null; acknowledged_at?: string | null }> {
+    return requestScanV1(`/organizations/${organizationId}/notifications/${notificationId}/read`, { method: "POST" });
+  },
+
+  acknowledgeOrganizationNotification(
+    organizationId: number,
+    notificationId: number,
+  ): Promise<{ notification_id: number; notification_status: string; read_at?: string | null; acknowledged_at?: string | null }> {
+    return requestScanV1(`/organizations/${organizationId}/notifications/${notificationId}/acknowledge`, {
+      method: "POST",
+    });
+  },
+
+  listOrganizationAudit(
+    organizationId: number,
+    params?: {
+      limit?: number;
+      offset?: number;
+      category?: OrganizationAuditCategory;
+      actor?: number;
+      resource_type?: string;
+    },
+  ): Promise<OrganizationAuditLedgerListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationAuditLedgerListResponse>(`/organizations/${organizationId}/audit${q}`);
+  },
+
+  listOrganizationComplianceEvents(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; severity?: OrganizationComplianceSeverity },
+  ): Promise<OrganizationComplianceEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationComplianceEventListResponse>(`/organizations/${organizationId}/compliance-events${q}`);
+  },
+
+  listOrganizationAuditAccessLogs(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; actor?: number; resource_type?: string },
+  ): Promise<OrganizationAuditAccessLogListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationAuditAccessLogListResponse>(`/organizations/${organizationId}/audit/access-log${q}`);
+  },
+
+  getOrganizationDealerDashboard(
+    organizationId: number,
+    params?: { refresh?: boolean },
+  ): Promise<OrganizationDealerDashboardSummaryResponse> {
+    const q =
+      params && params.refresh !== undefined
+        ? buildQueryString({ refresh: params.refresh ? "true" : "false" })
+        : "";
+    return requestScanV1<OrganizationDealerDashboardSummaryResponse>(`/organizations/${organizationId}/dashboard${q}`);
+  },
+
+  listOrganizationDealerDashboardMetrics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number; metric_period?: string },
+  ): Promise<OrganizationDealerOperationalMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<OrganizationDealerOperationalMetricListResponse>(
+      `/organizations/${organizationId}/dashboard/metrics${q}`,
+    );
+  },
+
+  listOrganizationDealerDashboardSnapshots(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OrganizationDealerDashboardSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OrganizationDealerDashboardSnapshotListResponse>(
+      `/organizations/${organizationId}/dashboard/snapshots${q}`,
+    );
+  },
+
+  getPublicStorefront(publicSlug: string): Promise<PublicStorefrontResponse> {
+    return requestScanV1<PublicStorefrontResponse>(`/storefronts/${encodeURIComponent(publicSlug)}`);
+  },
+
+  getPublicStorefrontInventory(
+    publicSlug: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<PublicStorefrontInventoryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<PublicStorefrontInventoryListResponse>(`/storefronts/${encodeURIComponent(publicSlug)}/inventory${q}`);
+  },
+
+  getPublicStorefrontFeatured(publicSlug: string): Promise<PublicStorefrontInventoryListResponse> {
+    return requestScanV1<PublicStorefrontInventoryListResponse>(`/storefronts/${encodeURIComponent(publicSlug)}/featured`);
+  },
+
+  upsertDealerStorefrontProfile(
+    organizationId: number,
+    payload: {
+      public_slug: string;
+      display_name: string;
+      tagline?: string | null;
+      description?: string | null;
+      logo_asset_id?: number | null;
+      banner_asset_id?: number | null;
+      website_url?: string | null;
+      instagram_url?: string | null;
+      whatnot_url?: string | null;
+      location_label?: string | null;
+      profile_status?: "ACTIVE" | "DRAFT" | "DISABLED";
+    },
+  ): Promise<DealerProfileResponse> {
+    return requestScanV1<DealerProfileResponse>(`/organizations/${organizationId}/storefront/profile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateDealerStorefrontSettings(
+    organizationId: number,
+    payload: {
+      storefront_visibility?: "PUBLIC" | "UNLISTED" | "PRIVATE";
+      public_inventory_enabled?: boolean;
+      featured_inventory_limit?: number;
+      featured_inventory_sort?: "newest" | "recently_updated" | "highest_value" | "manually_selected";
+      featured_manual_inventory_ids?: number[];
+    },
+  ): Promise<DealerStorefrontSettingsResponse> {
+    return requestScanV1<DealerStorefrontSettingsResponse>(`/organizations/${organizationId}/storefront/settings`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   listAutomationRules(params?: { limit?: number; offset?: number }): Promise<AutomationRuleListResponse> {
