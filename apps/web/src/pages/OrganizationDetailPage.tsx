@@ -190,10 +190,34 @@ export function OrganizationDetailPage(): JSX.Element {
         title={organization?.display_name ?? "Organization detail"}
         description="Member lineage, invitation shell, and append-only event history for the initial multi-tenant organization foundation."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link to="/organizations" className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
               All organizations
             </Link>
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/mobile-analytics`}
+                className="rounded-2xl border border-indigo-400/30 px-4 py-2 text-sm font-semibold text-indigo-100"
+              >
+                Mobile analytics
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/mobile-security`}
+                className="rounded-2xl border border-rose-400/30 px-4 py-2 text-sm font-semibold text-rose-100"
+              >
+                Mobile security
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/mobile-ops`}
+                className="rounded-2xl border border-cyan-400/30 px-4 py-2 text-sm font-semibold text-cyan-100"
+              >
+                Mobile ops
+              </Link>
+            ) : null}
             {organization && hasOrganizationPermission(organization, "inventory:view") ? (
               <Link
                 to={`/organizations/${organization.id}/inventory`}
@@ -232,6 +256,14 @@ export function OrganizationDetailPage(): JSX.Element {
                 className="rounded-2xl border border-fuchsia-400/30 px-4 py-2 text-sm font-semibold text-fuchsia-100"
               >
                 Marketplace listings
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/mobile`}
+                className="rounded-2xl border border-lime-400/30 px-4 py-2 text-sm font-semibold text-lime-100"
+              >
+                Mobile foundation
               </Link>
             ) : null}
             {organization && hasOrganizationPermission(organization, "organization:view") ? (

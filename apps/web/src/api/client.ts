@@ -11503,6 +11503,775 @@ export interface MarketplaceOpsDashboardResponse {
   latest_snapshot?: MarketplaceOpsSnapshotResponse | null;
 }
 
+export interface MobilePermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MobileDeviceResponse {
+  id: number;
+  organization_id: number;
+  device_identifier: string;
+  device_name: string;
+  device_type: string;
+  device_status: string;
+  last_seen_at: string | null;
+  created_at: string;
+}
+
+export interface MobileSessionResponse {
+  id: number;
+  organization_id: number;
+  device_id: number;
+  user_id: number;
+  session_status: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface OfflineSyncContractResponse {
+  id: number;
+  organization_id: number;
+  contract_type: string;
+  contract_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MobileFoundationEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MobileDeviceListResponse {
+  organization_id: number;
+  permissions: MobilePermissionResponse;
+  items: MobileDeviceResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileSessionListResponse {
+  organization_id: number;
+  permissions: MobilePermissionResponse;
+  items: MobileSessionResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OfflineSyncContractListResponse {
+  organization_id: number;
+  permissions: MobilePermissionResponse;
+  items: OfflineSyncContractResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileFoundationDashboardResponse {
+  organization_id: number;
+  permissions: MobilePermissionResponse;
+  summary: Record<string, unknown>;
+  runtime_registry: Record<string, unknown>;
+  recent_events: MobileFoundationEventResponse[];
+}
+
+export interface MobileDeviceRegisterRequest {
+  device_identifier: string;
+  device_name: string;
+  device_type: string;
+}
+
+export interface MobileDeviceUpdateRequest {
+  device_name?: string;
+  device_type?: string;
+  device_status?: string;
+  record_seen?: boolean;
+}
+
+export interface MobileSessionCreateRequest {
+  device_id: number;
+}
+
+export interface OfflineSyncContractCreateRequest {
+  contract_type: string;
+  contract_payload_json?: Record<string, unknown>;
+}
+
+export interface OfflineInventoryPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface OfflineInventoryRecordResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id: number | null;
+  local_record_identifier: string;
+  record_payload_json: Record<string, unknown>;
+  local_updated_at: string;
+  created_at: string;
+}
+
+export interface OfflineInventoryChangeResponse {
+  id: number;
+  organization_id: number;
+  device_id: number;
+  inventory_item_id: number | null;
+  change_type: string;
+  change_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OfflineSyncQueueResponse {
+  id: number;
+  organization_id: number;
+  device_id: number;
+  queue_status: string;
+  queue_payload_json: Record<string, unknown>;
+  queued_at: string;
+  processed_at: string | null;
+}
+
+export interface OfflineSyncConflictResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id: number | null;
+  conflict_type: string;
+  local_payload_json: Record<string, unknown>;
+  server_payload_json: Record<string, unknown>;
+  conflict_status: string;
+  created_at: string;
+}
+
+export interface OfflineInventoryEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OfflineInventoryChangeListResponse {
+  organization_id: number;
+  permissions: OfflineInventoryPermissionResponse;
+  items: OfflineInventoryChangeResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OfflineSyncQueueListResponse {
+  organization_id: number;
+  permissions: OfflineInventoryPermissionResponse;
+  items: OfflineSyncQueueResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OfflineSyncConflictListResponse {
+  organization_id: number;
+  permissions: OfflineInventoryPermissionResponse;
+  items: OfflineSyncConflictResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OfflineInventoryDashboardResponse {
+  organization_id: number;
+  permissions: OfflineInventoryPermissionResponse;
+  summary: Record<string, unknown>;
+  runtime_registry: Record<string, unknown>;
+  recent_records: OfflineInventoryRecordResponse[];
+  recent_events: OfflineInventoryEventResponse[];
+}
+
+export interface OfflineInventoryRecordCreateRequest {
+  local_record_identifier: string;
+  inventory_item_id?: number | null;
+  record_payload_json?: Record<string, unknown>;
+}
+
+export interface OfflineInventoryChangeRegisterRequest {
+  device_id: number;
+  inventory_item_id?: number | null;
+  change_type: string;
+  change_payload_json?: Record<string, unknown>;
+}
+
+export interface OfflineSyncQueueCreateRequest {
+  device_id: number;
+  queue_payload_json?: Record<string, unknown>;
+}
+
+export interface OfflineSyncConflictUpdateRequest {
+  conflict_status: string;
+}
+
+export interface MobileScanPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface ScanCaptureResponse {
+  id: number;
+  organization_id: number;
+  device_id: number;
+  scan_type: string;
+  scan_value: string;
+  normalized_value: string;
+  scan_status: string;
+  created_at: string;
+}
+
+export interface ScanLookupResultResponse {
+  id: number;
+  organization_id: number;
+  scan_capture_id: number;
+  lookup_type: string;
+  lookup_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface IntakeStagingRecordResponse {
+  id: number;
+  organization_id: number;
+  scan_capture_id: number;
+  staging_status: string;
+  staging_payload_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScanEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ScanCaptureDetailResponse {
+  capture: ScanCaptureResponse;
+  lookup_results: ScanLookupResultResponse[];
+}
+
+export interface ScanCaptureListResponse {
+  organization_id: number;
+  permissions: MobileScanPermissionResponse;
+  items: ScanCaptureResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ScanLookupListResponse {
+  organization_id: number;
+  permissions: MobileScanPermissionResponse;
+  items: ScanLookupResultResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface IntakeStagingListResponse {
+  organization_id: number;
+  permissions: MobileScanPermissionResponse;
+  items: IntakeStagingRecordResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileScanningDashboardResponse {
+  organization_id: number;
+  permissions: MobileScanPermissionResponse;
+  summary: Record<string, unknown>;
+  runtime_registry: Record<string, unknown>;
+  recent_events: ScanEventResponse[];
+}
+
+export interface ScanCaptureRequest {
+  device_id: number;
+  scan_type: string;
+  scan_value: string;
+}
+
+export interface IntakeStagingCreateRequest {
+  scan_capture_id: number;
+  staging_payload_json?: Record<string, unknown>;
+}
+
+export interface IntakeStagingUpdateRequest {
+  staging_status: string;
+}
+
+export interface ConventionPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface ConventionSessionResponse {
+  id: number;
+  organization_id: number;
+  session_name: string;
+  session_status: string;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+}
+
+export interface ConventionBoothResponse {
+  id: number;
+  organization_id: number;
+  convention_session_id: number;
+  booth_name: string;
+  booth_status: string;
+  created_at: string;
+}
+
+export interface ConventionInventoryStageResponse {
+  id: number;
+  organization_id: number;
+  convention_session_id: number;
+  inventory_item_id: number;
+  stage_status: string;
+  staged_at: string;
+}
+
+export interface ConventionActivityResponse {
+  id: number;
+  organization_id: number;
+  convention_session_id: number;
+  activity_type: string;
+  activity_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConventionEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConventionModeDashboardResponse {
+  organization_id: number;
+  permissions: ConventionPermissionResponse;
+  summary: Record<string, unknown>;
+  runtime_registry: Record<string, unknown>;
+  recent_events: ConventionEventResponse[];
+}
+
+export interface ConventionSessionListResponse {
+  organization_id: number;
+  permissions: ConventionPermissionResponse;
+  items: ConventionSessionResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ConventionBoothListResponse {
+  organization_id: number;
+  permissions: ConventionPermissionResponse;
+  items: ConventionBoothResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ConventionInventoryStageListResponse {
+  organization_id: number;
+  permissions: ConventionPermissionResponse;
+  items: ConventionInventoryStageResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ConventionActivityListResponse {
+  organization_id: number;
+  permissions: ConventionPermissionResponse;
+  items: ConventionActivityResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ConventionSessionCreateRequest {
+  session_name: string;
+}
+
+export interface ConventionSessionUpdateRequest {
+  session_status: string;
+}
+
+export interface ConventionBoothCreateRequest {
+  convention_session_id: number;
+  booth_name: string;
+}
+
+export interface ConventionBoothUpdateRequest {
+  booth_status: string;
+}
+
+export interface ConventionInventoryStageRequest {
+  convention_session_id: number;
+  inventory_item_id: number;
+}
+
+export interface QuickSalePermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface QuickSaleResponse {
+  id: number;
+  organization_id: number;
+  convention_session_id: number | null;
+  mobile_device_id: number | null;
+  sale_identifier: string;
+  sale_status: string;
+  buyer_label: string | null;
+  subtotal_amount: string;
+  discount_amount: string;
+  total_amount: string;
+  currency: string;
+  sale_source: string;
+  created_by_user_id: number;
+  created_at: string;
+  completed_at: string | null;
+  voided_at: string | null;
+}
+
+export interface QuickSaleLineItemResponse {
+  id: number;
+  organization_id: number;
+  quick_sale_id: number;
+  inventory_item_id: number | null;
+  offline_inventory_record_id: number | null;
+  marketplace_listing_draft_id: number | null;
+  quantity: number;
+  unit_price: string;
+  discount_amount: string;
+  line_total: string;
+  line_status: string;
+  created_at: string;
+}
+
+export interface QuickSalePaymentResponse {
+  id: number;
+  organization_id: number;
+  quick_sale_id: number;
+  payment_method: string;
+  payment_status: string;
+  amount: string;
+  currency: string;
+  payment_reference: string | null;
+  created_at: string;
+}
+
+export interface QuickSaleEventResponse {
+  id: number;
+  organization_id: number;
+  quick_sale_id: number | null;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface QuickSaleListResponse {
+  organization_id: number;
+  permissions: QuickSalePermissionResponse;
+  items: QuickSaleResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface QuickSaleDetailResponse {
+  sale: QuickSaleResponse;
+  line_items: QuickSaleLineItemResponse[];
+  payments: QuickSalePaymentResponse[];
+  events: QuickSaleEventResponse[];
+}
+
+export interface QuickSaleCreateRequest {
+  sale_identifier: string;
+  convention_session_id?: number | null;
+  mobile_device_id?: number | null;
+  buyer_label?: string | null;
+  currency: string;
+  sale_source: string;
+}
+
+export interface QuickSaleLineItemCreateRequest {
+  inventory_item_id?: number | null;
+  offline_inventory_record_id?: number | null;
+  marketplace_listing_draft_id?: number | null;
+  quantity: number;
+  unit_price: string;
+  discount_amount?: string;
+}
+
+export interface QuickSaleLineItemUpdateRequest {
+  line_status: string;
+}
+
+export interface QuickSalePaymentCreateRequest {
+  payment_method: string;
+  amount: string;
+  currency: string;
+  payment_reference?: string | null;
+}
+
+export interface MobileOpsPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MobileOpsSnapshotResponse {
+  id: number;
+  organization_id: number;
+  snapshot_type: string;
+  snapshot_payload_json: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface MobileOpsMetricResponse {
+  id: number;
+  organization_id: number;
+  metric_key: string;
+  metric_value_json: Record<string, unknown>;
+  metric_period: string;
+  generated_at: string;
+}
+
+export interface MobileOpsDiagnosticResponse {
+  id: number;
+  organization_id: number;
+  diagnostic_category: string;
+  diagnostic_status: string;
+  diagnostic_code: string;
+  diagnostic_message: string;
+  diagnostic_payload_json: Record<string, unknown>;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface MobileOpsEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MobileOpsDashboardResponse {
+  organization_id: number;
+  permissions: MobileOpsPermissionResponse;
+  summary: Record<string, unknown>;
+  metrics: MobileOpsMetricResponse[];
+  diagnostics: MobileOpsDiagnosticResponse[];
+  snapshots: MobileOpsSnapshotResponse[];
+  events: MobileOpsEventResponse[];
+  latest_snapshot: MobileOpsSnapshotResponse | null;
+}
+
+export interface MobileOpsMetricListResponse {
+  organization_id: number;
+  permissions: MobileOpsPermissionResponse;
+  items: MobileOpsMetricResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileOpsDiagnosticListResponse {
+  organization_id: number;
+  permissions: MobileOpsPermissionResponse;
+  items: MobileOpsDiagnosticResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileOpsSnapshotListResponse {
+  organization_id: number;
+  permissions: MobileOpsPermissionResponse;
+  items: MobileOpsSnapshotResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileAnalyticsPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MobileAnalyticsSnapshotResponse {
+  id: number;
+  organization_id: number;
+  snapshot_type: string;
+  snapshot_payload_json: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface MobileUsageMetricResponse {
+  id: number;
+  organization_id: number;
+  metric_key: string;
+  metric_value_json: Record<string, unknown>;
+  metric_period: string;
+  generated_at: string;
+}
+
+export interface MobileUsageTrendResponse {
+  id: number;
+  organization_id: number;
+  trend_key: string;
+  trend_payload_json: Record<string, unknown>;
+  trend_period: string;
+  generated_at: string;
+}
+
+export interface MobileAnalyticsEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MobileAnalyticsDashboardResponse {
+  organization_id: number;
+  permissions: MobileAnalyticsPermissionResponse;
+  summary: Record<string, unknown>;
+  metrics: MobileUsageMetricResponse[];
+  trends: MobileUsageTrendResponse[];
+  snapshots: MobileAnalyticsSnapshotResponse[];
+  events: MobileAnalyticsEventResponse[];
+  latest_snapshot: MobileAnalyticsSnapshotResponse | null;
+}
+
+export interface MobileUsageMetricListResponse {
+  organization_id: number;
+  permissions: MobileAnalyticsPermissionResponse;
+  items: MobileUsageMetricResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileUsageTrendListResponse {
+  organization_id: number;
+  permissions: MobileAnalyticsPermissionResponse;
+  items: MobileUsageTrendResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileAnalyticsSnapshotListResponse {
+  organization_id: number;
+  permissions: MobileAnalyticsPermissionResponse;
+  items: MobileAnalyticsSnapshotResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileDeviceSecurityPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MobileDeviceTrustStateResponse {
+  id: number;
+  organization_id: number;
+  mobile_device_id: number;
+  trust_status: string;
+  trust_reason: string | null;
+  trusted_at: string | null;
+  suspended_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MobileDeviceSecurityPolicyResponse {
+  id: number;
+  organization_id: number;
+  policy_key: string;
+  policy_status: string;
+  policy_payload_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MobileDeviceAccessLogResponse {
+  id: number;
+  organization_id: number;
+  mobile_device_id: number;
+  user_id: number;
+  access_result: string;
+  access_reason: string;
+  accessed_at: string;
+}
+
+export interface MobileDeviceSecurityEventResponse {
+  id: number;
+  organization_id: number;
+  mobile_device_id: number | null;
+  actor_user_id: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MobileDeviceSecurityDiagnosticResponse {
+  diagnostic_code: string;
+  diagnostic_status: string;
+  diagnostic_message: string;
+  diagnostic_payload_json: Record<string, unknown>;
+}
+
+export interface MobileDeviceSecurityDashboardResponse {
+  organization_id: number;
+  permissions: MobileDeviceSecurityPermissionResponse;
+  summary: Record<string, unknown>;
+  diagnostics: MobileDeviceSecurityDiagnosticResponse[];
+  trust_states: MobileDeviceTrustStateResponse[];
+  policies: MobileDeviceSecurityPolicyResponse[];
+  access_logs: MobileDeviceAccessLogResponse[];
+  events: MobileDeviceSecurityEventResponse[];
+}
+
+export interface MobileDeviceTrustStateListResponse {
+  organization_id: number;
+  permissions: MobileDeviceSecurityPermissionResponse;
+  items: MobileDeviceTrustStateResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileDeviceSecurityPolicyListResponse {
+  organization_id: number;
+  permissions: MobileDeviceSecurityPermissionResponse;
+  items: MobileDeviceSecurityPolicyResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileDeviceAccessLogListResponse {
+  organization_id: number;
+  permissions: MobileDeviceSecurityPermissionResponse;
+  items: MobileDeviceAccessLogResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileDeviceSecurityEventListResponse {
+  organization_id: number;
+  permissions: MobileDeviceSecurityPermissionResponse;
+  items: MobileDeviceSecurityEventResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MobileDeviceTrustStateCreateRequest {
+  mobile_device_id: number;
+  trust_status: string;
+  trust_reason?: string | null;
+}
+
+export interface MobileDeviceTrustStateUpdateRequest {
+  trust_status: string;
+  trust_reason?: string | null;
+}
+
+export interface MobileDeviceSecurityPolicyCreateRequest {
+  policy_key: string;
+  policy_status: string;
+  policy_payload_json?: Record<string, unknown>;
+}
+
+export interface MobileDeviceSecurityPolicyUpdateRequest {
+  policy_status: string;
+  policy_payload_json?: Record<string, unknown>;
+}
+
 export interface MarketplaceAnalyticsPermissionResponse {
   can_view: boolean;
   can_manage: boolean;
@@ -17212,6 +17981,510 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  getMobileFoundationDashboard(organizationId: number): Promise<MobileFoundationDashboardResponse> {
+    return requestScanV1<MobileFoundationDashboardResponse>(`/organizations/${organizationId}/mobile`);
+  },
+
+  listMobileDevices(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileDeviceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileDeviceListResponse>(`/organizations/${organizationId}/mobile/devices${q}`);
+  },
+
+  registerMobileDevice(organizationId: number, payload: MobileDeviceRegisterRequest): Promise<MobileDeviceResponse> {
+    return requestScanV1<MobileDeviceResponse>(`/organizations/${organizationId}/mobile/devices`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMobileDevice(
+    organizationId: number,
+    deviceId: number,
+    payload: MobileDeviceUpdateRequest,
+  ): Promise<MobileDeviceResponse> {
+    return requestScanV1<MobileDeviceResponse>(`/organizations/${organizationId}/mobile/devices/${deviceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMobileSessions(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileSessionListResponse>(`/organizations/${organizationId}/mobile/sessions${q}`);
+  },
+
+  createMobileSession(organizationId: number, payload: MobileSessionCreateRequest): Promise<MobileSessionResponse> {
+    return requestScanV1<MobileSessionResponse>(`/organizations/${organizationId}/mobile/sessions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listOfflineSyncContracts(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OfflineSyncContractListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OfflineSyncContractListResponse>(`/organizations/${organizationId}/mobile/contracts${q}`);
+  },
+
+  createOfflineSyncContract(
+    organizationId: number,
+    payload: OfflineSyncContractCreateRequest,
+  ): Promise<OfflineSyncContractResponse> {
+    return requestScanV1<OfflineSyncContractResponse>(`/organizations/${organizationId}/mobile/contracts`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getOfflineInventoryDashboard(organizationId: number): Promise<OfflineInventoryDashboardResponse> {
+    return requestScanV1<OfflineInventoryDashboardResponse>(`/organizations/${organizationId}/offline-inventory`);
+  },
+
+  listOfflineInventoryChanges(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OfflineInventoryChangeListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OfflineInventoryChangeListResponse>(`/organizations/${organizationId}/offline-inventory/changes${q}`);
+  },
+
+  listOfflineSyncQueue(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OfflineSyncQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OfflineSyncQueueListResponse>(`/organizations/${organizationId}/offline-inventory/queue${q}`);
+  },
+
+  listOfflineSyncConflicts(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<OfflineSyncConflictListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<OfflineSyncConflictListResponse>(`/organizations/${organizationId}/offline-inventory/conflicts${q}`);
+  },
+
+  createOfflineInventoryRecord(
+    organizationId: number,
+    payload: OfflineInventoryRecordCreateRequest,
+  ): Promise<OfflineInventoryRecordResponse> {
+    return requestScanV1<OfflineInventoryRecordResponse>(`/organizations/${organizationId}/offline-inventory`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  registerOfflineInventoryChange(
+    organizationId: number,
+    payload: OfflineInventoryChangeRegisterRequest,
+  ): Promise<OfflineInventoryChangeResponse> {
+    return requestScanV1<OfflineInventoryChangeResponse>(`/organizations/${organizationId}/offline-inventory/change`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  queueOfflineSyncOperation(
+    organizationId: number,
+    payload: OfflineSyncQueueCreateRequest,
+  ): Promise<OfflineSyncQueueResponse> {
+    return requestScanV1<OfflineSyncQueueResponse>(`/organizations/${organizationId}/offline-inventory/queue`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateOfflineSyncConflict(
+    organizationId: number,
+    conflictId: number,
+    payload: OfflineSyncConflictUpdateRequest,
+  ): Promise<OfflineSyncConflictResponse> {
+    return requestScanV1<OfflineSyncConflictResponse>(
+      `/organizations/${organizationId}/offline-inventory/conflicts/${conflictId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  getMobileScanningDashboard(organizationId: number): Promise<MobileScanningDashboardResponse> {
+    return requestScanV1<MobileScanningDashboardResponse>(`/organizations/${organizationId}/mobile-scanning`);
+  },
+
+  listScanCaptures(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ScanCaptureListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanCaptureListResponse>(`/organizations/${organizationId}/mobile-scanning/scans${q}`);
+  },
+
+  listScanLookupResults(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ScanLookupListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ScanLookupListResponse>(`/organizations/${organizationId}/mobile-scanning/lookups${q}`);
+  },
+
+  listIntakeStagingRecords(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<IntakeStagingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<IntakeStagingListResponse>(`/organizations/${organizationId}/mobile-scanning/staging${q}`);
+  },
+
+  captureMobileScan(organizationId: number, payload: ScanCaptureRequest): Promise<ScanCaptureDetailResponse> {
+    return requestScanV1<ScanCaptureDetailResponse>(`/organizations/${organizationId}/mobile-scanning/capture`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createIntakeStagingRecord(
+    organizationId: number,
+    payload: IntakeStagingCreateRequest,
+  ): Promise<IntakeStagingRecordResponse> {
+    return requestScanV1<IntakeStagingRecordResponse>(`/organizations/${organizationId}/mobile-scanning/staging`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateIntakeStagingRecord(
+    organizationId: number,
+    stagingId: number,
+    payload: IntakeStagingUpdateRequest,
+  ): Promise<IntakeStagingRecordResponse> {
+    return requestScanV1<IntakeStagingRecordResponse>(
+      `/organizations/${organizationId}/mobile-scanning/staging/${stagingId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  getConventionModeDashboard(organizationId: number): Promise<ConventionModeDashboardResponse> {
+    return requestScanV1<ConventionModeDashboardResponse>(`/organizations/${organizationId}/convention-mode`);
+  },
+
+  listConventionSessions(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ConventionSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ConventionSessionListResponse>(`/organizations/${organizationId}/convention-mode/sessions${q}`);
+  },
+
+  createConventionSession(
+    organizationId: number,
+    payload: ConventionSessionCreateRequest,
+  ): Promise<ConventionSessionResponse> {
+    return requestScanV1<ConventionSessionResponse>(`/organizations/${organizationId}/convention-mode/sessions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateConventionSession(
+    organizationId: number,
+    sessionId: number,
+    payload: ConventionSessionUpdateRequest,
+  ): Promise<ConventionSessionResponse> {
+    return requestScanV1<ConventionSessionResponse>(
+      `/organizations/${organizationId}/convention-mode/sessions/${sessionId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  listConventionBooths(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ConventionBoothListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ConventionBoothListResponse>(`/organizations/${organizationId}/convention-mode/booths${q}`);
+  },
+
+  createConventionBooth(organizationId: number, payload: ConventionBoothCreateRequest): Promise<ConventionBoothResponse> {
+    return requestScanV1<ConventionBoothResponse>(`/organizations/${organizationId}/convention-mode/booths`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateConventionBooth(
+    organizationId: number,
+    boothId: number,
+    payload: ConventionBoothUpdateRequest,
+  ): Promise<ConventionBoothResponse> {
+    return requestScanV1<ConventionBoothResponse>(`/organizations/${organizationId}/convention-mode/booths/${boothId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listConventionStagedInventory(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ConventionInventoryStageListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ConventionInventoryStageListResponse>(
+      `/organizations/${organizationId}/convention-mode/inventory${q}`,
+    );
+  },
+
+  stageConventionInventory(
+    organizationId: number,
+    payload: ConventionInventoryStageRequest,
+  ): Promise<ConventionInventoryStageResponse> {
+    return requestScanV1<ConventionInventoryStageResponse>(`/organizations/${organizationId}/convention-mode/inventory`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listConventionActivities(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ConventionActivityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ConventionActivityListResponse>(`/organizations/${organizationId}/convention-mode/activities${q}`);
+  },
+
+  listQuickSales(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<QuickSaleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<QuickSaleListResponse>(`/organizations/${organizationId}/quick-sales${q}`);
+  },
+
+  getQuickSale(organizationId: number, saleId: number): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales/${saleId}`);
+  },
+
+  createQuickSale(organizationId: number, payload: QuickSaleCreateRequest): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  addQuickSaleLineItem(
+    organizationId: number,
+    saleId: number,
+    payload: QuickSaleLineItemCreateRequest,
+  ): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales/${saleId}/line-items`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateQuickSaleLineItem(
+    organizationId: number,
+    saleId: number,
+    lineItemId: number,
+    payload: QuickSaleLineItemUpdateRequest,
+  ): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(
+      `/organizations/${organizationId}/quick-sales/${saleId}/line-items/${lineItemId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  recordQuickSalePayment(
+    organizationId: number,
+    saleId: number,
+    payload: QuickSalePaymentCreateRequest,
+  ): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales/${saleId}/payments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeQuickSale(organizationId: number, saleId: number): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales/${saleId}/complete`, {
+      method: "POST",
+    });
+  },
+
+  voidQuickSale(organizationId: number, saleId: number): Promise<QuickSaleDetailResponse> {
+    return requestScanV1<QuickSaleDetailResponse>(`/organizations/${organizationId}/quick-sales/${saleId}/void`, {
+      method: "POST",
+    });
+  },
+
+  getMobileOpsDashboard(organizationId: number): Promise<MobileOpsDashboardResponse> {
+    return requestScanV1<MobileOpsDashboardResponse>(`/organizations/${organizationId}/mobile-ops`);
+  },
+
+  listMobileOpsMetrics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileOpsMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileOpsMetricListResponse>(`/organizations/${organizationId}/mobile-ops/metrics${q}`);
+  },
+
+  listMobileOpsDiagnostics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileOpsDiagnosticListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileOpsDiagnosticListResponse>(`/organizations/${organizationId}/mobile-ops/diagnostics${q}`);
+  },
+
+  listMobileOpsSnapshots(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileOpsSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileOpsSnapshotListResponse>(`/organizations/${organizationId}/mobile-ops/snapshots${q}`);
+  },
+
+  generateMobileOpsDashboard(organizationId: number): Promise<MobileOpsDashboardResponse> {
+    return requestScanV1<MobileOpsDashboardResponse>(`/organizations/${organizationId}/mobile-ops/generate`, {
+      method: "POST",
+    });
+  },
+
+  getMobileAnalyticsDashboard(organizationId: number): Promise<MobileAnalyticsDashboardResponse> {
+    return requestScanV1<MobileAnalyticsDashboardResponse>(`/organizations/${organizationId}/mobile-analytics`);
+  },
+
+  listMobileAnalyticsMetrics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileUsageMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileUsageMetricListResponse>(`/organizations/${organizationId}/mobile-analytics/metrics${q}`);
+  },
+
+  listMobileAnalyticsTrends(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileUsageTrendListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileUsageTrendListResponse>(`/organizations/${organizationId}/mobile-analytics/trends${q}`);
+  },
+
+  listMobileAnalyticsSnapshots(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileAnalyticsSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileAnalyticsSnapshotListResponse>(`/organizations/${organizationId}/mobile-analytics/snapshots${q}`);
+  },
+
+  generateMobileAnalytics(organizationId: number): Promise<MobileAnalyticsDashboardResponse> {
+    return requestScanV1<MobileAnalyticsDashboardResponse>(`/organizations/${organizationId}/mobile-analytics/generate`, {
+      method: "POST",
+    });
+  },
+
+  getMobileDeviceSecurityDashboard(organizationId: number): Promise<MobileDeviceSecurityDashboardResponse> {
+    return requestScanV1<MobileDeviceSecurityDashboardResponse>(`/organizations/${organizationId}/mobile-security`);
+  },
+
+  listMobileDeviceTrustStates(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileDeviceTrustStateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileDeviceTrustStateListResponse>(`/organizations/${organizationId}/mobile-security/trust-states${q}`);
+  },
+
+  listMobileDeviceSecurityPolicies(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileDeviceSecurityPolicyListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileDeviceSecurityPolicyListResponse>(`/organizations/${organizationId}/mobile-security/policies${q}`);
+  },
+
+  listMobileDeviceAccessLogs(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileDeviceAccessLogListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileDeviceAccessLogListResponse>(`/organizations/${organizationId}/mobile-security/access-logs${q}`);
+  },
+
+  listMobileDeviceSecurityEvents(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MobileDeviceSecurityEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MobileDeviceSecurityEventListResponse>(`/organizations/${organizationId}/mobile-security/events${q}`);
+  },
+
+  createMobileDeviceTrustState(
+    organizationId: number,
+    payload: MobileDeviceTrustStateCreateRequest,
+  ): Promise<MobileDeviceTrustStateResponse> {
+    return requestScanV1<MobileDeviceTrustStateResponse>(`/organizations/${organizationId}/mobile-security/trust-states`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMobileDeviceTrustState(
+    organizationId: number,
+    trustStateId: number,
+    payload: MobileDeviceTrustStateUpdateRequest,
+  ): Promise<MobileDeviceTrustStateResponse> {
+    return requestScanV1<MobileDeviceTrustStateResponse>(
+      `/organizations/${organizationId}/mobile-security/trust-states/${trustStateId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  createMobileDeviceSecurityPolicy(
+    organizationId: number,
+    payload: MobileDeviceSecurityPolicyCreateRequest,
+  ): Promise<MobileDeviceSecurityPolicyResponse> {
+    return requestScanV1<MobileDeviceSecurityPolicyResponse>(`/organizations/${organizationId}/mobile-security/policies`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMobileDeviceSecurityPolicy(
+    organizationId: number,
+    policyId: number,
+    payload: MobileDeviceSecurityPolicyUpdateRequest,
+  ): Promise<MobileDeviceSecurityPolicyResponse> {
+    return requestScanV1<MobileDeviceSecurityPolicyResponse>(
+      `/organizations/${organizationId}/mobile-security/policies/${policyId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
   },
 
   getMarketplaceOpsDashboard(organizationId: number): Promise<MarketplaceOpsDashboardResponse> {

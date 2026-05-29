@@ -45,6 +45,14 @@ import { AutomationRecoveryPage } from "./pages/AutomationRecoveryPage";
 import { AutomationWorkersPage } from "./pages/AutomationWorkersPage";
 import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
 import { OrganizationDetailPage } from "./pages/OrganizationDetailPage";
+import { MobileFoundationPage } from "./pages/MobileFoundationPage";
+import { OfflineInventoryPage } from "./pages/OfflineInventoryPage";
+import { ConventionModePage } from "./pages/ConventionModePage";
+import { MobileScanningPage } from "./pages/MobileScanningPage";
+import { QuickSalesPage } from "./pages/QuickSalesPage";
+import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
+import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
+import { MobileAnalyticsPage } from "./pages/MobileAnalyticsPage";
 import { MarketplaceAccountsPage } from "./pages/MarketplaceAccountsPage";
 import { MarketplaceEventsPage } from "./pages/MarketplaceEventsPage";
 import { MarketplaceInventorySyncPage } from "./pages/MarketplaceInventorySyncPage";
@@ -124,6 +132,14 @@ export default function App() {
         <Route path="/automation-workflows" element={<AutomationWorkflowsPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+        <Route path="/organizations/:organizationId/mobile" element={<MobileFoundationPage />} />
+        <Route path="/organizations/:organizationId/offline-inventory" element={<OfflineInventoryPage />} />
+        <Route path="/organizations/:organizationId/mobile-scanning" element={<MobileScanningPage />} />
+        <Route path="/organizations/:organizationId/convention-mode" element={<ConventionModePage />} />
+        <Route path="/organizations/:organizationId/quick-sales" element={<QuickSalesPage />} />
+        <Route path="/organizations/:organizationId/mobile-ops" element={<MobileOpsDashboardPage />} />
+        <Route path="/organizations/:organizationId/mobile-security" element={<MobileDeviceSecurityPage />} />
+        <Route path="/organizations/:organizationId/mobile-analytics" element={<MobileAnalyticsPage />} />
         <Route path="/organizations/:organizationId/marketplaces" element={<MarketplaceAccountsPage />} />
         <Route path="/organizations/:organizationId/marketplace-events" element={<MarketplaceEventsPage />} />
         <Route path="/organizations/:organizationId/live-sales" element={<LiveSalesPage />} />

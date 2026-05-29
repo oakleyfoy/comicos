@@ -55,6 +55,14 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "shopify_sync_layer": "P43-08",
     "marketplace_ops_dashboard": "P43-09",
     "marketplace_analytics": "P43-10",
+    "mobile_foundation": "P44-01",
+    "offline_inventory_engine": "P44-02",
+    "mobile_scanning": "P44-03",
+    "convention_mode": "P44-04",
+    "quick_sales": "P44-05",
+    "mobile_ops_dashboard": "P44-06",
+    "mobile_device_security": "P44-07",
+    "mobile_analytics": "P44-08",
 }
 
 

@@ -1141,6 +1141,14 @@ from app.api.live_sales import attach_live_sales_layer
 from app.api.marketplace_ops_dashboard import attach_marketplace_ops_dashboard_layer
 from app.api.marketplace_analytics import attach_marketplace_analytics_layer
 from app.api.shopify_sync import attach_shopify_sync_layer
+from app.api.mobile_foundation import attach_mobile_foundation_layer
+from app.api.offline_inventory import attach_offline_inventory_layer
+from app.api.mobile_scanning import attach_mobile_scanning_layer
+from app.api.convention_mode import attach_convention_mode_layer
+from app.api.quick_sales import attach_quick_sales_layer
+from app.api.mobile_ops_dashboard import attach_mobile_ops_dashboard_layer
+from app.api.mobile_device_security import attach_mobile_device_security_layer
+from app.api.mobile_analytics import attach_mobile_analytics_layer
 from app.api.routes.auth_sessions import attach_auth_sessions_layer
 from app.api.shared_inventory import attach_shared_inventory_layer
 from app.api.reviews import attach_reviews_layer
@@ -1202,6 +1210,14 @@ attach_marketplace_inventory_sync_layer(app)
 attach_marketplace_listings_layer(app)
 attach_marketplace_order_layer(app)
 attach_marketplace_pricing_layer(app)
+attach_mobile_foundation_layer(app)
+attach_offline_inventory_layer(app)
+attach_mobile_scanning_layer(app)
+attach_convention_mode_layer(app)
+attach_quick_sales_layer(app)
+attach_mobile_ops_dashboard_layer(app)
+attach_mobile_device_security_layer(app)
+attach_mobile_analytics_layer(app)
 attach_auth_sessions_layer(app)
 attach_shared_inventory_layer(app)
 attach_reviews_layer(app)

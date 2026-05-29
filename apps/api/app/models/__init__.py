@@ -438,6 +438,51 @@ from app.models.live_sale_workflows import (
     LiveSaleQueueItem,
     LiveSaleSession,
 )
+from app.models.mobile_foundation import (
+    MobileDevice,
+    MobileFoundationEvent,
+    MobileSession,
+    OfflineSyncContract,
+)
+from app.models.offline_inventory import (
+    OfflineInventoryChange,
+    OfflineInventoryEvent,
+    OfflineInventoryRecord,
+    OfflineSyncConflict,
+    OfflineSyncQueue,
+)
+from app.models.mobile_scanning import IntakeStagingRecord, ScanCapture, ScanEvent, ScanLookupResult
+from app.models.convention_mode import (
+    ConventionActivity,
+    ConventionBooth,
+    ConventionModeEvent,
+    ConventionInventoryStage,
+    ConventionSession,
+)
+from app.models.quick_sales import (
+    QuickSale,
+    QuickSaleEvent,
+    QuickSaleLineItem,
+    QuickSalePayment,
+)
+from app.models.mobile_ops_dashboard import (
+    MobileOpsDiagnostic,
+    MobileOpsEvent,
+    MobileOpsMetric,
+    MobileOpsSnapshot,
+)
+from app.models.mobile_device_security import (
+    MobileDeviceAccessLog,
+    MobileDeviceSecurityEvent,
+    MobileDeviceSecurityPolicy,
+    MobileDeviceTrustState,
+)
+from app.models.mobile_analytics import (
+    MobileAnalyticsEvent,
+    MobileAnalyticsSnapshot,
+    MobileUsageMetric,
+    MobileUsageTrend,
+)
 from app.models.marketplace_events import (
     MarketplaceEvent,
     MarketplaceEventLineage,
@@ -819,6 +864,40 @@ __all__ = [
     "MarketplaceMetric",
     "MarketplacePerformanceTrend",
     "MarketplaceAnalyticsEvent",
+    "MobileDevice",
+    "MobileSession",
+    "OfflineSyncContract",
+    "MobileFoundationEvent",
+    "OfflineInventoryRecord",
+    "OfflineInventoryChange",
+    "OfflineSyncQueue",
+    "OfflineSyncConflict",
+    "OfflineInventoryEvent",
+    "ScanCapture",
+    "ScanLookupResult",
+    "IntakeStagingRecord",
+    "ScanEvent",
+    "ConventionSession",
+    "ConventionBooth",
+    "ConventionInventoryStage",
+    "ConventionActivity",
+    "ConventionModeEvent",
+    "QuickSale",
+    "QuickSaleLineItem",
+    "QuickSalePayment",
+    "QuickSaleEvent",
+    "MobileOpsSnapshot",
+    "MobileOpsMetric",
+    "MobileOpsDiagnostic",
+    "MobileOpsEvent",
+    "MobileDeviceTrustState",
+    "MobileDeviceSecurityPolicy",
+    "MobileDeviceAccessLog",
+    "MobileDeviceSecurityEvent",
+    "MobileAnalyticsSnapshot",
+    "MobileUsageMetric",
+    "MobileUsageTrend",
+    "MobileAnalyticsEvent",
     "MarketplaceOpsSnapshot",
     "MarketplaceOpsMetric",
     "MarketplaceOpsDiagnostic",
