@@ -144,6 +144,54 @@ export function MarketplaceAccountsPage(): JSX.Element {
               Organization
             </Link>
             <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-sync`}
+              className="rounded-2xl border border-amber-400/30 px-4 py-2 text-sm font-semibold text-amber-100"
+            >
+              Sync workspace
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/shopify`}
+              className="rounded-2xl border border-sky-400/30 px-4 py-2 text-sm font-semibold text-sky-100"
+            >
+              Shopify sync
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-ops`}
+              className="rounded-2xl border border-cyan-400/30 px-4 py-2 text-sm font-semibold text-cyan-100"
+            >
+              Ops dashboard
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-analytics`}
+              className="rounded-2xl border border-sky-400/30 px-4 py-2 text-sm font-semibold text-sky-100"
+            >
+              Analytics
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-orders`}
+              className="rounded-2xl border border-teal-400/30 px-4 py-2 text-sm font-semibold text-teal-100"
+            >
+              Orders workspace
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-pricing`}
+              className="rounded-2xl border border-violet-400/30 px-4 py-2 text-sm font-semibold text-violet-100"
+            >
+              Pricing workspace
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/marketplace-events`}
+              className="rounded-2xl border border-emerald-400/30 px-4 py-2 text-sm font-semibold text-emerald-100"
+            >
+              Events workspace
+            </Link>
+            <Link
+              to={`/organizations/${parsedOrganizationId}/live-sales`}
+              className="rounded-2xl border border-rose-400/30 px-4 py-2 text-sm font-semibold text-rose-100"
+            >
+              Live sales
+            </Link>
+            <Link
               to="/organizations"
               className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200"
             >

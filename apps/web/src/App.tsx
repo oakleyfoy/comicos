@@ -46,6 +46,15 @@ import { AutomationWorkersPage } from "./pages/AutomationWorkersPage";
 import { AutomationWorkflowsPage } from "./pages/AutomationWorkflowsPage";
 import { OrganizationDetailPage } from "./pages/OrganizationDetailPage";
 import { MarketplaceAccountsPage } from "./pages/MarketplaceAccountsPage";
+import { MarketplaceEventsPage } from "./pages/MarketplaceEventsPage";
+import { MarketplaceInventorySyncPage } from "./pages/MarketplaceInventorySyncPage";
+import { MarketplaceListingsPage } from "./pages/MarketplaceListingsPage";
+import { MarketplaceOrdersPage } from "./pages/MarketplaceOrdersPage";
+import { MarketplacePricingPage } from "./pages/MarketplacePricingPage";
+import { LiveSalesPage } from "./pages/LiveSalesPage";
+import { MarketplaceOpsDashboardPage } from "./pages/MarketplaceOpsDashboardPage";
+import { MarketplaceAnalyticsPage } from "./pages/MarketplaceAnalyticsPage";
+import { ShopifySyncPage } from "./pages/ShopifySyncPage";
 import { OrganizationInventoryPage } from "./pages/OrganizationInventoryPage";
 import { OrganizationReviewsPage } from "./pages/OrganizationReviewsPage";
 import { OrganizationActivityPage } from "./pages/OrganizationActivityPage";
@@ -116,6 +125,15 @@ export default function App() {
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
         <Route path="/organizations/:organizationId/marketplaces" element={<MarketplaceAccountsPage />} />
+        <Route path="/organizations/:organizationId/marketplace-events" element={<MarketplaceEventsPage />} />
+        <Route path="/organizations/:organizationId/live-sales" element={<LiveSalesPage />} />
+        <Route path="/organizations/:organizationId/marketplace-ops" element={<MarketplaceOpsDashboardPage />} />
+        <Route path="/organizations/:organizationId/marketplace-analytics" element={<MarketplaceAnalyticsPage />} />
+        <Route path="/organizations/:organizationId/marketplace-sync" element={<MarketplaceInventorySyncPage />} />
+        <Route path="/organizations/:organizationId/shopify" element={<ShopifySyncPage />} />
+        <Route path="/organizations/:organizationId/marketplace-listings" element={<MarketplaceListingsPage />} />
+        <Route path="/organizations/:organizationId/marketplace-orders" element={<MarketplaceOrdersPage />} />
+        <Route path="/organizations/:organizationId/marketplace-pricing" element={<MarketplacePricingPage />} />
         <Route path="/organizations/:organizationId/inventory" element={<OrganizationInventoryPage />} />
         <Route path="/organizations/:organizationId/reviews" element={<OrganizationReviewsPage />} />
         <Route path="/organizations/:organizationId/activity" element={<OrganizationActivityPage />} />

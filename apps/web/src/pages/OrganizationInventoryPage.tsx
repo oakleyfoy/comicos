@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   ApiError,
@@ -10,6 +10,7 @@ import {
   type OrganizationInventoryWorkflowEventResponse,
   type OrganizationMemberResponse,
   type OrganizationResponse,
+  type MarketplaceListingDraftResponse,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -23,6 +24,7 @@ import { OrganizationSharedInventoryListPanel } from "../components/organization
 import { hasOrganizationPermission } from "../lib/organizationPermissions";
 
 export function OrganizationInventoryPage(): JSX.Element {
+  const navigate = useNavigate();
   const { organizationId } = useParams();
   const parsedOrganizationId = Number(organizationId);
 
@@ -32,6 +34,7 @@ export function OrganizationInventoryPage(): JSX.Element {
   const [queues, setQueues] = useState<OrganizationInventoryQueueResponse[]>([]);
   const [events, setEvents] = useState<OrganizationInventoryWorkflowEventResponse[]>([]);
   const [members, setMembers] = useState<OrganizationMemberResponse[]>([]);
+  const [listingDrafts, setListingDrafts] = useState<MarketplaceListingDraftResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyInventoryId, setBusyInventoryId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,18 +62,22 @@ export function OrganizationInventoryPage(): JSX.Element {
         setMembers([]);
         return;
       }
-      const [inventoryResponse, assignmentResponse, queueResponse, memberResponse] = await Promise.all([
+      const [inventoryResponse, assignmentResponse, queueResponse, memberResponse, listingResponse] = await Promise.all([
         apiClient.getInventory({ page: 1, page_size: 50, organization_id: parsedOrganizationId }),
         apiClient.listOrganizationInventoryAssignments(parsedOrganizationId, { limit: 100, offset: 0 }),
         apiClient.listOrganizationInventoryQueues(parsedOrganizationId, { limit: 200, offset: 0 }),
         hasOrganizationPermission(org, "members:view")
           ? apiClient.listOrganizationMembers(parsedOrganizationId, { limit: 100, offset: 0 })
           : Promise.resolve({ items: [], pagination: { total_count: 0, limit: 0, offset: 0, has_next: false, next_cursor: null } }),
+        hasOrganizationPermission(org, "organization:view")
+          ? apiClient.listMarketplaceListings(parsedOrganizationId, { limit: 200, offset: 0 })
+          : Promise.resolve({ items: [], permissions: { can_view: false, can_manage: false }, pagination: { total_count: 0, limit: 0, offset: 0, has_next: false, next_cursor: null } }),
       ]);
       setInventory(inventoryResponse.items);
       setAssignments(assignmentResponse.items);
       setQueues(queueResponse.items);
       setMembers(memberResponse.items);
+      setListingDrafts(listingResponse.items);
       if (hasOrganizationPermission(org, "audit:view")) {
         const eventResponse = await apiClient.listOrganizationInventoryWorkflowEvents(parsedOrganizationId, {
           limit: 50,
@@ -145,7 +152,14 @@ export function OrganizationInventoryPage(): JSX.Element {
 
   const canViewInventory = organization ? hasOrganizationPermission(organization, "inventory:view") : false;
   const canManageInventory = organization ? hasOrganizationPermission(organization, "inventory:update") : false;
+  const canManageListings = organization ? hasOrganizationPermission(organization, "organization:update") : false;
   const canViewAudit = organization ? hasOrganizationPermission(organization, "audit:view") : false;
+  const listingDraftsByInventoryId = new Map<number, MarketplaceListingDraftResponse>();
+  for (const row of listingDrafts) {
+    if (!listingDraftsByInventoryId.has(row.inventory_item_id)) {
+      listingDraftsByInventoryId.set(row.inventory_item_id, row);
+    }
+  }
 
   return (
     <AppShell>
@@ -154,12 +168,22 @@ export function OrganizationInventoryPage(): JSX.Element {
         title="Organization inventory"
         description="Shared dealer inventory visibility, staff assignments, deterministic queues, and append-only workflow lineage."
         actions={
-          <Link
-            to={`/organizations/${parsedOrganizationId}`}
-            className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-200 hover:bg-white/5"
-          >
-            Back to organization
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to={`/organizations/${parsedOrganizationId}`}
+              className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-200 hover:bg-white/5"
+            >
+              Back to organization
+            </Link>
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${parsedOrganizationId}/marketplace-listings`}
+                className="rounded-xl border border-indigo-400/30 px-4 py-2 text-sm font-semibold text-indigo-100"
+              >
+                Marketplace listings
+              </Link>
+            ) : null}
+          </div>
         }
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
@@ -173,7 +197,18 @@ export function OrganizationInventoryPage(): JSX.Element {
       {!loading && organization && canViewInventory ? (
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
           <section className="space-y-4">
-            <OrganizationSharedInventoryListPanel items={inventory} loading={false} />
+            <OrganizationSharedInventoryListPanel
+              items={inventory}
+              loading={false}
+              organizationId={parsedOrganizationId}
+              listingDraftsByInventoryId={listingDraftsByInventoryId}
+              canCreateListing={canManageListings}
+              onCreateListingDraft={(inventoryItemId) =>
+                navigate(`/organizations/${parsedOrganizationId}/marketplace-listings`, {
+                  state: { inventoryItemId },
+                })
+              }
+            />
             <OrganizationInventoryAssignmentsPanel
               assignments={assignments}
               members={members}

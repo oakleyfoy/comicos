@@ -46,6 +46,15 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "organization_audit_ledger": "P42-08",
     "organization_dealer_dashboard": "P42-09",
     "marketplace_account_foundation": "P43-01",
+    "marketplace_listing_engine": "P43-02",
+    "marketplace_inventory_sync": "P43-03",
+    "marketplace_order_ingestion": "P43-04",
+    "marketplace_pricing_engine": "P43-05",
+    "marketplace_event_processing": "P43-06",
+    "live_sale_workflows": "P43-07",
+    "shopify_sync_layer": "P43-08",
+    "marketplace_ops_dashboard": "P43-09",
+    "marketplace_analytics": "P43-10",
 }
 
 

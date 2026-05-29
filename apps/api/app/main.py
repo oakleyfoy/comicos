@@ -1132,6 +1132,15 @@ from app.api.automation_scheduling import attach_automation_scheduling_layer
 from app.api.automation_workers import attach_automation_workers_layer
 from app.api.organization import attach_organization_layer
 from app.api.marketplace_accounts import attach_marketplace_accounts_layer
+from app.api.marketplace_events import attach_marketplace_events_layer
+from app.api.marketplace_inventory_sync import attach_marketplace_inventory_sync_layer
+from app.api.marketplace_listings import attach_marketplace_listings_layer
+from app.api.marketplace_orders import attach_marketplace_order_layer
+from app.api.marketplace_pricing import attach_marketplace_pricing_layer
+from app.api.live_sales import attach_live_sales_layer
+from app.api.marketplace_ops_dashboard import attach_marketplace_ops_dashboard_layer
+from app.api.marketplace_analytics import attach_marketplace_analytics_layer
+from app.api.shopify_sync import attach_shopify_sync_layer
 from app.api.routes.auth_sessions import attach_auth_sessions_layer
 from app.api.shared_inventory import attach_shared_inventory_layer
 from app.api.reviews import attach_reviews_layer
@@ -1184,6 +1193,15 @@ attach_automation_scheduling_layer(app)
 attach_automation_workers_layer(app)
 attach_organization_layer(app)
 attach_marketplace_accounts_layer(app)
+attach_marketplace_events_layer(app)
+attach_live_sales_layer(app)
+attach_marketplace_ops_dashboard_layer(app)
+attach_marketplace_analytics_layer(app)
+attach_shopify_sync_layer(app)
+attach_marketplace_inventory_sync_layer(app)
+attach_marketplace_listings_layer(app)
+attach_marketplace_order_layer(app)
+attach_marketplace_pricing_layer(app)
 attach_auth_sessions_layer(app)
 attach_shared_inventory_layer(app)
 attach_reviews_layer(app)

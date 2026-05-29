@@ -212,10 +212,82 @@ export function OrganizationDetailPage(): JSX.Element {
             ) : null}
             {organization && hasOrganizationPermission(organization, "organization:view") ? (
               <Link
+                to={`/organizations/${organization.id}/marketplace-orders`}
+                className="rounded-2xl border border-teal-400/30 px-4 py-2 text-sm font-semibold text-teal-100"
+              >
+                Marketplace orders
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-sync`}
+                className="rounded-2xl border border-amber-400/30 px-4 py-2 text-sm font-semibold text-amber-100"
+              >
+                Marketplace sync
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-listings`}
+                className="rounded-2xl border border-fuchsia-400/30 px-4 py-2 text-sm font-semibold text-fuchsia-100"
+              >
+                Marketplace listings
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
                 to={`/organizations/${organization.id}/marketplaces`}
                 className="rounded-2xl border border-indigo-400/30 px-4 py-2 text-sm font-semibold text-indigo-100"
               >
                 Marketplace accounts
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-pricing`}
+                className="rounded-2xl border border-violet-400/30 px-4 py-2 text-sm font-semibold text-violet-100"
+              >
+                Marketplace pricing
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/shopify`}
+                className="rounded-2xl border border-sky-400/30 px-4 py-2 text-sm font-semibold text-sky-100"
+              >
+                Shopify sync
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-ops`}
+                className="rounded-2xl border border-cyan-400/30 px-4 py-2 text-sm font-semibold text-cyan-100"
+              >
+                Ops dashboard
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-analytics`}
+                className="rounded-2xl border border-sky-400/30 px-4 py-2 text-sm font-semibold text-sky-100"
+              >
+                Analytics
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/marketplace-events`}
+                className="rounded-2xl border border-emerald-400/30 px-4 py-2 text-sm font-semibold text-emerald-100"
+              >
+                Marketplace events
+              </Link>
+            ) : null}
+            {organization && hasOrganizationPermission(organization, "organization:view") ? (
+              <Link
+                to={`/organizations/${organization.id}/live-sales`}
+                className="rounded-2xl border border-rose-400/30 px-4 py-2 text-sm font-semibold text-rose-100"
+              >
+                Live sales
               </Link>
             ) : null}
             {organization && hasOrganizationPermission(organization, "audit:view") ? (

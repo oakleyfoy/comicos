@@ -108,6 +108,12 @@ export function DealerOperationsDashboardPage(): JSX.Element {
               >
                 Back to organization
               </Link>
+              <Link
+                to={`/organizations/${organization.id}/shopify`}
+                className="rounded-2xl border border-sky-400/30 px-4 py-2 text-sm font-semibold text-sky-100"
+              >
+                Shopify sync
+              </Link>
             </div>
           ) : null
         }

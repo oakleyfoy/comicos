@@ -11431,6 +11431,920 @@ export interface MarketplaceAccountListResponse {
   pagination: MarketApiV1Pagination;
 }
 
+export interface MarketplaceOpsPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceOpsSnapshotResponse {
+  id: number;
+  organization_id: number;
+  snapshot_type: string;
+  snapshot_payload_json: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface MarketplaceOpsMetricResponse {
+  id: number;
+  organization_id: number;
+  metric_key: string;
+  metric_value_json: Record<string, unknown>;
+  metric_period: string;
+  generated_at: string;
+}
+
+export interface MarketplaceOpsDiagnosticResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id?: number | null;
+  diagnostic_category: string;
+  diagnostic_status: string;
+  diagnostic_code: string;
+  diagnostic_message: string;
+  diagnostic_payload_json: Record<string, unknown>;
+  created_at: string;
+  resolved_at?: string | null;
+}
+
+export interface MarketplaceOpsEventResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceOpsSnapshotListResponse {
+  items: MarketplaceOpsSnapshotResponse[];
+  permissions: MarketplaceOpsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceOpsMetricListResponse {
+  items: MarketplaceOpsMetricResponse[];
+  permissions: MarketplaceOpsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceOpsDiagnosticListResponse {
+  items: MarketplaceOpsDiagnosticResponse[];
+  permissions: MarketplaceOpsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceOpsDashboardResponse {
+  permissions: MarketplaceOpsPermissionResponse;
+  summary: Record<string, unknown>;
+  metrics: MarketplaceOpsMetricResponse[];
+  diagnostics: MarketplaceOpsDiagnosticResponse[];
+  snapshots: MarketplaceOpsSnapshotResponse[];
+  events: MarketplaceOpsEventResponse[];
+  latest_snapshot?: MarketplaceOpsSnapshotResponse | null;
+}
+
+export interface MarketplaceAnalyticsPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceAnalyticsSnapshotResponse {
+  id: number;
+  organization_id: number;
+  snapshot_type: string;
+  snapshot_payload_json: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface MarketplaceMetricResponse {
+  id: number;
+  organization_id: number;
+  metric_key: string;
+  metric_value_json: Record<string, unknown>;
+  metric_period: string;
+  generated_at: string;
+}
+
+export interface MarketplacePerformanceTrendResponse {
+  id: number;
+  organization_id: number;
+  trend_key: string;
+  trend_payload_json: Record<string, unknown>;
+  trend_period: string;
+  generated_at: string;
+}
+
+export interface MarketplaceAnalyticsEventResponse {
+  id: number;
+  organization_id: number;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceAnalyticsSnapshotListResponse {
+  items: MarketplaceAnalyticsSnapshotResponse[];
+  permissions: MarketplaceAnalyticsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceMetricListResponse {
+  items: MarketplaceMetricResponse[];
+  permissions: MarketplaceAnalyticsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplacePerformanceTrendListResponse {
+  items: MarketplacePerformanceTrendResponse[];
+  permissions: MarketplaceAnalyticsPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceAnalyticsDashboardResponse {
+  permissions: MarketplaceAnalyticsPermissionResponse;
+  summary: Record<string, unknown>;
+  metrics: MarketplaceMetricResponse[];
+  trends: MarketplacePerformanceTrendResponse[];
+  snapshots: MarketplaceAnalyticsSnapshotResponse[];
+  events: MarketplaceAnalyticsEventResponse[];
+  latest_snapshot?: MarketplaceAnalyticsSnapshotResponse | null;
+}
+
+export interface ShopifyPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface ShopifyStorefrontCreateRequest {
+  marketplace_account_id: number;
+  storefront_name: string;
+  storefront_identifier: string;
+  storefront_status?: string;
+}
+
+export interface ShopifyStorefrontResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  storefront_name: string;
+  storefront_status: string;
+  storefront_identifier: string;
+  created_at: string;
+}
+
+export interface ShopifyProductMappingCreateRequest {
+  inventory_item_id: number;
+  marketplace_listing_draft_id: number;
+  storefront_product_identifier: string;
+  mapping_status?: string;
+}
+
+export interface ShopifyProductMappingUpdateRequest {
+  storefront_product_identifier?: string | null;
+  mapping_status?: string | null;
+}
+
+export interface ShopifyProductMappingResponse {
+  id: number;
+  organization_id: number;
+  inventory_item_id: number;
+  marketplace_listing_draft_id: number;
+  storefront_product_identifier: string;
+  mapping_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShopifySyncStateResponse {
+  id: number;
+  organization_id: number;
+  storefront_id: number;
+  sync_status: string;
+  sync_payload_json: Record<string, unknown>;
+  last_sync_at?: string | null;
+  created_at: string;
+}
+
+export interface ShopifySyncSnapshotRequest {
+  storefront_id: number;
+}
+
+export interface ShopifySyncSnapshotResponse {
+  storefront: ShopifyStorefrontResponse;
+  sync_state?: ShopifySyncStateResponse | null;
+  projection_payload_json: Record<string, unknown>;
+  mappings: ShopifyProductMappingResponse[];
+}
+
+export interface ShopifySyncOverviewResponse {
+  permissions: ShopifyPermissionResponse;
+  storefronts: ShopifyStorefrontResponse[];
+  mappings: ShopifyProductMappingResponse[];
+  sync_states: ShopifySyncStateResponse[];
+  summary: Record<string, unknown>;
+}
+
+export interface ShopifyStorefrontListResponse {
+  items: ShopifyStorefrontResponse[];
+  permissions: ShopifyPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ShopifyProductMappingListResponse {
+  items: ShopifyProductMappingResponse[];
+  permissions: ShopifyPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ShopifySyncStateListResponse {
+  items: ShopifySyncStateResponse[];
+  permissions: ShopifyPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceListingDraftCreateRequest {
+  marketplace_account_id: number;
+  inventory_item_id: number;
+  listing_title: string;
+  listing_description?: string | null;
+  listing_price?: string | null;
+  listing_currency?: string;
+  listing_quantity?: number;
+}
+
+export interface MarketplaceListingDraftUpdateRequest {
+  listing_title?: string;
+  listing_description?: string | null;
+  listing_price?: string | null;
+  listing_currency?: string;
+  listing_quantity?: number;
+  listing_status?: string;
+}
+
+export interface MarketplaceListingValidationErrorResponse {
+  code: string;
+  message: string;
+}
+
+export interface MarketplaceListingDraftResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  inventory_item_id: number;
+  listing_title: string;
+  listing_description?: string | null;
+  listing_price?: string | null;
+  listing_currency: string;
+  listing_quantity: number;
+  listing_status: string;
+  validation_status: string;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+}
+
+export interface MarketplaceListingProjectionResponse {
+  id: number;
+  organization_id: number;
+  marketplace_listing_draft_id: number;
+  marketplace_type: string;
+  projection_payload_json: Record<string, unknown>;
+  projection_status: string;
+  generated_at: string;
+}
+
+export interface MarketplaceListingEventResponse {
+  id: number;
+  organization_id: number;
+  marketplace_listing_draft_id?: number | null;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceListingPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceListingDraftDetailResponse {
+  draft: MarketplaceListingDraftResponse;
+  validation_errors: MarketplaceListingValidationErrorResponse[];
+  permissions: MarketplaceListingPermissionResponse;
+  listing_events: MarketplaceListingEventResponse[];
+  projections: MarketplaceListingProjectionResponse[];
+}
+
+export interface MarketplaceListingListResponse {
+  items: MarketplaceListingDraftResponse[];
+  permissions: MarketplaceListingPermissionResponse;
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceListingProjectionListResponse {
+  items: MarketplaceListingProjectionResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceInventorySyncRunRequest {
+  marketplace_account_id?: number | null;
+  sync_run_type?: string;
+}
+
+export interface MarketplaceInventoryReconcileRequest {
+  marketplace_account_id?: number | null;
+}
+
+export interface MarketplaceInventoryStateResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  marketplace_listing_draft_id: number;
+  marketplace_listing_identifier: string;
+  inventory_item_id: number;
+  local_quantity: number;
+  marketplace_quantity: number;
+  sync_status: string;
+  last_sync_at: string;
+  created_at: string;
+}
+
+export interface MarketplaceInventorySyncRunResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id?: number | null;
+  sync_run_type: string;
+  sync_status: string;
+  records_processed: number;
+  conflicts_detected: number;
+  started_at: string;
+  completed_at?: string | null;
+}
+
+export interface MarketplaceInventoryConflictResponse {
+  id: number;
+  organization_id: number;
+  marketplace_inventory_state_id: number;
+  conflict_type: string;
+  local_value_json: Record<string, unknown>;
+  marketplace_value_json: Record<string, unknown>;
+  conflict_status: string;
+  detected_at: string;
+  resolved_at?: string | null;
+}
+
+export interface MarketplaceInventorySyncPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceInventoryDiagnosticsResponse {
+  total_states: number;
+  pending_states: number;
+  failed_states: number;
+  active_conflicts: number;
+  completed_runs: number;
+  failed_runs: number;
+}
+
+export interface MarketplaceInventorySyncSummaryResponse {
+  diagnostics: MarketplaceInventoryDiagnosticsResponse;
+  recent_runs: MarketplaceInventorySyncRunResponse[];
+  recent_conflicts: MarketplaceInventoryConflictResponse[];
+  recent_states: MarketplaceInventoryStateResponse[];
+  permissions: MarketplaceInventorySyncPermissionResponse;
+}
+
+export interface MarketplaceInventoryReconciliationEntryResponse {
+  state_id: number;
+  marketplace_listing_identifier: string;
+  inventory_item_id: number;
+  local_quantity: number;
+  marketplace_quantity: number;
+  conflict_types: string[];
+}
+
+export interface MarketplaceInventoryReconciliationReportResponse {
+  diagnostics: MarketplaceInventoryDiagnosticsResponse;
+  entries: MarketplaceInventoryReconciliationEntryResponse[];
+  conflicts: MarketplaceInventoryConflictResponse[];
+}
+
+export interface MarketplaceInventoryStateListResponse {
+  items: MarketplaceInventoryStateResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceInventorySyncRunListResponse {
+  items: MarketplaceInventorySyncRunResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceInventoryConflictListResponse {
+  items: MarketplaceInventoryConflictResponse[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MarketplaceOrderLineItemImportRequest {
+  inventory_item_id?: number | null;
+  marketplace_listing_identifier: string;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+}
+
+export interface MarketplaceTransactionImportRequest {
+  transaction_type: string;
+  transaction_status?: string;
+  gross_amount: string;
+  fee_amount: string;
+  net_amount: string;
+  transaction_currency?: string;
+  transaction_reference: string;
+}
+
+export interface MarketplaceOrderImportRequest {
+  marketplace_account_id: number;
+  marketplace_order_identifier: string;
+  marketplace_type?: string | null;
+  order_status?: string;
+  buyer_identifier?: string | null;
+  order_total: string;
+  order_currency?: string;
+  ordered_at?: string | null;
+  line_items?: MarketplaceOrderLineItemImportRequest[];
+  transactions?: MarketplaceTransactionImportRequest[];
+}
+
+export interface MarketplaceOrderReconcileRequest {
+  marketplace_account_id?: number | null;
+}
+
+export interface MarketplaceOrderResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  marketplace_order_identifier: string;
+  marketplace_type: string;
+  order_status: string;
+  buyer_identifier?: string | null;
+  order_total: string;
+  order_currency: string;
+  ordered_at: string;
+  imported_at: string;
+  created_at: string;
+}
+
+export interface MarketplaceOrderLineItemResponse {
+  id: number;
+  marketplace_order_id: number;
+  inventory_item_id?: number | null;
+  marketplace_listing_identifier: string;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+  created_at: string;
+}
+
+export interface MarketplaceTransactionResponse {
+  id: number;
+  organization_id: number;
+  marketplace_order_id: number;
+  transaction_type: string;
+  transaction_status: string;
+  gross_amount: string;
+  fee_amount: string;
+  net_amount: string;
+  transaction_currency: string;
+  transaction_reference: string;
+  created_at: string;
+}
+
+export interface MarketplaceOrderEventResponse {
+  id: number;
+  organization_id: number;
+  marketplace_order_id?: number | null;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceOrderPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceOrderImportSummaryResponse {
+  order_id: number;
+  duplicate_detected: boolean;
+  imported_line_items: number;
+  imported_transactions: number;
+  order_total: string;
+  order_currency: string;
+}
+
+export interface MarketplaceOrderDetailResponse {
+  order: MarketplaceOrderResponse;
+  line_items: MarketplaceOrderLineItemResponse[];
+  transactions: MarketplaceTransactionResponse[];
+  events: MarketplaceOrderEventResponse[];
+  import_summary: MarketplaceOrderImportSummaryResponse;
+  permissions: MarketplaceOrderPermissionResponse;
+}
+
+export interface MarketplaceOrderListResponse {
+  items: MarketplaceOrderResponse[];
+  permissions: MarketplaceOrderPermissionResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplaceTransactionListResponse {
+  items: MarketplaceTransactionResponse[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplaceTransactionMismatchResponse {
+  mismatch_code: string;
+  message: string;
+  order_id: number;
+  transaction_references: string[];
+}
+
+export interface MarketplaceTransactionReconciliationReportResponse {
+  mismatches: MarketplaceTransactionMismatchResponse[];
+  total_orders: number;
+  total_transactions: number;
+}
+
+export interface LiveSaleSessionCreateRequest {
+  marketplace_account_id: number;
+  session_name: string;
+  planned_start_at?: string | null;
+  planned_end_at?: string | null;
+}
+
+export interface LiveSaleSessionUpdateRequest {
+  session_name?: string | null;
+  planned_start_at?: string | null;
+  planned_end_at?: string | null;
+  session_status?: string | null;
+}
+
+export interface LiveSaleQueueItemCreateRequest {
+  inventory_item_id: number;
+  marketplace_listing_draft_id: number;
+  planned_price?: string | null;
+}
+
+export interface LiveSaleQueueItemUpdateRequest {
+  item_status: string;
+  planned_price?: string | null;
+  actual_sale_price?: string | null;
+}
+
+export interface LiveSaleQueueReorderRequest {
+  queue_item_ids: number[];
+}
+
+export interface LiveSaleClaimCreateRequest {
+  live_sale_queue_item_id: number;
+  buyer_identifier: string;
+  claimed_status?: string;
+  claimed_price?: string | null;
+}
+
+export interface LiveSaleClaimUpdateRequest {
+  claim_status: string;
+}
+
+export interface LiveSaleSessionResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  session_name: string;
+  session_status: string;
+  planned_start_at?: string | null;
+  planned_end_at?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiveSaleQueueItemResponse {
+  id: number;
+  organization_id: number;
+  live_sale_session_id: number;
+  inventory_item_id: number;
+  marketplace_listing_draft_id: number;
+  queue_position: number;
+  item_status: string;
+  planned_price?: string | null;
+  actual_sale_price?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiveSaleClaimResponse {
+  id: number;
+  organization_id: number;
+  live_sale_session_id: number;
+  live_sale_queue_item_id: number;
+  buyer_identifier: string;
+  claim_status: string;
+  claimed_price?: string | null;
+  claimed_at: string;
+  created_at: string;
+}
+
+export interface LiveSaleEventResponse {
+  id: number;
+  organization_id: number;
+  live_sale_session_id?: number | null;
+  actor_user_id?: number | null;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LiveSalePermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface LiveSaleSummaryResponse {
+  total_sessions: number;
+  live_sessions: number;
+  planned_sessions: number;
+  ended_sessions: number;
+  cancelled_sessions: number;
+}
+
+export interface LiveSaleClaimSummaryResponse {
+  total_claims: number;
+  claimed_claims: number;
+  confirmed_claims: number;
+  cancelled_claims: number;
+}
+
+export interface LiveSaleSessionListResponse {
+  items: LiveSaleSessionResponse[];
+  permissions: LiveSalePermissionResponse;
+  summary: LiveSaleSummaryResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LiveSaleQueueItemListResponse {
+  items: LiveSaleQueueItemResponse[];
+  permissions: LiveSalePermissionResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LiveSaleClaimListResponse {
+  items: LiveSaleClaimResponse[];
+  permissions: LiveSalePermissionResponse;
+  summary: LiveSaleClaimSummaryResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LiveSaleDetailResponse {
+  session: LiveSaleSessionResponse;
+  permissions: LiveSalePermissionResponse;
+  queue_items: LiveSaleQueueItemResponse[];
+  claims: LiveSaleClaimResponse[];
+  events: LiveSaleEventResponse[];
+}
+
+export interface MarketplaceEventIngestRequest {
+  marketplace_account_id: number;
+  external_event_identifier: string;
+  event_type: string;
+  event_payload_json: Record<string, unknown>;
+  received_at?: string | null;
+}
+
+export interface MarketplaceEventProcessRequest {
+  marketplace_event_id: number;
+}
+
+export interface MarketplaceEventValidationErrorResponse {
+  code: string;
+  message: string;
+}
+
+export interface MarketplaceEventResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  marketplace_type: string;
+  external_event_identifier: string;
+  event_type: string;
+  event_status: string;
+  event_payload_json: Record<string, unknown>;
+  received_at: string;
+  processed_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketplaceEventProcessingRunResponse {
+  id: number;
+  organization_id: number;
+  marketplace_event_id: number;
+  processing_status: string;
+  processing_result_json: Record<string, unknown>;
+  started_at: string;
+  completed_at?: string | null;
+}
+
+export interface MarketplaceEventLineageResponse {
+  id: number;
+  organization_id: number;
+  marketplace_event_id?: number | null;
+  actor_user_id?: number | null;
+  lineage_event_type: string;
+  lineage_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MarketplaceEventPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceEventSummaryResponse {
+  total_events: number;
+  received_events: number;
+  validated_events: number;
+  processed_events: number;
+  failed_events: number;
+}
+
+export interface MarketplaceEventListResponse {
+  items: MarketplaceEventResponse[];
+  permissions: MarketplaceEventPermissionResponse;
+  summary: MarketplaceEventSummaryResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplaceEventProcessingRunListResponse {
+  items: MarketplaceEventProcessingRunResponse[];
+  permissions: MarketplaceEventPermissionResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplaceEventDetailResponse {
+  event: MarketplaceEventResponse;
+  validation_errors: MarketplaceEventValidationErrorResponse[];
+  permissions: MarketplaceEventPermissionResponse;
+  processing_runs: MarketplaceEventProcessingRunResponse[];
+  lineage: MarketplaceEventLineageResponse[];
+}
+
+export interface MarketplacePriceRecommendationGenerateRequest {
+  marketplace_account_id: number;
+  marketplace_listing_draft_id: number;
+  recommendation_type?: string;
+  current_listing_price?: string | null;
+  floor_price?: string | null;
+  ceiling_price?: string | null;
+}
+
+export interface MarketplacePriceRecommendationReviewRequest {
+  recommendation_status: string;
+  review_reason?: string | null;
+}
+
+export interface MarketplaceOfferIngestRequest {
+  marketplace_account_id: number;
+  marketplace_listing_draft_id: number;
+  marketplace_offer_identifier: string;
+  offer_status?: string;
+  offer_amount: string;
+  offer_currency?: string;
+  buyer_identifier?: string | null;
+  received_at?: string | null;
+  expires_at?: string | null;
+}
+
+export interface MarketplaceOfferStatusUpdateRequest {
+  offer_status: string;
+}
+
+export interface MarketplacePricingRuleCreateRequest {
+  rule_key: string;
+  rule_name: string;
+  rule_status?: string;
+  rule_payload_json: Record<string, unknown>;
+}
+
+export interface MarketplacePricingRuleUpdateRequest {
+  rule_name?: string;
+  rule_status?: string;
+  rule_payload_json?: Record<string, unknown> | null;
+}
+
+export interface MarketplacePriceRecommendationResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  marketplace_listing_draft_id: number;
+  inventory_item_id: number;
+  recommendation_type: string;
+  recommended_price: string;
+  current_listing_price?: string | null;
+  floor_price?: string | null;
+  ceiling_price?: string | null;
+  recommendation_reason: string;
+  recommendation_status: string;
+  generated_at: string;
+  reviewed_at?: string | null;
+}
+
+export interface MarketplaceOfferResponse {
+  id: number;
+  organization_id: number;
+  marketplace_account_id: number;
+  marketplace_listing_draft_id: number;
+  marketplace_offer_identifier: string;
+  offer_status: string;
+  offer_amount: string;
+  offer_currency: string;
+  buyer_identifier?: string | null;
+  received_at: string;
+  expires_at?: string | null;
+  created_at: string;
+}
+
+export interface MarketplacePricingRuleResponse {
+  id: number;
+  organization_id: number;
+  rule_key: string;
+  rule_name: string;
+  rule_status: string;
+  rule_payload_json: Record<string, unknown>;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplacePricingPermissionResponse {
+  can_view: boolean;
+  can_manage: boolean;
+}
+
+export interface MarketplaceOfferSummaryResponse {
+  total_offers: number;
+  received_offers: number;
+  reviewed_offers: number;
+  accepted_internal_offers: number;
+  rejected_internal_offers: number;
+  expired_offers: number;
+}
+
+export interface MarketplacePriceRecommendationListResponse {
+  items: MarketplacePriceRecommendationResponse[];
+  permissions: MarketplacePricingPermissionResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplaceOfferListResponse {
+  items: MarketplaceOfferResponse[];
+  permissions: MarketplacePricingPermissionResponse;
+  summary: MarketplaceOfferSummaryResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MarketplacePricingRuleListResponse {
+  items: MarketplacePricingRuleResponse[];
+  permissions: MarketplacePricingPermissionResponse;
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export interface OrganizationListResponse {
   items: OrganizationResponse[];
   pagination: MarketApiV1Pagination;
@@ -16295,6 +17209,533 @@ export const apiClient = {
     payload: MarketplaceAccountVerifyRequest,
   ): Promise<MarketplaceAccountDetailResponse> {
     return requestScanV1<MarketplaceAccountDetailResponse>(`/organizations/${organizationId}/marketplaces/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMarketplaceOpsDashboard(organizationId: number): Promise<MarketplaceOpsDashboardResponse> {
+    return requestScanV1<MarketplaceOpsDashboardResponse>(`/organizations/${organizationId}/marketplace-ops`);
+  },
+
+  listMarketplaceOpsMetrics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceOpsMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceOpsMetricListResponse>(`/organizations/${organizationId}/marketplace-ops/metrics${q}`);
+  },
+
+  listMarketplaceOpsDiagnostics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceOpsDiagnosticListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceOpsDiagnosticListResponse>(`/organizations/${organizationId}/marketplace-ops/diagnostics${q}`);
+  },
+
+  listMarketplaceOpsSnapshots(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceOpsSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceOpsSnapshotListResponse>(`/organizations/${organizationId}/marketplace-ops/snapshots${q}`);
+  },
+
+  generateMarketplaceOpsSnapshot(organizationId: number): Promise<MarketplaceOpsSnapshotResponse> {
+    return requestScanV1<MarketplaceOpsSnapshotResponse>(`/organizations/${organizationId}/marketplace-ops/snapshot`, {
+      method: "POST",
+    });
+  },
+
+  generateMarketplaceOpsDiagnostics(
+    organizationId: number,
+  ): Promise<MarketplaceOpsDiagnosticListResponse> {
+    return requestScanV1<MarketplaceOpsDiagnosticListResponse>(`/organizations/${organizationId}/marketplace-ops/diagnostics/generate`, {
+      method: "POST",
+    });
+  },
+
+  getMarketplaceAnalyticsDashboard(organizationId: number): Promise<MarketplaceAnalyticsDashboardResponse> {
+    return requestScanV1<MarketplaceAnalyticsDashboardResponse>(`/organizations/${organizationId}/marketplace-analytics`);
+  },
+
+  listMarketplaceAnalyticsMetrics(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceMetricListResponse>(`/organizations/${organizationId}/marketplace-analytics/metrics${q}`);
+  },
+
+  listMarketplaceAnalyticsTrends(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplacePerformanceTrendListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplacePerformanceTrendListResponse>(`/organizations/${organizationId}/marketplace-analytics/trends${q}`);
+  },
+
+  listMarketplaceAnalyticsSnapshots(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceAnalyticsSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceAnalyticsSnapshotListResponse>(`/organizations/${organizationId}/marketplace-analytics/snapshots${q}`);
+  },
+
+  generateMarketplaceAnalyticsSnapshot(organizationId: number): Promise<MarketplaceAnalyticsSnapshotResponse> {
+    return requestScanV1<MarketplaceAnalyticsSnapshotResponse>(`/organizations/${organizationId}/marketplace-analytics/generate`, {
+      method: "POST",
+    });
+  },
+
+  getShopifyOverview(organizationId: number): Promise<ShopifySyncOverviewResponse> {
+    return requestScanV1<ShopifySyncOverviewResponse>(`/organizations/${organizationId}/shopify`);
+  },
+
+  listShopifyMappings(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ShopifyProductMappingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ShopifyProductMappingListResponse>(`/organizations/${organizationId}/shopify/mappings${q}`);
+  },
+
+  listShopifySyncStates(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ShopifySyncStateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ShopifySyncStateListResponse>(`/organizations/${organizationId}/shopify/sync-states${q}`);
+  },
+
+  createShopifyStorefront(
+    organizationId: number,
+    payload: ShopifyStorefrontCreateRequest,
+  ): Promise<ShopifyStorefrontResponse> {
+    return requestScanV1<ShopifyStorefrontResponse>(`/organizations/${organizationId}/shopify/storefront`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createShopifyMapping(
+    organizationId: number,
+    payload: ShopifyProductMappingCreateRequest,
+  ): Promise<ShopifyProductMappingResponse> {
+    return requestScanV1<ShopifyProductMappingResponse>(`/organizations/${organizationId}/shopify/mappings`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateShopifyMapping(
+    organizationId: number,
+    mappingId: number,
+    payload: ShopifyProductMappingUpdateRequest,
+  ): Promise<ShopifyProductMappingResponse> {
+    return requestScanV1<ShopifyProductMappingResponse>(`/organizations/${organizationId}/shopify/mappings/${mappingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateShopifySnapshot(
+    organizationId: number,
+    payload: ShopifySyncSnapshotRequest,
+  ): Promise<ShopifySyncSnapshotResponse> {
+    return requestScanV1<ShopifySyncSnapshotResponse>(`/organizations/${organizationId}/shopify/snapshot`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketplaceListings(organizationId: number, params?: { limit?: number; offset?: number }): Promise<MarketplaceListingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceListingListResponse>(`/organizations/${organizationId}/marketplace-listings${q}`);
+  },
+
+  getMarketplaceListing(organizationId: number, listingId: number): Promise<MarketplaceListingDraftDetailResponse> {
+    return requestScanV1<MarketplaceListingDraftDetailResponse>(`/organizations/${organizationId}/marketplace-listings/${listingId}`);
+  },
+
+  createMarketplaceListing(
+    organizationId: number,
+    payload: MarketplaceListingDraftCreateRequest,
+  ): Promise<MarketplaceListingDraftDetailResponse> {
+    return requestScanV1<MarketplaceListingDraftDetailResponse>(`/organizations/${organizationId}/marketplace-listings`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMarketplaceListing(
+    organizationId: number,
+    listingId: number,
+    payload: MarketplaceListingDraftUpdateRequest,
+  ): Promise<MarketplaceListingDraftDetailResponse> {
+    return requestScanV1<MarketplaceListingDraftDetailResponse>(`/organizations/${organizationId}/marketplace-listings/${listingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  archiveMarketplaceListing(organizationId: number, listingId: number): Promise<MarketplaceListingDraftDetailResponse> {
+    return requestScanV1<MarketplaceListingDraftDetailResponse>(
+      `/organizations/${organizationId}/marketplace-listings/${listingId}/archive`,
+      { method: "POST" },
+    );
+  },
+
+  generateMarketplaceListingProjection(
+    organizationId: number,
+    listingId: number,
+  ): Promise<MarketplaceListingDraftDetailResponse> {
+    return requestScanV1<MarketplaceListingDraftDetailResponse>(
+      `/organizations/${organizationId}/marketplace-listings/${listingId}/projection`,
+      { method: "POST" },
+    );
+  },
+
+  getMarketplaceSyncSummary(organizationId: number): Promise<MarketplaceInventorySyncSummaryResponse> {
+    return requestScanV1<MarketplaceInventorySyncSummaryResponse>(`/organizations/${organizationId}/marketplace-sync`);
+  },
+
+  listMarketplaceSyncRuns(
+    organizationId: number,
+    params?: { marketplace_account_id?: number; limit?: number; offset?: number },
+  ): Promise<MarketplaceInventorySyncRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceInventorySyncRunListResponse>(`/organizations/${organizationId}/marketplace-sync/runs${q}`);
+  },
+
+  listMarketplaceSyncConflicts(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceInventoryConflictListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceInventoryConflictListResponse>(`/organizations/${organizationId}/marketplace-sync/conflicts${q}`);
+  },
+
+  listMarketplaceSyncStates(
+    organizationId: number,
+    params?: { marketplace_account_id?: number; limit?: number; offset?: number },
+  ): Promise<MarketplaceInventoryStateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceInventoryStateListResponse>(`/organizations/${organizationId}/marketplace-sync/states${q}`);
+  },
+
+  runMarketplaceSync(
+    organizationId: number,
+    payload: MarketplaceInventorySyncRunRequest,
+  ): Promise<MarketplaceInventorySyncRunResponse> {
+    return requestScanV1<MarketplaceInventorySyncRunResponse>(`/organizations/${organizationId}/marketplace-sync/run`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  reconcileMarketplaceSync(
+    organizationId: number,
+    payload: MarketplaceInventoryReconcileRequest,
+  ): Promise<MarketplaceInventoryReconciliationReportResponse> {
+    return requestScanV1<MarketplaceInventoryReconciliationReportResponse>(`/organizations/${organizationId}/marketplace-sync/reconcile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketplaceOrders(organizationId: number, params?: { limit?: number; offset?: number }): Promise<MarketplaceOrderListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceOrderListResponse>(`/organizations/${organizationId}/marketplace-orders${q}`);
+  },
+
+  getMarketplaceOrder(organizationId: number, orderId: number): Promise<MarketplaceOrderDetailResponse> {
+    return requestScanV1<MarketplaceOrderDetailResponse>(`/organizations/${organizationId}/marketplace-orders/${orderId}`);
+  },
+
+  importMarketplaceOrder(
+    organizationId: number,
+    payload: MarketplaceOrderImportRequest,
+  ): Promise<MarketplaceOrderDetailResponse> {
+    return requestScanV1<MarketplaceOrderDetailResponse>(`/organizations/${organizationId}/marketplace-orders/import`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  reconcileMarketplaceOrders(
+    organizationId: number,
+    payload: MarketplaceOrderReconcileRequest,
+  ): Promise<MarketplaceTransactionReconciliationReportResponse> {
+    return requestScanV1<MarketplaceTransactionReconciliationReportResponse>(
+      `/organizations/${organizationId}/marketplace-orders/reconcile`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  listMarketplaceTransactions(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceTransactionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceTransactionListResponse>(`/organizations/${organizationId}/marketplace-transactions${q}`);
+  },
+
+  listLiveSaleSessions(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<LiveSaleSessionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<LiveSaleSessionListResponse>(`/organizations/${organizationId}/live-sales${q}`);
+  },
+
+  getLiveSaleSession(organizationId: number, sessionId: number): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales/${sessionId}`);
+  },
+
+  listLiveSaleQueue(
+    organizationId: number,
+    sessionId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<LiveSaleQueueItemListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<LiveSaleQueueItemListResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/queue${q}`);
+  },
+
+  listLiveSaleClaims(
+    organizationId: number,
+    sessionId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<LiveSaleClaimListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<LiveSaleClaimListResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/claims${q}`);
+  },
+
+  createLiveSaleSession(
+    organizationId: number,
+    payload: LiveSaleSessionCreateRequest,
+  ): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateLiveSaleSession(
+    organizationId: number,
+    sessionId: number,
+    payload: LiveSaleSessionUpdateRequest,
+  ): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales/${sessionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  startLiveSaleSession(organizationId: number, sessionId: number): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/start`, {
+      method: "POST",
+    });
+  },
+
+  endLiveSaleSession(organizationId: number, sessionId: number): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/end`, {
+      method: "POST",
+    });
+  },
+
+  addLiveSaleQueueItem(
+    organizationId: number,
+    sessionId: number,
+    payload: LiveSaleQueueItemCreateRequest,
+  ): Promise<LiveSaleQueueItemResponse> {
+    return requestScanV1<LiveSaleQueueItemResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/queue`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  reorderLiveSaleQueue(
+    organizationId: number,
+    sessionId: number,
+    payload: LiveSaleQueueReorderRequest,
+  ): Promise<LiveSaleQueueItemListResponse> {
+    return requestScanV1<LiveSaleQueueItemListResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/queue/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateLiveSaleQueueItemStatus(
+    organizationId: number,
+    sessionId: number,
+    queueItemId: number,
+    payload: LiveSaleQueueItemUpdateRequest,
+  ): Promise<LiveSaleDetailResponse> {
+    return requestScanV1<LiveSaleDetailResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/queue/${queueItemId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createLiveSaleClaim(
+    organizationId: number,
+    sessionId: number,
+    payload: LiveSaleClaimCreateRequest,
+  ): Promise<LiveSaleClaimResponse> {
+    return requestScanV1<LiveSaleClaimResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/claims`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateLiveSaleClaim(
+    organizationId: number,
+    sessionId: number,
+    claimId: number,
+    payload: LiveSaleClaimUpdateRequest,
+  ): Promise<LiveSaleClaimResponse> {
+    return requestScanV1<LiveSaleClaimResponse>(`/organizations/${organizationId}/live-sales/${sessionId}/claims/${claimId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketplacePricingRecommendations(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplacePriceRecommendationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplacePriceRecommendationListResponse>(
+      `/organizations/${organizationId}/marketplace-pricing/recommendations${q}`,
+    );
+  },
+
+  generateMarketplacePriceRecommendation(
+    organizationId: number,
+    payload: MarketplacePriceRecommendationGenerateRequest,
+  ): Promise<MarketplacePriceRecommendationResponse> {
+    return requestScanV1<MarketplacePriceRecommendationResponse>(
+      `/organizations/${organizationId}/marketplace-pricing/recommendations/generate`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  reviewMarketplacePriceRecommendation(
+    organizationId: number,
+    recommendationId: number,
+    payload: MarketplacePriceRecommendationReviewRequest,
+  ): Promise<MarketplacePriceRecommendationResponse> {
+    return requestScanV1<MarketplacePriceRecommendationResponse>(
+      `/organizations/${organizationId}/marketplace-pricing/recommendations/${recommendationId}/review`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  listMarketplacePricingOffers(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceOfferListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceOfferListResponse>(`/organizations/${organizationId}/marketplace-pricing/offers${q}`);
+  },
+
+  ingestMarketplaceOffer(
+    organizationId: number,
+    payload: MarketplaceOfferIngestRequest,
+  ): Promise<MarketplaceOfferResponse> {
+    return requestScanV1<MarketplaceOfferResponse>(`/organizations/${organizationId}/marketplace-pricing/offers/ingest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMarketplaceOfferStatus(
+    organizationId: number,
+    offerId: number,
+    payload: MarketplaceOfferStatusUpdateRequest,
+  ): Promise<MarketplaceOfferResponse> {
+    return requestScanV1<MarketplaceOfferResponse>(`/organizations/${organizationId}/marketplace-pricing/offers/${offerId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketplacePricingRules(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplacePricingRuleListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplacePricingRuleListResponse>(`/organizations/${organizationId}/marketplace-pricing/rules${q}`);
+  },
+
+  createMarketplacePricingRule(
+    organizationId: number,
+    payload: MarketplacePricingRuleCreateRequest,
+  ): Promise<MarketplacePricingRuleResponse> {
+    return requestScanV1<MarketplacePricingRuleResponse>(`/organizations/${organizationId}/marketplace-pricing/rules`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMarketplacePricingRule(
+    organizationId: number,
+    ruleId: number,
+    payload: MarketplacePricingRuleUpdateRequest,
+  ): Promise<MarketplacePricingRuleResponse> {
+    return requestScanV1<MarketplacePricingRuleResponse>(`/organizations/${organizationId}/marketplace-pricing/rules/${ruleId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listMarketplaceEvents(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceEventListResponse>(`/organizations/${organizationId}/marketplace-events${q}`);
+  },
+
+  getMarketplaceEvent(organizationId: number, eventId: number): Promise<MarketplaceEventDetailResponse> {
+    return requestScanV1<MarketplaceEventDetailResponse>(`/organizations/${organizationId}/marketplace-events/${eventId}`);
+  },
+
+  listMarketplaceEventRuns(
+    organizationId: number,
+    params?: { limit?: number; offset?: number },
+  ): Promise<MarketplaceEventProcessingRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MarketplaceEventProcessingRunListResponse>(`/organizations/${organizationId}/marketplace-events/runs${q}`);
+  },
+
+  ingestMarketplaceEvent(
+    organizationId: number,
+    payload: MarketplaceEventIngestRequest,
+  ): Promise<MarketplaceEventDetailResponse> {
+    return requestScanV1<MarketplaceEventDetailResponse>(`/organizations/${organizationId}/marketplace-events/ingest`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  processMarketplaceEvent(
+    organizationId: number,
+    payload: MarketplaceEventProcessRequest,
+  ): Promise<MarketplaceEventDetailResponse> {
+    return requestScanV1<MarketplaceEventDetailResponse>(`/organizations/${organizationId}/marketplace-events/process`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

@@ -397,6 +397,59 @@ from app.models.marketplace_accounts import (
     MarketplaceConnectionEvent,
     MarketplaceCredential,
 )
+from app.models.marketplace_listings import (
+    MarketplaceListingDraft,
+    MarketplaceListingEvent,
+    MarketplaceListingProjection,
+)
+from app.models.marketplace_inventory_sync import (
+    MarketplaceInventoryConflict,
+    MarketplaceInventoryState,
+    MarketplaceInventorySyncEvent,
+    MarketplaceInventorySyncRun,
+)
+from app.models.marketplace_orders import (
+    MarketplaceOrder,
+    MarketplaceOrderEvent,
+    MarketplaceOrderLineItem,
+    MarketplaceTransaction,
+)
+from app.models.marketplace_analytics import (
+    MarketplaceAnalyticsEvent,
+    MarketplaceAnalyticsSnapshot,
+    MarketplaceMetric,
+    MarketplacePerformanceTrend,
+)
+from app.models.shopify_sync import (
+    ShopifyProductMapping,
+    ShopifyStorefront,
+    ShopifySyncEvent,
+    ShopifySyncState,
+)
+from app.models.marketplace_ops_dashboard import (
+    MarketplaceOpsDiagnostic,
+    MarketplaceOpsEvent,
+    MarketplaceOpsMetric,
+    MarketplaceOpsSnapshot,
+)
+from app.models.live_sale_workflows import (
+    LiveSaleClaim,
+    LiveSaleEvent,
+    LiveSaleQueueItem,
+    LiveSaleSession,
+)
+from app.models.marketplace_events import (
+    MarketplaceEvent,
+    MarketplaceEventLineage,
+    MarketplaceEventProcessingRun,
+    MarketplaceWebhookEndpoint,
+)
+from app.models.marketplace_pricing import (
+    MarketplaceOffer,
+    MarketplacePriceRecommendation,
+    MarketplacePricingEvent,
+    MarketplacePricingRule,
+)
 from app.models.organization_inventory import (
     OrganizationInventoryAssignment,
     OrganizationInventoryQueue,
@@ -751,6 +804,41 @@ __all__ = [
     "OrganizationMembershipRole",
     "OrganizationPermissionAudit",
     "MarketplaceAccount",
+    "MarketplaceListingDraft",
+    "MarketplaceListingEvent",
+    "MarketplaceListingProjection",
+    "MarketplaceInventoryConflict",
+    "MarketplaceInventoryState",
+    "MarketplaceInventorySyncEvent",
+    "MarketplaceInventorySyncRun",
+    "MarketplaceOrder",
+    "MarketplaceOrderEvent",
+    "MarketplaceOrderLineItem",
+    "MarketplaceTransaction",
+    "MarketplaceAnalyticsSnapshot",
+    "MarketplaceMetric",
+    "MarketplacePerformanceTrend",
+    "MarketplaceAnalyticsEvent",
+    "MarketplaceOpsSnapshot",
+    "MarketplaceOpsMetric",
+    "MarketplaceOpsDiagnostic",
+    "MarketplaceOpsEvent",
+    "ShopifyStorefront",
+    "ShopifyProductMapping",
+    "ShopifySyncState",
+    "ShopifySyncEvent",
+    "LiveSaleSession",
+    "LiveSaleQueueItem",
+    "LiveSaleClaim",
+    "LiveSaleEvent",
+    "MarketplaceEvent",
+    "MarketplaceWebhookEndpoint",
+    "MarketplaceEventProcessingRun",
+    "MarketplaceEventLineage",
+    "MarketplaceOffer",
+    "MarketplacePriceRecommendation",
+    "MarketplacePricingEvent",
+    "MarketplacePricingRule",
     "MarketplaceCredential",
     "MarketplaceConnectionEvent",
     "OrganizationInventoryAssignment",
