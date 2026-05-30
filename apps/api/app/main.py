@@ -1149,6 +1149,14 @@ from app.api.quick_sales import attach_quick_sales_layer
 from app.api.mobile_ops_dashboard import attach_mobile_ops_dashboard_layer
 from app.api.mobile_device_security import attach_mobile_device_security_layer
 from app.api.mobile_analytics import attach_mobile_analytics_layer
+from app.api.agents import attach_agents_layer
+from app.api.workflows import attach_workflows_layer
+from app.api.research_agents import attach_research_agents_layer
+from app.api.intelligence import attach_intelligence_layer
+from app.api.agent_dashboard import attach_agent_dashboard_layer
+from app.api.agent_security import attach_agent_security_layer
+from app.api.agent_analytics import attach_agent_analytics_layer
+from app.api.agent_platform import attach_agent_platform_layer
 from app.api.routes.auth_sessions import attach_auth_sessions_layer
 from app.api.shared_inventory import attach_shared_inventory_layer
 from app.api.reviews import attach_reviews_layer
@@ -1218,6 +1226,14 @@ attach_quick_sales_layer(app)
 attach_mobile_ops_dashboard_layer(app)
 attach_mobile_device_security_layer(app)
 attach_mobile_analytics_layer(app)
+attach_agents_layer(app)
+attach_workflows_layer(app)
+attach_research_agents_layer(app)
+attach_intelligence_layer(app)
+attach_agent_dashboard_layer(app)
+attach_agent_security_layer(app)
+attach_agent_analytics_layer(app)
+attach_agent_platform_layer(app)
 attach_auth_sessions_layer(app)
 attach_shared_inventory_layer(app)
 attach_reviews_layer(app)

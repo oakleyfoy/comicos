@@ -76,7 +76,9 @@ def test_ops_dashboard_denies_non_admins(
     response = client.get("/ops/dashboard", headers=auth_headers(token))
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Operations dashboard access denied"}
+    body = response.json()
+    assert body["error"]["code"] == "HTTP_403"
+    assert body["error"]["message"] == "Operations dashboard access denied"
 
 
 def test_ops_dashboard_returns_recent_visibility_data(

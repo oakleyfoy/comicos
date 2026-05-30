@@ -483,6 +483,38 @@ from app.models.mobile_analytics import (
     MobileUsageMetric,
     MobileUsageTrend,
 )
+from app.models.agent import (
+    AgentCapability,
+    AgentDefinition,
+    AgentExecution,
+    AgentExecutionEvent,
+)
+from app.models.agent_security import (
+    AgentPermissionAuditEvent,
+    AgentPermissionPolicy,
+)
+from app.models.agent_analytics import (
+    AgentMetricSnapshot,
+    AgentPerformanceMetric,
+    RecommendationOutcomeMetric,
+    WorkflowPerformanceMetric,
+)
+from app.models.agent_workflow import (
+    WorkflowDefinition,
+    WorkflowExecution,
+    WorkflowStep,
+    WorkflowStepExecution,
+)
+from app.models.research_agent import (
+    ResearchEvidence,
+    ResearchFinding,
+    ResearchSnapshot,
+)
+from app.models.intelligence import (
+    IntelligenceEvidence,
+    IntelligenceRecommendation,
+    IntelligenceRecommendationReview,
+)
 from app.models.marketplace_events import (
     MarketplaceEvent,
     MarketplaceEventLineage,
@@ -898,6 +930,26 @@ __all__ = [
     "MobileUsageMetric",
     "MobileUsageTrend",
     "MobileAnalyticsEvent",
+    "AgentDefinition",
+    "AgentCapability",
+    "AgentExecution",
+    "AgentExecutionEvent",
+    "AgentPermissionPolicy",
+    "AgentPermissionAuditEvent",
+    "AgentMetricSnapshot",
+    "AgentPerformanceMetric",
+    "WorkflowPerformanceMetric",
+    "RecommendationOutcomeMetric",
+    "WorkflowDefinition",
+    "WorkflowStep",
+    "WorkflowExecution",
+    "WorkflowStepExecution",
+    "ResearchSnapshot",
+    "ResearchFinding",
+    "ResearchEvidence",
+    "IntelligenceRecommendation",
+    "IntelligenceEvidence",
+    "IntelligenceRecommendationReview",
     "MarketplaceOpsSnapshot",
     "MarketplaceOpsMetric",
     "MarketplaceOpsDiagnostic",

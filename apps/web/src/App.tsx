@@ -68,6 +68,7 @@ import { OrganizationReviewsPage } from "./pages/OrganizationReviewsPage";
 import { OrganizationActivityPage } from "./pages/OrganizationActivityPage";
 import { OrganizationAuditPage } from "./pages/OrganizationAuditPage";
 import { DealerOperationsDashboardPage } from "./pages/DealerOperationsDashboardPage";
+import { AgentDashboardPage } from "./pages/AgentDashboardPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
@@ -103,6 +104,7 @@ export default function App() {
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
         <Route path="/scan-ingestion" element={<ScanIngestionPage />} />
         <Route path="/scan-normalization" element={<ScanNormalizationPage />} />
         <Route path="/scan-boundary" element={<ScanBoundaryPage />} />

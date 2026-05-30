@@ -63,6 +63,14 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "mobile_ops_dashboard": "P44-06",
     "mobile_device_security": "P44-07",
     "mobile_analytics": "P44-08",
+    "agent_foundation": "P45-01",
+    "agent_workflows": "P45-02",
+    "research_agents": "P45-03",
+    "dealer_intelligence": "P45-04",
+    "agent_dashboard": "P45-05",
+    "agent_security": "P45-06",
+    "agent_analytics": "P45-07",
+    "agent_platform": "P45-08",
 }
 
 

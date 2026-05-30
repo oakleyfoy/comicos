@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 
 const navLinks = [
   { label: "Dashboard", to: "/dashboard" },
+  { label: "Agent Dashboard", to: "/agent-dashboard" },
   { label: "Orders", to: "/orders" },
   { label: "Imports", to: "/imports" },
   { label: "Email Imports", to: "/imports/email" },

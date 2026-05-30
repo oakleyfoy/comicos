@@ -13225,6 +13225,285 @@ export interface AutomationRuleListResponse {
   paused_rule_count?: number;
 }
 
+export type AgentHealthStatus = "HEALTHY" | "WARNING" | "FAILED" | "DISABLED";
+
+export interface AgentDashboardSummaryResponse {
+  total_agents: number;
+  enabled_agents: number;
+  total_workflows: number;
+  enabled_workflows: number;
+  active_executions: number;
+  total_research_snapshots: number;
+  total_recommendations: number;
+  recommendations_awaiting_review: number;
+}
+
+export interface AgentHealthRead {
+  agent_id: number;
+  agent_code: string;
+  agent_name: string;
+  enabled: boolean;
+  health_status: AgentHealthStatus;
+  execution_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  average_duration_ms?: number | null;
+  last_run_at?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+}
+
+export interface WorkflowHealthRead {
+  workflow_id: number;
+  workflow_code: string;
+  workflow_name: string;
+  enabled: boolean;
+  health_status: AgentHealthStatus;
+  execution_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  average_duration_ms?: number | null;
+  last_run_at?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+}
+
+export interface RecentExecutionRead {
+  execution_id: number;
+  execution_uuid: string;
+  agent_id: number;
+  agent_code: string;
+  agent_name: string;
+  workflow_execution_id?: number | null;
+  workflow_id?: number | null;
+  workflow_code?: string | null;
+  workflow_name?: string | null;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  trigger_source: string;
+}
+
+export interface RecommendationQueueRead {
+  recommendation_id: number;
+  recommendation_uuid: string;
+  recommendation_type: string;
+  title: string;
+  inventory_title: string;
+  status: string;
+  confidence_score: number;
+  opportunity_score: number;
+  priority_score: number;
+  created_at: string;
+  agent_execution_id: number;
+}
+
+export interface AgentHealthListResponse {
+  items: AgentHealthRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface WorkflowHealthListResponse {
+  items: WorkflowHealthRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface RecentExecutionListResponse {
+  items: RecentExecutionRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface RecommendationQueueListResponse {
+  items: RecommendationQueueRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AgentDashboardHealthResponse {
+  agents: AgentHealthRead[];
+  workflows: WorkflowHealthRead[];
+}
+
+export interface AgentMetricSnapshotRead {
+  id: number;
+  snapshot_uuid: string;
+  snapshot_date: string;
+  generated_at: string;
+  scope: string;
+  summary_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentPerformanceMetricRead {
+  id: number;
+  snapshot_id: number;
+  agent_id: number;
+  agent_code: string;
+  executions_total: number;
+  executions_completed: number;
+  executions_failed: number;
+  success_rate: number;
+  failure_rate: number;
+  avg_duration_ms?: number | null;
+  last_run_at?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  recommendations_generated: number;
+  recommendations_reviewed: number;
+  recommendations_accepted: number;
+  recommendations_dismissed: number;
+  created_at: string;
+}
+
+export interface WorkflowPerformanceMetricRead {
+  id: number;
+  snapshot_id: number;
+  workflow_id: number;
+  workflow_code: string;
+  executions_total: number;
+  executions_completed: number;
+  executions_failed: number;
+  success_rate: number;
+  failure_rate: number;
+  avg_duration_ms?: number | null;
+  last_run_at?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  created_at: string;
+}
+
+export interface RecommendationOutcomeMetricRead {
+  id: number;
+  snapshot_id: number;
+  recommendation_type: string;
+  recommendations_total: number;
+  reviewed_total: number;
+  accepted_total: number;
+  dismissed_total: number;
+  acceptance_rate: number;
+  dismissal_rate: number;
+  avg_confidence_score: number;
+  avg_opportunity_score: number;
+  avg_priority_score: number;
+  created_at: string;
+}
+
+export interface AgentMetricSnapshotDetail {
+  snapshot: AgentMetricSnapshotRead;
+  agent_metrics: AgentPerformanceMetricRead[];
+  workflow_metrics: WorkflowPerformanceMetricRead[];
+  recommendation_metrics: RecommendationOutcomeMetricRead[];
+}
+
+export interface AgentAnalyticsSummaryRead {
+  latest_snapshot?: AgentMetricSnapshotRead | null;
+  summary_json: Record<string, unknown>;
+  agent_metric_count: number;
+  workflow_metric_count: number;
+  recommendation_metric_count: number;
+}
+
+export interface AgentPlatformValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface AgentPlatformValidationRead {
+  overall_status: string;
+  checks: AgentPlatformValidationCheckRead[];
+}
+
+export interface AgentPlatformSummaryRead {
+  overall_status: string;
+  validation_status: string;
+  security_status: string;
+  analytics_status: string;
+  recommendation_engine_status: string;
+  workflow_status: string;
+}
+
+export interface AgentPlatformReadinessSectionRead {
+  section_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface AgentPlatformReadinessRead {
+  report_name: string;
+  overall_status: string;
+  sections: AgentPlatformReadinessSectionRead[];
+}
+
+export interface AgentMetricSnapshotListResponse {
+  items: AgentMetricSnapshotRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AgentPerformanceMetricListResponse {
+  items: AgentPerformanceMetricRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface WorkflowPerformanceMetricListResponse {
+  items: WorkflowPerformanceMetricRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface RecommendationOutcomeMetricListResponse {
+  items: RecommendationOutcomeMetricRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface IntelligenceRecommendationReviewRead {
+  id: number;
+  recommendation_id: number;
+  review_status: string;
+  reviewed_by: string;
+  reviewed_at: string;
+  review_notes?: string | null;
+}
+
+export interface IntelligenceRecommendationRead {
+  id: number;
+  recommendation_uuid: string;
+  agent_execution_id: number;
+  recommendation_type: string;
+  title: string;
+  description: string;
+  confidence_score: number;
+  opportunity_score: number;
+  priority_score: number;
+  inventory_copy_id?: number | null;
+  inventory_title: string;
+  status: string;
+  recommendation_payload_json: Record<string, unknown>;
+  created_at: string;
+  latest_review?: IntelligenceRecommendationReviewRead | null;
+}
+
+export interface IntelligenceEvidenceRead {
+  id: number;
+  recommendation_id: number;
+  evidence_type: string;
+  evidence_source: string;
+  evidence_payload_json: Record<string, unknown>;
+  evidence_score: number;
+  created_at: string;
+}
+
+export interface IntelligenceRecommendationDetail {
+  recommendation: IntelligenceRecommendationRead;
+  evidence: IntelligenceEvidenceRead[];
+  reviews: IntelligenceRecommendationReviewRead[];
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -22160,6 +22439,123 @@ export const apiClient = {
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
     return request<AcquisitionPriorityHistoryListResponse>(`/ops/acquisition-priority-history${q}`);
+  },
+
+  getAgentDashboard(): Promise<AgentDashboardSummaryResponse> {
+    return requestScanV1<AgentDashboardSummaryResponse>("/agent-dashboard");
+  },
+
+  getAgentHealth(params?: { limit?: number; offset?: number }): Promise<AgentHealthListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AgentHealthListResponse>(`/agent-dashboard/agents${q}`);
+  },
+
+  getWorkflowHealth(params?: { limit?: number; offset?: number }): Promise<WorkflowHealthListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<WorkflowHealthListResponse>(`/agent-dashboard/workflows${q}`);
+  },
+
+  getAgentDashboardHealth(): Promise<AgentDashboardHealthResponse> {
+    return requestScanV1<AgentDashboardHealthResponse>("/agent-dashboard/health");
+  },
+
+  getAgentExecutions(params?: {
+    agent_code?: string;
+    workflow_code?: string;
+    execution_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<RecentExecutionListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<RecentExecutionListResponse>(`/agent-dashboard/executions${q}`);
+  },
+
+  getAgentRecommendations(params?: {
+    recommendation_type?: string;
+    recommendation_status?: string;
+    queue_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<RecommendationQueueListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return requestScanV1<RecommendationQueueListResponse>(`/agent-dashboard/recommendations${q}`);
+  },
+
+  getIntelligenceRecommendation(recommendationId: number): Promise<IntelligenceRecommendationDetail> {
+    return requestScanV1<IntelligenceRecommendationDetail>(`/intelligence/recommendations/${recommendationId}`);
+  },
+
+  markIntelligenceRecommendationReviewed(recommendationId: number): Promise<IntelligenceRecommendationDetail> {
+    return requestScanV1<IntelligenceRecommendationDetail>(`/intelligence/recommendations/${recommendationId}/reviewed`, {
+      method: "POST",
+    });
+  },
+
+  markIntelligenceRecommendationDismissed(recommendationId: number): Promise<IntelligenceRecommendationDetail> {
+    return requestScanV1<IntelligenceRecommendationDetail>(`/intelligence/recommendations/${recommendationId}/dismissed`, {
+      method: "POST",
+    });
+  },
+
+  markIntelligenceRecommendationAccepted(recommendationId: number): Promise<IntelligenceRecommendationDetail> {
+    return requestScanV1<IntelligenceRecommendationDetail>(`/intelligence/recommendations/${recommendationId}/accepted`, {
+      method: "POST",
+    });
+  },
+
+  getAgentAnalytics(): Promise<AgentAnalyticsSummaryRead> {
+    return requestScanV1<AgentAnalyticsSummaryRead>("/agent-analytics");
+  },
+
+  getAgentAnalyticsSnapshots(params?: { limit?: number; offset?: number }): Promise<AgentMetricSnapshotListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AgentMetricSnapshotListResponse>(`/agent-analytics/snapshots${q}`);
+  },
+
+  getAgentAnalyticsSnapshotDetail(snapshotId: number): Promise<AgentMetricSnapshotDetail> {
+    return requestScanV1<AgentMetricSnapshotDetail>(`/agent-analytics/snapshots/${snapshotId}`);
+  },
+
+  generateAgentAnalyticsSnapshot(): Promise<AgentMetricSnapshotDetail> {
+    return requestScanV1<AgentMetricSnapshotDetail>("/agent-analytics/generate", {
+      method: "POST",
+    });
+  },
+
+  getAgentAnalyticsAgents(params?: { snapshot_id?: number; limit?: number; offset?: number }): Promise<AgentPerformanceMetricListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AgentPerformanceMetricListResponse>(`/agent-analytics/agents${q}`);
+  },
+
+  getAgentAnalyticsWorkflows(
+    params?: { snapshot_id?: number; limit?: number; offset?: number },
+  ): Promise<WorkflowPerformanceMetricListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<WorkflowPerformanceMetricListResponse>(`/agent-analytics/workflows${q}`);
+  },
+
+  getAgentAnalyticsRecommendations(
+    params?: { snapshot_id?: number; limit?: number; offset?: number },
+  ): Promise<RecommendationOutcomeMetricListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<RecommendationOutcomeMetricListResponse>(`/agent-analytics/recommendations${q}`);
+  },
+
+  getAgentPlatformReadiness(): Promise<AgentPlatformReadinessRead> {
+    return requestScanV1<AgentPlatformReadinessRead>("/agent-platform/readiness");
+  },
+
+  getAgentPlatformValidation(): Promise<AgentPlatformValidationRead> {
+    return requestScanV1<AgentPlatformValidationRead>("/agent-platform/validation");
+  },
+
+  getAgentPlatformSummary(): Promise<AgentPlatformSummaryRead> {
+    return requestScanV1<AgentPlatformSummaryRead>("/agent-platform/summary");
   },
 };
 

@@ -2,6 +2,42 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P45 closeout summary
+
+This section consolidates deferred work that remains intentionally outside the completed agent platform scope after P45-08 closeout.
+
+### High operational impact
+
+- Full-repo backend regressions remain time-consuming in local environments even though targeted P45 suites are stable.
+- Web bundle size still emits a non-blocking build warning.
+- Permission and readiness telemetry are deterministic and queryable, but external alert routing and continuous health monitoring remain deferred.
+
+### Medium operational impact
+
+- Real-time dashboard streaming and push-style execution updates remain deferred.
+- Multi-tenant role layering beyond current owner/admin-style control remains future work.
+- Large-scale query tuning for long-lived execution, recommendation, and analytics histories remains future optimization work.
+
+### Low operational impact
+
+- The readiness report is JSON-only in P45; export formats and richer operator presentation are deferred.
+- Documentation remains phase-oriented in a few places for easier lookup, which intentionally duplicates some concepts.
+
+### P45 deferred work by area
+
+- Agent foundation: distributed execution scaling, worker pools, external execution engines.
+- Workflow engine: visual workflow editing, distributed orchestration, realtime step streaming.
+- Research and intelligence: forecasting, autonomous downstream action, external marketplace ingestion, ML ranking.
+- Dashboard: realtime updates, richer drilldowns, long-horizon trend visualizations.
+- Security: enterprise RBAC expansion, external SIEM/alert export, continuous policy drift detection.
+- Analytics: scheduled snapshot generation, external observability sinks, fleet-scale retention tuning.
+
+### P45 deferred work by severity
+
+- Critical: none expected after closeout verification.
+- Warning: build-size warning, long full-suite runtime, future scale/telemetry tuning.
+- Info: richer export/report UX, realtime operator polish, additional enterprise controls.
+
 ## P40 closeout summary
 
 This section consolidates the remaining non-blocking work across the completed P40 stack.
