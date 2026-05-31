@@ -7,6 +7,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 API_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
+try:
+    from dotenv import load_dotenv
+    import os
+
+    load_dotenv(REPO_ROOT / ".env")
+    load_dotenv(API_ROOT / ".env")
+    extra_env_root = os.environ.get("COMICOS_API_ENV_ROOT", "").strip()
+    if extra_env_root:
+        load_dotenv(Path(extra_env_root) / ".env", override=False)
+    else:
+        companion_env = Path(r"C:\comic-os\apps\api\.env")
+        if companion_env.is_file():
+            load_dotenv(companion_env, override=False)
+except ImportError:
+    pass
+
 
 class Settings(BaseSettings):
     app_name: str = "ComicOS API"
@@ -91,6 +107,9 @@ class Settings(BaseSettings):
     listing_exports_storage_root_raw: str = Field(default="", alias="LISTING_EXPORTS_STORAGE_ROOT")
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
+
+    lunar_username_raw: str = Field(default="", alias="LUNAR_USERNAME")
+    lunar_password_raw: str = Field(default="", alias="LUNAR_PASSWORD")
 
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),

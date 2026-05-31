@@ -173,6 +173,159 @@ from app.models.market_feed import (
     MarketIntelligenceFeedHistory,
     MarketIntelligenceFeedSnapshot,
 )
+from app.models.market_intelligence import (
+    MarketAgentExecution,
+    MarketObservation,
+    MarketSignal,
+    MarketSnapshot,
+    MarketTrend,
+)
+from app.models.market_forecast import (
+    ForecastAgentExecution,
+    MarketForecast,
+    MarketForecastConfidence,
+    MarketForecastPoint,
+    MarketRiskAssessment,
+)
+from app.models.dealer_copilot import (
+    DealerCopilotExecution,
+    DealerOpportunityScore,
+    DealerRecommendation,
+    DealerRecommendationEvidence,
+    DealerRecommendationReview,
+)
+from app.models.forecast_validation import (
+    ForecastAccuracyMetric,
+    ForecastDriftEvent,
+    ForecastOutcome,
+    ForecastValidation,
+    ForecastValidationExecution,
+    SignalQualityMetric,
+)
+from app.models.data_integrity import (
+    AuditEvent,
+    ChangeRecord,
+    DataIntegrityCheck,
+    DataIntegrityIssue,
+    MigrationSafetyCheck,
+)
+from app.models.operations_reliability import (
+    JobHealthMetric,
+    PlatformHealthCheck,
+    QueueHealthMetric,
+    RecoveryRecommendation,
+    ReliabilityIssue,
+)
+from app.models.production_readiness import (
+    GoLiveAssessment,
+    ProductionCertification,
+    ProductionReadinessCheck,
+    ProductionReadinessRun,
+    ReadinessChecklistItem,
+)
+from app.models.condition_intelligence import (
+    ConditionAgentExecution,
+    ConditionDefect,
+    ConditionProfile,
+    ConditionSubgrade,
+    ScanAnalysis,
+    ScanQualityAssessment,
+)
+from app.models.grading_intelligence import (
+    GradePrediction,
+    GradePredictionEvidence,
+    GradingAgentExecution as GradingIntelligenceAgentExecution,
+    GradingRecommendation as GradingIntelligenceRecommendation,
+    GradingRecommendationReview as GradingIntelligenceRecommendationReview,
+    GradingRoiAnalysis as GradingIntelligenceRoiAnalysis,
+)
+from app.models.grading_validation import (
+    GradeCalibrationMetric,
+    GradePredictionOutcome,
+    GradeValidation,
+    GradingDriftEvent,
+    GradingReliabilityMetric,
+    GradingValidationExecution,
+)
+from app.models.release_imports import ReleaseImportError, ReleaseImportFile, ReleaseImportRun
+from app.models.lunar_feed import LunarFeedError, LunarFeedRawRow, LunarFeedRun, LunarFocAlert
+from app.models.lunar_scheduler import LunarScheduleConfig, LunarScheduledRun, LunarScheduledRunError
+from app.models.release_intelligence import (
+    ReleaseAgentExecution,
+    ReleaseIssue,
+    ReleaseKeySignal,
+    ReleaseSeries,
+    ReleaseVariant,
+)
+from app.models.pull_list import PullList, PullListIssue, PullListDecision, PullListAutomationRun, PullListAutomationSchedule, PullListCertificationRun
+from app.models.purchase_profile import PurchasePreference, PurchaseProfile
+from app.models.purchase_quantity import PurchaseQuantityRecommendation
+from app.models.purchase_variant import PurchaseVariantRecommendation
+from app.models.purchase_budget import PurchaseBudget, PurchaseBudgetAllocation
+from app.models.sell_candidate import SellCandidateRecommendation
+from app.models.portfolio_certification import PortfolioCertificationRun
+from app.models.acquisition_certification import AcquisitionCertificationRun
+from app.models.exit_candidate import ExitCandidate
+from app.models.hold_sell_intelligence import HoldSellRecommendation
+from app.models.grade_before_sell import GradeBeforeSellRecommendation
+from app.models.portfolio_rebalancing import PortfolioRebalanceRecommendation
+from app.models.exit_certification import ExitCertificationRun
+from app.models.unified_collector_intelligence import UnifiedCollectorRecommendation
+from app.models.cross_system_recommendation import CrossSystemRecommendation
+from app.models.final_platform_certification import FinalPlatformCertificationRun
+from app.models.daily_action_engine import DailyCollectorAction
+from app.models.want_list import WantList, WantListItem
+from app.models.collection_gap import CollectionGap
+from app.models.acquisition_opportunity import AcquisitionOpportunity
+from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
+from app.models.release_watchlist import (
+    CollectionContinuityAlert,
+    CollectionRun,
+    ReleaseReminder,
+    ReleaseWatchlist,
+    ReleaseWatchlistItem,
+    WatchlistAgentExecution,
+)
+from app.models.spec_intelligence import (
+    SpecAgentExecution,
+    SpecRecommendation,
+    SpecRecommendationReview,
+    SpecScore,
+    WeeklyBuyList,
+    WeeklyBuyListItem,
+)
+from app.models.character_intelligence import (
+    CharacterAlias,
+    CharacterAppearance,
+    CharacterPopularityScore,
+    CharacterProfile,
+)
+from app.models.franchise_intelligence import FranchisePopularityScore, FranchiseProfile
+from app.models.creator_intelligence import CreatorAlias, CreatorPopularityScore, CreatorProfile
+from app.models.intelligence_matching import ReleaseIntelligenceMatch
+from app.models.key_issue_intelligence import (
+    KeyIssueClassification,
+    KeyIssueEvidence,
+    KeyIssueProfile,
+    KeyIssueSignal,
+)
+from app.models.recommendation_v2 import (
+    RecommendationDecisionV2,
+    RecommendationRunV2,
+    RecommendationScoreComponentV2,
+    RecommendationScoreV2,
+)
+from app.models.collector_market_intelligence import (
+    CollectorDemandScore,
+    HistoricalPerformanceSignal,
+    MarketDemandProfile,
+    MarketDemandSignal,
+)
+from app.models.user_preference_intelligence import (
+    UserPreferenceProfile,
+    UserPreferenceScore,
+    UserPreferenceSignal,
+)
 from app.models.scan_ingestion import (
     ScanImage,
     ScanImageVariant,
@@ -397,10 +550,45 @@ from app.models.marketplace_accounts import (
     MarketplaceConnectionEvent,
     MarketplaceCredential,
 )
+from app.models.marketplace import (
+    MarketplaceAccount as MarketplaceConnectorAccount,
+    MarketplaceCapability as MarketplaceConnectorCapability,
+    MarketplaceCredential as MarketplaceConnectorCredential,
+    MarketplaceDefinition as MarketplaceConnectorDefinition,
+    MarketplaceExecution as MarketplaceConnectorExecution,
+)
 from app.models.marketplace_listings import (
     MarketplaceListingDraft,
     MarketplaceListingEvent,
     MarketplaceListingProjection,
+)
+from app.models.marketplace_listing import (
+    MarketplaceListing,
+    MarketplaceListingImage,
+    MarketplaceListingMapping,
+    MarketplaceListingPrice,
+    MarketplaceListingStatusHistory,
+    MarketplaceListingVariant,
+)
+from app.models.marketplace_publish import (
+    MarketplacePublishEvent,
+    MarketplacePublishJob,
+    MarketplacePublishTarget,
+    MarketplacePublishValidationIssue,
+)
+from app.models.marketplace_operations import (
+    MarketplaceRecommendation,
+    MarketplaceRecommendationEvidence,
+    MarketplaceRecommendationReview,
+)
+from app.models.marketplace_sync import (
+    MarketplaceInventoryAvailability,
+    MarketplaceInventoryReservation,
+    MarketplaceInventorySyncPlan,
+    MarketplaceInventorySyncPlanItem,
+    MarketplaceOrder as MarketplaceSyncOrder,
+    MarketplaceOrderEvent as MarketplaceSyncOrderEvent,
+    MarketplaceOrderItem as MarketplaceSyncOrderItem,
 )
 from app.models.marketplace_inventory_sync import (
     MarketplaceInventoryConflict,
@@ -811,6 +999,142 @@ __all__ = [
     "MarketIntelligenceFeedSnapshot",
     "MarketIntelligenceFeedHistory",
     "MarketIntelligenceFeedCursor",
+    "MarketSignal",
+    "MarketSnapshot",
+    "MarketTrend",
+    "MarketObservation",
+    "MarketAgentExecution",
+    "MarketForecast",
+    "MarketForecastPoint",
+    "MarketForecastConfidence",
+    "MarketRiskAssessment",
+    "ForecastAgentExecution",
+    "DealerRecommendation",
+    "DealerRecommendationEvidence",
+    "DealerRecommendationReview",
+    "DealerOpportunityScore",
+    "DealerCopilotExecution",
+    "ForecastValidation",
+    "ForecastAccuracyMetric",
+    "ForecastDriftEvent",
+    "SignalQualityMetric",
+    "ForecastOutcome",
+    "ForecastValidationExecution",
+    "DataIntegrityCheck",
+    "DataIntegrityIssue",
+    "MigrationSafetyCheck",
+    "AuditEvent",
+    "ChangeRecord",
+    "PlatformHealthCheck",
+    "ReliabilityIssue",
+    "JobHealthMetric",
+    "QueueHealthMetric",
+    "RecoveryRecommendation",
+    "ProductionReadinessCheck",
+    "ProductionReadinessRun",
+    "ProductionCertification",
+    "ReadinessChecklistItem",
+    "GoLiveAssessment",
+    "ScanAnalysis",
+    "ScanQualityAssessment",
+    "ConditionProfile",
+    "ConditionDefect",
+    "ConditionSubgrade",
+    "ConditionAgentExecution",
+    "GradePrediction",
+    "GradePredictionEvidence",
+    "GradingIntelligenceRecommendation",
+    "GradingIntelligenceRecommendationReview",
+    "GradingIntelligenceRoiAnalysis",
+    "GradingIntelligenceAgentExecution",
+    "GradeValidation",
+    "GradeCalibrationMetric",
+    "GradePredictionOutcome",
+    "GradingDriftEvent",
+    "GradingReliabilityMetric",
+    "GradingValidationExecution",
+    "ReleaseSeries",
+    "ReleaseIssue",
+    "ReleaseVariant",
+    "ReleaseKeySignal",
+    "ReleaseAgentExecution",
+    "ReleaseImportRun",
+    "ReleaseImportFile",
+    "ReleaseImportError",
+    "LunarFeedRun",
+    "LunarFeedRawRow",
+    "LunarFeedError",
+    "LunarFocAlert",
+    "LunarScheduleConfig",
+    "LunarScheduledRun",
+    "LunarScheduledRunError",
+    "CollectionRun",
+    "CollectionContinuityAlert",
+    "PullList",
+    "PullListIssue",
+    "PullListDecision",
+    "PullListAutomationRun",
+    "PullListAutomationSchedule",
+    "PullListCertificationRun",
+    "PurchaseProfile",
+    "PurchasePreference",
+    "PurchaseQuantityRecommendation",
+    "PurchaseVariantRecommendation",
+    "PurchaseBudget",
+    "PurchaseBudgetAllocation",
+    "SellCandidateRecommendation",
+    "PortfolioCertificationRun",
+    "AcquisitionCertificationRun",
+    "ExitCandidate",
+    "HoldSellRecommendation",
+    "GradeBeforeSellRecommendation",
+    "PortfolioRebalanceRecommendation",
+    "ExitCertificationRun",
+    "UnifiedCollectorRecommendation",
+    "CrossSystemRecommendation",
+    "FinalPlatformCertificationRun",
+    "DailyCollectorAction",
+    "WantList",
+    "WantListItem",
+    "CollectionGap",
+    "AcquisitionOpportunity",
+    "MarketplaceSource",
+    "MarketplaceAcquisitionCandidate",
+    "ReleaseWatchlist",
+    "ReleaseWatchlistItem",
+    "ReleaseReminder",
+    "WatchlistAgentExecution",
+    "SpecScore",
+    "SpecRecommendation",
+    "SpecRecommendationReview",
+    "WeeklyBuyList",
+    "WeeklyBuyListItem",
+    "SpecAgentExecution",
+    "CharacterProfile",
+    "CharacterPopularityScore",
+    "CharacterAlias",
+    "CharacterAppearance",
+    "FranchiseProfile",
+    "FranchisePopularityScore",
+    "CreatorProfile",
+    "CreatorPopularityScore",
+    "CreatorAlias",
+    "ReleaseIntelligenceMatch",
+    "KeyIssueProfile",
+    "MarketDemandProfile",
+    "MarketDemandSignal",
+    "HistoricalPerformanceSignal",
+    "CollectorDemandScore",
+    "UserPreferenceProfile",
+    "UserPreferenceSignal",
+    "UserPreferenceScore",
+    "RecommendationRunV2",
+    "RecommendationScoreV2",
+    "RecommendationScoreComponentV2",
+    "RecommendationDecisionV2",
+    "KeyIssueSignal",
+    "KeyIssueEvidence",
+    "KeyIssueClassification",
     "AutomationQueue",
     "AutomationJob",
     "AutomationJobAttempt",
@@ -881,6 +1205,26 @@ __all__ = [
     "OrganizationMembershipRole",
     "OrganizationPermissionAudit",
     "MarketplaceAccount",
+    "MarketplaceListing",
+    "MarketplaceListingVariant",
+    "MarketplaceListingImage",
+    "MarketplaceListingPrice",
+    "MarketplaceListingStatusHistory",
+    "MarketplaceListingMapping",
+    "MarketplacePublishJob",
+    "MarketplacePublishTarget",
+    "MarketplacePublishEvent",
+    "MarketplacePublishValidationIssue",
+    "MarketplaceRecommendation",
+    "MarketplaceRecommendationEvidence",
+    "MarketplaceRecommendationReview",
+    "MarketplaceInventoryReservation",
+    "MarketplaceInventoryAvailability",
+    "MarketplaceSyncOrder",
+    "MarketplaceSyncOrderItem",
+    "MarketplaceSyncOrderEvent",
+    "MarketplaceInventorySyncPlan",
+    "MarketplaceInventorySyncPlanItem",
     "MarketplaceListingDraft",
     "MarketplaceListingEvent",
     "MarketplaceListingProjection",

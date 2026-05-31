@@ -69,6 +69,50 @@ import { OrganizationActivityPage } from "./pages/OrganizationActivityPage";
 import { OrganizationAuditPage } from "./pages/OrganizationAuditPage";
 import { DealerOperationsDashboardPage } from "./pages/DealerOperationsDashboardPage";
 import { AgentDashboardPage } from "./pages/AgentDashboardPage";
+import { MarketplaceDashboardPage } from "./pages/MarketplaceDashboardPage";
+import { DealerCopilotPage } from "./pages/DealerCopilotPage";
+import { ForecastPlatformPage } from "./pages/ForecastPlatformPage";
+import { DataProtectionPage } from "./pages/DataProtectionPage";
+import { OperationsReliabilityPage } from "./pages/OperationsReliabilityPage";
+import { ProductionReadinessPage } from "./pages/ProductionReadinessPage";
+import { ConditionIntelligencePage } from "./pages/ConditionIntelligencePage";
+import { GradingIntelligencePage } from "./pages/GradingIntelligencePage";
+import { GradingValidationPage } from "./pages/GradingValidationPage";
+import { GradingPlatformPage } from "./pages/GradingPlatformPage";
+import { ReleaseIntelligencePage } from "./pages/ReleaseIntelligencePage";
+import { ReleaseWatchlistPage } from "./pages/ReleaseWatchlistPage";
+import { SpecIntelligencePage } from "./pages/SpecIntelligencePage";
+import { ReleasePlatformPage } from "./pages/ReleasePlatformPage";
+import { ReleasePlatformCertificationPage } from "./pages/ReleasePlatformCertificationPage";
+import { KeyIssueIntelligencePage } from "./pages/KeyIssueIntelligencePage";
+import { MarketUserIntelligencePage } from "./pages/MarketUserIntelligencePage";
+import { SellCandidatePage } from "./pages/SellCandidatePage";
+import { WantListPage } from "./pages/WantListPage";
+import { CollectionGapPage } from "./pages/CollectionGapPage";
+import { AcquisitionOpportunityPage } from "./pages/AcquisitionOpportunityPage";
+import { MarketplaceAcquisitionPage } from "./pages/MarketplaceAcquisitionPage";
+import { AcquisitionDashboardPage } from "./pages/AcquisitionDashboardPage";
+import { ExitCandidatePage } from "./pages/ExitCandidatePage";
+import { HoldSellPage } from "./pages/HoldSellPage";
+import { GradeBeforeSellPage } from "./pages/GradeBeforeSellPage";
+import { PortfolioRebalancingPage } from "./pages/PortfolioRebalancingPage";
+import { ExitDashboardPage } from "./pages/ExitDashboardPage";
+import { UnifiedCollectorPage } from "./pages/UnifiedCollectorPage";
+import { DailyActionPage } from "./pages/DailyActionPage";
+import { CrossSystemRecommendationPage } from "./pages/CrossSystemRecommendationPage";
+import { ExecutiveDashboardPage } from "./pages/ExecutiveDashboardPage";
+import { PullListDecisionsPage } from "./pages/PullListDecisionsPage";
+import { FocDashboardPage } from "./pages/FocDashboardPage";
+import { PurchaseProfilePage } from "./pages/PurchaseProfilePage";
+import { PurchaseQuantityPage } from "./pages/PurchaseQuantityPage";
+import { PurchaseVariantPage } from "./pages/PurchaseVariantPage";
+import { PurchaseBudgetPage } from "./pages/PurchaseBudgetPage";
+import { PullListPage } from "./pages/PullListPage";
+import { RecommendationsV2Page } from "./pages/RecommendationsV2Page";
+import { RecommendationIntelligenceCertificationPage } from "./pages/RecommendationIntelligenceCertificationPage";
+import { IntelligencePage } from "./pages/IntelligencePage";
+import { ReleaseImportsPage } from "./pages/ReleaseImportsPage";
+import { LunarFeedPage } from "./pages/LunarFeedPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
@@ -92,7 +136,7 @@ function HomeRedirect() {
     return <Navigate to={`/organizations/${securityContext.active_organization_id}`} replace />;
   }
 
-  return <Navigate to="/organizations" replace />;
+  return <Navigate to="/executive-dashboard" replace />;
 }
 
 export default function App() {
@@ -104,7 +148,51 @@ export default function App() {
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/executive-dashboard" element={<ExecutiveDashboardPage />} />
         <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
+        <Route path="/marketplace-dashboard" element={<MarketplaceDashboardPage />} />
+        <Route path="/dealer-copilot" element={<DealerCopilotPage />} />
+        <Route path="/forecast-platform" element={<ForecastPlatformPage />} />
+        <Route path="/data-protection" element={<DataProtectionPage />} />
+        <Route path="/operations-reliability" element={<OperationsReliabilityPage />} />
+        <Route path="/production-readiness" element={<ProductionReadinessPage />} />
+        <Route path="/condition-intelligence" element={<ConditionIntelligencePage />} />
+        <Route path="/grading-intelligence" element={<GradingIntelligencePage />} />
+        <Route path="/grading-validation" element={<GradingValidationPage />} />
+        <Route path="/grading-platform" element={<GradingPlatformPage />} />
+        <Route path="/release-intelligence" element={<ReleaseIntelligencePage />} />
+        <Route path="/release-watchlists" element={<ReleaseWatchlistPage />} />
+        <Route path="/pull-lists" element={<PullListPage />} />
+        <Route path="/pull-list-decisions" element={<PullListDecisionsPage />} />
+        <Route path="/foc-dashboard" element={<FocDashboardPage />} />
+        <Route path="/purchase-profile" element={<PurchaseProfilePage />} />
+        <Route path="/purchase-quantities" element={<PurchaseQuantityPage />} />
+        <Route path="/purchase-variants" element={<PurchaseVariantPage />} />
+        <Route path="/purchase-budget" element={<PurchaseBudgetPage />} />
+        <Route path="/spec-intelligence" element={<SpecIntelligencePage />} />
+        <Route path="/release-platform" element={<ReleasePlatformPage />} />
+        <Route path="/release-platform-certification" element={<ReleasePlatformCertificationPage />} />
+        <Route path="/intelligence" element={<IntelligencePage />} />
+        <Route path="/key-issues" element={<KeyIssueIntelligencePage />} />
+        <Route path="/market-user-intelligence" element={<MarketUserIntelligencePage />} />
+        <Route path="/sell-candidates" element={<SellCandidatePage />} />
+        <Route path="/want-lists" element={<WantListPage />} />
+        <Route path="/collection-gaps" element={<CollectionGapPage />} />
+        <Route path="/acquisition-opportunities" element={<AcquisitionOpportunityPage />} />
+        <Route path="/marketplace-acquisitions" element={<MarketplaceAcquisitionPage />} />
+        <Route path="/acquisition-dashboard" element={<AcquisitionDashboardPage />} />
+        <Route path="/exit-candidates" element={<ExitCandidatePage />} />
+        <Route path="/hold-sell" element={<HoldSellPage />} />
+        <Route path="/grade-before-sell" element={<GradeBeforeSellPage />} />
+        <Route path="/portfolio-rebalancing" element={<PortfolioRebalancingPage />} />
+        <Route path="/exit-dashboard" element={<ExitDashboardPage />} />
+        <Route path="/unified-intelligence" element={<UnifiedCollectorPage />} />
+        <Route path="/daily-actions" element={<DailyActionPage />} />
+        <Route path="/cross-system-recommendations" element={<CrossSystemRecommendationPage />} />
+        <Route path="/recommendations-v2" element={<RecommendationsV2Page />} />
+        <Route path="/recommendation-intelligence-certification" element={<RecommendationIntelligenceCertificationPage />} />
+        <Route path="/release-imports" element={<ReleaseImportsPage />} />
+        <Route path="/lunar-feed" element={<LunarFeedPage />} />
         <Route path="/scan-ingestion" element={<ScanIngestionPage />} />
         <Route path="/scan-normalization" element={<ScanNormalizationPage />} />
         <Route path="/scan-boundary" element={<ScanBoundaryPage />} />

@@ -2,6 +2,86 @@
 
 Operational notes for intentional deferrals and known cleanup work. Entries should be actionable when someone has a maintenance window.
 
+## P48 closeout summary
+
+Production safety, data protection, operations reliability, and production readiness certification (P48-01 through P48-04) complete personal-production signoff for Oakley. Certification is append-only and read-only — no automatic repair, marketplace changes, or destructive recovery during P48.
+
+### Deferred after P48
+
+- Future SaaS multi-user support and tenant isolation beyond current owner/admin-style control.
+- Future public launch support (storefront scale, onboarding, billing).
+- Future enterprise tooling (SIEM export, fleet RBAC, continuous compliance automation).
+- Scheduled production backup/restore automation (operators maintain external backup discipline manually).
+- Real HTTP marketplace transports and additional marketplace connectors (unchanged from P46 deferrals).
+
+## P49 closeout summary
+
+Grading Intelligence Platform phases P49-01 through P49-04 (condition intelligence, advisory predictions, validation/reliability, platform certification) complete personal-production signoff for grading workflows. Closeout is read-only — no prediction mutation, recommendation mutation, or automatic retraining.
+
+### Deferred grading items only
+
+- Advanced computer vision models for defect and surface analysis.
+- External grading company integrations (PSA/CGC/CBCS live APIs and submission handoff).
+- Automatic scan enhancement and denoise pipelines.
+- Advanced image training datasets and production ML calibration retraining.
+- Future ML calibration improvements beyond deterministic observational metrics.
+
+## P50 closeout summary
+
+Release Intelligence Platform phases P50-01 through P50-05 (release intelligence, watchlists, spec intelligence, release platform dashboards, Lunar feed/scheduler/variants, and platform certification) complete production signoff for release workflows. Closeout is read-only — no scoring changes, Lunar import changes, scheduler behavior changes, or variant logic changes during P50-05.
+
+### Deferred P50 items only
+
+- Additional release sources beyond Lunar distributor CSV feeds.
+- Real-time external publisher APIs and automated PRH/Diamond connectors.
+- Market intelligence and collector-intelligence fusion into release scoring (explicitly out of P50 scope).
+- Automated purchasing or FOC submission to distributors.
+- Multi-tenant release catalog sharing and publisher-wide normalization services.
+- Historical Lunar archive backfill automation beyond current manual/scheduled imports.
+
+## P51 closeout summary
+
+Recommendation Intelligence Platform phases P51-01 through P51-05 (collector intelligence, key issue intelligence, market/user intelligence, Recommendation Engine V2, and certification closeout) complete advisory recommendation signoff. P51-05 is read-only — no scoring changes, Lunar import changes, inventory/orders/marketplace mutations, or auto-buy during closeout.
+
+### Deferred P51 items only
+
+- Live market sales feed and sold-listing enrichment (eBay, Heritage, etc.).
+- CGC/graded outcome calibration and resale feedback loops.
+- User feedback loop refinement on recommendation accept/dismiss beyond current spec reviews.
+- Social/community heat signals and forum sentiment.
+- League of Comic Geeks or other licensed third-party demand datasets.
+- Automated ML retraining for market demand (baseline remains deterministic seed + P51-01/02 signals).
+
+## P47 closeout summary
+
+Forecasting, market intelligence, validation/learning, and dealer copilot are certified through P47-05. Deferred forecast work below remains intentionally outside the current closeout scope.
+
+### Deferred forecast items only
+
+- External market data feeds beyond current deterministic local inputs.
+- Advanced ML model training and retraining pipelines.
+- Real-time forecast refresh and streaming forecast updates.
+- Live comic market API integrations.
+- Automated dealer actions (buy, sell, repricing, grading submission).
+- Advanced grading integration handoff and downstream execution workflows.
+
+## P46 closeout summary
+
+Marketplace platform P46-01 through P46-08 is certified via read-only validation and dashboard closeout. Deferred marketplace work is intentionally outside this scope.
+
+### Deferred marketplace integrations and features
+
+- eBay integration (connector reserved in seed only).
+- Mercari integration (not started).
+- HipComic advanced support beyond reserved connector entry.
+- Live auction automation and stream scheduling (Whatnot-adjacent).
+- Shipping automation and carrier workflows.
+- Payment capture and payout workflows on marketplaces.
+- Discount and marketing automation on Shopify.
+- Public Shopify storefront/theme management.
+- Real HTTP transports for Whatnot and Shopify (current phase uses validated stub connectors).
+- Additional marketplaces beyond WHATNOT and SHOPIFY implementations.
+
 ## P45 closeout summary
 
 This section consolidates deferred work that remains intentionally outside the completed agent platform scope after P45-08 closeout.

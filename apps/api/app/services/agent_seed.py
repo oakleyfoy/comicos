@@ -107,6 +107,57 @@ FOUNDATIONAL_AGENT_SEEDS: tuple[AgentSeedDefinition, ...] = (
             AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
         ),
     ),
+    AgentSeedDefinition(
+        code="listing_quality_agent",
+        name="ListingQualityAgent",
+        description="Read-only marketplace operations agent that detects listing quality gaps and emits advisory recommendations.",
+        version="1.0.0",
+        capabilities=(
+            AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
+            AgentCapabilityDeclaration(capability_code="inventory.read", capability_name="Inventory Read"),
+        ),
+    ),
+    AgentSeedDefinition(
+        code="inventory_health_agent",
+        name="InventoryHealthAgent",
+        description="Read-only marketplace operations agent that detects inventory reservation and availability health issues.",
+        version="1.0.0",
+        capabilities=(
+            AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
+            AgentCapabilityDeclaration(capability_code="inventory.read", capability_name="Inventory Read"),
+        ),
+    ),
+    AgentSeedDefinition(
+        code="pricing_opportunity_agent",
+        name="PricingOpportunityAgent",
+        description="Advisory marketplace pricing agent that compares listing prices to FMV and trend signals without mutating prices.",
+        version="1.0.0",
+        capabilities=(
+            AgentCapabilityDeclaration(capability_code="pricing.read", capability_name="Pricing Read"),
+            AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
+            AgentCapabilityDeclaration(capability_code="inventory.read", capability_name="Inventory Read"),
+        ),
+    ),
+    AgentSeedDefinition(
+        code="unsold_inventory_agent",
+        name="UnsoldInventoryAgent",
+        description="Read-only marketplace operations agent that detects stale or unexposed inventory listings.",
+        version="1.0.0",
+        capabilities=(
+            AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
+            AgentCapabilityDeclaration(capability_code="inventory.read", capability_name="Inventory Read"),
+        ),
+    ),
+    AgentSeedDefinition(
+        code="marketplace_audit_agent",
+        name="MarketplaceAuditAgent",
+        description="Read-only marketplace operations agent that audits mappings, accounts, and publish lifecycle consistency.",
+        version="1.0.0",
+        capabilities=(
+            AgentCapabilityDeclaration(capability_code="market.read", capability_name="Market Read"),
+            AgentCapabilityDeclaration(capability_code="analytics.read", capability_name="Analytics Read"),
+        ),
+    ),
 )
 
 

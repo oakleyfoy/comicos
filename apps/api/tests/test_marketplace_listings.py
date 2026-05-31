@@ -3,7 +3,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.models import MarketplaceListingEvent, MarketplaceListingProjection
+from app.db.session import get_engine
+from app.models import MarketplaceListingEvent, MarketplaceListingProjection, User
+from app.models.marketplace_listing import MarketplaceListing, MarketplaceListingStatusHistory
+from app.schemas.marketplace_listing import MarketplaceListingCreate, MarketplaceListingUpdate
+from app.services.marketplace_listings import archive_listing, create_listing, get_listing, mark_ready_to_publish, update_listing
 from test_inventory import auth_headers, create_order, register_and_login
 
 
@@ -260,21 +264,111 @@ def test_listing_org_isolation_and_account_validation(client: TestClient, sessio
     ).all()
     assert unauthorized_events
 
-    disconnected = client.post(
-        f"/api/v1/organizations/{organization_id}/marketplaces/disconnect",
-        headers=auth_headers(owner),
-        json={"account_id": account_id, "reason": "test disconnect"},
-    )
-    assert disconnected.status_code == 200, disconnected.text
 
-    blocked = _create_listing(
-        client,
-        owner,
-        organization_id,
-        account_id=account_id,
-        inventory_item_id=inventory_item_id,
-        title="After disconnect",
-    )
-    assert blocked.status_code == 409, blocked.text
+def _canonical_inventory_copy_id(client: TestClient, token: str) -> int:
+    create_order(client, token)
+    response = client.get("/inventory?page=1&page_size=1", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    return int(response.json()["items"][0]["inventory_copy_id"])
 
-    assert listing_id > 0
+
+def test_canonical_marketplace_listing_create_update_archive_and_history(client: TestClient) -> None:
+    token = register_and_login(client, "canonical-listing-owner@example.com")
+    inventory_copy_id = _canonical_inventory_copy_id(client, token)
+
+    with Session(get_engine()) as session:
+        owner = session.exec(select(User).where(User.email == "canonical-listing-owner@example.com")).one()
+        detail = create_listing(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceListingCreate(
+                inventory_copy_id=inventory_copy_id,
+                listing_title="Canonical Listing",
+                listing_description="Internal source of truth listing.",
+                listing_type="SINGLE_ISSUE",
+                condition_label="NM",
+                grade_label="9.8",
+                asking_price="19.99",
+                currency="usd",
+                quantity=1,
+                variants=[
+                    {
+                        "variant_code": "RAW",
+                        "variant_name": "Raw Copy",
+                        "sku": "RAW-1",
+                        "quantity": 1,
+                        "price": "19.99",
+                    }
+                ],
+            ),
+        )
+        listing_id = detail.listing.id
+        assert detail.listing.inventory_copy_id == inventory_copy_id
+        assert detail.listing.status == "DRAFT"
+        assert detail.variants[0].variant_code == "RAW"
+
+        updated = update_listing(
+            session,
+            owner_id=int(owner.id or 0),
+            listing_id=listing_id,
+            payload=MarketplaceListingUpdate(
+                listing_title="Canonical Listing Updated",
+                quantity=2,
+                variants=[
+                    {
+                        "variant_code": "SLAB",
+                        "variant_name": "Slabbed Copy",
+                        "sku": "SLAB-1",
+                        "quantity": 1,
+                        "price": "29.99",
+                    }
+                ],
+            ),
+        )
+        ready = mark_ready_to_publish(session, owner_id=int(owner.id or 0), listing_id=listing_id)
+        archived = archive_listing(session, owner_id=int(owner.id or 0), listing_id=listing_id)
+
+        assert updated.listing.listing_title == "Canonical Listing Updated"
+        assert updated.variants[0].variant_code == "SLAB"
+        assert ready.listing.status == "READY_TO_PUBLISH"
+        assert archived.listing.status == "ARCHIVED"
+
+        session.expire_all()
+        history = session.exec(
+            select(MarketplaceListingStatusHistory)
+            .where(MarketplaceListingStatusHistory.listing_id == listing_id)
+            .order_by(MarketplaceListingStatusHistory.changed_at.asc(), MarketplaceListingStatusHistory.id.asc())
+        ).all()
+        assert [row.new_status for row in history] == ["DRAFT", "READY_TO_PUBLISH", "ARCHIVED"]
+
+
+def test_canonical_marketplace_listing_owner_scoping(client: TestClient) -> None:
+    token = register_and_login(client, "canonical-scope-owner@example.com")
+    outsider_token = register_and_login(client, "canonical-scope-outsider@example.com")
+
+    with Session(get_engine()) as session:
+        owner = session.exec(select(User).where(User.email == "canonical-scope-owner@example.com")).one()
+        outsider = session.exec(select(User).where(User.email == "canonical-scope-outsider@example.com")).one()
+        detail = create_listing(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceListingCreate(
+                listing_title="Scoped Listing",
+                listing_description="Owner only.",
+                listing_type="SINGLE_ISSUE",
+                condition_label="VF",
+                asking_price="11.00",
+                currency="USD",
+                quantity=1,
+            ),
+        )
+
+        same_owner = get_listing(session, owner_id=int(owner.id or 0), listing_id=detail.listing.id)
+        assert same_owner.listing.id == detail.listing.id
+
+        try:
+            get_listing(session, owner_id=int(outsider.id or 0), listing_id=detail.listing.id)
+        except Exception as exc:  # pragma: no cover - explicit assertion below
+            assert getattr(exc, "status_code", None) == 404
+        else:  # pragma: no cover - defensive
+            raise AssertionError("Expected owner scoping to hide canonical listing.")

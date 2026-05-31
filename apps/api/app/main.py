@@ -1131,6 +1131,13 @@ from app.api.automation_recovery import attach_automation_recovery_layer
 from app.api.automation_scheduling import attach_automation_scheduling_layer
 from app.api.automation_workers import attach_automation_workers_layer
 from app.api.organization import attach_organization_layer
+from app.api.whatnot import attach_whatnot_layer
+from app.api.shopify import attach_shopify_layer
+from app.api.marketplace_dashboard import attach_marketplace_dashboard_layer
+from app.api.marketplace_operations import attach_marketplace_operations_layer
+from app.api.marketplace import attach_marketplace_layer
+from app.api.marketplace_publish import attach_marketplace_publish_layer
+from app.api.marketplace_sync import attach_marketplace_sync_layer
 from app.api.marketplace_accounts import attach_marketplace_accounts_layer
 from app.api.marketplace_events import attach_marketplace_events_layer
 from app.api.marketplace_inventory_sync import attach_marketplace_inventory_sync_layer
@@ -1140,6 +1147,61 @@ from app.api.marketplace_pricing import attach_marketplace_pricing_layer
 from app.api.live_sales import attach_live_sales_layer
 from app.api.marketplace_ops_dashboard import attach_marketplace_ops_dashboard_layer
 from app.api.marketplace_analytics import attach_marketplace_analytics_layer
+from app.api.market_intelligence import attach_market_intelligence_layer
+from app.api.market_forecast import attach_market_forecast_layer
+from app.api.forecast_dashboard import attach_forecast_dashboard_layer
+from app.api.forecast_validation import attach_forecast_validation_layer
+from app.api.forecast_validation_dashboard import attach_forecast_validation_dashboard_layer
+from app.api.forecast_platform import attach_forecast_platform_layer
+from app.api.data_integrity import attach_data_integrity_layer
+from app.api.operations_reliability import attach_operations_reliability_layer
+from app.api.production_readiness import attach_production_readiness_layer
+from app.api.condition_intelligence import attach_condition_intelligence_layer
+from app.api.grading_intelligence import attach_grading_intelligence_layer
+from app.api.grading_validation import attach_grading_validation_layer
+from app.api.grading_platform import attach_grading_platform_layer
+from app.api.release_intelligence import attach_release_intelligence_layer
+from app.api.release_watchlists import attach_release_watchlists_layer
+from app.api.spec_intelligence import attach_spec_intelligence_layer
+from app.api.release_imports import attach_release_imports_layer
+from app.api.lunar_feed import attach_lunar_feed_layer
+from app.api.lunar_scheduler import attach_lunar_scheduler_layer
+from app.api.release_platform import attach_release_platform_layer
+from app.api.release_platform_certification import attach_release_platform_certification_layer
+from app.api.intelligence import attach_intelligence_layer
+from app.api.key_issue_intelligence import attach_key_issue_intelligence_layer
+from app.api.market_user_intelligence import attach_market_user_intelligence_layer
+from app.api.recommendations_v2 import attach_recommendations_v2_layer
+from app.api.pull_list_decisions import attach_pull_list_decisions_layer
+from app.api.foc_dashboard import attach_foc_dashboard_layer
+from app.api.pull_list_automation import attach_pull_list_automation_layer
+from app.api.pull_list_certification import attach_pull_list_certification_layer
+from app.api.purchase_profiles import attach_purchase_profile_layer
+from app.api.purchase_quantity import attach_purchase_quantity_layer
+from app.api.purchase_variant import attach_purchase_variant_layer
+from app.api.purchase_budget import attach_purchase_budget_layer
+from app.api.sell_candidate import attach_sell_candidate_layer
+from app.api.portfolio_certification import attach_portfolio_certification_layer
+from app.api.want_lists import attach_want_list_layer
+from app.api.collection_gaps import attach_collection_gap_layer
+from app.api.acquisition_opportunities import attach_acquisition_opportunity_layer
+from app.api.marketplace_acquisitions import attach_marketplace_acquisition_layer
+from app.api.acquisition_dashboard import attach_acquisition_dashboard_layer
+from app.api.acquisition_certification import attach_acquisition_certification_layer
+from app.api.exit_candidates import attach_exit_candidate_layer
+from app.api.hold_sell_intelligence import attach_hold_sell_intelligence_layer
+from app.api.grade_before_sell import attach_grade_before_sell_layer
+from app.api.portfolio_rebalancing import attach_portfolio_rebalancing_layer
+from app.api.exit_dashboard import attach_exit_dashboard_layer
+from app.api.exit_certification import attach_exit_certification_layer
+from app.api.unified_collector_intelligence import attach_unified_collector_intelligence_layer
+from app.api.daily_action_engine import attach_daily_action_engine_layer
+from app.api.cross_system_recommendation import attach_cross_system_recommendation_layer
+from app.api.executive_dashboard import attach_executive_dashboard_layer
+from app.api.final_platform_certification import attach_final_platform_certification_layer
+from app.api.pull_list import attach_pull_list_layer
+from app.api.recommendation_intelligence_certification import attach_recommendation_intelligence_certification_layer
+from app.api.dealer_copilot import attach_dealer_copilot_layer
 from app.api.shopify_sync import attach_shopify_sync_layer
 from app.api.mobile_foundation import attach_mobile_foundation_layer
 from app.api.offline_inventory import attach_offline_inventory_layer
@@ -1152,7 +1214,6 @@ from app.api.mobile_analytics import attach_mobile_analytics_layer
 from app.api.agents import attach_agents_layer
 from app.api.workflows import attach_workflows_layer
 from app.api.research_agents import attach_research_agents_layer
-from app.api.intelligence import attach_intelligence_layer
 from app.api.agent_dashboard import attach_agent_dashboard_layer
 from app.api.agent_security import attach_agent_security_layer
 from app.api.agent_analytics import attach_agent_analytics_layer
@@ -1208,11 +1269,73 @@ attach_automation_recovery_layer(app)
 attach_automation_scheduling_layer(app)
 attach_automation_workers_layer(app)
 attach_organization_layer(app)
+attach_marketplace_layer(app)
+attach_marketplace_publish_layer(app)
+attach_marketplace_sync_layer(app)
+attach_marketplace_operations_layer(app)
+attach_whatnot_layer(app)
+attach_shopify_layer(app)
+attach_marketplace_dashboard_layer(app)
 attach_marketplace_accounts_layer(app)
 attach_marketplace_events_layer(app)
 attach_live_sales_layer(app)
 attach_marketplace_ops_dashboard_layer(app)
 attach_marketplace_analytics_layer(app)
+attach_market_intelligence_layer(app)
+attach_market_forecast_layer(app)
+attach_forecast_dashboard_layer(app)
+attach_forecast_validation_layer(app)
+attach_forecast_validation_dashboard_layer(app)
+attach_forecast_platform_layer(app)
+attach_data_integrity_layer(app)
+attach_operations_reliability_layer(app)
+attach_production_readiness_layer(app)
+attach_condition_intelligence_layer(app)
+attach_grading_intelligence_layer(app)
+attach_grading_validation_layer(app)
+attach_grading_platform_layer(app)
+attach_release_intelligence_layer(app)
+attach_release_watchlists_layer(app)
+attach_spec_intelligence_layer(app)
+attach_release_platform_layer(app)
+attach_release_platform_certification_layer(app)
+attach_intelligence_layer(app)
+attach_key_issue_intelligence_layer(app)
+attach_market_user_intelligence_layer(app)
+attach_recommendations_v2_layer(app)
+attach_recommendation_intelligence_certification_layer(app)
+attach_pull_list_layer(app)
+attach_pull_list_decisions_layer(app)
+attach_foc_dashboard_layer(app)
+attach_pull_list_automation_layer(app)
+attach_pull_list_certification_layer(app)
+attach_purchase_profile_layer(app)
+attach_purchase_quantity_layer(app)
+attach_purchase_variant_layer(app)
+attach_purchase_budget_layer(app)
+attach_sell_candidate_layer(app)
+attach_portfolio_certification_layer(app)
+attach_want_list_layer(app)
+attach_collection_gap_layer(app)
+attach_acquisition_opportunity_layer(app)
+attach_marketplace_acquisition_layer(app)
+attach_acquisition_dashboard_layer(app)
+attach_acquisition_certification_layer(app)
+attach_exit_candidate_layer(app)
+attach_hold_sell_intelligence_layer(app)
+attach_grade_before_sell_layer(app)
+attach_portfolio_rebalancing_layer(app)
+attach_exit_dashboard_layer(app)
+attach_exit_certification_layer(app)
+attach_unified_collector_intelligence_layer(app)
+attach_daily_action_engine_layer(app)
+attach_cross_system_recommendation_layer(app)
+attach_executive_dashboard_layer(app)
+attach_final_platform_certification_layer(app)
+attach_release_imports_layer(app)
+attach_lunar_feed_layer(app)
+attach_lunar_scheduler_layer(app)
+attach_dealer_copilot_layer(app)
 attach_shopify_sync_layer(app)
 attach_marketplace_inventory_sync_layer(app)
 attach_marketplace_listings_layer(app)
@@ -1229,7 +1352,6 @@ attach_mobile_analytics_layer(app)
 attach_agents_layer(app)
 attach_workflows_layer(app)
 attach_research_agents_layer(app)
-attach_intelligence_layer(app)
 attach_agent_dashboard_layer(app)
 attach_agent_security_layer(app)
 attach_agent_analytics_layer(app)

@@ -7,6 +7,17 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.models import MarketplaceOrder, MarketplaceOrderEvent, MarketplaceTransaction
+from app.db.session import get_engine
+from app.models import User
+from app.models.marketplace_sync import MarketplaceOrder as SyncMarketplaceOrder
+from app.models.marketplace_sync import MarketplaceOrderEvent as SyncMarketplaceOrderEvent
+from app.models.marketplace_sync import MarketplaceOrderItem as SyncMarketplaceOrderItem
+from app.schemas.marketplace_listing import MarketplaceListingCreate
+from app.schemas.marketplace_sync import MarketplaceOrderCreate, MarketplaceOrderItemCreate
+from app.services.marketplace_listings import create_listing
+from app.services.marketplace_orders import create_order as create_sync_order
+from app.services.marketplace_orders import mark_order_fulfilled as mark_sync_order_fulfilled
+from app.services.marketplace_orders import mark_order_paid as mark_sync_order_paid
 from test_inventory import auth_headers, create_order, register_and_login
 
 
@@ -245,3 +256,68 @@ def test_order_org_isolation_denied_and_audited(client: TestClient, session: Ses
         .where(MarketplaceOrderEvent.event_type == "unauthorized_marketplace_order_access_attempt")
     ).all()
     assert events
+
+
+def test_marketplace_sync_orders_create_items_status_transitions_and_events(client: TestClient) -> None:
+    register_and_login(client, "marketplace-sync-order-owner@example.com")
+
+    with Session(get_engine()) as session:
+        owner = session.exec(select(User).where(User.email == "marketplace-sync-order-owner@example.com")).one()
+        listing = create_listing(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceListingCreate(
+                listing_title="Sync Order Listing",
+                listing_description="Sync order listing description",
+                listing_type="SINGLE_ISSUE",
+                condition_label="NM",
+                asking_price="19.00",
+                currency="USD",
+                quantity=1,
+            ),
+        )
+        created = create_sync_order(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceOrderCreate(
+                buyer_name="Sync Buyer",
+                buyer_email="sync-buyer@example.com",
+                shipping_amount="0.00",
+                tax_amount="0.00",
+                currency="USD",
+                items=[
+                    MarketplaceOrderItemCreate(
+                        listing_id=listing.listing.id,
+                        inventory_copy_id=None,
+                        external_item_id=None,
+                        title="Sync Order Item",
+                        quantity=1,
+                        unit_price="19.00",
+                    )
+                ],
+            ),
+        )
+        paid = mark_sync_order_paid(session, owner_id=int(owner.id or 0), order_id=created.order.id)
+        fulfilled = mark_sync_order_fulfilled(session, owner_id=int(owner.id or 0), order_id=created.order.id)
+
+        order_row = session.get(SyncMarketplaceOrder, created.order.id)
+        item_rows = session.exec(
+            select(SyncMarketplaceOrderItem).where(SyncMarketplaceOrderItem.order_id == created.order.id)
+        ).all()
+        event_rows = session.exec(
+            select(SyncMarketplaceOrderEvent)
+            .where(SyncMarketplaceOrderEvent.order_id == created.order.id)
+            .order_by(SyncMarketplaceOrderEvent.created_at.asc(), SyncMarketplaceOrderEvent.id.asc())
+        ).all()
+
+        assert order_row is not None
+        assert created.order.order_status == "PENDING"
+        assert paid.order.order_status == "PAID"
+        assert fulfilled.order.order_status == "FULFILLED"
+        assert len(item_rows) == 1
+        assert item_rows[0].item_status == "SOLD"
+        assert [row.event_type for row in event_rows] == [
+            "marketplace_order_created",
+            "marketplace_order_paid",
+            "marketplace_order_fulfilled",
+        ]

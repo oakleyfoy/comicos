@@ -1,0 +1,154 @@
+export type NavLinkItem = {
+  label: string;
+  to: string;
+  /** Highlight as primary landing link */
+  prominent?: boolean;
+  /** Requires ops admin (unchanged access rules). */
+  requiresOpsAdmin?: boolean;
+};
+
+export type NavGroup = {
+  id: string;
+  title: string;
+  links: NavLinkItem[];
+};
+
+/** Routes referenced by nav — must exist in App.tsx route config. */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "primary",
+    title: "Primary",
+    links: [
+      { label: "Executive Dashboard", to: "/executive-dashboard", prominent: true },
+      { label: "Daily Actions", to: "/daily-actions" },
+      { label: "Unified Intelligence", to: "/unified-intelligence" },
+      { label: "Cross-System Recommendations", to: "/cross-system-recommendations" },
+    ],
+  },
+  {
+    id: "collection",
+    title: "Collection",
+    links: [
+      { label: "Dashboard", to: "/dashboard" },
+      { label: "Want Lists", to: "/want-lists" },
+      { label: "Collection Gaps", to: "/collection-gaps" },
+      { label: "Key Issues", to: "/key-issues" },
+      { label: "Collector Intelligence", to: "/intelligence" },
+    ],
+  },
+  {
+    id: "buy",
+    title: "Buy / Preorder",
+    links: [
+      { label: "Pull Lists", to: "/pull-lists" },
+      { label: "Pull List Decisions", to: "/pull-list-decisions" },
+      { label: "FOC Dashboard", to: "/foc-dashboard" },
+      { label: "Purchase Profile", to: "/purchase-profile" },
+      { label: "Purchase Quantities", to: "/purchase-quantities" },
+      { label: "Purchase Variants", to: "/purchase-variants" },
+      { label: "Budget Allocation", to: "/purchase-budget" },
+      { label: "Acquisition Opportunities", to: "/acquisition-opportunities" },
+      { label: "Marketplace Acquisitions", to: "/marketplace-acquisitions" },
+      { label: "Acquisition Dashboard", to: "/acquisition-dashboard" },
+    ],
+  },
+  {
+    id: "sell",
+    title: "Sell / Exit",
+    links: [
+      { label: "Sell Candidates", to: "/sell-candidates" },
+      { label: "Exit Candidates", to: "/exit-candidates" },
+      { label: "Hold vs Sell", to: "/hold-sell" },
+      { label: "Grade Before Sell", to: "/grade-before-sell" },
+      { label: "Portfolio Rebalancing", to: "/portfolio-rebalancing" },
+      { label: "Exit Dashboard", to: "/exit-dashboard" },
+    ],
+  },
+  {
+    id: "market",
+    title: "Market / Releases",
+    links: [
+      { label: "Release Intelligence", to: "/release-intelligence" },
+      { label: "Release Platform", to: "/release-platform" },
+      { label: "Release Watchlists", to: "/release-watchlists" },
+      { label: "Release Imports", to: "/release-imports" },
+      { label: "Lunar Feed", to: "/lunar-feed" },
+      { label: "Recommendations V2", to: "/recommendations-v2" },
+      { label: "Spec Intelligence", to: "/spec-intelligence" },
+      { label: "Market & User Intelligence", to: "/market-user-intelligence" },
+      { label: "Forecast Platform", to: "/forecast-platform" },
+    ],
+  },
+  {
+    id: "imports",
+    title: "Imports / Data",
+    links: [
+      { label: "Orders", to: "/orders" },
+      { label: "Imports", to: "/imports" },
+      { label: "Email Imports", to: "/imports/email" },
+      { label: "Import Order", to: "/orders/import" },
+      { label: "Add Order", to: "/orders/new" },
+      { label: "Scanner Presets", to: "/settings/scanner-profiles" },
+      { label: "Data Protection", to: "/data-protection" },
+    ],
+  },
+  {
+    id: "operations",
+    title: "Operations / Admin",
+    links: [
+      { label: "Operations Reliability", to: "/operations-reliability" },
+      { label: "Production Readiness", to: "/production-readiness" },
+      { label: "Integrations", to: "/settings/integrations" },
+      { label: "Agent Dashboard", to: "/agent-dashboard" },
+      { label: "Marketplace Dashboard", to: "/marketplace-dashboard" },
+      { label: "Dealer Copilot", to: "/dealer-copilot" },
+      { label: "Rec Intelligence Certification", to: "/recommendation-intelligence-certification" },
+      { label: "Release Platform Certification", to: "/release-platform-certification" },
+      { label: "Operations", to: "/ops", requiresOpsAdmin: true },
+    ],
+  },
+  {
+    id: "grading",
+    title: "Grading",
+    links: [
+      { label: "Condition Intelligence", to: "/condition-intelligence" },
+      { label: "Grading Intelligence", to: "/grading-intelligence" },
+      { label: "Grading Validation", to: "/grading-validation" },
+      { label: "Grading Platform", to: "/grading-platform" },
+    ],
+  },
+];
+
+export const NAV_EXPANDED_STORAGE_KEY = "comic-os.nav.expanded-groups";
+
+export const DEFAULT_EXPANDED_GROUP_IDS = ["primary"];
+
+export function findGroupIdForPath(pathname: string): string | null {
+  for (const group of NAV_GROUPS) {
+    for (const link of group.links) {
+      if (pathname === link.to || (link.to !== "/dashboard" && pathname.startsWith(`${link.to}/`))) {
+        return group.id;
+      }
+    }
+  }
+  if (pathname.startsWith("/orders")) {
+    return "imports";
+  }
+  if (pathname.startsWith("/imports")) {
+    return "imports";
+  }
+  if (pathname.startsWith("/settings")) {
+    return "imports";
+  }
+  if (pathname.startsWith("/inventory")) {
+    return "collection";
+  }
+  return null;
+}
+
+export function visibleNavGroups(isOpsAdmin: boolean): NavGroup[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter((link) => !link.requiresOpsAdmin || isOpsAdmin),
+  })).filter((group) => group.links.length > 0);
+}

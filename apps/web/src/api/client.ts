@@ -13441,6 +13441,2513 @@ export interface AgentPlatformReadinessRead {
   sections: AgentPlatformReadinessSectionRead[];
 }
 
+export interface MarketplaceValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface MarketplaceValidationRead {
+  overall_status: string;
+  platform_certified: boolean;
+  checks: MarketplaceValidationCheckRead[];
+}
+
+export interface MarketplaceHealthComponentRead {
+  component_code: string;
+  title: string;
+  health_status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface MarketplaceHealthRead {
+  overall_status: string;
+  components: MarketplaceHealthComponentRead[];
+}
+
+export interface MarketplaceDashboardSummaryRead {
+  validation_status: string;
+  health_status: string;
+  platform_certified: boolean;
+  summary_cards: Record<string, number>;
+  validation_checks: MarketplaceValidationCheckRead[];
+  health_components: MarketplaceHealthComponentRead[];
+}
+
+export interface DealerRecommendationEvidenceRead {
+  id: number;
+  recommendation_id: number;
+  evidence_type: string;
+  evidence_source: string;
+  evidence_payload_json: Record<string, unknown>;
+  evidence_score: number;
+  created_at: string;
+}
+
+export interface DealerRecommendationReviewRead {
+  id: number;
+  recommendation_id: number;
+  review_status: string;
+  reviewed_by: string;
+  reviewed_at: string;
+  review_notes?: string | null;
+}
+
+export interface DealerRecommendationRead {
+  id: number;
+  owner_user_id: number;
+  agent_execution_id?: number | null;
+  recommendation_uuid: string;
+  recommendation_type: string;
+  asset_type: string;
+  asset_id?: number | null;
+  title: string;
+  description: string;
+  confidence_score: number;
+  priority_score: number;
+  recommendation_status: string;
+  created_at: string;
+  latest_review?: DealerRecommendationReviewRead | null;
+}
+
+export interface DealerRecommendationDetail {
+  recommendation: DealerRecommendationRead;
+  evidence: DealerRecommendationEvidenceRead[];
+  reviews: DealerRecommendationReviewRead[];
+}
+
+export interface DealerOpportunityScoreRead {
+  id: number;
+  owner_user_id: number;
+  asset_type: string;
+  asset_id: number;
+  opportunity_score: number;
+  risk_score: number;
+  forecast_score: number;
+  demand_score: number;
+  grading_score?: number | null;
+  calculated_at: string;
+}
+
+export interface DealerCopilotExecutionRead {
+  id: number;
+  owner_user_id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  created_at: string;
+}
+
+export interface DealerRecommendationListResponse {
+  items: DealerRecommendationRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface DealerOpportunityScoreListResponse {
+  items: DealerOpportunityScoreRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface DealerCopilotExecutionListResponse {
+  items: DealerCopilotExecutionRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface DealerCopilotSummaryRead {
+  total_recommendations: number;
+  open_recommendations: number;
+  by_type: Record<string, number>;
+  by_status: Record<string, number>;
+}
+
+export interface DealerCopilotDashboardRead {
+  summary: DealerCopilotSummaryRead;
+  top_buys: DealerRecommendationRead[];
+  top_sells: DealerRecommendationRead[];
+  top_holds: DealerRecommendationRead[];
+  top_grades: DealerRecommendationRead[];
+  top_watchlist: DealerRecommendationRead[];
+  opportunities: DealerOpportunityScoreRead[];
+  executions: DealerCopilotExecutionRead[];
+}
+
+export interface DealerCopilotRunResponse {
+  recommendations: DealerRecommendationRead[];
+  opportunities: DealerOpportunityScoreRead[];
+  executions: DealerCopilotExecutionRead[];
+}
+
+export interface ForecastPlatformValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface ForecastPlatformValidationRead {
+  overall_status: string;
+  platform_certified: boolean;
+  checks: ForecastPlatformValidationCheckRead[];
+}
+
+export interface ForecastPlatformHealthComponentRead {
+  component_code: string;
+  title: string;
+  health_status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface ForecastPlatformHealthRead {
+  overall_status: string;
+  components: ForecastPlatformHealthComponentRead[];
+}
+
+export interface ForecastPlatformCertificationRead {
+  platform_certified: boolean;
+  validation_status: string;
+  health_status: string;
+  summary: string;
+  certification_notes: string[];
+}
+
+export interface MarketForecastRead {
+  id: number;
+  owner_user_id: number;
+  forecast_uuid: string;
+  forecast_type: string;
+  asset_type: string;
+  asset_id?: number | null;
+  forecast_horizon_days: number;
+  forecast_value: number;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface MarketRiskAssessmentRead {
+  id: number;
+  owner_user_id: number;
+  assessment_uuid: string;
+  asset_type: string;
+  asset_id?: number | null;
+  risk_type: string;
+  risk_score: number;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface ForecastPlatformSummaryRead {
+  market_score: number;
+  forecast_count: number;
+  risk_count: number;
+  recommendation_count: number;
+  forecast_accuracy: number;
+  top_bullish_forecasts: MarketForecastRead[];
+  top_bearish_forecasts: MarketForecastRead[];
+  top_risks: MarketRiskAssessmentRead[];
+  top_buy_recommendations: DealerRecommendationRead[];
+  top_sell_recommendations: DealerRecommendationRead[];
+  top_grade_candidates: DealerRecommendationRead[];
+  accuracy_summary: ForecastAccuracyMetricRead[];
+  signal_quality_summary: SignalQualityMetricRead[];
+  recent_outcomes: ForecastOutcomeRead[];
+}
+
+export interface ForecastPlatformDashboardRead {
+  summary: ForecastPlatformSummaryRead;
+  health: ForecastPlatformHealthRead;
+  validation: ForecastPlatformValidationRead;
+  certification: ForecastPlatformCertificationRead;
+}
+
+export interface DataIntegrityCheckRead {
+  id: number;
+  owner_user_id: number;
+  check_uuid: string;
+  check_type: string;
+  check_status: string;
+  checked_at: string;
+  summary_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DataIntegrityIssueRead {
+  id: number;
+  check_id: number;
+  issue_type: string;
+  severity: string;
+  entity_type: string;
+  entity_id?: number | null;
+  issue_message: string;
+  issue_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MigrationSafetyCheckRead {
+  id: number;
+  owner_user_id: number;
+  migration_revision: string;
+  check_status: string;
+  pre_count_json: Record<string, unknown>;
+  post_count_json: Record<string, unknown>;
+  validation_payload_json: Record<string, unknown>;
+  checked_at: string;
+  created_at: string;
+}
+
+export interface AuditEventRead {
+  id: number;
+  owner_user_id: number;
+  audit_uuid: string;
+  actor_id?: number | null;
+  actor_type: string;
+  action_type: string;
+  entity_type: string;
+  entity_id?: number | null;
+  source: string;
+  event_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ChangeRecordRead {
+  id: number;
+  audit_event_id: number;
+  field_name: string;
+  before_value_json?: unknown;
+  after_value_json?: unknown;
+  created_at: string;
+}
+
+export interface DataIntegrityCheckDetail {
+  check: DataIntegrityCheckRead;
+  issues: DataIntegrityIssueRead[];
+}
+
+export interface AuditEventDetail {
+  event: AuditEventRead;
+  changes: ChangeRecordRead[];
+}
+
+export interface DataIntegrityCheckListResponse {
+  items: DataIntegrityCheckRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface DataIntegrityIssueListResponse {
+  items: DataIntegrityIssueRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface MigrationSafetyCheckListResponse {
+  items: MigrationSafetyCheckRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface AuditEventListResponse {
+  items: AuditEventRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface OperationsReliabilitySummaryRead {
+  readiness_score: number;
+  platform_health_status: string;
+  open_issue_count: number;
+  recommendation_count: number;
+}
+
+export interface PullListAutomationOpsPanelRead {
+  last_run: string | null;
+  status: string;
+  runtime_ms: number;
+  decisions_generated: number;
+  actions_generated: number;
+}
+
+export interface PullListCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
+export interface PortfolioCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
+export interface AcquisitionCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
+export interface ExitCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
+export interface FinalPlatformCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  health_status: string;
+  validation_summary: string;
+}
+
+export interface ProductionReadinessOpsPanelRead {
+  last_run_at: string | null;
+  readiness_score: number;
+  health_status: string;
+  go_live_result: string;
+  recommendations: string;
+}
+
+export interface OperationsReliabilityDashboardRead {
+  summary: OperationsReliabilitySummaryRead;
+  health_checks: PlatformHealthCheckRead[];
+  issues: ReliabilityIssueRead[];
+  job_metrics: JobHealthMetricRead[];
+  queue_metrics: QueueHealthMetricRead[];
+  recommendations: RecoveryRecommendationRead[];
+  pull_list_automation?: PullListAutomationOpsPanelRead | null;
+  pull_list_certification?: PullListCertificationOpsPanelRead | null;
+  portfolio_certification?: PortfolioCertificationOpsPanelRead | null;
+  acquisition_certification?: AcquisitionCertificationOpsPanelRead | null;
+  exit_certification?: ExitCertificationOpsPanelRead | null;
+  final_platform_certification?: FinalPlatformCertificationOpsPanelRead | null;
+  production_readiness?: ProductionReadinessOpsPanelRead | null;
+}
+
+export interface PlatformHealthCheckRead {
+  id: number;
+  check_uuid: string;
+  subsystem: string;
+  health_status: string;
+  health_score: number;
+  check_payload_json: Record<string, unknown>;
+  checked_at: string;
+}
+
+export interface ReliabilityIssueRead {
+  id: number;
+  issue_uuid: string;
+  subsystem: string;
+  issue_type: string;
+  severity: string;
+  issue_status: string;
+  issue_payload_json: Record<string, unknown>;
+  detected_at: string;
+}
+
+export interface JobHealthMetricRead {
+  id: number;
+  job_type: string;
+  total_jobs: number;
+  successful_jobs: number;
+  failed_jobs: number;
+  average_duration_ms: number;
+  measured_at: string;
+}
+
+export interface QueueHealthMetricRead {
+  id: number;
+  queue_name: string;
+  queued_count: number;
+  running_count: number;
+  failed_count: number;
+  measured_at: string;
+}
+
+export interface RecoveryRecommendationRead {
+  id: number;
+  recommendation_uuid: string;
+  subsystem: string;
+  recommendation_type: string;
+  title: string;
+  description: string;
+  priority_score: number;
+  created_at: string;
+}
+
+export interface ProductionReadinessCheckRead {
+  id: number;
+  check_uuid: string;
+  check_name: string;
+  subsystem: string;
+  check_status: string;
+  check_notes: string;
+  checked_at: string;
+}
+
+export interface ProductionCertificationRead {
+  id: number;
+  certification_uuid: string;
+  certification_status: string;
+  readiness_score: number;
+  certification_notes: string;
+  certified_at: string;
+}
+
+export interface GoLiveAssessmentRead {
+  id: number;
+  assessment_uuid: string;
+  assessment_status: string;
+  overall_score: number;
+  assessment_summary: string;
+  assessed_at: string;
+}
+
+export interface ProductionReadinessDashboardRead {
+  readiness_score: number;
+  certification_status: string;
+  marketplace_status: string;
+  forecast_status: string;
+  data_protection_status: string;
+  operations_status: string;
+  agent_platform_status: string;
+  checklist_pass_count: number;
+  checklist_total: number;
+  go_live_status: string;
+  latest_certification: ProductionCertificationRead | null;
+  latest_assessment: GoLiveAssessmentRead | null;
+}
+
+export interface ConditionProfileRead {
+  id: number;
+  analysis_id: number;
+  overall_condition_score: number;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface ConditionDefectRead {
+  id: number;
+  analysis_id: number;
+  defect_type: string;
+  defect_location: string;
+  defect_severity: string;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface ConditionSubgradeRead {
+  id: number;
+  analysis_id: number;
+  subgrade_type: string;
+  score: number;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface ScanQualityAssessmentRead {
+  id: number;
+  analysis_id: number;
+  image_quality_score: number;
+  resolution_score: number;
+  alignment_score: number;
+  glare_score: number;
+  crop_score: number;
+  quality_status: string;
+  created_at: string;
+}
+
+export interface ConditionAgentExecutionRead {
+  id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface ConditionDashboardRead {
+  analysis_count: number;
+  profile_count: number;
+  defect_count: number;
+  subgrade_count: number;
+  quality_assessment_count: number;
+  execution_count: number;
+  average_condition_score: number;
+  average_quality_score: number;
+  condition_summary: ConditionProfileRead[];
+  defect_summary: ConditionDefectRead[];
+  subgrade_summary: ConditionSubgradeRead[];
+  scan_quality_summary: ScanQualityAssessmentRead[];
+  agent_activity: ConditionAgentExecutionRead[];
+}
+
+export interface GradePredictionRead {
+  id: number;
+  prediction_uuid: string;
+  analysis_id: number;
+  inventory_copy_id: number | null;
+  grading_scale: string;
+  predicted_grade: string;
+  grade_floor: string;
+  grade_ceiling: string;
+  confidence_score: number;
+  created_at: string;
+}
+
+export interface GradingIntelligenceRecommendationRead {
+  id: number;
+  recommendation_uuid: string;
+  prediction_id: number | null;
+  inventory_copy_id: number | null;
+  recommendation_type: string;
+  title: string;
+  description: string;
+  confidence_score: number;
+  priority_score: number;
+  recommendation_status: string;
+  created_at: string;
+}
+
+export interface GradingIntelligenceRoiAnalysisRead {
+  id: number;
+  recommendation_id: number | null;
+  inventory_copy_id: number | null;
+  raw_value: number;
+  expected_graded_value: number;
+  grading_cost: number;
+  expected_profit: number;
+  expected_roi_percent: number;
+  created_at: string;
+}
+
+export interface GradingAgentExecutionRead {
+  id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface GradingDashboardRead {
+  prediction_count: number;
+  recommendation_count: number;
+  roi_analysis_count: number;
+  average_confidence: number;
+  average_priority: number;
+  average_roi_percent: number;
+  prediction_summary: GradePredictionRead[];
+  recommendation_summary: GradingIntelligenceRecommendationRead[];
+  top_grading_candidates: GradingIntelligenceRecommendationRead[];
+  roi_summary: GradingIntelligenceRoiAnalysisRead[];
+  agent_activity: GradingAgentExecutionRead[];
+}
+
+export interface GradeValidationRead {
+  id: number;
+  validation_uuid: string;
+  prediction_id: number;
+  actual_grade: string;
+  predicted_grade: string;
+  variance: number;
+  validated_at: string;
+}
+
+export interface GradeCalibrationMetricRead {
+  id: number;
+  metric_date: string;
+  grading_scale: string;
+  total_predictions: number;
+  average_variance: number;
+  accuracy_score: number;
+  created_at: string;
+}
+
+export interface GradePredictionOutcomeRead {
+  id: number;
+  outcome_uuid: string;
+  recommendation_id: number | null;
+  prediction_id: number | null;
+  outcome_type: string;
+  outcome_score: number;
+  created_at: string;
+}
+
+export interface GradingDriftEventRead {
+  id: number;
+  event_uuid: string;
+  drift_type: string;
+  drift_score: number;
+  detected_at: string;
+}
+
+export interface GradingReliabilityMetricRead {
+  id: number;
+  metric_uuid: string;
+  reliability_type: string;
+  metric_score: number;
+  measured_at: string;
+}
+
+export interface GradingValidationExecutionRead {
+  id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface PredictionAccuracySummary {
+  validation_count: number;
+  average_variance: number;
+  accuracy_score: number;
+}
+
+export interface DriftSummary {
+  event_count: number;
+  average_drift_score: number;
+  latest_drift_type: string | null;
+}
+
+export interface GradingValidationDashboardRead {
+  prediction_accuracy: PredictionAccuracySummary;
+  calibration_metrics: GradeCalibrationMetricRead[];
+  drift_summary: DriftSummary;
+  reliability_metrics: GradingReliabilityMetricRead[];
+  recommendation_outcomes: GradePredictionOutcomeRead[];
+  agent_activity: GradingValidationExecutionRead[];
+}
+
+export interface GradingPlatformValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface GradingPlatformValidationRead {
+  overall_status: string;
+  platform_certified: boolean;
+  checks: GradingPlatformValidationCheckRead[];
+}
+
+export interface GradingPlatformHealthComponentRead {
+  component_code: string;
+  title: string;
+  health_status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface GradingPlatformHealthRead {
+  overall_status: string;
+  components: GradingPlatformHealthComponentRead[];
+}
+
+export interface GradingPlatformConditionSummary {
+  analysis_count: number;
+  profile_count: number;
+  average_condition_score: number;
+  average_quality_score: number;
+}
+
+export interface GradingPlatformPredictionSummary {
+  prediction_count: number;
+  average_confidence: number;
+  recent_predictions: GradePredictionRead[];
+}
+
+export interface GradingPlatformRecommendationSummary {
+  recommendation_count: number;
+  average_priority: number;
+  recent_recommendations: GradingIntelligenceRecommendationRead[];
+}
+
+export interface GradingPlatformRoiSummary {
+  roi_analysis_count: number;
+  average_roi_percent: number;
+  recent_roi: GradingIntelligenceRoiAnalysisRead[];
+}
+
+export interface GradingPlatformCalibrationSummary {
+  validation_count: number;
+  calibration_metric_count: number;
+  average_accuracy_score: number;
+  recent_calibration: GradeCalibrationMetricRead[];
+}
+
+export interface GradingPlatformReliabilitySummary {
+  reliability_metric_count: number;
+  drift_event_count: number;
+  average_reliability_score: number;
+  recent_reliability: GradingReliabilityMetricRead[];
+}
+
+export interface GradingPlatformSummaryRead {
+  condition_summary: GradingPlatformConditionSummary;
+  prediction_summary: GradingPlatformPredictionSummary;
+  recommendation_summary: GradingPlatformRecommendationSummary;
+  roi_summary: GradingPlatformRoiSummary;
+  calibration_summary: GradingPlatformCalibrationSummary;
+  reliability_summary: GradingPlatformReliabilitySummary;
+  top_grading_candidates: GradingIntelligenceRecommendationRead[];
+}
+
+export interface GradingPlatformCertificationRead {
+  platform_certified: boolean;
+  validation_status: string;
+  health_status: string;
+  summary: string;
+  go_live_recommendation: string;
+  certification_notes: string[];
+}
+
+export interface ReleasePlatformValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface ReleasePlatformValidationRead {
+  overall_status: string;
+  platform_certified: boolean;
+  checks: ReleasePlatformValidationCheckRead[];
+}
+
+export interface ReleasePlatformHealthComponentRead {
+  component_code: string;
+  title: string;
+  health_status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface ReleasePlatformHealthRead {
+  overall_status: string;
+  components: ReleasePlatformHealthComponentRead[];
+}
+
+export interface ReleasePlatformImportSummaryRead {
+  last_import_at: string | null;
+  last_successful_import_at: string | null;
+  last_failed_import_at: string | null;
+  last_import_status: string | null;
+  last_import_records_processed: number;
+  total_import_runs: number;
+}
+
+export interface ReleasePlatformSchedulerSummaryRead {
+  scheduler_enabled: boolean;
+  schedule_time_utc: string | null;
+  last_scheduled_run_status: string | null;
+  last_scheduled_run_at: string | null;
+}
+
+export interface ReleasePlatformSummaryRead {
+  total_releases: number;
+  total_series: number;
+  total_variants: number;
+  total_new_number_ones: number;
+  total_opportunities: number;
+  total_watchlists: number;
+  total_foc_alerts: number;
+  scheduler: ReleasePlatformSchedulerSummaryRead;
+  import_summary: ReleasePlatformImportSummaryRead;
+  platform_readiness_score: number;
+}
+
+export interface ReleasePlatformCertificationRead {
+  platform_certified: boolean;
+  validation_status: string;
+  health_status: string;
+  go_live_recommendation: string;
+  certification_date: string;
+  certification_version: string;
+  summary: string;
+  certification_notes: string[];
+}
+
+export interface IntelligenceEntityRankRead {
+  entity_id: number;
+  entity_name: string;
+  entity_type: string;
+  popularity_score: number;
+  demand_score: number;
+  collector_score: number;
+}
+
+export interface IntelligenceUpcomingReleaseRead {
+  release_issue_id: number;
+  title: string;
+  series_name: string;
+  publisher: string;
+  release_date: string | null;
+  combined_popularity_score: number;
+  matched_entity_count: number;
+}
+
+export interface IntelligencePopularityBucketRead {
+  bucket_label: string;
+  entity_count: number;
+}
+
+export interface IntelligenceDashboardRead {
+  top_characters: IntelligenceEntityRankRead[];
+  top_franchises: IntelligenceEntityRankRead[];
+  top_creators: IntelligenceEntityRankRead[];
+  upcoming_releases_by_popularity: IntelligenceUpcomingReleaseRead[];
+  popularity_distribution: IntelligencePopularityBucketRead[];
+  character_count: number;
+  franchise_count: number;
+  creator_count: number;
+}
+
+export interface KeyIssueScoreBreakdownRead {
+  importance_score: number;
+  collector_importance: number;
+  historical_importance: number;
+  franchise_importance: number;
+  overall_key_issue_score: number;
+}
+
+export interface KeyIssueProfileRead {
+  id: number;
+  release_issue_id: number;
+  issue_number: string;
+  title: string;
+  series_name: string;
+  publisher: string;
+  key_issue_type: string;
+  importance_score: number;
+  confidence_score: number;
+  classification: string;
+  scores: KeyIssueScoreBreakdownRead;
+}
+
+export interface KeyIssueDashboardRead {
+  top_key_issues: KeyIssueProfileRead[];
+  first_appearances: KeyIssueProfileRead[];
+  origins: KeyIssueProfileRead[];
+  milestones: KeyIssueProfileRead[];
+  anniversaries: KeyIssueProfileRead[];
+  universe_launches: KeyIssueProfileRead[];
+  highest_importance: KeyIssueProfileRead[];
+  total_profiles: number;
+}
+
+export interface MarketDemandEntityRead {
+  entity_type: string;
+  entity_name: string;
+  demand_score: number;
+  confidence_score: number;
+}
+
+export interface UserPreferenceRead {
+  id: number;
+  preference_type: string;
+  preference_key: string;
+  preference_label: string;
+  status: string;
+  preference_score: number;
+  confidence_score: number;
+}
+
+export interface PreferenceSignalRead {
+  signal_type: string;
+  signal_strength: number;
+  source_type: string;
+  preference_label: string;
+}
+
+export interface MarketDemandBucketRead {
+  bucket: string;
+  count: number;
+}
+
+export interface UpcomingMarketUserFitRead {
+  release_issue_id: number;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  release_date: string | null;
+  combined_market_user_score: number;
+}
+
+export interface MarketUserDashboardRead {
+  top_market_demand: MarketDemandEntityRead[];
+  top_user_preferences: UserPreferenceRead[];
+  preference_signals: PreferenceSignalRead[];
+  market_demand_distribution: MarketDemandBucketRead[];
+  upcoming_high_fit: UpcomingMarketUserFitRead[];
+  total_market_profiles: number;
+  total_active_preferences: number;
+}
+
+export interface RecommendationV2Read {
+  id: number;
+  release_issue_id: number;
+  release_variant_id: number | null;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  publisher: string;
+  total_score: number;
+  recommendation_tier: string;
+  recommendation_type: string;
+  confidence_score: number;
+}
+
+export interface RecommendationComponentRead {
+  component_name: string;
+  component_score: number;
+  component_weight: number;
+  explanation: string;
+}
+
+export interface RecommendationDecisionRead {
+  decision_summary: string;
+  primary_reason: string;
+  risk_note: string;
+  suggested_action: string;
+  suggested_quantity: number;
+}
+
+export interface RecommendationV2DetailRead extends RecommendationV2Read {
+  components: RecommendationComponentRead[];
+  decision: RecommendationDecisionRead | null;
+}
+
+export interface RecommendationV2DashboardRead {
+  must_buy: RecommendationV2Read[];
+  strong_buy: RecommendationV2Read[];
+  buy: RecommendationV2Read[];
+  watch: RecommendationV2Read[];
+  pass_tier: RecommendationV2Read[];
+  investment_number_ones: RecommendationV2Read[];
+  start_run: RecommendationV2Read[];
+  key_issues: RecommendationV2Read[];
+  ratio_variants: RecommendationV2Read[];
+  user_preference_matches: RecommendationV2Read[];
+}
+
+export type PullListStatus = "ACTIVE" | "PAUSED" | "COMPLETED" | "DROPPED";
+
+export interface PullListRead {
+  id: number;
+  owner_id: number;
+  publisher: string;
+  series_name: string;
+  canonical_series_id: number | null;
+  status: PullListStatus;
+  upcoming_issue_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PullListIssueRead {
+  id: number;
+  pull_list_id: number;
+  release_id: number;
+  issue_number: string;
+  title: string;
+  release_date: string | null;
+  foc_date: string | null;
+  action_state: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PullListDetailRead {
+  pull_list: PullListRead;
+  issues: PullListIssueRead[];
+}
+
+export interface PullListListResponse {
+  items: PullListRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PullListCreatePayload {
+  publisher: string;
+  series_name: string;
+  canonical_series_id?: number | null;
+  status?: PullListStatus;
+}
+
+export interface PullListUpdatePayload {
+  publisher?: string;
+  series_name?: string;
+  canonical_series_id?: number | null;
+  status?: PullListStatus;
+}
+
+export interface PullListIssueAttachPayload {
+  release_id: number;
+}
+
+export type PullListDecisionType = "START_RUN" | "CONTINUE_RUN" | "WATCH" | "PASS";
+
+export interface PullListDecisionRead {
+  id: number;
+  owner_id: number;
+  release_id: number;
+  decision_type: PullListDecisionType;
+  confidence_score: number;
+  explanation: string;
+  reasons: string[];
+  created_at: string;
+  comic_title: string;
+  issue_number: string;
+  publisher: string;
+  series_name: string;
+  release_date: string | null;
+  foc_date: string | null;
+  recommendation_tier: string | null;
+  recommendation_score: number | null;
+}
+
+export interface PullListDecisionListResponse {
+  items: PullListDecisionRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type FocDateStatus = "DUE_NOW" | "THIS_WEEK" | "NEXT_WEEK" | "THIS_MONTH" | "MISSED";
+
+export interface FocDashboardSummaryRead {
+  action_required_count: number;
+  start_run_count: number;
+  continue_run_count: number;
+  watch_count: number;
+  upcoming_foc_count: number;
+  upcoming_release_count: number;
+}
+
+export interface FocDashboardItemRead {
+  release_id: number;
+  pull_list_issue_id: number | null;
+  decision_id: number | null;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  publisher: string;
+  decision_type: PullListDecisionType | null;
+  confidence_score: number | null;
+  foc_date: string | null;
+  release_date: string | null;
+  days_until_foc: number | null;
+  days_until_release: number | null;
+  foc_status: FocDateStatus | null;
+  reasons: string[];
+  sections: string[];
+  on_pull_list: boolean;
+  pull_list_action_state: string | null;
+}
+
+export interface FocDashboardRead {
+  summary: FocDashboardSummaryRead;
+  action_required: FocDashboardItemRead[];
+  upcoming_foc: FocDashboardItemRead[];
+  upcoming_releases: FocDashboardItemRead[];
+  missed_foc: FocDashboardItemRead[];
+  watchlist: FocDashboardItemRead[];
+}
+
+export interface FocDashboardListResponse {
+  items: FocDashboardItemRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type PurchaseProfileType =
+  | "INVESTOR"
+  | "COLLECTOR"
+  | "READER"
+  | "VARIANT_HUNTER"
+  | "LONG_TERM_HOLD";
+
+export interface PurchaseProfileRead {
+  id: number;
+  owner_id: number;
+  profile_type: PurchaseProfileType;
+  display_name: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseProfileUpdate {
+  profile_type?: PurchaseProfileType;
+  display_name?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface PurchasePreferenceRead {
+  id: number;
+  owner_id: number;
+  preferred_copy_count: number;
+  risk_tolerance: number;
+  variant_interest: number;
+  grading_interest: number;
+  completionist_score: number;
+  speculation_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchasePreferenceUpdate {
+  preferred_copy_count?: number;
+  risk_tolerance?: number;
+  variant_interest?: number;
+  grading_interest?: number;
+  completionist_score?: number;
+  speculation_score?: number;
+}
+
+export type PurchaseQuantityTier = "PASS" | "WATCH" | "BUY" | "STRONG_BUY" | "MUST_BUY";
+
+export interface PurchaseQuantityRecommendationRead {
+  id: number;
+  owner_id: number;
+  release_id: number;
+  recommendation_tier: PurchaseQuantityTier;
+  quantity_recommended: number;
+  confidence_score: number;
+  rationale: string;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  series_name: string;
+  pull_list_decision: string | null;
+}
+
+export interface PurchaseQuantityListResponse {
+  items: PurchaseQuantityRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PurchaseQuantityGenerateResponse {
+  created_count: number;
+}
+
+export type PurchaseVariantAction = "BUY" | "WATCH" | "AVOID";
+export type PurchaseVariantType =
+  | "COVER_A"
+  | "OPEN_ORDER"
+  | "INCENTIVE"
+  | "RATIO"
+  | "STORE_EXCLUSIVE"
+  | "UNKNOWN";
+
+export interface PurchaseVariantRecommendationRead {
+  id: number;
+  owner_id: number;
+  release_id: number;
+  variant_id: number | null;
+  cover_label: string;
+  variant_type: PurchaseVariantType;
+  recommendation: PurchaseVariantAction;
+  confidence_score: number;
+  rationale: string;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  series_name: string;
+}
+
+export interface PurchaseVariantListResponse {
+  items: PurchaseVariantRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PurchaseVariantGenerateResponse {
+  created_count: number;
+}
+
+export interface PurchaseBudgetRead {
+  id: number;
+  owner_id: number;
+  monthly_budget: number;
+  weekly_budget: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseBudgetUpdate {
+  monthly_budget?: number;
+  weekly_budget?: number;
+  is_active?: boolean;
+}
+
+export interface PurchaseBudgetAllocationRead {
+  id: number;
+  owner_id: number;
+  release_id: number;
+  recommendation_tier: PurchaseQuantityTier;
+  allocated_amount: number;
+  priority_rank: number;
+  rationale: string;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  series_name: string;
+}
+
+export interface PurchaseBudgetAllocationListResponse {
+  items: PurchaseBudgetAllocationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PurchaseBudgetSummaryRead {
+  total_budget: number;
+  weekly_budget: number;
+  allocated_budget: number;
+  remaining_budget: number;
+  allocation_percentage: number;
+  is_active: boolean;
+}
+
+export interface PurchaseBudgetGenerateResponse {
+  created_count: number;
+}
+
+export type WantListPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type WantListItemStatus = "WANTED" | "FOUND" | "ACQUIRED" | "REMOVED";
+
+export type CollectionGapType = "MISSING_ISSUE" | "RUN_GAP" | "KEY_MISSING" | "MILESTONE_MISSING";
+export type CollectionGapPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface CollectionGapRead {
+  id: number;
+  owner_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  gap_type: CollectionGapType;
+  completion_percent: number;
+  priority: CollectionGapPriority;
+  rationale: string;
+  created_at: string;
+}
+
+export interface CollectionGapSummaryRead {
+  total_gaps: number;
+  by_priority: Record<string, number>;
+  by_gap_type: Record<string, number>;
+  average_completion_percent: number;
+}
+
+export interface CollectionGapListRead {
+  items: CollectionGapRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type AcquisitionOpportunityType =
+  | "COLLECTION_GAP"
+  | "WANT_LIST_ITEM"
+  | "KEY_TARGET"
+  | "MILESTONE_TARGET"
+  | "RUN_COMPLETION_TARGET";
+
+export interface AcquisitionOpportunityRead {
+  id: number;
+  owner_id: number;
+  source_type: "COLLECTION_GAP" | "WANT_LIST" | "MANUAL";
+  source_reference_id: number | null;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  variant_description: string | null;
+  opportunity_type: AcquisitionOpportunityType;
+  priority_score: number;
+  confidence_score: number;
+  estimated_fmv: number | null;
+  target_price: number | null;
+  value_gap: number | null;
+  rationale: string;
+  created_at: string;
+}
+
+export interface AcquisitionOpportunitySummaryRead {
+  total_opportunities: number;
+  average_priority_score: number;
+  average_confidence_score: number;
+  by_opportunity_type: Record<string, number>;
+  with_target_price: number;
+}
+
+export interface AcquisitionOpportunityListRead {
+  items: AcquisitionOpportunityRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type MarketplaceAcquisitionSourceType =
+  | "EBAY"
+  | "WHATNOT"
+  | "MYCOMICSHOP"
+  | "COMICLINK"
+  | "COMICCONNECT"
+  | "MANUAL"
+  | "OTHER";
+
+export type MarketplaceCandidateRecommendation = "BUY" | "WATCH" | "PASS";
+export type MarketplaceCandidateStatus = "NEW" | "REVIEWED" | "IGNORED" | "ACQUIRED";
+
+export interface MarketplaceSourceRead {
+  id: number;
+  name: string;
+  source_type: MarketplaceAcquisitionSourceType;
+  base_url: string | null;
+  is_active: boolean;
+}
+
+export interface MarketplaceAcquisitionCandidateRead {
+  id: number;
+  owner_id: number;
+  marketplace_source_id: number | null;
+  source_name: string | null;
+  source_type: MarketplaceAcquisitionSourceType | null;
+  acquisition_opportunity_id: number | null;
+  title: string;
+  publisher: string | null;
+  series_name: string | null;
+  issue_number: string | null;
+  variant_description: string | null;
+  listing_url: string | null;
+  asking_price: number | null;
+  shipping_price: number | null;
+  total_price: number | null;
+  condition_description: string | null;
+  grade_label: string | null;
+  seller_name: string | null;
+  match_confidence: number;
+  value_score: number;
+  recommendation: MarketplaceCandidateRecommendation;
+  rationale: string;
+  status: MarketplaceCandidateStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplaceAcquisitionSummaryRead {
+  total_candidates: number;
+  by_recommendation: Record<string, number>;
+  by_status: Record<string, number>;
+  average_match_confidence: number;
+  average_value_score: number;
+  sources: MarketplaceSourceRead[];
+}
+
+export interface MarketplaceAcquisitionListRead {
+  items: MarketplaceAcquisitionCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AcquisitionDashboardSummaryRead {
+  total_want_list_items: number;
+  critical_want_list_items: number;
+  open_collection_gaps: number;
+  high_priority_opportunities: number;
+  buy_candidates: number;
+  watch_candidates: number;
+  pass_candidates: number;
+  below_target_candidates: number;
+  review_required_candidates: number;
+}
+
+export interface AcquisitionDashboardItemRead {
+  section: string;
+  item_type: string;
+  item_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  priority_label?: string | null;
+  priority_score?: number | null;
+  recommendation?: string | null;
+  confidence_score?: number | null;
+  total_price?: number | null;
+  target_price?: number | null;
+  source_type?: string | null;
+  rationale: string;
+  created_at: string;
+}
+
+export interface AcquisitionDashboardRead {
+  summary: AcquisitionDashboardSummaryRead;
+  top_collection_gaps: AcquisitionDashboardItemRead[];
+  top_want_list_items: AcquisitionDashboardItemRead[];
+  top_opportunities: AcquisitionDashboardItemRead[];
+  marketplace_candidates: AcquisitionDashboardItemRead[];
+  below_target_price: AcquisitionDashboardItemRead[];
+  review_required: AcquisitionDashboardItemRead[];
+}
+
+export interface AcquisitionDashboardActionsRead {
+  urgent_acquisition_actions: AcquisitionDashboardItemRead[];
+}
+
+export interface WantListItemRead {
+  id: number;
+  want_list_id: number;
+  owner_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  variant_description: string;
+  priority: WantListPriority;
+  status: WantListItemStatus;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WantListSummaryRead {
+  id: number;
+  owner_id: number;
+  name: string;
+  description: string;
+  is_active: boolean;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WantListListRead {
+  items: WantListSummaryRead[];
+}
+
+export interface WantListRead {
+  id: number;
+  owner_id: number;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  items: WantListItemRead[];
+}
+
+export type SellCandidateAction = "STRONG_SELL" | "SELL" | "HOLD" | "REVIEW";
+
+export interface SellCandidateRecommendationRead {
+  id: number;
+  owner_id: number;
+  inventory_item_id: number;
+  recommendation: SellCandidateAction;
+  confidence_score: number;
+  rationale: string;
+  estimated_fmv: number;
+  estimated_profit: number;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  variant: string;
+}
+
+export interface SellCandidateListResponse {
+  items: SellCandidateRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SellCandidateSummaryRead {
+  total_candidates: number;
+  strong_sell_count: number;
+  sell_count: number;
+  hold_count: number;
+  review_count: number;
+  total_estimated_profit: number;
+}
+
+export interface SellCandidateGenerateResponse {
+  created_count: number;
+}
+
+export type ExitCandidateReason =
+  | "DUPLICATE"
+  | "PROFITABLE"
+  | "GRADED"
+  | "OVEREXPOSED"
+  | "CAPITAL_RECOVERY"
+  | "MULTIPLE_SIGNALS";
+
+export interface ExitCandidateRead {
+  id: number;
+  owner_id: number;
+  inventory_item_id: number;
+  candidate_score: number;
+  confidence_score: number;
+  estimated_fmv: number;
+  acquisition_cost: number;
+  unrealized_gain: number;
+  candidate_reason: ExitCandidateReason;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+}
+
+export interface ExitCandidateListResponse {
+  items: ExitCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ExitCandidateSummaryRead {
+  total_candidates: number;
+  duplicate_count: number;
+  profitable_count: number;
+  graded_count: number;
+  overexposed_count: number;
+  capital_recovery_count: number;
+  multiple_signals_count: number;
+  total_unrealized_gain: number;
+  average_candidate_score: number;
+}
+
+export type HoldSellAction = "HOLD" | "WATCH" | "SELL";
+
+export interface HoldSellRecommendationRead {
+  id: number;
+  owner_id: number;
+  inventory_item_id: number;
+  recommendation: HoldSellAction;
+  conviction_score: number;
+  confidence_score: number;
+  estimated_fmv: number;
+  acquisition_cost: number;
+  unrealized_gain: number;
+  rationale: string;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+}
+
+export interface HoldSellListResponse {
+  items: HoldSellRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface HoldSellSummaryRead {
+  total_recommendations: number;
+  hold_count: number;
+  watch_count: number;
+  sell_count: number;
+  average_conviction: number;
+  total_unrealized_gain: number;
+}
+
+export type GradeBeforeSellAction = "GRADE_BEFORE_SELL" | "SELL_RAW" | "HOLD_FOR_REVIEW";
+
+export interface GradeBeforeSellRecommendationRead {
+  id: number;
+  owner_id: number;
+  inventory_item_id: number;
+  recommendation: GradeBeforeSellAction;
+  current_estimated_value: number;
+  expected_graded_value: number;
+  estimated_grading_cost: number;
+  expected_value_gain: number;
+  expected_roi: number;
+  confidence_score: number;
+  rationale: string;
+  created_at: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+}
+
+export interface GradeBeforeSellListResponse {
+  items: GradeBeforeSellRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface GradeBeforeSellSummaryRead {
+  total_recommendations: number;
+  grade_before_sell_count: number;
+  sell_raw_count: number;
+  hold_for_review_count: number;
+  average_expected_roi: number;
+  total_expected_value_gain: number;
+}
+
+export type PortfolioRebalanceType =
+  | "TITLE_OVEREXPOSURE"
+  | "PUBLISHER_OVEREXPOSURE"
+  | "CHARACTER_OVEREXPOSURE"
+  | "MODERN_SPEC_OVEREXPOSURE"
+  | "DUPLICATE_CAPITAL"
+  | "LOW_EFFICIENCY_CAPITAL";
+
+export type PortfolioRebalanceAction = "REDUCE_EXPOSURE" | "REVIEW_POSITION" | "HOLD";
+
+export interface PortfolioRebalanceRecommendationRead {
+  id: number;
+  owner_id: number;
+  rebalance_type: PortfolioRebalanceType;
+  target_key: string;
+  target_label: string;
+  exposure_value: number;
+  exposure_percent: number;
+  recommended_action: PortfolioRebalanceAction;
+  priority_score: number;
+  confidence_score: number;
+  rationale: string;
+  created_at: string;
+  publisher: string;
+}
+
+export interface PortfolioRebalanceListResponse {
+  items: PortfolioRebalanceRecommendationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PortfolioRebalanceSummaryRead {
+  total_recommendations: number;
+  reduce_exposure_count: number;
+  review_position_count: number;
+  hold_count: number;
+  average_priority_score: number;
+  total_exposure_value: number;
+}
+
+export interface ExitDashboardSummaryRead {
+  total_exit_candidates: number;
+  sell_recommendations: number;
+  watch_recommendations: number;
+  hold_recommendations: number;
+  grade_before_sell_recommendations: number;
+  sell_raw_recommendations: number;
+  rebalance_actions: number;
+  estimated_capital_recovery: number;
+  review_required_count: number;
+}
+
+export interface ExitDashboardItemRead {
+  section: string;
+  item_type: string;
+  item_id: number;
+  inventory_item_id?: number | null;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  recommendation?: string | null;
+  action?: string | null;
+  priority_score?: number | null;
+  confidence_score?: number | null;
+  capital_value?: number | null;
+  rationale: string;
+  created_at: string;
+}
+
+export interface ExitDashboardRead {
+  summary: ExitDashboardSummaryRead;
+  top_sell_recommendations: ExitDashboardItemRead[];
+  top_grade_before_sell: ExitDashboardItemRead[];
+  top_rebalance_actions: ExitDashboardItemRead[];
+  capital_recovery: ExitDashboardItemRead[];
+  review_required: ExitDashboardItemRead[];
+}
+
+export interface ExitDashboardActionsRead {
+  priority_exit_actions: ExitDashboardItemRead[];
+}
+
+export interface UnifiedCollectorRecommendationRead {
+  id: number;
+  owner_id: number;
+  recommendation_type: string;
+  priority_score: number;
+  confidence_score: number;
+  title: string;
+  rationale: string;
+  source_systems: string[];
+  created_at: string;
+}
+
+export interface UnifiedCollectorSummaryRead {
+  total_recommendations: number;
+  preorder_count: number;
+  acquire_count: number;
+  grade_count: number;
+  sell_count: number;
+  rebalance_count: number;
+  watch_count: number;
+  multi_source_count: number;
+  average_priority: number;
+  average_confidence: number;
+}
+
+export interface CrossSystemRecommendationRead {
+  id: number;
+  owner_id: number;
+  recommendation_type: string;
+  priority_score: number;
+  confidence_score: number;
+  title: string;
+  estimated_value: number | null;
+  recommendation_rank: number;
+  source_systems: string[];
+  rationale: string;
+  created_at: string;
+}
+
+export interface CrossSystemRecommendationSummaryRead {
+  total_recommendations: number;
+  top_acquisitions: number;
+  top_preorders: number;
+  top_grading_opportunities: number;
+  top_sell_opportunities: number;
+  top_rebalance_opportunities: number;
+}
+
+export interface ExecutiveDashboardSummaryRead {
+  total_daily_actions: number;
+  critical_daily_actions: number;
+  top_recommendations_count: number;
+  preorder_action_count: number;
+  acquisition_target_count: number;
+  grading_opportunity_count: number;
+  sell_opportunity_count: number;
+  rebalance_warning_count: number;
+  review_required_count: number;
+  estimated_capital_recovery: number;
+  budget_remaining: number | null;
+}
+
+export interface ExecutiveDashboardItemRead {
+  section: string;
+  item_type: string;
+  item_id: number;
+  title: string;
+  publisher: string;
+  action_type: string | null;
+  recommendation_type: string | null;
+  priority_score: number | null;
+  confidence_score: number | null;
+  recommendation_rank: number | null;
+  due_date: string | null;
+  estimated_value: number | null;
+  rationale: string;
+  source_systems: string[];
+  health_status: string | null;
+  created_at: string;
+}
+
+export interface ExecutiveDashboardSectionRead {
+  section: string;
+  title: string;
+  empty_message: string;
+  items: ExecutiveDashboardItemRead[];
+}
+
+export interface ExecutiveDashboardRead {
+  summary: ExecutiveDashboardSummaryRead;
+  daily_actions: ExecutiveDashboardSectionRead;
+  top_recommendations: ExecutiveDashboardSectionRead;
+  preorder_this_week: ExecutiveDashboardSectionRead;
+  acquire_targets: ExecutiveDashboardSectionRead;
+  grade_opportunities: ExecutiveDashboardSectionRead;
+  sell_opportunities: ExecutiveDashboardSectionRead;
+  portfolio_risk: ExecutiveDashboardSectionRead;
+  watch_items: ExecutiveDashboardSectionRead;
+  system_health: ExecutiveDashboardSectionRead;
+}
+
+export interface ExecutiveDashboardActionsRead {
+  priority_actions: ExecutiveDashboardItemRead[];
+}
+
+export interface DailyCollectorActionRead {
+  id: number;
+  owner_id: number;
+  action_type: string;
+  priority_score: number;
+  confidence_score: number;
+  due_date: string | null;
+  title: string;
+  rationale: string;
+  source_recommendation_id: number | null;
+  source_systems: string[];
+  created_at: string;
+}
+
+export interface DailyActionSummaryRead {
+  total_actions: number;
+  critical_actions: number;
+  preorder_actions: number;
+  acquisition_actions: number;
+  grading_actions: number;
+  sell_actions: number;
+  rebalance_actions: number;
+  watch_actions: number;
+}
+
+export interface RecommendationIntelligenceValidationCheckRead {
+  check_code: string;
+  title: string;
+  status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface RecommendationIntelligenceValidationRead {
+  overall_status: string;
+  checks: RecommendationIntelligenceValidationCheckRead[];
+}
+
+export interface RecommendationIntelligenceHealthComponentRead {
+  component_code: string;
+  title: string;
+  health_status: string;
+  summary: string;
+  details_json: Record<string, unknown>;
+}
+
+export interface RecommendationIntelligenceHealthRead {
+  overall_status: string;
+  components: RecommendationIntelligenceHealthComponentRead[];
+}
+
+export interface RecommendationQualityCalibrationRead {
+  overall_status: string;
+  total_recommendations: number;
+  tier_distribution: Record<string, number>;
+  type_distribution: Record<string, number>;
+  number_one_count: number;
+  key_issue_in_top_count: number;
+  user_preference_component_active: boolean;
+  score_variance: number;
+  findings: string[];
+  details_json: Record<string, unknown>;
+}
+
+export interface RecommendationIntelligenceSummaryRead {
+  total_recommendations_v2: number;
+  must_buy_count: number;
+  strong_buy_count: number;
+  buy_count: number;
+  watch_count: number;
+  pass_count: number;
+  investment_number_one_count: number;
+  start_run_count: number;
+  key_issue_count: number;
+  ratio_variant_count: number;
+  user_preference_match_count: number;
+  average_score: number;
+  readiness_score: number;
+  v1_recommendation_count: number;
+  v2_run_count: number;
+  explanation_count: number;
+  v1_vs_v2_moved_up: number;
+  v1_vs_v2_moved_down: number;
+}
+
+export interface RecommendationIntelligenceCertificationRead {
+  platform_certified: boolean;
+  certification_status: string;
+  go_live_recommendation: string;
+  readiness_score: number;
+  certification_date: string;
+  certification_version: string;
+  validation_status: string;
+  health_status: string;
+  calibration_status: string;
+  certification_notes: string[];
+}
+
+export interface ReleaseSeriesRead {
+  id: number;
+  publisher: string;
+  series_name: string;
+  series_type: string;
+  status: string;
+  created_at: string;
+}
+
+export interface ReleaseIssueRead {
+  id: number;
+  release_uuid: string;
+  series_id: number;
+  issue_number: string;
+  title: string;
+  foc_date: string | null;
+  release_date: string | null;
+  cover_price: number;
+  release_status: string;
+  created_at: string;
+}
+
+export interface ReleaseVariantRead {
+  id: number;
+  issue_id: number;
+  variant_uuid: string;
+  variant_name: string;
+  ratio_value: number | null;
+  ratio_type: string | null;
+  is_incentive_variant: boolean;
+  variant_type: string;
+  cover_artist: string | null;
+  source_item_code: string;
+  created_at: string;
+}
+
+export interface ReleaseKeySignalRead {
+  id: number;
+  issue_id: number;
+  signal_type: string;
+  confidence_score: number;
+  signal_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ReleaseAgentExecutionRead {
+  id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface ReleaseSignalFeedItemRead {
+  series: ReleaseSeriesRead;
+  issue: ReleaseIssueRead;
+  signal: ReleaseKeySignalRead;
+}
+
+export interface ReleaseIntelligenceDashboardRead {
+  upcoming_releases: ReleaseIssueRead[];
+  foc_calendar: ReleaseIssueRead[];
+  new_number_one_feed: ReleaseSignalFeedItemRead[];
+  key_issue_feed: ReleaseSignalFeedItemRead[];
+  variant_feed: ReleaseSignalFeedItemRead[];
+  agent_activity: ReleaseAgentExecutionRead[];
+  variant_count: number;
+  ratio_variant_count: number;
+  cover_variant_count: number;
+  recent_variants: ReleaseVariantRead[];
+  top_ratio_variants: ReleaseVariantRead[];
+}
+
+export interface CollectionRunRead {
+  id: number;
+  owner_user_id: number;
+  publisher: string;
+  series_name: string;
+  first_issue_owned: string;
+  latest_issue_owned: string;
+  issue_count_owned: number;
+  continuity_status: string;
+  created_at: string;
+}
+
+export interface CollectionContinuityAlertRead {
+  id: number;
+  owner_user_id: number;
+  release_issue_id: number;
+  alert_type: string;
+  alert_status: string;
+  alert_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ReleaseWatchlistRead {
+  id: number;
+  owner_user_id: number;
+  watchlist_name: string;
+  watchlist_type: string;
+  created_at: string;
+}
+
+export interface ReleaseWatchlistItemRead {
+  id: number;
+  watchlist_id: number;
+  publisher: string | null;
+  series_name: string | null;
+  character_name: string | null;
+  creator_name: string | null;
+  keyword: string | null;
+  created_at: string;
+}
+
+export interface ReleaseReminderRead {
+  id: number;
+  owner_user_id: number;
+  release_issue_id: number;
+  reminder_type: string;
+  reminder_date: string;
+  reminder_status: string;
+  created_at: string;
+}
+
+export interface WatchlistAgentExecutionRead {
+  id: number;
+  owner_user_id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface ReleaseWatchlistDetailRead {
+  watchlist: ReleaseWatchlistRead;
+  items: ReleaseWatchlistItemRead[];
+}
+
+export interface WatchlistMatchRead {
+  watchlist: ReleaseWatchlistRead;
+  item: ReleaseWatchlistItemRead;
+  release_issue: ReleaseIssueRead;
+}
+
+export interface ContinuityDashboardRead {
+  active_runs: CollectionRunRead[];
+  continuity_alerts: CollectionContinuityAlertRead[];
+  foc_reminders: ReleaseReminderRead[];
+  release_reminders: ReleaseReminderRead[];
+  watchlists: ReleaseWatchlistDetailRead[];
+  watchlist_matches: WatchlistMatchRead[];
+  upcoming_watched_releases: ReleaseIssueRead[];
+  agent_activity: WatchlistAgentExecutionRead[];
+}
+
+export interface SpecScoreRead {
+  id: number;
+  release_issue_id: number;
+  score_value: number;
+  score_grade: string;
+  confidence_score: number;
+  score_payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SpecRecommendationRead {
+  id: number;
+  recommendation_uuid: string;
+  release_issue_id: number;
+  recommendation_type: string;
+  recommendation_score: number;
+  confidence_score: number;
+  recommendation_reason: string;
+  created_at: string;
+}
+
+export interface SpecRecommendationReviewRead {
+  id: number;
+  recommendation_id: number;
+  review_status: string;
+  reviewed_at: string;
+  review_notes: string;
+}
+
+export interface WeeklyBuyListRead {
+  id: number;
+  owner_user_id: number;
+  list_uuid: string;
+  week_start_date: string;
+  generated_at: string;
+}
+
+export interface WeeklyBuyListItemRead {
+  id: number;
+  weekly_buy_list_id: number;
+  release_issue_id: number;
+  buy_category: string;
+  ranking_score: number;
+  created_at: string;
+}
+
+export interface WeeklyBuyListDetailRead {
+  weekly_buy_list: WeeklyBuyListRead;
+  items: WeeklyBuyListItemRead[];
+}
+
+export interface SpecAgentExecutionRead {
+  id: number;
+  owner_user_id: number;
+  agent_code: string;
+  execution_uuid: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface SpecDashboardRead {
+  top_spec_opportunities: SpecRecommendationRead[];
+  weekly_buy_lists: WeeklyBuyListDetailRead[];
+  new_number_one_opportunities: SpecRecommendationRead[];
+  variant_opportunities: SpecRecommendationRead[];
+  key_issue_opportunities: SpecRecommendationRead[];
+  watch_opportunities: SpecRecommendationRead[];
+  recommendation_reviews: SpecRecommendationReviewRead[];
+  agent_activity: SpecAgentExecutionRead[];
+  variant_count: number;
+  ratio_variant_count: number;
+  top_ratio_variants: ReleaseVariantRead[];
+  upcoming_incentive_variants: ReleaseVariantRead[];
+}
+
+export interface ReleaseHorizonIssueRead {
+  horizon: string;
+  issue: ReleaseIssueRead;
+  series: ReleaseSeriesRead;
+}
+
+export interface RankedOpportunityRead {
+  category: string;
+  release_issue_id: number;
+  issue: ReleaseIssueRead;
+  series: ReleaseSeriesRead;
+  ranking_score: number;
+  score_components?: Record<string, number>;
+  recommendation: SpecRecommendationRead | null;
+}
+
+export interface FutureBuyQueueItemRead {
+  horizon_window: string;
+  buy_category: string;
+  release_issue_id: number;
+  issue: ReleaseIssueRead;
+  series: ReleaseSeriesRead;
+  ranking_score: number;
+}
+
+export interface FutureBuyQueueRead {
+  next_30_days: FutureBuyQueueItemRead[];
+  next_60_days: FutureBuyQueueItemRead[];
+  next_90_days: FutureBuyQueueItemRead[];
+}
+
+export interface ContinueRunPlanRead {
+  plan_type: string;
+  publisher: string;
+  series_name: string;
+  latest_issue_owned: string | null;
+  target_issue_number: string;
+  release_issue_id: number;
+  issue: ReleaseIssueRead;
+  series: ReleaseSeriesRead;
+}
+
+export interface BudgetCategorySpendRead {
+  must_buy: number;
+  strong_buy: number;
+  watch: number;
+}
+
+export interface BudgetForecastRead {
+  days_30: BudgetCategorySpendRead;
+  days_60: BudgetCategorySpendRead;
+  days_90: BudgetCategorySpendRead;
+  expected_spend_total_30: number;
+  expected_spend_total_60: number;
+  expected_spend_total_90: number;
+}
+
+export interface ReleaseOpportunityDashboardRead {
+  new_announcements: ReleaseHorizonIssueRead[];
+  next_30_days: ReleaseHorizonIssueRead[];
+  next_60_days: ReleaseHorizonIssueRead[];
+  next_90_days: ReleaseHorizonIssueRead[];
+  continue_run_alerts: ContinueRunPlanRead[];
+  start_following_alerts: ContinueRunPlanRead[];
+  new_opportunity_alerts: ContinueRunPlanRead[];
+  top_new_number_ones: RankedOpportunityRead[];
+  top_first_appearances: RankedOpportunityRead[];
+  top_milestone_issues: RankedOpportunityRead[];
+  top_variants: RankedOpportunityRead[];
+  top_spec_opportunities: RankedOpportunityRead[];
+  future_buy_queue: FutureBuyQueueRead;
+  budget_forecast: BudgetForecastRead;
+  variant_count: number;
+  ratio_variant_count: number;
+  cover_variant_count: number;
+  top_ratio_variants: ReleaseVariantRead[];
+  top_new_variants: ReleaseVariantRead[];
+}
+
+export interface ReleaseImportRunRead {
+  id: number;
+  owner_user_id: number;
+  import_uuid: string;
+  import_type: string;
+  file_name: string;
+  records_processed: number;
+  records_created: number;
+  records_updated: number;
+  records_failed: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface ReleaseImportFileRead {
+  id: number;
+  import_run_id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  created_at: string;
+}
+
+export interface ReleaseImportErrorRead {
+  id: number;
+  import_run_id: number;
+  record_identifier: string;
+  error_code: string;
+  error_message: string;
+  created_at: string;
+}
+
+export interface ReleaseImportDashboardRead {
+  recent_imports: ReleaseImportRunRead[];
+  import_success_rate: number;
+  import_failures: number;
+  latest_uploads: ReleaseImportFileRead[];
+  error_summary: { error_code: string; count: number }[];
+}
+
+export interface ReleaseImportRunListResponse {
+  items: ReleaseImportRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ReleaseImportErrorListResponse {
+  items: ReleaseImportErrorRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LunarCredentialStatusRead {
+  credential_available: boolean;
+  username_masked: string | null;
+}
+
+export interface LunarFeedRunRead {
+  id: number;
+  owner_user_id: number;
+  run_uuid: string;
+  source_type: string;
+  file_name: string;
+  file_period: string;
+  status: string;
+  records_processed: number;
+  records_created: number;
+  records_updated: number;
+  records_failed: number;
+  foc_alerts_created: number;
+  source_url: string;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface LunarFeedDashboardRead {
+  credential_status: LunarCredentialStatusRead;
+  last_run: LunarFeedRunRead | null;
+}
+
+export interface LunarFeedImportSummaryRead {
+  run_id: number;
+  status: string;
+  source_type: string;
+  file_name: string;
+  file_period: string;
+  records_processed: number;
+  records_created: number;
+  records_updated: number;
+  records_failed: number;
+  foc_alerts_created: number;
+  errors: { record_identifier: string; error_code: string; message: string }[];
+}
+
+export interface LunarRemoteDownloadRead {
+  file_name: string;
+  file_period: string;
+  file_type: string;
+  source_url: string;
+  byte_size: number;
+}
+
+export interface LunarSchedulerStatusRead {
+  credential_available: boolean;
+  enabled: boolean;
+  schedule_type: string;
+  schedule_time: string;
+  timezone: string;
+  next_run_at: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_imported_file_name: string;
+  last_imported_file_period: string;
+  last_imported_at: string | null;
+}
+
+export interface LunarScheduledRunRead {
+  id: number;
+  owner_user_id: number;
+  run_uuid: string;
+  trigger_type: string;
+  status: string;
+  file_name: string | null;
+  file_period: string | null;
+  records_processed: number;
+  records_imported: number;
+  records_updated: number;
+  records_failed: number;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface LunarSchedulerHistoryRead {
+  runs: LunarScheduledRunRead[];
+  total_runs: number;
+  no_change_runs: number;
+  import_runs: number;
+  failed_runs: number;
+}
+
+export interface LunarSchedulerRunNowRead {
+  run_id: number;
+  run_uuid: string;
+  status: string;
+  file_name: string | null;
+  file_period: string | null;
+  records_processed: number;
+  records_imported: number;
+  records_updated: number;
+  records_failed: number;
+}
+
+export interface JobHealthMetricListResponse {
+  items: JobHealthMetricRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface QueueHealthMetricListResponse {
+  items: QueueHealthMetricRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface RecoveryRecommendationListResponse {
+  items: RecoveryRecommendationRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ReliabilityIssueListResponse {
+  items: ReliabilityIssueRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface ForecastAccuracyMetricRead {
+  id: number;
+  owner_user_id: number;
+  metric_date: string;
+  forecast_type: string;
+  forecast_horizon_days: number;
+  total_forecasts: number;
+  average_error: number;
+  average_accuracy: number;
+  created_at: string;
+}
+
+export interface ForecastDriftEventRead {
+  id: number;
+  owner_user_id: number;
+  event_uuid: string;
+  forecast_type: string;
+  drift_type: string;
+  drift_score: number;
+  detected_at: string;
+}
+
+export interface SignalQualityMetricRead {
+  id: number;
+  owner_user_id: number;
+  signal_type: string;
+  signal_source: string;
+  quality_score: number;
+  completeness_score: number;
+  consistency_score: number;
+  measured_at: string;
+}
+
+export interface ForecastOutcomeRead {
+  id: number;
+  owner_user_id: number;
+  outcome_uuid: string;
+  recommendation_id?: number | null;
+  forecast_id?: number | null;
+  outcome_type: string;
+  outcome_score: number;
+  created_at: string;
+}
+
 export interface AgentMetricSnapshotListResponse {
   items: AgentMetricSnapshotRead[];
   pagination: MarketApiV1Pagination;
@@ -22556,6 +25063,1156 @@ export const apiClient = {
 
   getAgentPlatformSummary(): Promise<AgentPlatformSummaryRead> {
     return requestScanV1<AgentPlatformSummaryRead>("/agent-platform/summary");
+  },
+
+  getMarketplaceDashboard(): Promise<MarketplaceDashboardSummaryRead> {
+    return requestScanV1<MarketplaceDashboardSummaryRead>("/marketplace-dashboard");
+  },
+
+  getMarketplaceDashboardHealth(): Promise<MarketplaceHealthRead> {
+    return requestScanV1<MarketplaceHealthRead>("/marketplace-dashboard/health");
+  },
+
+  getMarketplaceDashboardValidation(): Promise<MarketplaceValidationRead> {
+    return requestScanV1<MarketplaceValidationRead>("/marketplace-dashboard/validation");
+  },
+
+  getDealerCopilotDashboard(): Promise<DealerCopilotDashboardRead> {
+    return requestScanV1<DealerCopilotDashboardRead>("/dealer-copilot/dashboard");
+  },
+
+  getForecastPlatformDashboard(): Promise<ForecastPlatformDashboardRead> {
+    return requestScanV1<ForecastPlatformDashboardRead>("/forecast-platform");
+  },
+
+  getForecastPlatformSummary(): Promise<ForecastPlatformSummaryRead> {
+    return requestScanV1<ForecastPlatformSummaryRead>("/forecast-platform/summary");
+  },
+
+  getForecastPlatformHealth(): Promise<ForecastPlatformHealthRead> {
+    return requestScanV1<ForecastPlatformHealthRead>("/forecast-platform/health");
+  },
+
+  getForecastPlatformValidation(): Promise<ForecastPlatformValidationRead> {
+    return requestScanV1<ForecastPlatformValidationRead>("/forecast-platform/validation");
+  },
+
+  getForecastPlatformCertification(): Promise<ForecastPlatformCertificationRead> {
+    return requestScanV1<ForecastPlatformCertificationRead>("/forecast-platform/certification");
+  },
+
+  getDataIntegrityChecks(params?: { limit?: number; offset?: number }): Promise<DataIntegrityCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<DataIntegrityCheckListResponse>(`/data-integrity/checks${q}`);
+  },
+
+  getDataIntegrityCheck(checkId: number): Promise<DataIntegrityCheckDetail> {
+    return requestScanV1<DataIntegrityCheckDetail>(`/data-integrity/checks/${checkId}`);
+  },
+
+  getDataIntegrityIssues(params?: { limit?: number; offset?: number }): Promise<DataIntegrityIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<DataIntegrityIssueListResponse>(`/data-integrity/issues${q}`);
+  },
+
+  runDataIntegrityCheck(): Promise<DataIntegrityCheckDetail> {
+    return requestScanV1<DataIntegrityCheckDetail>("/data-integrity/run", {
+      method: "POST",
+    });
+  },
+
+  getMigrationSafetyChecks(params?: { limit?: number; offset?: number }): Promise<MigrationSafetyCheckListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<MigrationSafetyCheckListResponse>(`/data-integrity/migration-safety${q}`);
+  },
+
+  validateMigrationSafety(payload: {
+    migration_revision: string;
+    pre_count_json?: Record<string, number>;
+    post_count_json?: Record<string, number>;
+  }): Promise<MigrationSafetyCheckRead> {
+    return requestScanV1<MigrationSafetyCheckRead>("/data-integrity/migration-safety/validate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+
+  getAuditEvents(params?: { limit?: number; offset?: number }): Promise<AuditEventListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<AuditEventListResponse>(`/data-integrity/audit-events${q}`);
+  },
+
+  getAuditEvent(auditEventId: number): Promise<AuditEventDetail> {
+    return requestScanV1<AuditEventDetail>(`/data-integrity/audit-events/${auditEventId}`);
+  },
+
+  getOperationsReliabilityHealth(): Promise<OperationsReliabilityDashboardRead> {
+    return requestScanV1<OperationsReliabilityDashboardRead>("/operations-reliability/health");
+  },
+
+  getOperationsReliabilityIssues(params?: { limit?: number; offset?: number }): Promise<ReliabilityIssueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ReliabilityIssueListResponse>(`/operations-reliability/issues${q}`);
+  },
+
+  getOperationsReliabilityJobs(params?: { limit?: number; offset?: number }): Promise<JobHealthMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<JobHealthMetricListResponse>(`/operations-reliability/jobs${q}`);
+  },
+
+  getOperationsReliabilityQueues(params?: { limit?: number; offset?: number }): Promise<QueueHealthMetricListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<QueueHealthMetricListResponse>(`/operations-reliability/queues${q}`);
+  },
+
+  getOperationsReliabilityRecommendations(
+    params?: { limit?: number; offset?: number },
+  ): Promise<RecoveryRecommendationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<RecoveryRecommendationListResponse>(`/operations-reliability/recommendations${q}`);
+  },
+
+  getProductionReadinessDashboard(): Promise<ProductionReadinessDashboardRead> {
+    return requestScanV1<ProductionReadinessDashboardRead>("/production-readiness/dashboard");
+  },
+
+  getConditionIntelligenceDashboard(): Promise<ConditionDashboardRead> {
+    return requestScanV1<ConditionDashboardRead>("/condition-intelligence/dashboard");
+  },
+
+  getGradingIntelligenceDashboard(): Promise<GradingDashboardRead> {
+    return requestScanV1<GradingDashboardRead>("/grading-intelligence/dashboard");
+  },
+
+  getGradingValidationDashboard(): Promise<GradingValidationDashboardRead> {
+    return requestScanV1<GradingValidationDashboardRead>("/grading-validation/dashboard");
+  },
+
+  getGradingPlatformSummary(): Promise<GradingPlatformSummaryRead> {
+    return requestScanV1<GradingPlatformSummaryRead>("/grading-platform/summary");
+  },
+
+  getGradingPlatformHealth(): Promise<GradingPlatformHealthRead> {
+    return requestScanV1<GradingPlatformHealthRead>("/grading-platform/health");
+  },
+
+  getGradingPlatformValidation(): Promise<GradingPlatformValidationRead> {
+    return requestScanV1<GradingPlatformValidationRead>("/grading-platform/validation");
+  },
+
+  getGradingPlatformCertification(): Promise<GradingPlatformCertificationRead> {
+    return requestScanV1<GradingPlatformCertificationRead>("/grading-platform/certification");
+  },
+
+  getReleasePlatformSummary(): Promise<ReleasePlatformSummaryRead> {
+    return requestScanV1<ReleasePlatformSummaryRead>("/release-platform/summary");
+  },
+
+  getReleasePlatformHealth(): Promise<ReleasePlatformHealthRead> {
+    return requestScanV1<ReleasePlatformHealthRead>("/release-platform/health");
+  },
+
+  getReleasePlatformValidation(): Promise<ReleasePlatformValidationRead> {
+    return requestScanV1<ReleasePlatformValidationRead>("/release-platform/validation");
+  },
+
+  getReleasePlatformCertification(): Promise<ReleasePlatformCertificationRead> {
+    return requestScanV1<ReleasePlatformCertificationRead>("/release-platform/certification");
+  },
+
+  postIntelligenceSeed(): Promise<{ franchise_count: number; character_count: number; creator_count: number; scores_created: number }> {
+    return requestScanV1("/intelligence/seed", { method: "POST" });
+  },
+
+  getIntelligenceDashboard(): Promise<IntelligenceDashboardRead> {
+    return requestScanV1<IntelligenceDashboardRead>("/intelligence/dashboard");
+  },
+
+  postKeyIssuesRefresh(): Promise<{
+    detections_created: number;
+    catalog_matches: number;
+    pattern_matches: number;
+    scores_updated: number;
+    refreshed_at: string;
+  }> {
+    return requestScanV1("/key-issues/refresh", { method: "POST" });
+  },
+
+  getKeyIssuesDashboard(): Promise<KeyIssueDashboardRead> {
+    return requestScanV1<KeyIssueDashboardRead>("/key-issues/dashboard");
+  },
+
+  postMarketUserIntelligenceRefresh(): Promise<{
+    market: Record<string, number>;
+    user_preferences: Record<string, number>;
+  }> {
+    return requestScanV1("/market-user-intelligence/refresh", { method: "POST" });
+  },
+
+  getMarketUserIntelligenceDashboard(): Promise<MarketUserDashboardRead> {
+    return requestScanV1<MarketUserDashboardRead>("/market-user-intelligence/dashboard");
+  },
+
+  getMarketUserPreferences(): Promise<{ items: UserPreferenceRead[]; total_items: number }> {
+    return requestScanV1<{ items: UserPreferenceRead[]; total_items: number }>(
+      "/market-user-intelligence/user-preferences"
+    );
+  },
+
+  createMarketUserPreference(payload: {
+    preference_type: string;
+    preference_label: string;
+    preference_score?: number;
+  }): Promise<{ preference: UserPreferenceRead }> {
+    return requestScanV1<{ preference: UserPreferenceRead }>("/market-user-intelligence/user-preferences", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  disableMarketUserPreference(profileId: number): Promise<{ preference: UserPreferenceRead }> {
+    return requestScanV1<{ preference: UserPreferenceRead }>(
+      `/market-user-intelligence/user-preferences/${profileId}/disable`,
+      { method: "PATCH" }
+    );
+  },
+
+  postRecommendationsV2Run(): Promise<{
+    run_uuid: string;
+    status: string;
+    issues_scored: number;
+    variants_scored: number;
+    recommendations_created: number;
+  }> {
+    return requestScanV1("/recommendations-v2/run", { method: "POST" });
+  },
+
+  getRecommendationsV2Dashboard(): Promise<RecommendationV2DashboardRead> {
+    return requestScanV1<RecommendationV2DashboardRead>("/recommendations-v2/dashboard");
+  },
+
+  getRecommendationV2Detail(scoreId: number): Promise<RecommendationV2DetailRead> {
+    return requestScanV1<RecommendationV2DetailRead>(`/recommendations-v2/${scoreId}`);
+  },
+
+  getRecommendationIntelligenceValidation(): Promise<RecommendationIntelligenceValidationRead> {
+    return requestScanV1<RecommendationIntelligenceValidationRead>("/recommendation-intelligence/validation");
+  },
+
+  getRecommendationIntelligenceHealth(): Promise<RecommendationIntelligenceHealthRead> {
+    return requestScanV1<RecommendationIntelligenceHealthRead>("/recommendation-intelligence/health");
+  },
+
+  getRecommendationIntelligenceCalibration(): Promise<RecommendationQualityCalibrationRead> {
+    return requestScanV1<RecommendationQualityCalibrationRead>("/recommendation-intelligence/calibration");
+  },
+
+  getRecommendationIntelligenceSummary(): Promise<RecommendationIntelligenceSummaryRead> {
+    return requestScanV1<RecommendationIntelligenceSummaryRead>("/recommendation-intelligence/summary");
+  },
+
+  getRecommendationIntelligenceCertification(): Promise<RecommendationIntelligenceCertificationRead> {
+    return requestScanV1<RecommendationIntelligenceCertificationRead>("/recommendation-intelligence/certification");
+  },
+
+  getPullLists(params?: { status?: string; publisher?: string; search?: string; limit?: number; offset?: number }): Promise<PullListListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PullListRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/pull-lists${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  createPullList(payload: PullListCreatePayload): Promise<PullListDetailRead> {
+    return requestScanV1<PullListDetailRead>("/pull-lists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updatePullList(pullListId: number, payload: PullListUpdatePayload): Promise<PullListDetailRead> {
+    return requestScanV1<PullListDetailRead>(`/pull-lists/${pullListId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPullList(pullListId: number): Promise<PullListDetailRead> {
+    return requestScanV1<PullListDetailRead>(`/pull-lists/${pullListId}`);
+  },
+
+  attachPullListIssue(pullListId: number, payload: PullListIssueAttachPayload): Promise<PullListDetailRead> {
+    return requestScanV1<PullListDetailRead>(`/pull-lists/${pullListId}/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPullListDecisions(params?: {
+    decision_type?: string;
+    tier?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PullListDecisionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PullListDecisionRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/pull-list-decisions${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getPullListDecision(decisionId: number): Promise<PullListDecisionRead> {
+    return requestScanV1<PullListDecisionRead>(`/pull-list-decisions/${decisionId}`);
+  },
+
+  getUpcomingPullListDecisions(params?: {
+    decision_type?: string;
+    tier?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PullListDecisionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PullListDecisionRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/pull-list-decisions/upcoming${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getFocDashboard(params?: {
+    decision_type?: string;
+    publisher?: string;
+    max_days_until_foc?: number;
+    max_days_until_release?: number;
+  }): Promise<FocDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FocDashboardRead>(`/foc-dashboard${q}`);
+  },
+
+  getFocDashboardSummary(params?: {
+    decision_type?: string;
+    publisher?: string;
+    max_days_until_foc?: number;
+    max_days_until_release?: number;
+  }): Promise<FocDashboardSummaryRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FocDashboardSummaryRead>(`/foc-dashboard/summary${q}`);
+  },
+
+  getFocDashboardActions(params?: {
+    decision_type?: string;
+    publisher?: string;
+    max_days_until_foc?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<FocDashboardListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: FocDashboardItemRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/foc-dashboard/actions${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getFocDashboardReleases(params?: {
+    decision_type?: string;
+    publisher?: string;
+    max_days_until_release?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<FocDashboardListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: FocDashboardItemRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/foc-dashboard/releases${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getPurchaseProfile(): Promise<PurchaseProfileRead> {
+    return requestScanV1<PurchaseProfileRead>("/purchase-profile");
+  },
+
+  patchPurchaseProfile(payload: PurchaseProfileUpdate): Promise<PurchaseProfileRead> {
+    return requestScanV1<PurchaseProfileRead>("/purchase-profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPurchasePreferences(): Promise<PurchasePreferenceRead> {
+    return requestScanV1<PurchasePreferenceRead>("/purchase-profile/preferences");
+  },
+
+  patchPurchasePreferences(payload: PurchasePreferenceUpdate): Promise<PurchasePreferenceRead> {
+    return requestScanV1<PurchasePreferenceRead>("/purchase-profile/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPurchaseQuantities(params?: {
+    tier?: string;
+    quantity?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PurchaseQuantityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PurchaseQuantityRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/purchase-quantities${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  generatePurchaseQuantities(): Promise<PurchaseQuantityGenerateResponse> {
+    return requestScanV1<PurchaseQuantityGenerateResponse>("/purchase-quantities/generate", {
+      method: "POST",
+    });
+  },
+
+  getPurchaseVariants(params?: {
+    recommendation?: string;
+    variant_type?: string;
+    publisher?: string;
+    release_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PurchaseVariantListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PurchaseVariantRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/purchase-variants${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  generatePurchaseVariants(): Promise<PurchaseVariantGenerateResponse> {
+    return requestScanV1<PurchaseVariantGenerateResponse>("/purchase-variants/generate", {
+      method: "POST",
+    });
+  },
+
+  getPurchaseBudget(): Promise<PurchaseBudgetRead> {
+    return requestScanV1<PurchaseBudgetRead>("/purchase-budget");
+  },
+
+  patchPurchaseBudget(payload: PurchaseBudgetUpdate): Promise<PurchaseBudgetRead> {
+    return requestScanV1<PurchaseBudgetRead>("/purchase-budget", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPurchaseBudgetSummary(): Promise<PurchaseBudgetSummaryRead> {
+    return requestScanV1<PurchaseBudgetSummaryRead>("/purchase-budget/summary");
+  },
+
+  getPurchaseBudgetAllocations(params?: { limit?: number; offset?: number }): Promise<PurchaseBudgetAllocationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<{ items: PurchaseBudgetAllocationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/purchase-budget/allocations${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  generatePurchaseBudgetAllocations(): Promise<PurchaseBudgetGenerateResponse> {
+    return requestScanV1<PurchaseBudgetGenerateResponse>("/purchase-budget/allocations/generate", {
+      method: "POST",
+    });
+  },
+
+  getSellCandidates(params?: {
+    recommendation?: string;
+    publisher?: string;
+    confidence?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<SellCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: SellCandidateRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/sell-candidates${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getSellCandidateSummary(): Promise<SellCandidateSummaryRead> {
+    return requestScanV1<SellCandidateSummaryRead>("/sell-candidates/summary");
+  },
+
+  generateSellCandidates(): Promise<SellCandidateGenerateResponse> {
+    return requestScanV1<SellCandidateGenerateResponse>("/sell-candidates/generate", {
+      method: "POST",
+    });
+  },
+
+  getWantLists(): Promise<WantListListRead> {
+    return requestScanV1<WantListListRead>("/want-lists");
+  },
+
+  createWantList(body: { name: string; description?: string; is_active?: boolean }): Promise<WantListRead> {
+    return requestScanV1<WantListRead>("/want-lists", { method: "POST", body: JSON.stringify(body) });
+  },
+
+  getWantList(wantListId: number): Promise<WantListRead> {
+    return requestScanV1<WantListRead>(`/want-lists/${wantListId}`);
+  },
+
+  patchWantList(wantListId: number, body: { name?: string; description?: string; is_active?: boolean }): Promise<WantListRead> {
+    return requestScanV1<WantListRead>(`/want-lists/${wantListId}`, { method: "PATCH", body: JSON.stringify(body) });
+  },
+
+  addWantListItem(
+    wantListId: number,
+    body: {
+      publisher?: string;
+      series_name: string;
+      issue_number: string;
+      variant_description?: string;
+      priority?: WantListPriority;
+      status?: WantListItemStatus;
+      notes?: string;
+    },
+  ): Promise<WantListItemRead> {
+    return requestScanV1<WantListItemRead>(`/want-lists/${wantListId}/items`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  patchWantListItem(
+    itemId: number,
+    body: Partial<{
+      publisher: string;
+      series_name: string;
+      issue_number: string;
+      variant_description: string;
+      priority: WantListPriority;
+      status: WantListItemStatus;
+      notes: string;
+    }>,
+  ): Promise<WantListItemRead> {
+    return requestScanV1<WantListItemRead>(`/want-list-items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  deleteWantListItem(itemId: number): Promise<{ deleted: boolean; id: number }> {
+    return requestScanV1<{ deleted: boolean; id: number }>(`/want-list-items/${itemId}`, { method: "DELETE" });
+  },
+
+  getCollectionGaps(params?: {
+    priority?: string;
+    gap_type?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<CollectionGapListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<CollectionGapListRead>(`/collection-gaps${q}`);
+  },
+
+  refreshCollectionGaps(params?: {
+    priority?: string;
+    gap_type?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<CollectionGapListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<CollectionGapListRead>(`/collection-gaps/latest${q}`);
+  },
+
+  getCollectionGapSummary(): Promise<CollectionGapSummaryRead> {
+    return requestScanV1<CollectionGapSummaryRead>("/collection-gaps/summary");
+  },
+
+  getAcquisitionOpportunities(params?: {
+    opportunity_type?: string;
+    priority_score_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionOpportunityListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<AcquisitionOpportunityListRead>(`/acquisition-opportunities${q}`);
+  },
+
+  refreshAcquisitionOpportunities(params?: {
+    opportunity_type?: string;
+    priority_score_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AcquisitionOpportunityListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<AcquisitionOpportunityListRead>(`/acquisition-opportunities/latest${q}`);
+  },
+
+  getAcquisitionOpportunitySummary(): Promise<AcquisitionOpportunitySummaryRead> {
+    return requestScanV1<AcquisitionOpportunitySummaryRead>("/acquisition-opportunities/summary");
+  },
+
+  getMarketplaceAcquisitions(params?: {
+    recommendation?: string;
+    status?: string;
+    source_type?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MarketplaceAcquisitionListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<MarketplaceAcquisitionListRead>(`/marketplace-acquisitions${q}`);
+  },
+
+  getMarketplaceAcquisitionSummary(): Promise<MarketplaceAcquisitionSummaryRead> {
+    return requestScanV1<MarketplaceAcquisitionSummaryRead>("/marketplace-acquisitions/summary");
+  },
+
+  createMarketplaceAcquisition(body: {
+    marketplace_source_id?: number;
+    title: string;
+    publisher?: string;
+    series_name?: string;
+    issue_number?: string;
+    variant_description?: string;
+    listing_url?: string;
+    asking_price?: number;
+    shipping_price?: number;
+    total_price?: number;
+    condition_description?: string;
+    grade_label?: string;
+    seller_name?: string;
+  }): Promise<MarketplaceAcquisitionCandidateRead> {
+    return requestScanV1<MarketplaceAcquisitionCandidateRead>("/marketplace-acquisitions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  patchMarketplaceAcquisition(
+    id: number,
+    body: Partial<{
+      marketplace_source_id: number;
+      title: string;
+      publisher: string;
+      series_name: string;
+      issue_number: string;
+      status: MarketplaceCandidateStatus;
+      total_price: number;
+    }>,
+  ): Promise<MarketplaceAcquisitionCandidateRead> {
+    return requestScanV1<MarketplaceAcquisitionCandidateRead>(`/marketplace-acquisitions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  evaluateMarketplaceAcquisition(id: number): Promise<MarketplaceAcquisitionCandidateRead> {
+    return requestScanV1<MarketplaceAcquisitionCandidateRead>(`/marketplace-acquisitions/${id}/evaluate`, {
+      method: "POST",
+    });
+  },
+
+  getAcquisitionDashboard(params?: {
+    publisher?: string;
+    priority?: string;
+    recommendation?: string;
+    source_type?: string;
+  }): Promise<AcquisitionDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | undefined>) : "";
+    return requestScanV1<AcquisitionDashboardRead>(`/acquisition-dashboard${q}`);
+  },
+
+  getAcquisitionDashboardSummary(params?: {
+    publisher?: string;
+    priority?: string;
+    recommendation?: string;
+    source_type?: string;
+  }): Promise<AcquisitionDashboardSummaryRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | undefined>) : "";
+    return requestScanV1<AcquisitionDashboardSummaryRead>(`/acquisition-dashboard/summary${q}`);
+  },
+
+  getAcquisitionDashboardActions(params?: {
+    publisher?: string;
+    priority?: string;
+    recommendation?: string;
+    source_type?: string;
+  }): Promise<AcquisitionDashboardActionsRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | undefined>) : "";
+    return requestScanV1<AcquisitionDashboardActionsRead>(`/acquisition-dashboard/actions${q}`);
+  },
+
+  getExitCandidates(params?: {
+    candidate_reason?: string;
+    score_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ExitCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: ExitCandidateRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/exit-candidates${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  refreshExitCandidates(params?: {
+    candidate_reason?: string;
+    score_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ExitCandidateListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: ExitCandidateRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/exit-candidates/latest${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getExitCandidateSummary(): Promise<ExitCandidateSummaryRead> {
+    return requestScanV1<ExitCandidateSummaryRead>("/exit-candidates/summary");
+  },
+
+  getHoldSellRecommendations(params?: {
+    recommendation?: string;
+    conviction_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<HoldSellListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: HoldSellRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/hold-sell${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  refreshHoldSellRecommendations(params?: {
+    recommendation?: string;
+    conviction_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<HoldSellListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: HoldSellRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/hold-sell/latest${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getHoldSellSummary(): Promise<HoldSellSummaryRead> {
+    return requestScanV1<HoldSellSummaryRead>("/hold-sell/summary");
+  },
+
+  getGradeBeforeSellRecommendations(params?: {
+    recommendation?: string;
+    roi_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradeBeforeSellListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: GradeBeforeSellRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/grade-before-sell${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  refreshGradeBeforeSellRecommendations(params?: {
+    recommendation?: string;
+    roi_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GradeBeforeSellListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: GradeBeforeSellRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/grade-before-sell/latest${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getGradeBeforeSellSummary(): Promise<GradeBeforeSellSummaryRead> {
+    return requestScanV1<GradeBeforeSellSummaryRead>("/grade-before-sell/summary");
+  },
+
+  getPortfolioRebalancingRecommendations(params?: {
+    rebalance_type?: string;
+    recommended_action?: string;
+    priority_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRebalanceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PortfolioRebalanceRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/portfolio-rebalancing${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  refreshPortfolioRebalancingRecommendations(params?: {
+    rebalance_type?: string;
+    recommended_action?: string;
+    priority_min?: number;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PortfolioRebalanceListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: PortfolioRebalanceRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/portfolio-rebalancing/latest${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getPortfolioRebalancingSummary(): Promise<PortfolioRebalanceSummaryRead> {
+    return requestScanV1<PortfolioRebalanceSummaryRead>("/portfolio-rebalancing/summary");
+  },
+
+  getExitDashboard(params?: {
+    publisher?: string;
+    recommendation?: string;
+    action?: string;
+    score_min?: number;
+  }): Promise<ExitDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExitDashboardRead>(`/exit-dashboard${q}`);
+  },
+
+  getExitDashboardSummary(params?: {
+    publisher?: string;
+    recommendation?: string;
+    action?: string;
+    score_min?: number;
+  }): Promise<ExitDashboardSummaryRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExitDashboardSummaryRead>(`/exit-dashboard/summary${q}`);
+  },
+
+  getExitDashboardActions(params?: {
+    publisher?: string;
+    recommendation?: string;
+    action?: string;
+    score_min?: number;
+  }): Promise<ExitDashboardActionsRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExitDashboardActionsRead>(`/exit-dashboard/actions${q}`);
+  },
+
+  getUnifiedIntelligence(params?: {
+    recommendation_type?: string;
+    priority_min?: number;
+    source_system?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: UnifiedCollectorRecommendationRead[]; total_items: number; limit: number; offset: number }> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: UnifiedCollectorRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/unified-intelligence${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getUnifiedIntelligenceSummary(): Promise<UnifiedCollectorSummaryRead> {
+    return requestScanV1<UnifiedCollectorSummaryRead>("/unified-intelligence/summary");
+  },
+
+  getDailyActions(params?: {
+    action_type?: string;
+    priority_min?: number;
+    due_before?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: DailyCollectorActionRead[]; total_items: number; limit: number; offset: number }> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: DailyCollectorActionRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/daily-actions${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getDailyActionsSummary(): Promise<DailyActionSummaryRead> {
+    return requestScanV1<DailyActionSummaryRead>("/daily-actions/summary");
+  },
+
+  getCrossSystemRecommendations(params?: {
+    recommendation_type?: string;
+    rank_max?: number;
+    priority_min?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: CrossSystemRecommendationRead[]; total_items: number; limit: number; offset: number }> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: CrossSystemRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/cross-system-recommendations${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getCrossSystemRecommendationsSummary(): Promise<CrossSystemRecommendationSummaryRead> {
+    return requestScanV1<CrossSystemRecommendationSummaryRead>("/cross-system-recommendations/summary");
+  },
+
+  getExecutiveDashboard(params?: {
+    section?: string;
+    recommendation_type?: string;
+    action_type?: string;
+    priority_min?: number;
+    publisher?: string;
+  }): Promise<ExecutiveDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExecutiveDashboardRead>(`/executive-dashboard${q}`);
+  },
+
+  getExecutiveDashboardSummary(params?: {
+    section?: string;
+    recommendation_type?: string;
+    action_type?: string;
+    priority_min?: number;
+    publisher?: string;
+  }): Promise<ExecutiveDashboardSummaryRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExecutiveDashboardSummaryRead>(`/executive-dashboard/summary${q}`);
+  },
+
+  getExecutiveDashboardActions(params?: {
+    section?: string;
+    recommendation_type?: string;
+    action_type?: string;
+    priority_min?: number;
+    publisher?: string;
+  }): Promise<ExecutiveDashboardActionsRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<ExecutiveDashboardActionsRead>(`/executive-dashboard/actions${q}`);
+  },
+
+  getReleaseIntelligenceDashboard(): Promise<ReleaseIntelligenceDashboardRead> {
+    return requestScanV1<ReleaseIntelligenceDashboardRead>("/release-intelligence/dashboard");
+  },
+
+  getReleaseWatchlistDashboard(): Promise<ContinuityDashboardRead> {
+    return requestScanV1<ContinuityDashboardRead>("/release-watchlists/dashboard");
+  },
+
+  getSpecIntelligenceDashboard(): Promise<SpecDashboardRead> {
+    return requestScanV1<SpecDashboardRead>("/spec-intelligence/dashboard");
+  },
+
+  getReleasePlatformDashboard(): Promise<ReleaseOpportunityDashboardRead> {
+    return requestScanV1<ReleaseOpportunityDashboardRead>("/release-platform/dashboard");
+  },
+
+  getReleaseImportDashboard(): Promise<ReleaseImportDashboardRead> {
+    return requestScanV1<ReleaseImportDashboardRead>("/release-imports/dashboard");
+  },
+
+  getReleaseImportRuns(params?: { limit?: number; offset?: number }): Promise<ReleaseImportRunListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ReleaseImportRunListResponse>(`/release-imports/runs${q}`);
+  },
+
+  getReleaseImportErrors(params?: { limit?: number; offset?: number; import_run_id?: number }): Promise<ReleaseImportErrorListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<ReleaseImportErrorListResponse>(`/release-imports/errors${q}`);
+  },
+
+  uploadReleaseImportJson(payload: { file_name: string; feed: unknown }): Promise<ReleaseImportRunRead> {
+    return requestScanV1<ReleaseImportRunRead>("/release-imports/json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadReleaseImportCsv(file: File): Promise<ReleaseImportRunRead> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestScanV1<ReleaseImportRunRead>("/release-imports/csv", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  getLunarFeedDashboard(): Promise<LunarFeedDashboardRead> {
+    return requestScanV1<LunarFeedDashboardRead>("/lunar-feed/dashboard");
+  },
+
+  getLunarFeedCredentialStatus(): Promise<LunarCredentialStatusRead> {
+    return requestScanV1<LunarCredentialStatusRead>("/lunar-feed/credential-status");
+  },
+
+  downloadLatestLunarCsv(): Promise<LunarRemoteDownloadRead> {
+    return requestScanV1<LunarRemoteDownloadRead>("/lunar-feed/download/latest", {
+      method: "POST",
+    });
+  },
+
+  downloadLunarCsvForPeriod(period: string): Promise<LunarRemoteDownloadRead> {
+    return requestScanV1<LunarRemoteDownloadRead>(`/lunar-feed/download/${encodeURIComponent(period)}`, {
+      method: "POST",
+    });
+  },
+
+  importLatestLunarCsvRemote(): Promise<LunarFeedImportSummaryRead> {
+    return requestScanV1<LunarFeedImportSummaryRead>("/lunar-feed/import/latest-remote", {
+      method: "POST",
+    });
+  },
+
+  uploadLunarFeedCsv(file: File): Promise<LunarFeedImportSummaryRead> {
+    const form = new FormData();
+    form.append("file", file);
+    return requestScanV1<LunarFeedImportSummaryRead>("/lunar-feed/import/upload", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  getLunarSchedulerStatus(): Promise<LunarSchedulerStatusRead> {
+    return requestScanV1<LunarSchedulerStatusRead>("/lunar-scheduler/status");
+  },
+
+  getLunarSchedulerHistory(): Promise<LunarSchedulerHistoryRead> {
+    return requestScanV1<LunarSchedulerHistoryRead>("/lunar-scheduler/history");
+  },
+
+  runLunarSchedulerNow(): Promise<LunarSchedulerRunNowRead> {
+    return requestScanV1<LunarSchedulerRunNowRead>("/lunar-scheduler/run-now", { method: "POST" });
+  },
+
+  enableLunarScheduler(): Promise<LunarSchedulerStatusRead> {
+    return requestScanV1<LunarSchedulerStatusRead>("/lunar-scheduler/enable", { method: "POST" });
+  },
+
+  disableLunarScheduler(): Promise<LunarSchedulerStatusRead> {
+    return requestScanV1<LunarSchedulerStatusRead>("/lunar-scheduler/disable", { method: "POST" });
+  },
+
+  setLunarSchedulerTime(payload: { schedule_time: string; timezone?: string }): Promise<LunarSchedulerStatusRead> {
+    return requestScanV1<LunarSchedulerStatusRead>("/lunar-scheduler/set-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getDealerCopilotRecommendations(
+    params?: { recommendation_type?: string; recommendation_status?: string; limit?: number; offset?: number },
+  ): Promise<DealerRecommendationListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<DealerRecommendationListResponse>(`/dealer-copilot/recommendations${q}`);
+  },
+
+  getDealerCopilotRecommendationDetail(recommendationId: number): Promise<DealerRecommendationDetail> {
+    return requestScanV1<DealerRecommendationDetail>(`/dealer-copilot/recommendations/${recommendationId}`);
+  },
+
+  getDealerCopilotOpportunities(params?: { limit?: number; offset?: number }): Promise<DealerOpportunityScoreListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<DealerOpportunityScoreListResponse>(`/dealer-copilot/opportunities${q}`);
+  },
+
+  getDealerCopilotExecutions(params?: { limit?: number; offset?: number }): Promise<DealerCopilotExecutionListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<DealerCopilotExecutionListResponse>(`/dealer-copilot/executions${q}`);
+  },
+
+  runDealerCopilot(): Promise<DealerCopilotRunResponse> {
+    return requestScanV1<DealerCopilotRunResponse>("/dealer-copilot/run", {
+      method: "POST",
+    });
   },
 };
 

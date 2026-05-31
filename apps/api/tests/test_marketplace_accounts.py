@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.models import MarketplaceConnectionEvent
+from app.core.security import decrypt_secret_value
+from app.db.session import get_engine
+from app.models import MarketplaceConnectionEvent, User
+from app.models.marketplace import (
+    MarketplaceCredential as MarketplaceFrameworkCredential,
+    MarketplaceDefinition as MarketplaceFrameworkDefinition,
+)
+from app.schemas.marketplace import MarketplaceAccountCreate
+from app.services.marketplace_accounts import create_account, disable_account
+from app.services.marketplace_seed import ensure_marketplace_definitions
 from test_inventory import auth_headers, register_and_login
 
 
@@ -222,3 +232,67 @@ def test_marketplace_identity_is_owned_by_single_organization(client: TestClient
 
     assert first.status_code == 201, first.text
     assert second.status_code == 409, second.text
+
+
+def test_connector_framework_account_create_encrypts_credentials(client: TestClient) -> None:
+    register_and_login(client, "connector-framework-owner@example.com")
+    with Session(get_engine()) as session:
+        ensure_marketplace_definitions(session)
+        owner = session.exec(select(User).where(User.email == "connector-framework-owner@example.com")).one()
+        marketplace = session.exec(
+            select(MarketplaceFrameworkDefinition).where(MarketplaceFrameworkDefinition.marketplace_code == "SHOPIFY")
+        ).one()
+
+        account = create_account(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceAccountCreate(
+                marketplace_id=int(marketplace.id or 0),
+                account_name="Framework Shopify",
+                account_identifier="framework-shopify-1",
+                status="PENDING",
+                credential_type="oauth_token",
+                credential_payload="top-secret-token",
+            ),
+        )
+
+        credential = session.exec(
+            select(MarketplaceFrameworkCredential).where(MarketplaceFrameworkCredential.account_id == account.id)
+        ).one()
+        assert account.status == "PENDING"
+        assert account.marketplace is not None
+        assert credential.encrypted_payload != "top-secret-token"
+        assert decrypt_secret_value(credential.encrypted_payload) == "top-secret-token"
+
+
+def test_connector_framework_account_disable_is_owner_scoped(client: TestClient) -> None:
+    register_and_login(client, "connector-disable-owner@example.com")
+    register_and_login(client, "connector-disable-outsider@example.com")
+    with Session(get_engine()) as session:
+        ensure_marketplace_definitions(session)
+        owner = session.exec(select(User).where(User.email == "connector-disable-owner@example.com")).one()
+        outsider = session.exec(select(User).where(User.email == "connector-disable-outsider@example.com")).one()
+        marketplace = session.exec(
+            select(MarketplaceFrameworkDefinition).where(MarketplaceFrameworkDefinition.marketplace_code == "EBAY")
+        ).one()
+
+        account = create_account(
+            session,
+            owner_id=int(owner.id or 0),
+            payload=MarketplaceAccountCreate(
+                marketplace_id=int(marketplace.id or 0),
+                account_name="Disable Me",
+                account_identifier="disable-me-1",
+                status="ACTIVE",
+            ),
+        )
+
+        disabled = disable_account(session, owner_id=int(owner.id or 0), account_id=account.id)
+        assert disabled.status == "DISABLED"
+
+        try:
+            disable_account(session, owner_id=int(outsider.id or 0), account_id=account.id)
+        except HTTPException as exc:
+            assert exc.status_code == 404
+        else:  # pragma: no cover - defensive
+            raise AssertionError("Expected owner scoping to hide the account from other users.")

@@ -17,6 +17,14 @@ GMAIL_AUTO_SYNC_SCAN_JOB_TYPE = "scheduled_gmail_sync_scan"
 GMAIL_AUTO_SYNC_INTERVAL_SECONDS = 900
 GMAIL_AUTO_SYNC_SCAN_JOB_ID = "scheduled-gmail-auto-sync-scan"
 
+LUNAR_IMPORT_SCAN_JOB_TYPE = "scheduled_lunar_import_scan"
+LUNAR_IMPORT_SCAN_INTERVAL_SECONDS = 900
+LUNAR_IMPORT_SCAN_JOB_ID = "scheduled-lunar-import-scan"
+
+PULL_LIST_REFRESH_SCAN_JOB_TYPE = "scheduled_pull_list_refresh_scan"
+PULL_LIST_REFRESH_SCAN_INTERVAL_SECONDS = 900
+PULL_LIST_REFRESH_SCAN_JOB_ID = "scheduled-pull-list-refresh-scan"
+
 
 def schedule_worker_heartbeat(*, delay_seconds: int = 300):
     settings = get_settings()
@@ -93,4 +101,67 @@ def schedule_gmail_auto_sync_scan(*, delay_seconds: int = GMAIL_AUTO_SYNC_INTERV
         func="app.tasks.scheduled.run_scheduled_gmail_sync_scan",
         meta={"job_type": GMAIL_AUTO_SYNC_SCAN_JOB_TYPE},
         job_id=GMAIL_AUTO_SYNC_SCAN_JOB_ID,
+    )
+
+
+def run_scheduled_lunar_import_scan() -> dict[str, int]:
+    from app.tasks.lunar_import_task import run_daily_lunar_import
+
+    result = run_daily_lunar_import()
+    schedule_lunar_daily_import_scan()
+    schedule_pull_list_daily_refresh_scan()
+    return result
+
+
+def schedule_lunar_daily_import_scan(*, delay_seconds: int = LUNAR_IMPORT_SCAN_INTERVAL_SECONDS):
+    settings = get_settings()
+    existing_job = fetch_job_by_id(LUNAR_IMPORT_SCAN_JOB_ID)
+    if existing_job is not None and existing_job.get_status(refresh=True) in {
+        "scheduled",
+        "queued",
+        "started",
+        "deferred",
+    }:
+        return existing_job
+
+    if existing_job is not None:
+        existing_job.delete()
+
+    return schedule_job_in(
+        queue_name=settings.rq_ai_parse_queue_name,
+        delay_seconds=delay_seconds,
+        func="app.tasks.scheduled.run_scheduled_lunar_import_scan",
+        meta={"job_type": LUNAR_IMPORT_SCAN_JOB_TYPE},
+        job_id=LUNAR_IMPORT_SCAN_JOB_ID,
+    )
+
+
+def run_scheduled_pull_list_refresh_scan() -> dict[str, int | str | bool]:
+    from app.tasks.pull_list_refresh_task import run_daily_pull_list_refresh
+
+    result = run_daily_pull_list_refresh()
+    schedule_pull_list_daily_refresh_scan()
+    return result
+
+
+def schedule_pull_list_daily_refresh_scan(*, delay_seconds: int = PULL_LIST_REFRESH_SCAN_INTERVAL_SECONDS):
+    settings = get_settings()
+    existing_job = fetch_job_by_id(PULL_LIST_REFRESH_SCAN_JOB_ID)
+    if existing_job is not None and existing_job.get_status(refresh=True) in {
+        "scheduled",
+        "queued",
+        "started",
+        "deferred",
+    }:
+        return existing_job
+
+    if existing_job is not None:
+        existing_job.delete()
+
+    return schedule_job_in(
+        queue_name=settings.rq_ai_parse_queue_name,
+        delay_seconds=delay_seconds,
+        func="app.tasks.scheduled.run_scheduled_pull_list_refresh_scan",
+        meta={"job_type": PULL_LIST_REFRESH_SCAN_JOB_TYPE},
+        job_id=PULL_LIST_REFRESH_SCAN_JOB_ID,
     )
