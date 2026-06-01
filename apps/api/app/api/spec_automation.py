@@ -4,12 +4,10 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
-from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models import User
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
 from app.schemas.spec_automation import SpecAutomationRunListRead, SpecAutomationRunTriggerResponse
-from app.services.ops_admin import ensure_ops_admin_access
 from app.services.spec_automation import (
     get_latest_spec_automation_run,
     list_spec_automation_runs,
@@ -60,9 +58,7 @@ def v1_latest_spec_automation_run(
 def v1_run_spec_automation(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    settings: Settings = Depends(get_settings),
 ) -> ScanApiV1Envelope:
-    ensure_ops_admin_access(current_user, settings)
     assert current_user.id is not None
     from app.services.spec_automation import _to_read
 

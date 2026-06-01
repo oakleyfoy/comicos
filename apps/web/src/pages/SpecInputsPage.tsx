@@ -45,7 +45,7 @@ export function SpecInputsPage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestSpecInputs();
+      const latest = await apiClient.refreshSpecInputs();
       setItems(latest.items);
       const sum = await apiClient.getSpecInputSummary();
       setSummary(sum);

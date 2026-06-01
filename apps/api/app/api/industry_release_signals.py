@@ -8,7 +8,11 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.industry_release_signal import IndustryReleaseSignalListRead
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
-from app.services.industry_release_signals import classify_latest_industry_release_signals, list_industry_release_signals
+from app.services.industry_release_signals import (
+    classify_latest_industry_release_signals,
+    get_latest_industry_release_signals_read,
+    list_industry_release_signals,
+)
 
 industry_release_signal_v1_router = APIRouter(
     prefix="/api/v1",
@@ -44,6 +48,16 @@ def v1_list_industry_release_signals(
 
 @industry_release_signal_v1_router.get("/industry-release-signals/latest", response_model=ScanApiV1Envelope)
 def v1_latest_industry_release_signals(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = get_latest_industry_release_signals_read(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@industry_release_signal_v1_router.post("/industry-release-signals/refresh", response_model=ScanApiV1Envelope)
+def v1_refresh_industry_release_signals(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:

@@ -205,11 +205,16 @@ def test_industry_opportunities_api(client: TestClient, session: Session) -> Non
         foc_date=today + timedelta(days=3),
         release_date=today + timedelta(days=17),
     )
-    latest = client.get("/api/v1/industry-opportunities/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/industry-opportunities/refresh", headers=auth_headers(token))
     assert latest.status_code == 200
     body = latest.json()["data"]
     assert body["scores_computed"] >= 1
     assert len(body["items"]) >= 1
+
+    read_back = client.get("/api/v1/industry-opportunities/latest", headers=auth_headers(token))
+    assert read_back.status_code == 200
+    assert read_back.json()["data"]["scores_computed"] == 0
+    assert len(read_back.json()["data"]["items"]) >= 1
 
     listed = client.get("/api/v1/industry-opportunities", headers=auth_headers(token))
     assert listed.status_code == 200

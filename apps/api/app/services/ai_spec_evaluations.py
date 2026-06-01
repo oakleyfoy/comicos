@@ -59,6 +59,17 @@ def list_ai_spec_evaluations(
     return [_to_read(row, spec_input=inputs.get(int(row.spec_input_id))) for row in page], total
 
 
+def get_latest_ai_spec_evaluations_read(session: Session, *, owner_user_id: int) -> AISpecEvaluationLatestRead:
+    items, _ = list_ai_spec_evaluations(session, owner_user_id=owner_user_id, limit=200, offset=0)
+    return AISpecEvaluationLatestRead(
+        evaluations_computed=0,
+        evaluations_skipped=1,
+        evaluations_updated=0,
+        fallback_count=0,
+        items=items,
+    )
+
+
 def refresh_latest_ai_spec_evaluations(session: Session, *, owner_user_id: int) -> AISpecEvaluationLatestRead:
     gen = generate_ai_spec_evaluations(session, owner_user_id=owner_user_id)
     items, _ = list_ai_spec_evaluations(session, owner_user_id=owner_user_id, limit=200, offset=0)

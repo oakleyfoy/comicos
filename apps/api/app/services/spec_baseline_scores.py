@@ -55,6 +55,16 @@ def list_spec_baseline_scores(
     return [_to_read(row, spec_input=inputs.get(int(row.spec_input_id))) for row in page], total
 
 
+def get_latest_spec_baseline_scores_read(session: Session, *, owner_user_id: int) -> SpecBaselineScoreLatestRead:
+    items, _ = list_spec_baseline_scores(session, owner_user_id=owner_user_id, limit=200, offset=0)
+    return SpecBaselineScoreLatestRead(
+        scores_computed=0,
+        scores_skipped=1,
+        scores_updated=0,
+        items=items,
+    )
+
+
 def refresh_latest_spec_baseline_scores(session: Session, *, owner_user_id: int) -> SpecBaselineScoreLatestRead:
     gen = generate_spec_baseline_scores(session, owner_user_id=owner_user_id)
     items, _ = list_spec_baseline_scores(session, owner_user_id=owner_user_id, limit=200, offset=0)

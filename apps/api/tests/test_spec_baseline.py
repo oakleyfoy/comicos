@@ -39,7 +39,7 @@ def test_spec_baseline_api_and_summary(client: TestClient, session: Session) -> 
     _import_lunar_issue(session, owner_user_id=owner_id)
     run_industry_scanner_refresh(session, owner_user_id=owner_id, trigger_type="MANUAL")
 
-    latest = client.get("/api/v1/spec-baseline-scores/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/spec-baseline-scores/refresh", headers=auth_headers(token))
     assert latest.status_code == 200
     payload = latest.json()["data"]
     assert payload["scores_computed"] + payload["scores_skipped"] + payload["scores_updated"] >= 1
@@ -58,4 +58,5 @@ def test_spec_baseline_api_and_summary(client: TestClient, session: Session) -> 
 
     repeat = client.get("/api/v1/spec-baseline-scores/latest", headers=auth_headers(token))
     assert repeat.status_code == 200
-    assert repeat.json()["data"]["scores_skipped"] >= 1
+    assert repeat.json()["data"]["scores_computed"] == 0
+    assert repeat.json()["data"]["scores_skipped"] == 1

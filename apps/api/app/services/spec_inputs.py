@@ -45,6 +45,16 @@ def list_spec_inputs(
     return [_to_read(row) for row in page], total
 
 
+def get_latest_spec_inputs_read(session: Session, *, owner_user_id: int) -> SpecInputLatestRead:
+    items, _ = list_spec_inputs(session, owner_user_id=owner_user_id, limit=200, offset=0)
+    return SpecInputLatestRead(
+        items=items,
+        inputs_created=0,
+        inputs_updated=0,
+        inputs_skipped=1,
+    )
+
+
 def refresh_latest_spec_inputs(session: Session, *, owner_user_id: int) -> SpecInputLatestRead:
     build_result = build_spec_inputs(session, owner_user_id=owner_user_id)
     items, _ = list_spec_inputs(session, owner_user_id=owner_user_id, limit=200, offset=0)

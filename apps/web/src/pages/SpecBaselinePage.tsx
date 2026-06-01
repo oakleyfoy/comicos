@@ -56,7 +56,7 @@ export function SpecBaselinePage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestSpecBaselineScores();
+      const latest = await apiClient.refreshSpecBaselineScores();
       setItems(latest.items);
       const sum = await apiClient.getSpecBaselineSummary();
       setSummary(sum);

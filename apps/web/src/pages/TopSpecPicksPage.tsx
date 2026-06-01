@@ -48,7 +48,7 @@ export function TopSpecPicksPage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestTopSpecPicks();
+      const latest = await apiClient.runTopSpecPicks();
       setItems(latest.items);
       const sum = await apiClient.getTopSpecPickSummary();
       setSummary(sum);

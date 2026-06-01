@@ -25,7 +25,7 @@ def attach_industry_scanner_dashboard_layer(app: FastAPI) -> None:
 
 @industry_scanner_dashboard_v1_router.get("/industry-scanner-dashboard", response_model=ScanApiV1Envelope)
 def v1_industry_scanner_dashboard(
-    refresh: bool = Query(default=True),
+    refresh: bool = Query(default=False),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
@@ -40,7 +40,7 @@ def v1_industry_scanner_dashboard(
 
 @industry_scanner_dashboard_v1_router.get("/industry-scanner-dashboard/summary", response_model=ScanApiV1Envelope)
 def v1_industry_scanner_dashboard_summary(
-    refresh: bool = Query(default=True),
+    refresh: bool = Query(default=False),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:

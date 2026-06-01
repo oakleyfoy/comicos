@@ -129,6 +129,24 @@ def synchronize_industry_release_signals(session: Session, *, owner_user_id: int
     return changed
 
 
+def get_latest_industry_release_signals_read(session: Session, *, owner_user_id: int) -> IndustryReleaseSignalLatestRead:
+    run_id = latest_scan_run_id(session, owner_user_id=owner_user_id)
+    if run_id is None:
+        return IndustryReleaseSignalLatestRead(scan_run_id=None, signals_classified=0, items=[])
+    items, _ = list_industry_release_signals(
+        session,
+        owner_user_id=owner_user_id,
+        scan_run_id=run_id,
+        limit=200,
+        offset=0,
+    )
+    return IndustryReleaseSignalLatestRead(
+        scan_run_id=run_id,
+        signals_classified=0,
+        items=items,
+    )
+
+
 def classify_latest_industry_release_signals(session: Session, *, owner_user_id: int) -> IndustryReleaseSignalLatestRead:
     run_id = latest_scan_run_id(session, owner_user_id=owner_user_id)
     if run_id is None:

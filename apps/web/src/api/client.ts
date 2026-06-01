@@ -13864,6 +13864,24 @@ export interface SpecAutomationOpsPanelRead {
   top_picks_created: number;
 }
 
+export interface SpecAutomationRunRead {
+  id: number;
+  owner_id: number;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  inputs_processed: number;
+  baseline_scores_created: number;
+  ai_evaluations_created: number;
+  top_picks_created: number;
+  runtime_ms: number;
+  error_message: string | null;
+}
+
+export interface SpecAutomationRunTriggerResponse {
+  run: SpecAutomationRunRead;
+}
+
 export interface AISpecCertificationOpsPanelRead {
   last_certification_at: string | null;
   readiness_score: number;
@@ -26311,6 +26329,10 @@ export const apiClient = {
     return requestScanV1<IndustryReleaseSignalLatestRead>("/industry-release-signals/latest");
   },
 
+  refreshIndustryReleaseSignals(): Promise<IndustryReleaseSignalLatestRead> {
+    return requestScanV1<IndustryReleaseSignalLatestRead>("/industry-release-signals/refresh", { method: "POST" });
+  },
+
   getIndustryOpportunities(params?: {
     scan_run_id?: number;
     risk_level?: string;
@@ -26326,6 +26348,10 @@ export const apiClient = {
     return requestScanV1<IndustryOpportunityLatestRead>("/industry-opportunities/latest");
   },
 
+  refreshIndustryOpportunities(): Promise<IndustryOpportunityLatestRead> {
+    return requestScanV1<IndustryOpportunityLatestRead>("/industry-opportunities/refresh", { method: "POST" });
+  },
+
   getIndustryOpportunitySummary(): Promise<IndustryOpportunitySummaryRead> {
     return requestScanV1<IndustryOpportunitySummaryRead>("/industry-opportunities/summary");
   },
@@ -26337,6 +26363,10 @@ export const apiClient = {
 
   getLatestSpecInputs(): Promise<SpecInputLatestRead> {
     return requestScanV1<SpecInputLatestRead>("/spec-inputs/latest");
+  },
+
+  refreshSpecInputs(): Promise<SpecInputLatestRead> {
+    return requestScanV1<SpecInputLatestRead>("/spec-inputs/refresh", { method: "POST" });
   },
 
   getSpecInputSummary(): Promise<SpecInputSummaryRead> {
@@ -26352,6 +26382,10 @@ export const apiClient = {
     return requestScanV1<SpecBaselineScoreLatestRead>("/spec-baseline-scores/latest");
   },
 
+  refreshSpecBaselineScores(): Promise<SpecBaselineScoreLatestRead> {
+    return requestScanV1<SpecBaselineScoreLatestRead>("/spec-baseline-scores/refresh", { method: "POST" });
+  },
+
   getSpecBaselineSummary(): Promise<SpecBaselineScoreSummaryRead> {
     return requestScanV1<SpecBaselineScoreSummaryRead>("/spec-baseline-scores/summary");
   },
@@ -26363,6 +26397,10 @@ export const apiClient = {
 
   getLatestAISpecEvaluations(): Promise<AISpecEvaluationLatestRead> {
     return requestScanV1<AISpecEvaluationLatestRead>("/ai-spec-evaluations/latest");
+  },
+
+  refreshAISpecEvaluations(): Promise<AISpecEvaluationLatestRead> {
+    return requestScanV1<AISpecEvaluationLatestRead>("/ai-spec-evaluations/refresh", { method: "POST" });
   },
 
   getAISpecEvaluationSummary(): Promise<AISpecEvaluationSummaryRead> {
@@ -26378,6 +26416,14 @@ export const apiClient = {
     return requestScanV1<TopSpecPickLatestRead>(`/top-spec-picks/latest?limit=${limit}`);
   },
 
+  runTopSpecPicks(limit = 20): Promise<TopSpecPickLatestRead> {
+    return requestScanV1<TopSpecPickLatestRead>(`/top-spec-picks/run?limit=${limit}`, { method: "POST" });
+  },
+
+  runSpecAutomationPipeline(): Promise<SpecAutomationRunTriggerResponse> {
+    return requestScanV1<SpecAutomationRunTriggerResponse>("/spec-automation/run", { method: "POST" });
+  },
+
   getTopSpecPickSummary(): Promise<TopSpecPickSummaryRead> {
     return requestScanV1<TopSpecPickSummaryRead>("/top-spec-picks/summary");
   },
@@ -26390,12 +26436,12 @@ export const apiClient = {
     return requestScanV1<WeeklySpecDashboardSummaryRead>("/weekly-spec-dashboard/summary");
   },
 
-  getIndustryScannerDashboard(refresh = true): Promise<IndustryScannerDashboardRead> {
+  getIndustryScannerDashboard(refresh = false): Promise<IndustryScannerDashboardRead> {
     const q = refresh ? "?refresh=true" : "?refresh=false";
     return requestScanV1<IndustryScannerDashboardRead>(`/industry-scanner-dashboard${q}`);
   },
 
-  getIndustryScannerDashboardSummary(refresh = true): Promise<IndustryScannerDashboardSummaryRead> {
+  getIndustryScannerDashboardSummary(refresh = false): Promise<IndustryScannerDashboardSummaryRead> {
     const q = refresh ? "?refresh=true" : "?refresh=false";
     return requestScanV1<IndustryScannerDashboardSummaryRead>(`/industry-scanner-dashboard/summary${q}`);
   },

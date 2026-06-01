@@ -152,6 +152,20 @@ def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: 
     return updated
 
 
+def get_latest_industry_opportunities_read(session: Session, *, owner_user_id: int) -> IndustryOpportunityLatestRead:
+    run_id = latest_scan_run_id(session, owner_user_id=owner_user_id)
+    if run_id is None:
+        return IndustryOpportunityLatestRead(scan_run_id=None, scores_computed=0, items=[])
+    items, _ = list_industry_opportunities(
+        session,
+        owner_user_id=owner_user_id,
+        scan_run_id=run_id,
+        limit=200,
+        offset=0,
+    )
+    return IndustryOpportunityLatestRead(scan_run_id=run_id, scores_computed=0, items=items)
+
+
 def refresh_latest_industry_opportunities(session: Session, *, owner_user_id: int) -> IndustryOpportunityLatestRead:
     run_id = latest_scan_run_id(session, owner_user_id=owner_user_id)
     if run_id is None:

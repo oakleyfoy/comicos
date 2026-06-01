@@ -10,6 +10,7 @@ from app.schemas.ai_spec_evaluation import AISpecEvaluationListRead
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
 from app.services.ai_spec_evaluations import (
     build_ai_spec_evaluation_summary,
+    get_latest_ai_spec_evaluations_read,
     list_ai_spec_evaluations,
     refresh_latest_ai_spec_evaluations,
 )
@@ -44,6 +45,16 @@ def v1_list_ai_spec_evaluations(
 
 @ai_spec_evaluations_v1_router.get("/ai-spec-evaluations/latest", response_model=ScanApiV1Envelope)
 def v1_latest_ai_spec_evaluations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = get_latest_ai_spec_evaluations_read(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@ai_spec_evaluations_v1_router.post("/ai-spec-evaluations/refresh", response_model=ScanApiV1Envelope)
+def v1_refresh_ai_spec_evaluations(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:

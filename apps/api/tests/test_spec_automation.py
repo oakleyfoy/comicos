@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
-
-from app.core.config import get_settings
 from app.models.spec_automation import SpecAutomationRun
 from app.models.top_spec_pick import TopSpecPick
 from app.services.industry_scanner_automation import run_industry_scanner_refresh
@@ -49,9 +46,7 @@ def test_industry_scanner_triggers_spec_automation(client: TestClient, session: 
     assert row.status in {"SUCCESS", "NO_CHANGE"}
 
 
-def test_spec_automation_api_and_ops_panel(
-    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_spec_automation_api_and_ops_panel(client: TestClient, session: Session) -> None:
     email = "spec-auto-api@example.com"
     token = register_and_login(client, email)
     owner_id = _owner_id(session, email)
@@ -65,10 +60,8 @@ def test_spec_automation_api_and_ops_panel(
     assert runs.status_code == 200
     assert runs.json()["data"]["pagination"]["total_count"] >= 1
 
-    monkeypatch.setenv("APP_ENV", "production")
-    get_settings.cache_clear()
-    forbidden = client.post("/api/v1/spec-automation/run", headers=auth_headers(token))
-    assert forbidden.status_code == 403
+    ok = client.post("/api/v1/spec-automation/run", headers=auth_headers(token))
+    assert ok.status_code == 200
 
     ops = build_operations_dashboard(session, owner_user_id=owner_id)
     assert ops.spec_automation is not None

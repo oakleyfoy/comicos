@@ -56,7 +56,7 @@ export function IndustryOpportunitiesPage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestIndustryOpportunities();
+      const latest = await apiClient.refreshIndustryOpportunities();
       setItems(latest.items);
       const sum = await apiClient.getIndustryOpportunitySummary();
       setSummary(sum);

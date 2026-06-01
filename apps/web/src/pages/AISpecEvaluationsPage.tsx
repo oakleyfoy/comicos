@@ -56,7 +56,7 @@ export function AISpecEvaluationsPage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestAISpecEvaluations();
+      const latest = await apiClient.refreshAISpecEvaluations();
       setItems(latest.items);
       const sum = await apiClient.getAISpecEvaluationSummary();
       setSummary(sum);

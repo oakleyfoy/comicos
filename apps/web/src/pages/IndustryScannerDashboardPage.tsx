@@ -57,13 +57,14 @@ function SectionBlock({
 export function IndustryScannerDashboardPage(): JSX.Element {
   const [dash, setDash] = useState<IndustryScannerDashboardRead | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const body = await apiClient.getIndustryScannerDashboard();
+      const body = await apiClient.getIndustryScannerDashboard(false);
       setDash(body);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load industry scanner dashboard.");
@@ -71,6 +72,19 @@ export function IndustryScannerDashboardPage(): JSX.Element {
       setLoading(false);
     }
   }, []);
+
+  async function onRefreshScores() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const body = await apiClient.getIndustryScannerDashboard(true);
+      setDash(body);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Unable to refresh industry scanner dashboard.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -104,6 +118,16 @@ export function IndustryScannerDashboardPage(): JSX.Element {
         eyebrow="P59-05"
         title="Industry Scanner Dashboard"
         description="Best industry-wide release opportunities from supported publishers — aggregated from scan, signal, and opportunity scoring (not an AI Top 20)."
+        actions={
+          <button
+            type="button"
+            disabled={refreshing || loading}
+            onClick={() => void onRefreshScores()}
+            className="rounded-full border border-cyan-400/40 bg-cyan-400/15 px-4 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/25 disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing…" : "Refresh scores"}
+          </button>
+        }
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 

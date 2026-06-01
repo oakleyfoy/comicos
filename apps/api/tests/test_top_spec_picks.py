@@ -44,7 +44,7 @@ def test_top_spec_picks_api_and_summary(client: TestClient, session: Session) ->
     _import_lunar_issue(session, owner_user_id=owner_id)
     run_industry_scanner_refresh(session, owner_user_id=owner_id, trigger_type="MANUAL")
 
-    latest = client.get("/api/v1/top-spec-picks/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/top-spec-picks/run", headers=auth_headers(token))
     assert latest.status_code == 200
     payload = latest.json()["data"]
     assert len(payload["items"]) >= 1
@@ -63,3 +63,4 @@ def test_top_spec_picks_api_and_summary(client: TestClient, session: Session) ->
     repeat = client.get("/api/v1/top-spec-picks/latest", headers=auth_headers(token))
     assert repeat.status_code == 200
     assert repeat.json()["data"]["picks_skipped"] is True
+    assert repeat.json()["data"]["picks_computed"] == 0

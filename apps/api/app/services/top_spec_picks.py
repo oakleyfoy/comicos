@@ -47,6 +47,11 @@ def list_top_spec_picks(
     return [_to_read(row) for row in page], total
 
 
+def get_latest_top_spec_picks_read(session: Session, *, owner_user_id: int, limit: int = 20) -> TopSpecPickLatestRead:
+    items, _ = list_top_spec_picks(session, owner_user_id=owner_user_id, limit=limit, offset=0)
+    return TopSpecPickLatestRead(picks_computed=0, picks_skipped=True, items=items)
+
+
 def refresh_latest_top_spec_picks(session: Session, *, owner_user_id: int, limit: int = 20) -> TopSpecPickLatestRead:
     result = generate_top_spec_picks(session, owner_user_id=owner_user_id, limit=limit)
     items, _ = list_top_spec_picks(session, owner_user_id=owner_user_id, limit=limit, offset=0)

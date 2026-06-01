@@ -44,7 +44,7 @@ def test_ai_spec_evaluations_api_and_summary(client: TestClient, session: Sessio
     _import_lunar_issue(session, owner_user_id=owner_id)
     run_industry_scanner_refresh(session, owner_user_id=owner_id, trigger_type="MANUAL")
 
-    latest = client.get("/api/v1/ai-spec-evaluations/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/ai-spec-evaluations/refresh", headers=auth_headers(token))
     assert latest.status_code == 200
     payload = latest.json()["data"]
     assert payload["evaluations_computed"] + payload["evaluations_skipped"] + payload["evaluations_updated"] >= 1
@@ -63,4 +63,5 @@ def test_ai_spec_evaluations_api_and_summary(client: TestClient, session: Sessio
 
     repeat = client.get("/api/v1/ai-spec-evaluations/latest", headers=auth_headers(token))
     assert repeat.status_code == 200
-    assert repeat.json()["data"]["evaluations_skipped"] >= 1
+    assert repeat.json()["data"]["evaluations_computed"] == 0
+    assert repeat.json()["data"]["evaluations_skipped"] == 1

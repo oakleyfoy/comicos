@@ -121,7 +121,7 @@ def build_industry_scanner_dashboard(
     session: Session,
     *,
     owner_user_id: int,
-    refresh: bool = True,
+    refresh: bool = False,
 ) -> IndustryScannerDashboardRead:
     _ensure_pipeline(session, owner_user_id=owner_user_id, refresh=refresh)
     summary = build_industry_scanner_dashboard_summary(session, owner_user_id=owner_user_id, refresh=False)

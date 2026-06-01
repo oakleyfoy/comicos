@@ -41,7 +41,7 @@ def test_spec_inputs_api_and_summary(client: TestClient, session: Session) -> No
     _import_lunar_issue(session, owner_user_id=owner_id)
     run_industry_scanner_refresh(session, owner_user_id=owner_id, trigger_type="MANUAL")
 
-    latest = client.get("/api/v1/spec-inputs/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/spec-inputs/refresh", headers=auth_headers(token))
     assert latest.status_code == 200
     payload = latest.json()["data"]
     assert payload["inputs_created"] + payload["inputs_skipped"] + payload["inputs_updated"] >= 1
@@ -60,4 +60,5 @@ def test_spec_inputs_api_and_summary(client: TestClient, session: Session) -> No
 
     second = client.get("/api/v1/spec-inputs/latest", headers=auth_headers(token))
     assert second.status_code == 200
-    assert second.json()["data"]["inputs_skipped"] >= 1
+    assert second.json()["data"]["inputs_created"] == 0
+    assert second.json()["data"]["inputs_skipped"] == 1

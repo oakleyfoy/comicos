@@ -209,7 +209,7 @@ def test_industry_release_signals_api(client: TestClient, session: Session) -> N
     )
     scan_industry_releases(session, owner_user_id=owner_id)
 
-    latest = client.get("/api/v1/industry-release-signals/latest", headers=auth_headers(token))
+    latest = client.post("/api/v1/industry-release-signals/refresh", headers=auth_headers(token))
     assert latest.status_code == 200
     body = latest.json()["data"]
     assert body["scan_run_id"] is not None

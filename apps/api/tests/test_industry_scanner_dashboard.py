@@ -146,14 +146,18 @@ def test_industry_scanner_dashboard_api(client: TestClient, session: Session) ->
         title="Event Squad #1 KEY EVENT CROSSOVER",
     )
 
-    full = client.get("/api/v1/industry-scanner-dashboard", headers=auth_headers(token))
+    full = client.get("/api/v1/industry-scanner-dashboard?refresh=false", headers=auth_headers(token))
     assert full.status_code == 200
-    data = full.json()["data"]
+    assert full.json()["data"]["summary"]["releases_scanned"] == 0
+
+    primed = client.get("/api/v1/industry-scanner-dashboard?refresh=true", headers=auth_headers(token))
+    assert primed.status_code == 200
+    data = primed.json()["data"]
     assert "summary" in data
     assert "top_number_one_issues" in data
     assert "watchlist" in data
     assert data["summary"]["releases_scanned"] >= 1
 
-    summary = client.get("/api/v1/industry-scanner-dashboard/summary", headers=auth_headers(token))
+    summary = client.get("/api/v1/industry-scanner-dashboard/summary?refresh=true", headers=auth_headers(token))
     assert summary.status_code == 200
     assert summary.json()["data"]["signals_detected"] >= 1

@@ -10,6 +10,7 @@ from app.schemas.industry_opportunity import IndustryOpportunityListRead
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
 from app.services.industry_opportunities import (
     build_industry_opportunity_summary,
+    get_latest_industry_opportunities_read,
     list_industry_opportunities,
     refresh_latest_industry_opportunities,
 )
@@ -50,6 +51,16 @@ def v1_list_industry_opportunities(
 
 @industry_opportunity_v1_router.get("/industry-opportunities/latest", response_model=ScanApiV1Envelope)
 def v1_latest_industry_opportunities(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = get_latest_industry_opportunities_read(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@industry_opportunity_v1_router.post("/industry-opportunities/refresh", response_model=ScanApiV1Envelope)
+def v1_refresh_industry_opportunities(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:

@@ -64,7 +64,7 @@ export function IndustrySignalsPage(): JSX.Element {
     setMessage(null);
     setError(null);
     try {
-      const latest = await apiClient.getLatestIndustryReleaseSignals();
+      const latest = await apiClient.refreshIndustryReleaseSignals();
       setScanRunId(latest.scan_run_id);
       setMessage(`Classified ${latest.signals_classified} signal(s) for scan run ${latest.scan_run_id ?? "—"}.`);
       setItems(latest.items);

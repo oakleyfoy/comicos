@@ -10,6 +10,7 @@ from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standar
 from app.schemas.spec_baseline_score import SpecBaselineScoreListRead
 from app.services.spec_baseline_scores import (
     build_spec_baseline_summary,
+    get_latest_spec_baseline_scores_read,
     list_spec_baseline_scores,
     refresh_latest_spec_baseline_scores,
 )
@@ -44,6 +45,16 @@ def v1_list_spec_baseline_scores(
 
 @spec_baseline_scores_v1_router.get("/spec-baseline-scores/latest", response_model=ScanApiV1Envelope)
 def v1_latest_spec_baseline_scores(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = get_latest_spec_baseline_scores_read(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@spec_baseline_scores_v1_router.post("/spec-baseline-scores/refresh", response_model=ScanApiV1Envelope)
+def v1_refresh_spec_baseline_scores(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
