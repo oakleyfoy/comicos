@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
+import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
 import {
   ApiError,
   apiClient,
@@ -82,6 +83,7 @@ import {
   type GradingSpreadDashboardSummary,
   type GradingRoiDashboardSummary,
   type GradingSubmissionDashboardSummary,
+  type InventoryResponse,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
@@ -796,6 +798,51 @@ function ScanSessionMiniTable(props: {
   );
 }
 
+type DashboardPortfolioFilters = {
+  publisher: string;
+  ownershipIntelFilter: InventoryOwnershipNormalized | "";
+  valuationScopeFilter: InventoryValuationScope | "";
+  confidenceBucketFilter: MarketFmvConfidenceBucket | "";
+};
+
+function buildDashboardWidgetPromises(
+  query: InventoryQueryParams,
+  filters: DashboardPortfolioFilters,
+  includeInventoryIntel: boolean,
+): Record<string, Promise<unknown>> {
+  const portfolioValueParams = {
+    publisher: filters.publisher || undefined,
+    ownership_state: filters.ownershipIntelFilter || undefined,
+    valuation_scope: filters.valuationScopeFilter || undefined,
+    confidence_bucket: filters.confidenceBucketFilter || undefined,
+  };
+
+  const widgets: Record<string, Promise<unknown>> = {
+    inventorySummary: apiClient.getInventorySummary(),
+    inventoryList: apiClient.getInventory(query),
+    portfolioPerformance: apiClient.getPortfolioPerformance(),
+    portfolioValue: apiClient.getPortfolioValueSummary(portfolioValueParams),
+    inventoryRisks: apiClient.getInventoryRisksSummary(),
+    inventoryAction: apiClient.getInventoryActionCenterSummary(),
+    orderArrival: apiClient.getOrderArrivalIntelligenceSummary(),
+    collectionTimeline: apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
+    duplicateOwnership: apiClient.getDuplicateOwnershipList(),
+    runDetection: apiClient.getRunDetectionList(),
+    collectionAnalyticsSummary: apiClient.getCollectionAnalyticsSummary(),
+    collectionAnalyticsPublishers: apiClient.getCollectionAnalyticsPublishers(),
+    collectionAnalyticsQuality: apiClient.getCollectionAnalyticsQuality(),
+    scanPipeline: apiClient.getScanPipelineDashboard(),
+    physicalIntake: apiClient.getPhysicalIntakeSummary(),
+  };
+
+  if (includeInventoryIntel) {
+    widgets.inventoryIntelSummary = apiClient.getInventoryIntelligenceSummary();
+    widgets.inventoryIntelHealth = apiClient.getInventoryIntelligenceHealth();
+  }
+
+  return widgets;
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
 
@@ -834,6 +881,9 @@ export function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dashboardWidgetErrors, setDashboardWidgetErrors] = useState<
+    Partial<Record<DashboardWidgetKey, string>>
+  >({});
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkHoldStatus, setBulkHoldStatus] = useState<"hold" | "sell" | "sold">("sell");
   const [fMvDrafts, setFmvDrafts] = useState<Record<number, string>>({});
@@ -1230,6 +1280,79 @@ export function DashboardPage() {
     ],
   );
 
+  const dashboardPortfolioFilters = useMemo<DashboardPortfolioFilters>(
+    () => ({
+      publisher,
+      ownershipIntelFilter,
+      valuationScopeFilter,
+      confidenceBucketFilter,
+    }),
+    [publisher, ownershipIntelFilter, valuationScopeFilter, confidenceBucketFilter],
+  );
+
+  const applyDashboardWidgetResults = useCallback((data: Partial<Record<string, unknown>>) => {
+    if (data.inventorySummary) {
+      setSummary(data.inventorySummary as InventorySummary);
+    }
+    if (data.inventoryList) {
+      const inventoryResponse = data.inventoryList as InventoryResponse;
+      setInventory(inventoryResponse.items);
+      setTotal(inventoryResponse.total);
+      setSelectedIds((current) =>
+        current.filter((id) =>
+          inventoryResponse.items.some((item) => item.inventory_copy_id === id),
+        ),
+      );
+    }
+    if (data.portfolioPerformance) {
+      setPerformance(data.portfolioPerformance as PortfolioPerformance);
+    }
+    if (data.portfolioValue) {
+      setPortfolioValueSummary(data.portfolioValue as PortfolioValueSummaryResponse);
+    }
+    if (data.inventoryIntelSummary) {
+      setInventoryIntelSummary(data.inventoryIntelSummary as InventoryIntelligenceRollupSummary);
+    }
+    if (data.inventoryIntelHealth) {
+      setInventoryIntelHealth(data.inventoryIntelHealth as InventoryIntelligenceHealthRollup);
+    }
+    if (data.inventoryRisks) {
+      setInventoryRiskSummary(data.inventoryRisks as InventoryRiskSummary);
+    }
+    if (data.inventoryAction) {
+      setInventoryActionSummary(data.inventoryAction as InventoryActionCenterSummary);
+    }
+    if (data.orderArrival) {
+      setOrderArrivalSummary(data.orderArrival as OrderArrivalIntelSummary);
+    }
+    if (data.collectionTimeline) {
+      setCollectionHistoricalTimeline(data.collectionTimeline as CollectionHistoricalTimelineEventsResponse);
+    }
+    if (data.duplicateOwnership) {
+      setDuplicateOwnershipReport(data.duplicateOwnership as DuplicateOwnershipListResponse);
+    }
+    if (data.runDetection) {
+      setRunDetectionReport(data.runDetection as RunDetectionListResponse);
+    }
+    if (data.collectionAnalyticsSummary) {
+      setCollectionAnalyticsSummary(data.collectionAnalyticsSummary as CollectionAnalyticsSummary);
+    }
+    if (data.collectionAnalyticsPublishers) {
+      setCollectionAnalyticsPublishers(
+        data.collectionAnalyticsPublishers as CollectionPublisherAnalyticsResponse,
+      );
+    }
+    if (data.collectionAnalyticsQuality) {
+      setCollectionAnalyticsQuality(data.collectionAnalyticsQuality as CollectionQualityAnalyticsResponse);
+    }
+    if (data.scanPipeline) {
+      setScanPipelineDash(data.scanPipeline as ScanPipelineDashboardResponse);
+    }
+    if (data.physicalIntake) {
+      setPhysicalIntakeSummary(data.physicalIntake as PhysicalIntakeSummaryResponse);
+    }
+  }, []);
+
   const exportChipClass =
     "rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/35 hover:bg-white/5";
 
@@ -1245,63 +1368,11 @@ export function DashboardPage() {
   }
 
   async function loadDashboardData(query: InventoryQueryParams = inventoryQuery): Promise<void> {
-    const [
-      summaryResponse,
-      performanceResponse,
-      portfolioValueSummaryResponse,
-      inventoryResponse,
-      riskSummaryResponse,
-      workflowSummaryResponse,
-      orderArrivalSummaryResponse,
-      historicalTimelineResp,
-      dupOwnershipInsight,
-      runDetectionInsight,
-      caSummary,
-      caPublishers,
-      caQuality,
-      scanPipelineDashboard,
-      physicalIntakeSummaryResponse,
-    ] = await Promise.all([
-      apiClient.getInventorySummary(),
-      apiClient.getPortfolioPerformance(),
-      apiClient.getPortfolioValueSummary({
-        publisher: publisher || undefined,
-        ownership_state: ownershipIntelFilter || undefined,
-        valuation_scope: valuationScopeFilter || undefined,
-        confidence_bucket: confidenceBucketFilter || undefined,
-      }),
-      apiClient.getInventory(query),
-      apiClient.getInventoryRisksSummary(),
-      apiClient.getInventoryActionCenterSummary(),
-      apiClient.getOrderArrivalIntelligenceSummary(),
-      apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
-      apiClient.getDuplicateOwnershipList(),
-      apiClient.getRunDetectionList(),
-      apiClient.getCollectionAnalyticsSummary(),
-      apiClient.getCollectionAnalyticsPublishers(),
-      apiClient.getCollectionAnalyticsQuality(),
-      apiClient.getScanPipelineDashboard(),
-      apiClient.getPhysicalIntakeSummary(),
-    ]);
-    setSummary(summaryResponse);
-    setPerformance(performanceResponse);
-    setPortfolioValueSummary(portfolioValueSummaryResponse);
-    setInventory(inventoryResponse.items);
-    setTotal(inventoryResponse.total);
-    setInventoryRiskSummary(riskSummaryResponse);
-    setInventoryActionSummary(workflowSummaryResponse);
-    setOrderArrivalSummary(orderArrivalSummaryResponse);
-    setCollectionHistoricalTimeline(historicalTimelineResp);
-    setDuplicateOwnershipReport(dupOwnershipInsight);
-    setRunDetectionReport(runDetectionInsight);
-    setCollectionAnalyticsSummary(caSummary);
-    setCollectionAnalyticsPublishers(caPublishers);
-    setCollectionAnalyticsQuality(caQuality);
-    setScanPipelineDash(scanPipelineDashboard);
-    setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
-    setSelectedIds((current) =>
-      current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
+    const { data, errors } = await settleDashboardWidgets(
+      buildDashboardWidgetPromises(query, dashboardPortfolioFilters, false),
     );
+    setDashboardWidgetErrors(errors);
+    applyDashboardWidgetResults(data);
   }
 
   useEffect(() => {
@@ -1311,85 +1382,23 @@ export function DashboardPage() {
       setIsLoading(true);
       setError(null);
 
-      try {
-        const [
-          summaryResponse,
-          performanceResponse,
-          portfolioValueSummaryResponse,
-          inventoryResponse,
-          intelSummary,
-          intelHealth,
-          riskSummary,
-          workflowSummary,
-          orderArrivalSummaryResponse,
-          historicalTimelineResp,
-          dupOwnership,
-          runDetection,
-          caSummary,
-          caPublishers,
-          caQuality,
-          scanPipelineDashboard,
-          physicalIntakeSummaryResponse,
-        ] =
-          await Promise.all([
-            apiClient.getInventorySummary(),
-            apiClient.getPortfolioPerformance(),
-            apiClient.getPortfolioValueSummary({
-              publisher: publisher || undefined,
-              ownership_state: ownershipIntelFilter || undefined,
-              valuation_scope: valuationScopeFilter || undefined,
-              confidence_bucket: confidenceBucketFilter || undefined,
-            }),
-            apiClient.getInventory(inventoryQuery),
-            apiClient.getInventoryIntelligenceSummary(),
-            apiClient.getInventoryIntelligenceHealth(),
-            apiClient.getInventoryRisksSummary(),
-            apiClient.getInventoryActionCenterSummary(),
-            apiClient.getOrderArrivalIntelligenceSummary(),
-            apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
-            apiClient.getDuplicateOwnershipList(),
-            apiClient.getRunDetectionList(),
-            apiClient.getCollectionAnalyticsSummary(),
-            apiClient.getCollectionAnalyticsPublishers(),
-            apiClient.getCollectionAnalyticsQuality(),
-            apiClient.getScanPipelineDashboard(),
-            apiClient.getPhysicalIntakeSummary(),
-          ]);
+      const { data, errors } = await settleDashboardWidgets(
+        buildDashboardWidgetPromises(inventoryQuery, dashboardPortfolioFilters, true),
+      );
 
-        if (ignore) {
-          return;
-        }
-
-        setSummary(summaryResponse);
-        setPerformance(performanceResponse);
-        setPortfolioValueSummary(portfolioValueSummaryResponse);
-        setInventory(inventoryResponse.items);
-        setTotal(inventoryResponse.total);
-        setInventoryIntelSummary(intelSummary);
-        setInventoryIntelHealth(intelHealth);
-        setInventoryRiskSummary(riskSummary);
-        setInventoryActionSummary(workflowSummary);
-        setOrderArrivalSummary(orderArrivalSummaryResponse);
-        setCollectionHistoricalTimeline(historicalTimelineResp);
-        setDuplicateOwnershipReport(dupOwnership);
-        setRunDetectionReport(runDetection);
-        setCollectionAnalyticsSummary(caSummary);
-        setCollectionAnalyticsPublishers(caPublishers);
-        setCollectionAnalyticsQuality(caQuality);
-        setScanPipelineDash(scanPipelineDashboard);
-        setPhysicalIntakeSummary(physicalIntakeSummaryResponse);
-        setSelectedIds((current) =>
-          current.filter((id) => inventoryResponse.items.some((item) => item.inventory_copy_id === id)),
-        );
-      } catch (loadError) {
-        if (!ignore) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load dashboard.");
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
+      if (ignore) {
+        return;
       }
+
+      setDashboardWidgetErrors(errors);
+      applyDashboardWidgetResults(data);
+
+      const hasInventoryData = Boolean(data.inventorySummary || data.inventoryList);
+      if (!hasInventoryData && Object.keys(data).length === 0) {
+        setError("Unable to load dashboard.");
+      }
+
+      setIsLoading(false);
     }
 
     void fetchData();
@@ -1397,7 +1406,7 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [inventoryQuery]);
+  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, inventoryQuery]);
 
   useEffect(() => {
     let ignore = false;
@@ -2984,6 +2993,28 @@ export function DashboardPage() {
           </>
         }
       />
+
+      {dashboardWidgetErrors.inventorySummary ||
+      dashboardWidgetErrors.portfolioPerformance ||
+      dashboardWidgetErrors.portfolioValue ? (
+        <div className="mt-6 space-y-2">
+          {dashboardWidgetErrors.inventorySummary ? (
+            <StatusBanner tone="error">
+              Inventory summary: {dashboardWidgetErrors.inventorySummary}
+            </StatusBanner>
+          ) : null}
+          {dashboardWidgetErrors.portfolioPerformance ? (
+            <StatusBanner tone="error">
+              Portfolio performance: {dashboardWidgetErrors.portfolioPerformance}
+            </StatusBanner>
+          ) : null}
+          {dashboardWidgetErrors.portfolioValue ? (
+            <StatusBanner tone="error">
+              Portfolio value: {dashboardWidgetErrors.portfolioValue}
+            </StatusBanner>
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
@@ -6240,7 +6271,14 @@ export function DashboardPage() {
       ) : null}
 
       {((inventoryIntelSummary && inventoryIntelHealth) ||
-        (collectionAnalyticsSummary && collectionAnalyticsQuality)) ? (
+        collectionAnalyticsSummary ||
+        collectionAnalyticsQuality ||
+        collectionAnalyticsPublishers ||
+        dashboardWidgetErrors.inventoryIntelSummary ||
+        dashboardWidgetErrors.inventoryIntelHealth ||
+        dashboardWidgetErrors.collectionAnalyticsSummary ||
+        dashboardWidgetErrors.collectionAnalyticsQuality ||
+        dashboardWidgetErrors.collectionAnalyticsPublishers) ? (
         <details className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
           <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/45 p-4">
             <div>
@@ -6252,6 +6290,21 @@ export function DashboardPage() {
             </div>
           </summary>
           <div className="mt-8 space-y-12 border-t border-white/5 pt-8">
+            {dashboardWidgetErrors.inventoryIntelSummary ||
+            dashboardWidgetErrors.inventoryIntelHealth ? (
+              <div className="space-y-2">
+                {dashboardWidgetErrors.inventoryIntelSummary ? (
+                  <StatusBanner tone="error">
+                    Inventory intelligence summary: {dashboardWidgetErrors.inventoryIntelSummary}
+                  </StatusBanner>
+                ) : null}
+                {dashboardWidgetErrors.inventoryIntelHealth ? (
+                  <StatusBanner tone="error">
+                    Inventory intelligence health: {dashboardWidgetErrors.inventoryIntelHealth}
+                  </StatusBanner>
+                ) : null}
+              </div>
+            ) : null}
             {inventoryIntelSummary && inventoryIntelHealth ? (
               <div className="space-y-4">
                 <div>
@@ -6333,42 +6386,78 @@ export function DashboardPage() {
           </div>
               </div>
             ) : null}
-            {collectionAnalyticsSummary && collectionAnalyticsQuality ? (
+            {dashboardWidgetErrors.collectionAnalyticsSummary ||
+            dashboardWidgetErrors.collectionAnalyticsQuality ||
+            dashboardWidgetErrors.collectionAnalyticsPublishers ? (
+              <div className="space-y-2">
+                {dashboardWidgetErrors.collectionAnalyticsSummary ? (
+                  <StatusBanner tone="error">
+                    Collection analytics summary: {dashboardWidgetErrors.collectionAnalyticsSummary}
+                  </StatusBanner>
+                ) : null}
+                {dashboardWidgetErrors.collectionAnalyticsQuality ? (
+                  <StatusBanner tone="error">
+                    Collection quality analytics: {dashboardWidgetErrors.collectionAnalyticsQuality}
+                  </StatusBanner>
+                ) : null}
+                {dashboardWidgetErrors.collectionAnalyticsPublishers ? (
+                  <StatusBanner tone="error">
+                    Collection publisher analytics: {dashboardWidgetErrors.collectionAnalyticsPublishers}
+                  </StatusBanner>
+                ) : null}
+              </div>
+            ) : null}
+            {collectionAnalyticsSummary || collectionAnalyticsQuality ? (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-semibold text-white">Publisher & quality rollups</h3>
-                  <p className="mt-1 text-sm text-slate-400">
-                    As-of anchor:{" "}
-                    <span className="font-semibold text-slate-200">
-                      {collectionAnalyticsSummary.generated_as_of_date}
-                    </span>
-                  </p>
+                  {collectionAnalyticsSummary ? (
+                    <p className="mt-1 text-sm text-slate-400">
+                      As-of anchor:{" "}
+                      <span className="font-semibold text-slate-200">
+                        {collectionAnalyticsSummary.generated_as_of_date}
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preorder exposure</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.preorder_copies}</p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Missing calendar cues: {collectionAnalyticsSummary.preorder_missing_calendar_copies}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">In hand copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.in_hand_copies}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Total tracked: {collectionAnalyticsSummary.total_copies}</p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Unresolved review workload</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.unresolved_review_copies}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Distinct copies in needs_review health bucket.</p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Canonical-linked copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.canonical_linked_copies}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Unscanned primaries: {collectionAnalyticsSummary.unscanned_primary_copies}</p>
-            </article>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                {collectionAnalyticsSummary ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preorder exposure</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.preorder_copies}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Missing calendar cues: {collectionAnalyticsSummary.preorder_missing_calendar_copies}
+                      </p>
+                    </article>
+                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">In hand copies</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.in_hand_copies}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Total tracked: {collectionAnalyticsSummary.total_copies}
+                      </p>
+                    </article>
+                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                        Unresolved review workload
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-white">
+                        {collectionAnalyticsSummary.unresolved_review_copies}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">Distinct copies in needs_review health bucket.</p>
+                    </article>
+                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Canonical-linked copies</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">
+                        {collectionAnalyticsSummary.canonical_linked_copies}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Unscanned primaries: {collectionAnalyticsSummary.unscanned_primary_copies}
+                      </p>
+                    </article>
+                  </div>
+                ) : null}
+                {collectionAnalyticsQuality ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <article className="rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-200">OCR complete</p>
               <p className="mt-2 text-xl font-semibold text-white">
@@ -6441,7 +6530,8 @@ export function DashboardPage() {
                 </span>
               </p>
             </article>
-          </div>
+                  </div>
+                ) : null}
           {collectionAnalyticsPublishers && collectionAnalyticsPublishers.publishers.length ? (
             <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
               <h3 className="text-sm font-semibold text-white">Publisher breakdown</h3>
@@ -6648,26 +6738,32 @@ export function DashboardPage() {
 
       {!hasPerformanceData ? (
         <div className="mt-6">
-          <EmptyState
-            title="No performance data yet"
-            description="Performance leaders appear after you create orders and start assigning FMV values to inventory copies."
-            action={
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Link
-                  to="/orders/import"
-                  className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
-                >
-                  Paste Receipt/Text
-                </Link>
-                <Link
-                  to="/orders/new"
-                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Add Your First Order
-                </Link>
-              </div>
-            }
-          />
+          {dashboardWidgetErrors.portfolioPerformance ? (
+            <StatusBanner tone="error">
+              Portfolio performance: {dashboardWidgetErrors.portfolioPerformance}
+            </StatusBanner>
+          ) : (
+            <EmptyState
+              title="No performance data yet"
+              description="Performance leaders appear after you create orders and start assigning FMV values to inventory copies."
+              action={
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    to="/orders/import"
+                    className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                  >
+                    Paste Receipt/Text
+                  </Link>
+                  <Link
+                    to="/orders/new"
+                    className="rounded-2xl bg-cyan-400 px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    Add Your First Order
+                  </Link>
+                </div>
+              }
+            />
+          )}
         </div>
       ) : (
         <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-4 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
@@ -7145,6 +7241,11 @@ export function DashboardPage() {
 
           {!inventory.length ? (
             <div className="p-5">
+              {dashboardWidgetErrors.inventoryList ? (
+                <StatusBanner tone="error">
+                  Inventory list: {dashboardWidgetErrors.inventoryList}
+                </StatusBanner>
+              ) : (
               <EmptyState
                 title="No inventory yet"
                 description="Create your first order to populate the dashboard with inventory copies, valuation controls, and detail pages."
@@ -7165,6 +7266,7 @@ export function DashboardPage() {
                   </div>
                 }
               />
+              )}
             </div>
           ) : (
             <>
