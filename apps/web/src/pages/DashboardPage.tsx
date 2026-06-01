@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
+import { formatCurrencyAmount, formatUsdCurrency, normalizeCurrencyCode } from "../lib/currencyFormat";
 import {
   ApiError,
   apiClient,
@@ -128,24 +129,8 @@ const sortOptions: Array<{ label: string; value: SortBy }> = [
   { label: "Gain / Loss", value: "gain_loss" },
 ];
 
-function formatCurrency(value: string | null): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-}
-
-function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode || "USD",
-  }).format(amount);
-}
-
 function formatMaybeCurrency(value?: string | null): string {
-  return value ? formatCurrency(value) : "—";
+  return value ? formatUsdCurrency(value) : "—";
 }
 
 function formatDate(value: string): string {
@@ -2850,40 +2835,40 @@ export function DashboardPage() {
     { label: "Ordered", value: summary?.ordered_not_received_copies ?? 0 },
     { label: "Preordered", value: summary?.preordered_copies ?? 0 },
     { label: "Cancelled", value: summary?.cancelled_copies ?? 0 },
-    { label: "Cost Basis", value: formatCurrency(summary?.total_cost_basis ?? "0") },
-    { label: "Current FMV", value: formatCurrency(summary?.total_current_fmv ?? "0") },
+    { label: "Cost Basis", value: formatUsdCurrency(summary?.total_cost_basis ?? "0") },
+    { label: "Current FMV", value: formatUsdCurrency(summary?.total_current_fmv ?? "0") },
     {
       label: "Active Market Value",
-      value: formatCurrencyWithCode(portfolioValue?.total_active_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+      value: formatCurrencyAmount(portfolioValue?.total_active_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
     },
     {
       label: "Raw Market Value",
-      value: formatCurrencyWithCode(portfolioValue?.raw_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+      value: formatCurrencyAmount(portfolioValue?.raw_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
     },
     {
       label: "Graded Market Value",
-      value: formatCurrencyWithCode(portfolioValue?.graded_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+      value: formatCurrencyAmount(portfolioValue?.graded_market_value ?? "0", portfolioValue?.currency_code ?? "USD"),
     },
     {
       label: "Low-Confidence Value",
-      value: formatCurrencyWithCode(portfolioValue?.low_confidence_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+      value: formatCurrencyAmount(portfolioValue?.low_confidence_value ?? "0", portfolioValue?.currency_code ?? "USD"),
     },
     {
       label: "Preorder Informational",
-      value: formatCurrencyWithCode(
+      value: formatCurrencyAmount(
         portfolioValue?.preorder_informational_value ?? "0",
         portfolioValue?.currency_code ?? "USD",
       ),
     },
     {
       label: "Stale Value",
-      value: formatCurrencyWithCode(portfolioValue?.stale_value ?? "0", portfolioValue?.currency_code ?? "USD"),
+      value: formatCurrencyAmount(portfolioValue?.stale_value ?? "0", portfolioValue?.currency_code ?? "USD"),
     },
     { label: "No Market Data", value: portfolioValue?.no_market_data_count ?? 0 },
     { label: "Cancelled Excluded", value: portfolioValue?.cancelled_excluded_count ?? 0 },
     {
       label: "Unrealized P/L",
-      value: formatCurrency(summary?.total_unrealized_gain_loss ?? "0"),
+      value: formatUsdCurrency(summary?.total_unrealized_gain_loss ?? "0"),
     },
   ];
 
@@ -3029,7 +3014,7 @@ export function DashboardPage() {
       </section>
       {portfolioValue ? (
         <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-300">
-          Showing {portfolioValue.currency_code} market value.{" "}
+          Showing {normalizeCurrencyCode(portfolioValue.currency_code)} market value.{" "}
           {portfolioHasMultipleCurrencies ? "Multiple currencies are kept separate." : "Single-currency summary."}{" "}
           Low-confidence and stale values are surfaced in the cards above without changing acquisition data.
         </div>
@@ -3655,7 +3640,7 @@ export function DashboardPage() {
                             } />
                             <StatCard
                               label="Gross / Net 30d"
-                              value={snap ? `${formatCurrency(snap.gross_sales_30d)} / ${formatCurrency(snap.net_sales_30d)}` : "—"}
+                              value={snap ? `${formatUsdCurrency(snap.gross_sales_30d)} / ${formatUsdCurrency(snap.net_sales_30d)}` : "—"}
                             />
                           </div>
                           <p className="mt-2 text-[10px] text-slate-500">
@@ -3776,9 +3761,9 @@ export function DashboardPage() {
                               <StatusBanner tone="error">{salesLedgerSummaryError}</StatusBanner>
                             ) : salesLedgerSummary ? (
                               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                <StatCard label="Gross 30d" value={snap ? formatCurrency(snap.gross_sales_30d) : formatCurrency(salesLedgerSummary.gross_sales_total)} />
-                                <StatCard label="Net 30d" value={snap ? formatCurrency(snap.net_sales_30d) : formatCurrency(salesLedgerSummary.net_proceeds_total)} />
-                                <StatCard label="Realized profit 30d" value={snap ? formatCurrency(snap.realized_profit_30d) : formatCurrency(salesLedgerSummary.realized_profit_total)} />
+                                <StatCard label="Gross 30d" value={snap ? formatUsdCurrency(snap.gross_sales_30d) : formatUsdCurrency(salesLedgerSummary.gross_sales_total)} />
+                                <StatCard label="Net 30d" value={snap ? formatUsdCurrency(snap.net_sales_30d) : formatUsdCurrency(salesLedgerSummary.net_proceeds_total)} />
+                                <StatCard label="Realized profit 30d" value={snap ? formatUsdCurrency(snap.realized_profit_30d) : formatUsdCurrency(salesLedgerSummary.realized_profit_total)} />
                                 <StatCard label="Recent recorded rows" value={String(salesLedgerSummary.recent_sales.length)} />
                               </div>
                             ) : (
@@ -4021,7 +4006,7 @@ export function DashboardPage() {
                     label="Redundant tail capital"
                     value={
                       dupIntelSummary.redundant_capital_amount
-                        ? formatCurrency(dupIntelSummary.redundant_capital_amount)
+                        ? formatUsdCurrency(dupIntelSummary.redundant_capital_amount)
                         : "—"
                     }
                   />
@@ -4937,11 +4922,11 @@ export function DashboardPage() {
                 <StatCard label="WATCH" value={String(portfolioRecommendationSummary.watchCount)} />
                 <StatCard
                   label="Estimated capital release"
-                  value={formatCurrency(String(portfolioRecommendationSummary.estimatedCapitalRelease))}
+                  value={formatUsdCurrency(String(portfolioRecommendationSummary.estimatedCapitalRelease))}
                 />
                 <StatCard
                   label="Efficiency opportunities"
-                  value={formatCurrency(String(portfolioRecommendationSummary.estimatedPortfolioEfficiencyGain))}
+                  value={formatUsdCurrency(String(portfolioRecommendationSummary.estimatedPortfolioEfficiencyGain))}
                 />
               </div>
             ) : (
@@ -5470,9 +5455,9 @@ export function DashboardPage() {
                 <>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <StatCard label="Recorded sales" value={String(salesLedgerSummary.completed_sale_count)} />
-                    <StatCard label="Gross sales" value={formatCurrency(salesLedgerSummary.gross_sales_total)} />
-                    <StatCard label="Net proceeds" value={formatCurrency(salesLedgerSummary.net_proceeds_total)} />
-                    <StatCard label="Realized profit" value={formatCurrency(salesLedgerSummary.realized_profit_total)} />
+                    <StatCard label="Gross sales" value={formatUsdCurrency(salesLedgerSummary.gross_sales_total)} />
+                    <StatCard label="Net proceeds" value={formatUsdCurrency(salesLedgerSummary.net_proceeds_total)} />
+                    <StatCard label="Realized profit" value={formatUsdCurrency(salesLedgerSummary.realized_profit_total)} />
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {salesLedgerSummary.sales_count_by_channel.map((row) => (
@@ -5511,9 +5496,9 @@ export function DashboardPage() {
                               <td className="p-3 font-mono text-[11px] text-slate-300">#{sale.id}</td>
                               <td className="p-3 text-slate-200">{sale.channel.replace(/_/g, " ")}</td>
                               <td className="p-3 text-slate-200">{sale.status}</td>
-                              <td className="p-3 text-slate-300">{formatCurrency(sale.gross_sale_amount)}</td>
-                              <td className="p-3 text-slate-300">{formatCurrency(sale.net_proceeds_amount)}</td>
-                              <td className="p-3 text-slate-300">{formatCurrency(sale.realized_profit_amount)}</td>
+                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.gross_sale_amount)}</td>
+                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.net_proceeds_amount)}</td>
+                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.realized_profit_amount)}</td>
                               <td className="p-3 text-slate-400">{formatDate(sale.sale_date)}</td>
                               <td className="p-3 text-slate-400">{sale.listing_id ? `#${sale.listing_id}` : "—"}</td>
                             </tr>
@@ -6815,7 +6800,7 @@ export function DashboardPage() {
                                 : gainLossClass(section.valueFor(item))
                             }`}
                           >
-                            {formatCurrency(section.valueFor(item))}
+                            {formatUsdCurrency(section.valueFor(item))}
                           </p>
                         </div>
                       </div>
@@ -7334,12 +7319,12 @@ export function DashboardPage() {
                     </td>
                     <td className="px-4 py-3.5">{item.retailer}</td>
                     <td className="px-4 py-3.5">{formatDate(item.order_date)}</td>
-                    <td className="px-4 py-3.5">{formatCurrency(item.acquisition_cost)}</td>
+                    <td className="px-4 py-3.5">{formatUsdCurrency(item.acquisition_cost)}</td>
                     <td className="px-4 py-3.5">
                       <div className="space-y-1">
                         <p className="font-medium text-white">
                           {item.current_market_fmv
-                            ? formatCurrencyWithCode(item.current_market_fmv, item.fmv_currency_code ?? "USD")
+                            ? formatCurrencyAmount(item.current_market_fmv, item.fmv_currency_code ?? "USD")
                             : "—"}
                         </p>
                         {item.fmv_stale_data ? (
@@ -7397,7 +7382,7 @@ export function DashboardPage() {
                       </div>
                     </td>
                     <td className={`px-4 py-3.5 ${gainLossClass(item.gain_loss)}`}>
-                      {formatCurrency(item.gain_loss)}
+                      {formatUsdCurrency(item.gain_loss)}
                     </td>
                     <td className="px-4 py-3.5">
                       <select
@@ -7552,11 +7537,11 @@ export function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-slate-500">Acquisition</p>
-                    <p>{formatCurrency(item.acquisition_cost)}</p>
+                    <p>{formatUsdCurrency(item.acquisition_cost)}</p>
                   </div>
                   <div>
                     <p className="text-slate-500">Gain / Loss</p>
-                    <p className={gainLossClass(item.gain_loss)}>{formatCurrency(item.gain_loss)}</p>
+                    <p className={gainLossClass(item.gain_loss)}>{formatUsdCurrency(item.gain_loss)}</p>
                   </div>
                   <div>
                     <p className="text-slate-500">Current FMV</p>

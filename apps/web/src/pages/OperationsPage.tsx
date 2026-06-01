@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { formatCurrencyAmount as formatCurrencyWithCode, formatUsdCurrency as formatCurrency } from "../lib/currencyFormat";
 import {
   ApiError,
   apiClient,
@@ -307,22 +308,6 @@ function formatDate(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
-}
-
-function formatCurrency(value: string | null): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-}
-
-function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode || "USD",
-  }).format(amount);
 }
 
 function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_status"]): string {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { formatCurrencyAmount as formatCurrencyWithCode, formatUsdCurrency as formatCurrency } from "../lib/currencyFormat";
 import {
   ApiError,
   apiClient,
@@ -607,22 +608,6 @@ function summarizeRelationshipConflictEvidence(evidence: Record<string, unknown>
   return parts.join(" · ") || "deterministic conflict evidence recorded";
 }
 
-
-function formatCurrency(value: string | null): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-}
-
-function formatCurrencyWithCode(value: string | null, currencyCode: string): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode || "USD",
-  }).format(amount);
-}
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
