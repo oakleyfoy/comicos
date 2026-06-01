@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "../../api/client";
+import { ApiError } from "../../api/apiError";
 import { formatDashboardWidgetError, settleDashboardWidgets } from "../dashboardPartialLoad";
 
 describe("settleDashboardWidgets", () => {
@@ -25,6 +25,20 @@ describe("settleDashboardWidgets", () => {
       "[DashboardPage] Failed to load dashboard widget: portfolioPerformance",
       expect.any(ApiError),
     );
+
+    consoleSpy.mockRestore();
+  });
+
+  it("records 401 widget failures without rejecting the batch", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { data, errors } = await settleDashboardWidgets({
+      inventorySummary: Promise.resolve({ total_copies: 5 }),
+      scanPipeline: Promise.reject(new ApiError("Authentication required", 401)),
+    });
+
+    expect(data.inventorySummary).toEqual({ total_copies: 5 });
+    expect(errors.scanPipeline).toBe("Authentication required");
 
     consoleSpy.mockRestore();
   });

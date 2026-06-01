@@ -1,3 +1,6 @@
+import { handleApi401Response } from "../lib/auth401Policy";
+import { ApiError } from "./apiError";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const MARKET_API_V1_PREFIX = "/api/v1/market";
 const SCAN_API_V1_PREFIX = "/api/v1";
@@ -6562,15 +6565,6 @@ export interface OrderQueryParams {
   sort_dir?: "asc" | "desc";
 }
 
-class ApiError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
-
 function parseStructuredApiError(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const rec = data as Record<string, unknown>;
@@ -6596,6 +6590,21 @@ export function clearStoredToken(): void {
   localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
 }
 
+function redirectToLoginIfNeeded(): void {
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
+async function rejectUnauthorized(path: string, response: Response): Promise<never> {
+  return handleApi401Response(path, response, {
+    clearStoredToken,
+    redirectToLogin: redirectToLoginIfNeeded,
+    parseStructuredApiError,
+    warn: console.warn.bind(console),
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(init?.headers);
@@ -6615,25 +6624,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 401) {
-    const isCredentialExchange =
-      path === "/auth/login" || path === "/auth/register" || path.startsWith("/auth/login?");
-
-    if (isCredentialExchange) {
-      let message = "Incorrect email or password";
-      try {
-        const data = (await response.json()) as unknown;
-        message = parseStructuredApiError(data) ?? message;
-      } catch {
-        // Ignore invalid error payloads.
-      }
-      throw new ApiError(message, 401);
-    }
-
-    clearStoredToken();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-    throw new ApiError("Authentication required", 401);
+    await rejectUnauthorized(path, response);
   }
 
   if (!response.ok) {
@@ -6692,11 +6683,7 @@ async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
   });
 
   if (response.status === 401) {
-    clearStoredToken();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-    throw new ApiError("Authentication required", 401);
+    await rejectUnauthorized(path, response);
   }
 
   if (!response.ok) {
@@ -6725,11 +6712,7 @@ async function fetchBinary(path: string): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers });
 
   if (response.status === 401) {
-    clearStoredToken();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-    throw new ApiError("Authentication required", 401);
+    await rejectUnauthorized(path, response);
   }
 
   if (!response.ok) {
@@ -6775,11 +6758,7 @@ async function downloadAuthenticatedReport(pathFromRoot: string, fallbackFilenam
   const response = await fetch(`${API_BASE_URL}${pathFromRoot}`, { headers });
 
   if (response.status === 401) {
-    clearStoredToken();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-    throw new ApiError("Authentication required", 401);
+    await rejectUnauthorized(pathFromRoot, response);
   }
 
   if (!response.ok) {
@@ -18114,16 +18093,14 @@ export const apiClient = {
       headers.set("Authorization", `Bearer ${token}`);
     }
     return (async (): Promise<CoverImageRead> => {
-      const response = await fetch(
-        `${API_BASE_URL}/inventory/${inventoryCopyId}/cover-images`,
-        { method: "POST", headers, body },
-      );
+      const uploadPath = `/inventory/${inventoryCopyId}/cover-images`;
+      const response = await fetch(`${API_BASE_URL}${uploadPath}`, {
+        method: "POST",
+        headers,
+        body,
+      });
       if (response.status === 401) {
-        clearStoredToken();
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
-        }
-        throw new ApiError("Authentication required", 401);
+        await rejectUnauthorized(uploadPath, response);
       }
       if (!response.ok) {
         let message = "Request failed";
@@ -18151,17 +18128,14 @@ export const apiClient = {
       headers.set("Authorization", `Bearer ${token}`);
     }
     return (async (): Promise<CoverImageRead> => {
-      const response = await fetch(`${API_BASE_URL}/imports/${importId}/cover-images`, {
+      const uploadPath = `/imports/${importId}/cover-images`;
+      const response = await fetch(`${API_BASE_URL}${uploadPath}`, {
         method: "POST",
         headers,
         body,
       });
       if (response.status === 401) {
-        clearStoredToken();
-        if (window.location.pathname !== "/login") {
-          window.location.href = "/login";
-        }
-        throw new ApiError("Authentication required", 401);
+        await rejectUnauthorized(uploadPath, response);
       }
       if (!response.ok) {
         let message = "Request failed";

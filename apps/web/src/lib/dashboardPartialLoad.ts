@@ -1,4 +1,4 @@
-import { ApiError } from "../api/client";
+import { ApiError } from "../api/apiError";
 
 export const DASHBOARD_WIDGET_KEYS = [
   "inventorySummary",
