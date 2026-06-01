@@ -1,0 +1,13 @@
+# Render Blueprint — static frontend (comicosapp.com).
+# SPA client routes require a catch-all rewrite to index.html.
+services:
+  - type: web
+    name: comic-os-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    staticPublishPath: apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
