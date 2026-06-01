@@ -12,6 +12,7 @@ from app.services.run_continuity_agent import run_continuity_detection
 from app.services.spec_recommendation_agent import run_spec_recommendations
 from app.services.spec_scoring_agent import run_spec_scoring
 from app.services.variant_intelligence_agent import detect_variant_signals
+from app.services.industry_scanner_automation import run_industry_scanner_refresh
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ def refresh_release_intelligence_after_lunar_import(
     run_spec_scoring(session, owner_user_id=owner_user_id)
     run_spec_recommendations(session, owner_user_id=owner_user_id)
     build_future_buy_queue(session, owner_user_id=owner_user_id)
+    run_industry_scanner_refresh(session, owner_user_id=owner_user_id, trigger_type="LUNAR_REFRESH")
     return LunarReleaseRefreshSummary(
         release_signals_refreshed=True,
         watchlist_refreshed=True,

@@ -146,6 +146,11 @@ def build_operations_dashboard(session: Session, *, owner_user_id: int) -> Opera
     from app.services.exit_certification import build_exit_certification_ops_panel
     from app.services.final_platform_certification import build_final_platform_certification_ops_panel
     from app.services.production_readiness_validation import build_production_readiness_ops_panel
+    from app.services.future_release_certification import build_future_release_certification_ops_panel
+    from app.services.industry_scanner_automation import build_industry_scanner_automation_ops_panel
+    from app.services.industry_scanner_certification import build_industry_scanner_certification_ops_panel
+    from app.services.spec_automation import build_spec_automation_ops_panel
+    from app.services.ai_spec_certification import build_ai_spec_certification_ops_panel
 
     summary = build_operations_summary(session, owner_user_id=owner_user_id)
     health_checks = list_health_checks_for_owner(session, owner_user_id=owner_user_id, limit=20, offset=0)
@@ -160,6 +165,11 @@ def build_operations_dashboard(session: Session, *, owner_user_id: int) -> Opera
     exit_certification = build_exit_certification_ops_panel(session, owner_user_id=owner_user_id)
     final_platform_certification = build_final_platform_certification_ops_panel(session, owner_user_id=owner_user_id)
     production_readiness = build_production_readiness_ops_panel(session, owner_user_id=owner_user_id)
+    future_release_certification = build_future_release_certification_ops_panel(session, owner_user_id=owner_user_id)
+    industry_scanner_automation = build_industry_scanner_automation_ops_panel(session, owner_user_id=owner_user_id)
+    industry_scanner_certification = build_industry_scanner_certification_ops_panel(session, owner_user_id=owner_user_id)
+    spec_automation = build_spec_automation_ops_panel(session, owner_user_id=owner_user_id)
+    ai_spec_certification = build_ai_spec_certification_ops_panel(session, owner_user_id=owner_user_id)
 
     # Latest subsystem health only
     latest: dict[str, PlatformHealthCheckRead] = {}
@@ -181,4 +191,9 @@ def build_operations_dashboard(session: Session, *, owner_user_id: int) -> Opera
         exit_certification=exit_certification,
         final_platform_certification=final_platform_certification,
         production_readiness=production_readiness,
+        future_release_certification=future_release_certification,
+        industry_scanner_automation=industry_scanner_automation,
+        industry_scanner_certification=industry_scanner_certification,
+        spec_automation=spec_automation,
+        ai_spec_certification=ai_spec_certification,
     )

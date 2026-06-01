@@ -89,6 +89,21 @@ import { MarketUserIntelligencePage } from "./pages/MarketUserIntelligencePage";
 import { SellCandidatePage } from "./pages/SellCandidatePage";
 import { WantListPage } from "./pages/WantListPage";
 import { CollectionGapPage } from "./pages/CollectionGapPage";
+import { CollectedRunsPage } from "./pages/CollectedRunsPage";
+import { NextIssuesPage } from "./pages/NextIssuesPage";
+import { FutureReleasesPage } from "./pages/FutureReleasesPage";
+import { FutureReleaseActionsPage } from "./pages/FutureReleaseActionsPage";
+import { FutureReleaseDashboardPage } from "./pages/FutureReleaseDashboardPage";
+import { IndustryPublishersPage } from "./pages/IndustryPublishersPage";
+import { IndustryReleaseScannerPage } from "./pages/IndustryReleaseScannerPage";
+import { IndustrySignalsPage } from "./pages/IndustrySignalsPage";
+import { IndustryOpportunitiesPage } from "./pages/IndustryOpportunitiesPage";
+import { WeeklySpecDashboardPage } from "./pages/WeeklySpecDashboardPage";
+import { TopSpecPicksPage } from "./pages/TopSpecPicksPage";
+import { AISpecEvaluationsPage } from "./pages/AISpecEvaluationsPage";
+import { SpecBaselinePage } from "./pages/SpecBaselinePage";
+import { SpecInputsPage } from "./pages/SpecInputsPage";
+import { IndustryScannerDashboardPage } from "./pages/IndustryScannerDashboardPage";
 import { AcquisitionOpportunityPage } from "./pages/AcquisitionOpportunityPage";
 import { MarketplaceAcquisitionPage } from "./pages/MarketplaceAcquisitionPage";
 import { AcquisitionDashboardPage } from "./pages/AcquisitionDashboardPage";
@@ -170,6 +185,11 @@ export default function App() {
         <Route path="/purchase-variants" element={<PurchaseVariantPage />} />
         <Route path="/purchase-budget" element={<PurchaseBudgetPage />} />
         <Route path="/spec-intelligence" element={<SpecIntelligencePage />} />
+        <Route path="/spec-inputs" element={<SpecInputsPage />} />
+        <Route path="/spec-baseline" element={<SpecBaselinePage />} />
+        <Route path="/ai-spec-evaluations" element={<AISpecEvaluationsPage />} />
+        <Route path="/top-spec-picks" element={<TopSpecPicksPage />} />
+        <Route path="/weekly-spec-dashboard" element={<WeeklySpecDashboardPage />} />
         <Route path="/release-platform" element={<ReleasePlatformPage />} />
         <Route path="/release-platform-certification" element={<ReleasePlatformCertificationPage />} />
         <Route path="/intelligence" element={<IntelligencePage />} />
@@ -178,6 +198,16 @@ export default function App() {
         <Route path="/sell-candidates" element={<SellCandidatePage />} />
         <Route path="/want-lists" element={<WantListPage />} />
         <Route path="/collection-gaps" element={<CollectionGapPage />} />
+        <Route path="/collected-runs" element={<CollectedRunsPage />} />
+        <Route path="/next-issues" element={<NextIssuesPage />} />
+        <Route path="/future-releases" element={<FutureReleasesPage />} />
+        <Route path="/future-release-actions" element={<FutureReleaseActionsPage />} />
+        <Route path="/future-release-dashboard" element={<FutureReleaseDashboardPage />} />
+        <Route path="/industry-publishers" element={<IndustryPublishersPage />} />
+        <Route path="/industry-release-scanner" element={<IndustryReleaseScannerPage />} />
+        <Route path="/industry-signals" element={<IndustrySignalsPage />} />
+        <Route path="/industry-opportunities" element={<IndustryOpportunitiesPage />} />
+        <Route path="/industry-scanner-dashboard" element={<IndustryScannerDashboardPage />} />
         <Route path="/acquisition-opportunities" element={<AcquisitionOpportunityPage />} />
         <Route path="/marketplace-acquisitions" element={<MarketplaceAcquisitionPage />} />
         <Route path="/acquisition-dashboard" element={<AcquisitionDashboardPage />} />

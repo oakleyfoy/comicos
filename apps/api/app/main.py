@@ -1184,6 +1184,26 @@ from app.api.sell_candidate import attach_sell_candidate_layer
 from app.api.portfolio_certification import attach_portfolio_certification_layer
 from app.api.want_lists import attach_want_list_layer
 from app.api.collection_gaps import attach_collection_gap_layer
+from app.api.collected_runs import attach_collected_run_layer
+from app.api.next_issues import attach_next_issue_layer
+from app.api.future_release_matches import attach_future_release_match_layer
+from app.api.future_release_actions import attach_future_release_action_layer
+from app.api.future_release_dashboard import attach_future_release_dashboard_layer
+from app.api.future_release_certification import attach_future_release_certification_layer
+from app.api.industry_publishers import attach_industry_publishers_layer
+from app.api.industry_release_scan import attach_industry_release_scan_layer
+from app.api.industry_release_signals import attach_industry_release_signal_layer
+from app.api.industry_opportunities import attach_industry_opportunity_layer
+from app.api.industry_scanner_dashboard import attach_industry_scanner_dashboard_layer
+from app.api.industry_scanner_automation import attach_industry_scanner_automation_layer
+from app.api.industry_scanner_certification import attach_industry_scanner_certification_layer
+from app.api.spec_inputs import attach_spec_inputs_layer
+from app.api.spec_baseline_scores import attach_spec_baseline_scores_layer
+from app.api.ai_spec_evaluations import attach_ai_spec_evaluations_layer
+from app.api.top_spec_picks import attach_top_spec_picks_layer
+from app.api.weekly_spec_dashboard import attach_weekly_spec_dashboard_layer
+from app.api.spec_automation import attach_spec_automation_layer
+from app.api.ai_spec_certification import attach_ai_spec_certification_layer
 from app.api.acquisition_opportunities import attach_acquisition_opportunity_layer
 from app.api.marketplace_acquisitions import attach_marketplace_acquisition_layer
 from app.api.acquisition_dashboard import attach_acquisition_dashboard_layer
@@ -1317,6 +1337,26 @@ attach_sell_candidate_layer(app)
 attach_portfolio_certification_layer(app)
 attach_want_list_layer(app)
 attach_collection_gap_layer(app)
+attach_collected_run_layer(app)
+attach_next_issue_layer(app)
+attach_future_release_match_layer(app)
+attach_future_release_action_layer(app)
+attach_future_release_dashboard_layer(app)
+attach_future_release_certification_layer(app)
+attach_industry_publishers_layer(app)
+attach_industry_release_scan_layer(app)
+attach_industry_release_signal_layer(app)
+attach_industry_opportunity_layer(app)
+attach_industry_scanner_dashboard_layer(app)
+attach_industry_scanner_automation_layer(app)
+attach_industry_scanner_certification_layer(app)
+attach_spec_inputs_layer(app)
+attach_spec_baseline_scores_layer(app)
+attach_ai_spec_evaluations_layer(app)
+attach_top_spec_picks_layer(app)
+attach_weekly_spec_dashboard_layer(app)
+attach_spec_automation_layer(app)
+attach_ai_spec_certification_layer(app)
 attach_acquisition_opportunity_layer(app)
 attach_marketplace_acquisition_layer(app)
 attach_acquisition_dashboard_layer(app)

@@ -13791,6 +13791,13 @@ export interface AcquisitionCertificationOpsPanelRead {
   validation_status: string;
 }
 
+export interface FutureReleaseCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
 export interface ExitCertificationOpsPanelRead {
   last_certification_at: string | null;
   readiness_score: number;
@@ -13814,6 +13821,42 @@ export interface ProductionReadinessOpsPanelRead {
   recommendations: string;
 }
 
+export interface IndustryScannerAutomationOpsPanelRead {
+  last_run: string | null;
+  status: string;
+  trigger_type: string | null;
+  runtime_ms: number;
+  releases_scanned: number;
+  candidates_created: number;
+  signals_upserted: number;
+  scores_updated: number;
+  scan_skipped: boolean;
+}
+
+export interface IndustryScannerCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
+export interface SpecAutomationOpsPanelRead {
+  last_run: string | null;
+  status: string;
+  runtime_ms: number;
+  inputs_processed: number;
+  baseline_scores_created: number;
+  ai_evaluations_created: number;
+  top_picks_created: number;
+}
+
+export interface AISpecCertificationOpsPanelRead {
+  last_certification_at: string | null;
+  readiness_score: number;
+  certification_result: string;
+  validation_status: string;
+}
+
 export interface OperationsReliabilityDashboardRead {
   summary: OperationsReliabilitySummaryRead;
   health_checks: PlatformHealthCheckRead[];
@@ -13828,6 +13871,11 @@ export interface OperationsReliabilityDashboardRead {
   exit_certification?: ExitCertificationOpsPanelRead | null;
   final_platform_certification?: FinalPlatformCertificationOpsPanelRead | null;
   production_readiness?: ProductionReadinessOpsPanelRead | null;
+  future_release_certification?: FutureReleaseCertificationOpsPanelRead | null;
+  industry_scanner_automation?: IndustryScannerAutomationOpsPanelRead | null;
+  industry_scanner_certification?: IndustryScannerCertificationOpsPanelRead | null;
+  spec_automation?: SpecAutomationOpsPanelRead | null;
+  ai_spec_certification?: AISpecCertificationOpsPanelRead | null;
 }
 
 export interface PlatformHealthCheckRead {
@@ -14777,6 +14825,95 @@ export interface CollectionGapListRead {
   offset: number;
 }
 
+export type CollectedRunStatus = "ACTIVE" | "INACTIVE" | "COMPLETE" | "UNKNOWN";
+
+export interface CollectedRunRead {
+  id: number;
+  owner_id: number;
+  publisher: string;
+  series_name: string;
+  latest_owned_issue: string;
+  total_owned_issues: number;
+  run_status: CollectedRunStatus;
+  created_at: string;
+}
+
+export interface CollectedRunListRead {
+  items: CollectedRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CollectedRunSummaryRead {
+  total_runs: number;
+  active_runs: number;
+  inactive_runs: number;
+  complete_runs: number;
+  unknown_runs: number;
+  last_refreshed_at: string | null;
+}
+
+export interface NextIssueRead {
+  id: number;
+  owner_id: number;
+  series_name: string;
+  current_issue: string;
+  next_issue: string;
+  confidence: number;
+  rationale: string;
+  created_at: string;
+}
+
+export interface NextIssueListRead {
+  items: NextIssueRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface FutureReleaseMatchRead {
+  id: number;
+  owner_id: number;
+  series_name: string;
+  issue_number: string;
+  publisher: string;
+  foc_date: string | null;
+  release_date: string | null;
+  release_id: number;
+  variant_count: number;
+  confidence: number;
+  created_at: string;
+}
+
+export interface FutureReleaseMatchListRead {
+  items: FutureReleaseMatchRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export type FutureReleaseActionType = "PREORDER_NOW" | "PREORDER_THIS_WEEK" | "WATCH" | "MISSED_FOC";
+
+export interface FutureReleaseActionRead {
+  id: number;
+  owner_id: number;
+  series_name: string;
+  issue_number: string;
+  action_type: FutureReleaseActionType;
+  priority_score: number;
+  foc_date: string | null;
+  release_id: number | null;
+  created_at: string;
+}
+
+export interface FutureReleaseActionListRead {
+  items: FutureReleaseActionRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export type AcquisitionOpportunityType =
   | "COLLECTION_GAP"
   | "WANT_LIST_ITEM"
@@ -15556,6 +15693,383 @@ export interface WatchlistMatchRead {
   watchlist: ReleaseWatchlistRead;
   item: ReleaseWatchlistItemRead;
   release_issue: ReleaseIssueRead;
+}
+
+export interface FutureReleaseDashboardSummaryRead {
+  active_runs: number;
+  upcoming_issues: number;
+  foc_this_week: number;
+  preorder_now: number;
+  missed_foc: number;
+}
+
+export type IndustryPublisherInclusionStatus = "INCLUDED" | "EXCLUDED";
+
+export interface IndustryPublisherRead {
+  id: number;
+  owner_id: number;
+  publisher_code: string;
+  publisher_name: string;
+  scan_enabled: boolean;
+  inclusion_status: IndustryPublisherInclusionStatus;
+  scan_priority: number;
+  classification_mode: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IndustryPublisherListRead {
+  items: IndustryPublisherRead[];
+  total_items: number;
+}
+
+export interface IndustryReleaseScanRunRead {
+  id: number;
+  owner_id: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  releases_scanned: number;
+  candidates_created: number;
+  candidates_total: number;
+  publishers_included: number;
+  error_message: string;
+  created_at: string;
+}
+
+export interface IndustryReleaseScanRunListRead {
+  items: IndustryReleaseScanRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface IndustryReleaseCandidateRead {
+  id: number;
+  owner_id: number;
+  scan_run_id: number;
+  release_id: number;
+  publisher_code: string;
+  publisher_name: string;
+  series_name: string;
+  issue_number: string;
+  foc_date: string | null;
+  release_date: string | null;
+  variant_count: number;
+  monitoring_status: string;
+  created_at: string;
+}
+
+export interface IndustryReleaseCandidateListRead {
+  items: IndustryReleaseCandidateRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface IndustryReleaseSignalRead {
+  id: number;
+  owner_id: number;
+  candidate_id: number;
+  scan_run_id: number;
+  release_id: number;
+  publisher_code: string;
+  publisher_name: string;
+  series_name: string;
+  issue_number: string;
+  signal_type: string;
+  confidence_score: number;
+  rationale: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IndustryReleaseSignalListRead {
+  items: IndustryReleaseSignalRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface IndustryReleaseSignalLatestRead {
+  scan_run_id: number | null;
+  signals_classified: number;
+  items: IndustryReleaseSignalRead[];
+}
+
+export interface IndustryOpportunityRead {
+  id: number;
+  owner_id: number;
+  candidate_id: number;
+  scan_run_id: number;
+  release_id: number;
+  publisher_code: string;
+  publisher_name: string;
+  series_name: string;
+  issue_number: string;
+  opportunity_score: number;
+  confidence_score: number;
+  risk_level: string;
+  rationale: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IndustryOpportunityListRead {
+  items: IndustryOpportunityRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface IndustryOpportunityLatestRead {
+  scan_run_id: number | null;
+  scores_computed: number;
+  items: IndustryOpportunityRead[];
+}
+
+export interface IndustryOpportunitySummaryRead {
+  scan_run_id: number | null;
+  total_opportunities: number;
+  average_opportunity_score: number;
+  high_opportunity_count: number;
+  low_risk_count: number;
+  medium_risk_count: number;
+  high_risk_count: number;
+}
+
+export interface SpecInputRead {
+  id: number;
+  owner_id: number;
+  release_id: number | null;
+  industry_candidate_id: number | null;
+  future_release_match_id: number | null;
+  title: string;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  foc_date: string | null;
+  release_date: string | null;
+  source_systems: string[];
+  signal_summary: string;
+  created_at: string;
+}
+
+export interface SpecInputListRead {
+  items: SpecInputRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SpecInputLatestRead {
+  items: SpecInputRead[];
+  inputs_created: number;
+  inputs_skipped: number;
+  inputs_updated: number;
+}
+
+export interface SpecInputSummaryRead {
+  total_inputs: number;
+  unique_releases: number;
+  with_industry_candidate: number;
+  with_future_match: number;
+  source_system_counts: Record<string, number>;
+}
+
+export interface SpecBaselineScoreRead {
+  id: number;
+  owner_id: number;
+  spec_input_id: number;
+  release_id: number | null;
+  title: string;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  baseline_score: number;
+  confidence_score: number;
+  risk_score: number;
+  rationale: string;
+  created_at: string;
+}
+
+export interface SpecBaselineScoreListRead {
+  items: SpecBaselineScoreRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SpecBaselineScoreLatestRead {
+  scores_computed: number;
+  scores_skipped: number;
+  scores_updated: number;
+  items: SpecBaselineScoreRead[];
+}
+
+export interface SpecBaselineScoreSummaryRead {
+  total_scores: number;
+  average_baseline_score: number;
+  average_confidence_score: number;
+  average_risk_score: number;
+  high_baseline_count: number;
+}
+
+export interface AISpecEvaluationRead {
+  id: number;
+  owner_id: number;
+  spec_input_id: number;
+  baseline_score_id: number;
+  release_id: number | null;
+  title: string;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  ai_score: number;
+  ai_confidence: number;
+  risk_level: string;
+  ai_rationale: string;
+  model_name: string;
+  prompt_version: string;
+  evaluation_status: string;
+  created_at: string;
+}
+
+export interface AISpecEvaluationListRead {
+  items: AISpecEvaluationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AISpecEvaluationLatestRead {
+  evaluations_computed: number;
+  evaluations_skipped: number;
+  evaluations_updated: number;
+  fallback_count: number;
+  items: AISpecEvaluationRead[];
+}
+
+export interface AISpecEvaluationSummaryRead {
+  total_evaluations: number;
+  success_count: number;
+  fallback_count: number;
+  average_ai_score: number;
+  average_ai_confidence: number;
+  low_risk_count: number;
+  medium_risk_count: number;
+  high_risk_count: number;
+}
+
+export interface TopSpecPickRead {
+  id: number;
+  owner_id: number;
+  rank: number;
+  release_id: number | null;
+  spec_input_id: number;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  final_score: number;
+  confidence_score: number;
+  risk_level: string;
+  suggested_quantity: number | null;
+  foc_date: string | null;
+  release_date: string | null;
+  rationale: string;
+  created_at: string;
+}
+
+export interface TopSpecPickListRead {
+  items: TopSpecPickRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TopSpecPickLatestRead {
+  picks_computed: number;
+  picks_skipped: boolean;
+  items: TopSpecPickRead[];
+}
+
+export interface TopSpecPickSummaryRead {
+  total_picks: number;
+  average_final_score: number;
+  average_confidence_score: number;
+  low_risk_count: number;
+  medium_risk_count: number;
+  high_risk_count: number;
+  with_suggested_quantity: number;
+}
+
+export interface WeeklySpecDashboardSummaryRead {
+  top_picks_count: number;
+  preorder_now_count: number;
+  average_confidence: number;
+  high_risk_count: number;
+  number_one_issues_count: number;
+  ratio_variant_count: number;
+  first_appearance_count: number;
+  foc_approaching_count: number;
+}
+
+export interface WeeklySpecDashboardItemRead extends TopSpecPickRead {
+  signal_types: string[];
+  foc_urgency_label: string;
+  future_release_action: string | null;
+}
+
+export interface WeeklySpecDashboardRead {
+  summary: WeeklySpecDashboardSummaryRead;
+  publisher_breakdown: Record<string, number>;
+  signal_breakdown: Record<string, number>;
+  top_20_preorder: WeeklySpecDashboardItemRead[];
+  preorder_now: WeeklySpecDashboardItemRead[];
+  high_confidence: WeeklySpecDashboardItemRead[];
+  high_risk_high_reward: WeeklySpecDashboardItemRead[];
+  number_one_issues: WeeklySpecDashboardItemRead[];
+  ratio_variants: WeeklySpecDashboardItemRead[];
+  first_appearances: WeeklySpecDashboardItemRead[];
+  milestones: WeeklySpecDashboardItemRead[];
+}
+
+export interface IndustryScannerDashboardSummaryRead {
+  releases_scanned: number;
+  signals_detected: number;
+  high_score_opportunities: number;
+  number_one_issues: number;
+  ratio_variants: number;
+  key_events: number;
+}
+
+export interface IndustryScannerDashboardItemRead extends IndustryOpportunityRead {
+  signal_types: string[];
+  foc_date: string | null;
+  release_date: string | null;
+  monitoring_status: string;
+}
+
+export interface IndustryScannerDashboardRead {
+  summary: IndustryScannerDashboardSummaryRead;
+  scan_run_id: number | null;
+  top_number_one_issues: IndustryScannerDashboardItemRead[];
+  ratio_variants: IndustryScannerDashboardItemRead[];
+  facsimiles: IndustryScannerDashboardItemRead[];
+  anniversary_milestone_books: IndustryScannerDashboardItemRead[];
+  key_events: IndustryScannerDashboardItemRead[];
+  high_opportunity_score: IndustryScannerDashboardItemRead[];
+  watchlist: IndustryScannerDashboardItemRead[];
+}
+
+export interface FutureReleaseDashboardRead {
+  summary: FutureReleaseDashboardSummaryRead;
+  next_issues: NextIssueRead[];
+  upcoming_foc: FutureReleaseMatchRead[];
+  preorder_now: FutureReleaseActionRead[];
+  this_week: FutureReleaseActionRead[];
+  missed_foc: FutureReleaseActionRead[];
+  watchlist: WatchlistMatchRead[];
 }
 
 export interface ContinuityDashboardRead {
@@ -25667,6 +26181,209 @@ export const apiClient = {
 
   getCollectionGapSummary(): Promise<CollectionGapSummaryRead> {
     return requestScanV1<CollectionGapSummaryRead>("/collection-gaps/summary");
+  },
+
+  getCollectedRuns(params?: {
+    run_status?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<CollectedRunListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<CollectedRunListRead>(`/collected-runs${q}`);
+  },
+
+  refreshCollectedRuns(params?: {
+    run_status?: string;
+    publisher?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<CollectedRunListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<CollectedRunListRead>(`/collected-runs/latest${q}`);
+  },
+
+  getCollectedRunSummary(): Promise<CollectedRunSummaryRead> {
+    return requestScanV1<CollectedRunSummaryRead>("/collected-runs/summary");
+  },
+
+  getNextIssues(params?: { limit?: number; offset?: number }): Promise<NextIssueListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<NextIssueListRead>(`/next-issues${q}`);
+  },
+
+  refreshNextIssues(params?: { limit?: number; offset?: number }): Promise<NextIssueListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<NextIssueListRead>(`/next-issues/latest${q}`);
+  },
+
+  getFutureReleaseMatches(params?: { limit?: number; offset?: number }): Promise<FutureReleaseMatchListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FutureReleaseMatchListRead>(`/future-release-matches${q}`);
+  },
+
+  refreshFutureReleaseMatches(params?: { limit?: number; offset?: number }): Promise<FutureReleaseMatchListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FutureReleaseMatchListRead>(`/future-release-matches/latest${q}`);
+  },
+
+  getFutureReleaseActions(params?: { limit?: number; offset?: number }): Promise<FutureReleaseActionListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FutureReleaseActionListRead>(`/future-release-actions${q}`);
+  },
+
+  refreshFutureReleaseActions(params?: { limit?: number; offset?: number }): Promise<FutureReleaseActionListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<FutureReleaseActionListRead>(`/future-release-actions/latest${q}`);
+  },
+
+  getFutureReleaseDashboard(): Promise<FutureReleaseDashboardRead> {
+    return requestScanV1<FutureReleaseDashboardRead>("/future-release-dashboard");
+  },
+
+  getFutureReleaseDashboardSummary(): Promise<FutureReleaseDashboardSummaryRead> {
+    return requestScanV1<FutureReleaseDashboardSummaryRead>("/future-release-dashboard/summary");
+  },
+
+  getIndustryPublishers(): Promise<IndustryPublisherListRead> {
+    return requestScanV1<IndustryPublisherListRead>("/industry-publishers");
+  },
+
+  patchIndustryPublisher(
+    publisherId: number,
+    body: {
+      scan_enabled?: boolean;
+      inclusion_status?: IndustryPublisherInclusionStatus;
+      scan_priority?: number;
+      classification_mode?: string;
+    },
+  ): Promise<IndustryPublisherRead> {
+    return requestScanV1<IndustryPublisherRead>(`/industry-publishers/${publisherId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getIndustryReleaseScans(params?: { limit?: number; offset?: number }): Promise<IndustryReleaseScanRunListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<IndustryReleaseScanRunListRead>(`/industry-release-scans${q}`);
+  },
+
+  runIndustryReleaseScan(): Promise<IndustryReleaseScanRunRead> {
+    return requestScanV1<IndustryReleaseScanRunRead>("/industry-release-scans/run", { method: "POST" });
+  },
+
+  getIndustryReleaseCandidates(params?: {
+    scan_run_id?: number;
+    publisher_code?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<IndustryReleaseCandidateListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<IndustryReleaseCandidateListRead>(`/industry-release-candidates${q}`);
+  },
+
+  getIndustryReleaseSignals(params?: {
+    scan_run_id?: number;
+    signal_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<IndustryReleaseSignalListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<IndustryReleaseSignalListRead>(`/industry-release-signals${q}`);
+  },
+
+  getLatestIndustryReleaseSignals(): Promise<IndustryReleaseSignalLatestRead> {
+    return requestScanV1<IndustryReleaseSignalLatestRead>("/industry-release-signals/latest");
+  },
+
+  getIndustryOpportunities(params?: {
+    scan_run_id?: number;
+    risk_level?: string;
+    opportunity_score_min?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<IndustryOpportunityListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<IndustryOpportunityListRead>(`/industry-opportunities${q}`);
+  },
+
+  getLatestIndustryOpportunities(): Promise<IndustryOpportunityLatestRead> {
+    return requestScanV1<IndustryOpportunityLatestRead>("/industry-opportunities/latest");
+  },
+
+  getIndustryOpportunitySummary(): Promise<IndustryOpportunitySummaryRead> {
+    return requestScanV1<IndustryOpportunitySummaryRead>("/industry-opportunities/summary");
+  },
+
+  getSpecInputs(params?: { limit?: number; offset?: number }): Promise<SpecInputListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<SpecInputListRead>(`/spec-inputs${q}`);
+  },
+
+  getLatestSpecInputs(): Promise<SpecInputLatestRead> {
+    return requestScanV1<SpecInputLatestRead>("/spec-inputs/latest");
+  },
+
+  getSpecInputSummary(): Promise<SpecInputSummaryRead> {
+    return requestScanV1<SpecInputSummaryRead>("/spec-inputs/summary");
+  },
+
+  getSpecBaselineScores(params?: { limit?: number; offset?: number }): Promise<SpecBaselineScoreListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<SpecBaselineScoreListRead>(`/spec-baseline-scores${q}`);
+  },
+
+  getLatestSpecBaselineScores(): Promise<SpecBaselineScoreLatestRead> {
+    return requestScanV1<SpecBaselineScoreLatestRead>("/spec-baseline-scores/latest");
+  },
+
+  getSpecBaselineSummary(): Promise<SpecBaselineScoreSummaryRead> {
+    return requestScanV1<SpecBaselineScoreSummaryRead>("/spec-baseline-scores/summary");
+  },
+
+  getAISpecEvaluations(params?: { limit?: number; offset?: number }): Promise<AISpecEvaluationListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<AISpecEvaluationListRead>(`/ai-spec-evaluations${q}`);
+  },
+
+  getLatestAISpecEvaluations(): Promise<AISpecEvaluationLatestRead> {
+    return requestScanV1<AISpecEvaluationLatestRead>("/ai-spec-evaluations/latest");
+  },
+
+  getAISpecEvaluationSummary(): Promise<AISpecEvaluationSummaryRead> {
+    return requestScanV1<AISpecEvaluationSummaryRead>("/ai-spec-evaluations/summary");
+  },
+
+  getTopSpecPicks(params?: { limit?: number; offset?: number }): Promise<TopSpecPickListRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<TopSpecPickListRead>(`/top-spec-picks${q}`);
+  },
+
+  getLatestTopSpecPicks(limit = 20): Promise<TopSpecPickLatestRead> {
+    return requestScanV1<TopSpecPickLatestRead>(`/top-spec-picks/latest?limit=${limit}`);
+  },
+
+  getTopSpecPickSummary(): Promise<TopSpecPickSummaryRead> {
+    return requestScanV1<TopSpecPickSummaryRead>("/top-spec-picks/summary");
+  },
+
+  getWeeklySpecDashboard(): Promise<WeeklySpecDashboardRead> {
+    return requestScanV1<WeeklySpecDashboardRead>("/weekly-spec-dashboard");
+  },
+
+  getWeeklySpecDashboardSummary(): Promise<WeeklySpecDashboardSummaryRead> {
+    return requestScanV1<WeeklySpecDashboardSummaryRead>("/weekly-spec-dashboard/summary");
+  },
+
+  getIndustryScannerDashboard(refresh = true): Promise<IndustryScannerDashboardRead> {
+    const q = refresh ? "?refresh=true" : "?refresh=false";
+    return requestScanV1<IndustryScannerDashboardRead>(`/industry-scanner-dashboard${q}`);
+  },
+
+  getIndustryScannerDashboardSummary(refresh = true): Promise<IndustryScannerDashboardSummaryRead> {
+    const q = refresh ? "?refresh=true" : "?refresh=false";
+    return requestScanV1<IndustryScannerDashboardSummaryRead>(`/industry-scanner-dashboard/summary${q}`);
   },
 
   getAcquisitionOpportunities(params?: {

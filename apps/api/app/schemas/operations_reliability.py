@@ -10,6 +10,11 @@ from app.schemas.portfolio_certification import PortfolioCertificationOpsPanelRe
 from app.schemas.acquisition_certification import AcquisitionCertificationOpsPanelRead
 from app.schemas.exit_certification import ExitCertificationOpsPanelRead
 from app.schemas.final_platform_certification import FinalPlatformCertificationOpsPanelRead
+from app.schemas.future_release_certification import FutureReleaseCertificationOpsPanelRead
+from app.schemas.industry_scanner_automation import IndustryScannerAutomationOpsPanelRead
+from app.schemas.industry_scanner_certification import IndustryScannerCertificationOpsPanelRead
+from app.schemas.spec_automation import SpecAutomationOpsPanelRead
+from app.schemas.ai_spec_certification import AISpecCertificationOpsPanelRead
 from app.schemas.production_readiness import ProductionReadinessOpsPanelRead
 
 
@@ -99,6 +104,11 @@ class OperationsReliabilityDashboardRead(BaseModel):
     exit_certification: ExitCertificationOpsPanelRead | None = None
     final_platform_certification: FinalPlatformCertificationOpsPanelRead | None = None
     production_readiness: ProductionReadinessOpsPanelRead | None = None
+    future_release_certification: FutureReleaseCertificationOpsPanelRead | None = None
+    industry_scanner_automation: IndustryScannerAutomationOpsPanelRead | None = None
+    industry_scanner_certification: IndustryScannerCertificationOpsPanelRead | None = None
+    spec_automation: SpecAutomationOpsPanelRead | None = None
+    ai_spec_certification: AISpecCertificationOpsPanelRead | None = None
 
 
 class PlatformHealthCheckListResponse(BaseModel):

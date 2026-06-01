@@ -277,6 +277,91 @@ export function OperationsReliabilityPage(): JSX.Element {
                 <p className="text-sm text-slate-500">No acquisition certification runs recorded for this owner.</p>
               )}
             </Panel>
+            <Panel title="Future Release Intelligence Certification">
+              {hasRecordedRunAt(dashboard.future_release_certification?.last_certification_at) ? (
+                <CertificationStats
+                  lastAt={dashboard.future_release_certification!.last_certification_at!}
+                  readinessScore={dashboard.future_release_certification!.readiness_score}
+                  certificationResult={dashboard.future_release_certification!.certification_result}
+                  validationStatusLabel="Validation Status"
+                  validationStatus={dashboard.future_release_certification!.validation_status}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">No future release certification runs recorded for this owner.</p>
+              )}
+            </Panel>
+            <Panel title="Industry Scanner Automation">
+              {hasRecordedRunAt(dashboard.industry_scanner_automation?.last_run ?? null) ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <StatCard
+                    label="Last Run"
+                    value={dashboard.industry_scanner_automation!.last_run!.slice(0, 19).replace("T", " ")}
+                  />
+                  <StatCard label="Status" value={dashboard.industry_scanner_automation!.status} />
+                  <StatCard label="Trigger" value={dashboard.industry_scanner_automation!.trigger_type ?? "—"} />
+                  <StatCard label="Runtime (ms)" value={String(dashboard.industry_scanner_automation!.runtime_ms)} />
+                  <StatCard label="Releases Scanned" value={String(dashboard.industry_scanner_automation!.releases_scanned)} />
+                  <StatCard
+                    label="Candidates Created"
+                    value={String(dashboard.industry_scanner_automation!.candidates_created)}
+                  />
+                  <StatCard label="Signals Upserted" value={String(dashboard.industry_scanner_automation!.signals_upserted)} />
+                  <StatCard label="Scores Updated" value={String(dashboard.industry_scanner_automation!.scores_updated)} />
+                  {dashboard.industry_scanner_automation!.scan_skipped ? (
+                    <p className="sm:col-span-2 text-xs text-slate-400">Latest refresh reused prior scan (catalog unchanged).</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No industry scanner automation runs recorded for this owner.</p>
+              )}
+            </Panel>
+            <Panel title="Spec Pipeline Automation">
+              {hasRecordedRunAt(dashboard.spec_automation?.last_run ?? null) ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <StatCard
+                    label="Last Run"
+                    value={dashboard.spec_automation!.last_run!.slice(0, 19).replace("T", " ")}
+                  />
+                  <StatCard label="Status" value={dashboard.spec_automation!.status} />
+                  <StatCard label="Runtime (ms)" value={String(dashboard.spec_automation!.runtime_ms)} />
+                  <StatCard label="Inputs Processed" value={String(dashboard.spec_automation!.inputs_processed)} />
+                  <StatCard
+                    label="Baseline Scores"
+                    value={String(dashboard.spec_automation!.baseline_scores_created)}
+                  />
+                  <StatCard label="AI Evaluations" value={String(dashboard.spec_automation!.ai_evaluations_created)} />
+                  <StatCard label="Top Picks Created" value={String(dashboard.spec_automation!.top_picks_created)} />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No spec automation runs recorded for this owner.</p>
+              )}
+            </Panel>
+            <Panel title="AI Spec Engine Certification">
+              {hasRecordedRunAt(dashboard.ai_spec_certification?.last_certification_at ?? null) ? (
+                <CertificationStats
+                  lastAt={dashboard.ai_spec_certification!.last_certification_at!}
+                  readinessScore={dashboard.ai_spec_certification!.readiness_score}
+                  certificationResult={dashboard.ai_spec_certification!.certification_result}
+                  validationStatusLabel="Validation Status"
+                  validationStatus={dashboard.ai_spec_certification!.validation_status}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">No AI spec certification runs recorded for this owner.</p>
+              )}
+            </Panel>
+            <Panel title="Industry Scanner Certification">
+              {hasRecordedRunAt(dashboard.industry_scanner_certification?.last_certification_at ?? null) ? (
+                <CertificationStats
+                  lastAt={dashboard.industry_scanner_certification!.last_certification_at!}
+                  readinessScore={dashboard.industry_scanner_certification!.readiness_score}
+                  certificationResult={dashboard.industry_scanner_certification!.certification_result}
+                  validationStatusLabel="Validation Status"
+                  validationStatus={dashboard.industry_scanner_certification!.validation_status}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">No industry scanner certification runs recorded for this owner.</p>
+              )}
+            </Panel>
             <Panel title="Exit Intelligence Certification">
               {hasRecordedRunAt(dashboard.exit_certification?.last_certification_at) ? (
                 <CertificationStats

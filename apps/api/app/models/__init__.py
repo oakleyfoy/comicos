@@ -276,6 +276,23 @@ from app.models.final_platform_certification import FinalPlatformCertificationRu
 from app.models.daily_action_engine import DailyCollectorAction
 from app.models.want_list import WantList, WantListItem
 from app.models.collection_gap import CollectionGap
+from app.models.collected_run import CollectedRun
+from app.models.next_issue import NextIssue
+from app.models.future_release_match import FutureReleaseMatch
+from app.models.future_release_action import FutureReleaseAction
+from app.models.future_release_certification import FutureReleaseCertificationRun
+from app.models.industry_publisher import IndustryPublisher
+from app.models.industry_release_scan import IndustryReleaseCandidate, IndustryReleaseScanRun
+from app.models.industry_release_signal import IndustryReleaseSignal
+from app.models.industry_opportunity import IndustryOpportunityScore
+from app.models.industry_scanner_automation import IndustryScannerAutomationRun
+from app.models.industry_scanner_certification import IndustryScannerCertificationRun
+from app.models.spec_input import SpecInput
+from app.models.spec_baseline_score import SpecBaselineScore
+from app.models.ai_spec_evaluation import AISpecEvaluation
+from app.models.top_spec_pick import TopSpecPick
+from app.models.spec_automation import SpecAutomationRun
+from app.models.ai_spec_certification import AISpecCertificationRun
 from app.models.acquisition_opportunity import AcquisitionOpportunity
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
@@ -1097,6 +1114,24 @@ __all__ = [
     "WantList",
     "WantListItem",
     "CollectionGap",
+    "CollectedRun",
+    "NextIssue",
+    "FutureReleaseMatch",
+    "FutureReleaseAction",
+    "FutureReleaseCertificationRun",
+    "IndustryPublisher",
+    "IndustryReleaseScanRun",
+    "IndustryReleaseCandidate",
+    "IndustryReleaseSignal",
+    "IndustryOpportunityScore",
+    "IndustryScannerAutomationRun",
+    "IndustryScannerCertificationRun",
+    "SpecInput",
+    "SpecBaselineScore",
+    "AISpecEvaluation",
+    "TopSpecPick",
+    "SpecAutomationRun",
+    "AISpecCertificationRun",
     "AcquisitionOpportunity",
     "MarketplaceSource",
     "MarketplaceAcquisitionCandidate",
