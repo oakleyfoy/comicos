@@ -107,7 +107,7 @@ Suggested service layout:
 1. Backend web service
    - start command:
    ```bash
-   cd apps/api && ./.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   cd apps/api && python scripts/render_web_start.py
    ```
    - env:
      `APP_ENV`, `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `FRONTEND_URL`, `CORS_ORIGINS`,

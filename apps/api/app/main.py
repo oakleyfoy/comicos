@@ -1,6 +1,5 @@
 from urllib.parse import quote
 
-from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
 import json
@@ -26,7 +25,6 @@ from app.api.report_params import (
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, token_expiration_utc, verify_password
 from app.db.session import get_session
-from app.db.startup_migrations import run_startup_migrations
 from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, PortfolioStrategyDashboardSnapshot, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
@@ -1254,14 +1252,7 @@ from app.security.session_manager import build_device_label, create_session, det
 settings = get_settings()
 validate_production_settings(settings)
 
-
-@asynccontextmanager
-async def _app_lifespan(_app: FastAPI):
-    run_startup_migrations()
-    yield
-
-
-app = FastAPI(title="ComicOS API", lifespan=_app_lifespan)
+app = FastAPI(title="ComicOS API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

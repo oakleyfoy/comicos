@@ -40,6 +40,14 @@ pip install -e .[dev]
 Start command:
 
 ```bash
+python scripts/render_web_start.py
+```
+
+Use this instead of starting uvicorn directly. On production boot it runs `alembic upgrade head` in a **separate process** (then `exec` uvicorn) so Render’s 512MB instances are not loading migrations and `app.main` at the same time.
+
+Legacy direct start (local dev only):
+
+```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
