@@ -6615,6 +6615,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 401) {
+    const isCredentialExchange =
+      path === "/auth/login" || path === "/auth/register" || path.startsWith("/auth/login?");
+
+    if (isCredentialExchange) {
+      let message = "Incorrect email or password";
+      try {
+        const data = (await response.json()) as unknown;
+        message = parseStructuredApiError(data) ?? message;
+      } catch {
+        // Ignore invalid error payloads.
+      }
+      throw new ApiError(message, 401);
+    }
+
     clearStoredToken();
     if (window.location.pathname !== "/login") {
       window.location.href = "/login";

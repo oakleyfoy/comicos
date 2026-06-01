@@ -1,0 +1,32 @@
+name: Migrate production database
+
+# Run Alembic against Render Postgres without using Render Shell:
+# 1. GitHub repo → Settings → Secrets → Actions → New repository secret
+#    Name: PRODUCTION_DATABASE_URL  Value: External Database URL from Render Postgres
+# 2. Actions → "Migrate production database" → Run workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "./apps/api[dev]"
+
+      - name: Alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        working-directory: apps/api
+        run: python -m alembic upgrade head

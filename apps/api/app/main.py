@@ -1,5 +1,6 @@
 from urllib.parse import quote
 
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
 import json
@@ -25,6 +26,7 @@ from app.api.report_params import (
 from app.core.config import Settings, get_settings, validate_production_settings
 from app.core.security import create_access_token, get_password_hash, token_expiration_utc, verify_password
 from app.db.session import get_session
+from app.db.startup_migrations import run_startup_migrations
 from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, PortfolioStrategyDashboardSnapshot, User
 from app.schemas.ai import ParseOrderRequest, ParseOrderResponse
 from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
@@ -1252,7 +1254,14 @@ from app.security.session_manager import build_device_label, create_session, det
 settings = get_settings()
 validate_production_settings(settings)
 
-app = FastAPI(title="ComicOS API")
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    run_startup_migrations()
+    yield
+
+
+app = FastAPI(title="ComicOS API", lifespan=_app_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -1463,6 +1472,37 @@ def health_db(session: Session = Depends(get_session)) -> dict[str, bool | str]:
         raise HTTPException(status_code=503, detail="Database connection failed") from exc
 
     return {"ok": True, "database": "connected"}
+
+
+@app.get("/health/auth-schema")
+def health_auth_schema(session: Session = Depends(get_session)) -> dict[str, object]:
+    """Public check: login requires auth session tables (P43+ migrations)."""
+    required = ("user_auth_sessions", "user_auth_session_events", "organization_security_contexts")
+    try:
+        rows = session.exec(
+            text(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('user_auth_sessions', 'user_auth_session_events', 'organization_security_contexts')
+                """
+            )
+        ).all()
+        present = {str(row[0]) for row in rows}
+        missing = [name for name in required if name not in present]
+        alembic_row = session.exec(text("SELECT version_num FROM alembic_version LIMIT 1")).first()
+        alembic_version = str(alembic_row[0]) if alembic_row else None
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Auth schema check failed") from exc
+
+    ok = not missing
+    return {
+        "ok": ok,
+        "missing_tables": missing,
+        "alembic_version": alembic_version,
+        "login_ready": ok,
+    }
 
 
 @app.get("/health/redis")
