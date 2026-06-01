@@ -3,10 +3,23 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from agent_security_test_utils import grant_agent_execute, grant_agent_review
 from app.db.session import get_engine
-from app.models import User
+from app.models import AgentDefinition, User
+from app.services.agent_registry import enable_agent
+from app.services.agent_seed import seed_foundational_agents
 from release_platform_test_helpers import seed_release_platform_horizons
 from test_inventory import auth_headers, register_and_login
+
+
+def _enable_intelligence_agents(session: Session) -> None:
+    seed_foundational_agents(session)
+    for code in ("pricing_intelligence_agent", "catalog_intelligence_agent"):
+        row = session.exec(select(AgentDefinition).where(AgentDefinition.code == code)).first()
+        assert row is not None and row.id is not None
+        enable_agent(session, agent_id=int(row.id))
+        grant_agent_execute(session, agent_id=int(row.id))
+        grant_agent_review(session, agent_id=int(row.id), admin=True)
 
 
 def test_intelligence_api_seed_dashboard_and_lists(client: TestClient) -> None:
