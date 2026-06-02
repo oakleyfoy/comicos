@@ -16,10 +16,13 @@ describe("buildDashboardWidgetPromises", () => {
     expect(keys).toEqual(["inventoryList", "inventorySummary", "physicalIntake", "portfolioValue"].sort());
   });
 
-  it("collection profile adds analytics widgets but not market-only panels", () => {
+  it("collection profile adds analytics widgets without portfolio value batch", () => {
     const keys = Object.keys(buildDashboardWidgetPromises(query, filters, "collection"));
     expect(keys).toContain("collectionAnalyticsSummary");
     expect(keys).toContain("inventoryIntelSummary");
+    expect(keys).not.toContain("portfolioValue");
+    expect(keys).not.toContain("portfolioPerformance");
+    expect(keys).not.toContain("inventoryList");
     expect(keys.length).toBeGreaterThan(6);
   });
 

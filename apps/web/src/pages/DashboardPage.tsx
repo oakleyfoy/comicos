@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
-import { DashboardHubNav } from "../components/DashboardHubNav";
+import { DashboardProfileTabs } from "../components/DashboardProfileTabs";
+import { CollectionInsightsSummaryStrip } from "../components/CollectionInsightsSummaryStrip";
 import {
   buildDashboardWidgetPromises,
   dashboardLoadsDealerEffects,
@@ -13,6 +14,8 @@ import {
   dashboardShowsCollectionPanels,
   dashboardShowsExtendedWorkbench,
   dashboardShowsInventoryGrid,
+  dashboardShowsPortfolioMetricCards,
+  dashboardShowsPortfolioPerformance,
   type DashboardLoadProfile,
   type DashboardPortfolioFilters,
 } from "../lib/dashboardLoadProfile";
@@ -809,6 +812,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const showInventoryGrid = dashboardShowsInventoryGrid(loadProfile);
   const showAutomationScanCards = dashboardShowsAutomationScanCards(loadProfile);
   const loadsFullWorkspace = loadProfile === "full";
+  const showPortfolioMetricCards = dashboardShowsPortfolioMetricCards(loadProfile);
+  const showPortfolioPerformance = dashboardShowsPortfolioPerformance(loadProfile);
+  const showCompactHeadlineStats =
+    !showPortfolioMetricCards &&
+    loadProfile !== "collection" &&
+    (loadProfile === "market" || loadProfile === "grading" || loadProfile === "dealer");
 
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [performance, setPerformance] = useState<PortfolioPerformance | null>(null);
@@ -2946,6 +2955,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       value: formatUsdCurrency(summary?.total_unrealized_gain_loss ?? "0"),
     },
   ];
+  const compactHeadlineCards = cards.slice(0, 4);
 
   const analyticsSections = [
     {
@@ -2972,7 +2982,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   ];
 
   const hasPerformanceData = analyticsSections.some((section) => section.items.length > 0);
-  const isInitialLoad = isLoading && !summary && !performance && inventory.length === 0;
+  const isInitialLoad =
+    isLoading &&
+    !summary &&
+    !performance &&
+    inventory.length === 0 &&
+    !(loadProfile === "collection" && collectionAnalyticsSummary);
 
   if (isInitialLoad) {
     return (
@@ -2989,8 +3004,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         />
         <div className="mt-6">
           <LoadingState
-            title="Loading portfolio workspace"
-            description="Refreshing summary cards, performance leaders, and inventory rows."
+            title={loadProfile === "collection" ? "Loading collection insights" : "Loading portfolio workspace"}
+            description={
+              loadProfile === "collection"
+                ? "Fetching risk lanes, timeline, and analytics for your library."
+                : "Refreshing summary cards, performance leaders, and inventory rows."
+            }
           />
         </div>
       </AppShell>
@@ -3005,60 +3024,65 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         description={profileMeta.description}
         actions={
           <>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <div className="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300 sm:block">
               Signed in as <span className="font-medium text-white">{user?.email ?? "Loading..."}</span>
             </div>
-            <Link
-              to="/orders/import"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
-            >
-              Import Order
-            </Link>
-            <Link
-              to="/scan-sessions"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/5"
-            >
-              Bulk scan ingest
-            </Link>
-            <Link
-              to="/settings/scanner-profiles"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-violet-300/35 hover:bg-white/5"
-            >
-              Scanner presets
-            </Link>
-            <Link
-              to="/scan-sessions#scan-qa-and-routing"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-amber-300/35 hover:bg-white/5"
-            >
-              QA &amp; routing
-            </Link>
-            <Link
-              to="/dashboard#physical-intake"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
-            >
-              Receiving intake
-            </Link>
-            <Link
-              to="/dashboard/market"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
-            >
-              Market sales
-            </Link>
+            {loadProfile !== "portfolio" && loadProfile !== "full" ? (
+              <Link
+                to="/dashboard"
+                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/50"
+              >
+                Portfolio
+              </Link>
+            ) : null}
+            {loadProfile === "portfolio" || loadProfile === "full" ? (
+              <>
+                <Link
+                  to="/orders/import"
+                  className="rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                >
+                  Import
+                </Link>
+                <Link
+                  to="/scan-sessions"
+                  className="rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/5"
+                >
+                  Scan
+                </Link>
+              </>
+            ) : null}
             <Link
               to="/orders/new"
-              className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              className="rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Add Order
+              Add order
             </Link>
           </>
         }
       />
 
-      <DashboardHubNav activeProfile={loadProfile} />
+      <DashboardProfileTabs activeProfile={loadProfile} />
 
-      {dashboardWidgetErrors.inventorySummary ||
-      dashboardWidgetErrors.portfolioPerformance ||
-      dashboardWidgetErrors.portfolioValue ? (
+      {loadProfile === "collection" ? (
+        <CollectionInsightsSummaryStrip
+          loading={isLoading}
+          summary={collectionAnalyticsSummary}
+          error={dashboardWidgetErrors.collectionAnalyticsSummary ?? null}
+        />
+      ) : null}
+
+      {loadProfile === "collection" &&
+      isLoading &&
+      !inventoryRiskSummary &&
+      !inventoryActionSummary &&
+      collectionAnalyticsSummary ? (
+        <p className="mt-4 text-sm text-slate-500">Loading risk lanes, arrivals, and series progress…</p>
+      ) : null}
+
+      {loadProfile !== "collection" &&
+      (dashboardWidgetErrors.inventorySummary ||
+        dashboardWidgetErrors.portfolioPerformance ||
+        dashboardWidgetErrors.portfolioValue) ? (
         <div className="mt-6 space-y-2">
           {dashboardWidgetErrors.inventorySummary ? (
             <StatusBanner tone="error">
@@ -3078,6 +3102,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         </div>
       ) : null}
 
+      {showPortfolioMetricCards ? (
+        <>
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <article
@@ -3095,6 +3121,22 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {portfolioHasMultipleCurrencies ? "Multiple currencies are kept separate." : "Single-currency summary."}{" "}
           Low-confidence and stale values are surfaced in the cards above without changing acquisition data.
         </div>
+      ) : null}
+        </>
+      ) : null}
+
+      {showCompactHeadlineStats && summary ? (
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {compactHeadlineCards.map((card) => (
+            <article
+              key={card.label}
+              className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
+            >
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+              <p className="mt-2 text-xl font-semibold text-white">{card.value}</p>
+            </article>
+          ))}
+        </section>
       ) : null}
 
       {loadProfile === "portfolio" && physicalIntakeSummary ? (
@@ -5815,6 +5857,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
       {showCollectionPanels || loadsFullWorkspace ? (
       <>
+      {loadsFullWorkspace ? (
       <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">
           <div>
@@ -5925,6 +5968,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           </button>
         </div>
       </details>
+      ) : null}
 
       {inventoryRiskSummary ? (
         <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
@@ -6387,13 +6431,17 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         dashboardWidgetErrors.collectionAnalyticsSummary ||
         dashboardWidgetErrors.collectionAnalyticsQuality ||
         dashboardWidgetErrors.collectionAnalyticsPublishers) ? (
-        <details className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+        <details
+          className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+          open={loadProfile === "collection"}
+        >
           <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/45 p-4">
             <div>
               <h2 className="text-lg font-semibold text-white">Coverage rollup & publishers</h2>
               <p className="mt-1 max-w-prose text-sm text-slate-400">
-                Collapsed by default — ownership mix, health buckets, preorder exposure, OCR/canon coverage and
-                deterministic publisher totals (mirrors Ops collection analytics wording).
+                {loadProfile === "collection"
+                  ? "Ownership mix, health buckets, preorder exposure, and publisher totals."
+                  : "Collapsed by default — ownership mix, health buckets, preorder exposure, OCR/canon coverage and deterministic publisher totals."}
               </p>
             </div>
           </summary>
@@ -6844,7 +6892,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         </details>
       ) : null}
 
-      {!hasPerformanceData ? (
+      {showPortfolioPerformance ? (
+      !hasPerformanceData ? (
         <div className="mt-6">
           {dashboardWidgetErrors.portfolioPerformance ? (
             <StatusBanner tone="error">
@@ -6939,7 +6988,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ))}
           </div>
         </details>
-      )}
+      )
+      ) : null}
 
       </>
       ) : null}

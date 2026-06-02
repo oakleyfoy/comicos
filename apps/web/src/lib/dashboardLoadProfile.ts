@@ -102,8 +102,20 @@ export function dashboardLoadsGradingEffects(profile: DashboardLoadProfile): boo
   return profile === "grading" || profile === "full";
 }
 
+export function dashboardShowsPortfolioMetricCards(profile: DashboardLoadProfile): boolean {
+  return profile === "portfolio" || profile === "full";
+}
+
+export function dashboardShowsDashboardHub(profile: DashboardLoadProfile): boolean {
+  return false;
+}
+
+export function dashboardShowsPortfolioPerformance(profile: DashboardLoadProfile): boolean {
+  return profile === "full";
+}
+
 export function dashboardShowsInventoryGrid(profile: DashboardLoadProfile): boolean {
-  return profile === "portfolio" || profile === "collection" || profile === "full";
+  return profile === "portfolio" || profile === "full";
 }
 
 export function dashboardShowsCollectionPanels(profile: DashboardLoadProfile): boolean {
@@ -111,7 +123,7 @@ export function dashboardShowsCollectionPanels(profile: DashboardLoadProfile): b
 }
 
 export function dashboardShowsExtendedWorkbench(profile: DashboardLoadProfile): boolean {
-  return profile !== "portfolio";
+  return profile === "market" || profile === "grading" || profile === "dealer" || profile === "full";
 }
 
 export function dashboardShowsAutomationScanCards(profile: DashboardLoadProfile): boolean {
@@ -136,6 +148,8 @@ export function buildDashboardWidgetPromises(
     profile === "portfolio" ||
     profile === "collection" ||
     profile === "market" ||
+    profile === "grading" ||
+    profile === "dealer" ||
     profile === "full";
   if (needsSummary) {
     widgets.inventorySummary = apiClient.getInventorySummary();
@@ -145,13 +159,15 @@ export function buildDashboardWidgetPromises(
     widgets.inventoryList = apiClient.getInventory(query);
   }
 
-  if (profile === "portfolio" || profile === "collection" || profile === "full") {
+  if (profile === "portfolio" || profile === "full") {
     widgets.portfolioValue = apiClient.getPortfolioValueSummary(portfolioValueParams);
     widgets.physicalIntake = apiClient.getPhysicalIntakeSummary();
   }
 
   if (profile === "collection" || profile === "full") {
-    widgets.portfolioPerformance = apiClient.getPortfolioPerformance();
+    if (profile === "full") {
+      widgets.portfolioPerformance = apiClient.getPortfolioPerformance();
+    }
     widgets.inventoryRisks = apiClient.getInventoryRisksSummary();
     widgets.inventoryAction = apiClient.getInventoryActionCenterSummary();
     widgets.orderArrival = apiClient.getOrderArrivalIntelligenceSummary();
@@ -164,10 +180,6 @@ export function buildDashboardWidgetPromises(
     widgets.scanPipeline = apiClient.getScanPipelineDashboard();
     widgets.inventoryIntelSummary = apiClient.getInventoryIntelligenceSummary();
     widgets.inventoryIntelHealth = apiClient.getInventoryIntelligenceHealth();
-  }
-
-  if (profile === "grading" || profile === "dealer") {
-    widgets.inventorySummary = apiClient.getInventorySummary();
   }
 
   return widgets;
