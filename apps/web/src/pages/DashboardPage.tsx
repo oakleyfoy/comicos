@@ -109,6 +109,7 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { MarketIntelligenceDashboard } from "../components/MarketIntelligenceDashboard";
 import { PageHeader } from "../components/PageHeader";
+import { PortfolioInventoryList } from "../components/PortfolioInventoryList";
 import { ScanIngestionSummaryCard } from "../components/ScanIngestionSummaryCard";
 import { ScanNormalizationSummaryCard } from "../components/ScanNormalizationSummaryCard";
 import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
@@ -7433,422 +7434,43 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </div>
           ) : (
             <>
-          <div className="hidden overflow-x-auto xl:block">
-            <table className="min-w-full text-left text-sm text-slate-300">
-              <thead className="border-b border-white/10 text-xs uppercase tracking-[0.16em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(inventory.length) && selectedIds.length === inventory.length}
-                      onChange={toggleSelectAll}
-                    />
-                  </th>
-                  <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Issue</th>
-                  <th className="px-4 py-3">Release meta</th>
-                  <th className="px-4 py-3">Publisher</th>
-                  <th className="px-4 py-3">Cover / Variant</th>
-                  <th className="px-4 py-3">Retailer</th>
-                  <th className="px-4 py-3">Order Date</th>
-                  <th className="px-4 py-3">Acquisition</th>
-                  <th className="px-4 py-3">Market FMV</th>
-                  <th className="px-4 py-3">Valuation</th>
-                  <th className="px-4 py-3">Manual FMV</th>
-                  <th className="px-4 py-3">Gain / Loss</th>
-                  <th className="px-4 py-3">Grade</th>
-                  <th className="px-4 py-3">Hold</th>
-                  <th className="px-4 py-3">Stars</th>
-                  <th className="px-4 py-3">Notes</th>
-                  <th className="px-4 py-3">Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory.map((item) => (
-                  <tr key={item.inventory_copy_id} className="border-b border-white/5 align-top">
-                    <td className="px-4 py-3.5">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(item.inventory_copy_id)}
-                        onChange={() => toggleSelection(item.inventory_copy_id)}
-                      />
-                    </td>
-                    <td className="px-4 py-3.5 font-medium text-white">
-                      <p>{item.title}</p>
-                      <p className="mt-1 text-[11px]">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-1 font-semibold ${assetStateTone(
-                            item.asset_state,
-                          )}`}
-                        >
-                          {assetStateLabel(item.asset_state)}
-                        </span>
-                      </p>
-                      <InventoryIntelBadges item={item} />
-                      <InventoryRiskBadges risks={item.inventory_risks} />
-                      <InventoryActionCenterBadges attachment={item.inventory_action_center} />
-                      <OrderArrivalBadges classifications={item.order_arrival_classifications} />
-                    </td>
-                    <td className="px-4 py-3.5">#{item.issue_number}</td>
-                    <td className="align-top">{inventoryReleaseChronologyCell(item)}</td>
-                    <td className="px-4 py-3.5">{item.publisher}</td>
-                    <td className="px-4 py-3.5 text-slate-300">
-                      {variantLabel(item) || "Standard cover"}
-                    </td>
-                    <td className="px-4 py-3.5">{item.retailer}</td>
-                    <td className="px-4 py-3.5">{formatDate(item.order_date)}</td>
-                    <td className="px-4 py-3.5">{formatUsdCurrency(item.acquisition_cost)}</td>
-                    <td className="px-4 py-3.5">
-                      <div className="space-y-1">
-                        <p className="font-medium text-white">
-                          {item.current_market_fmv
-                            ? formatCurrencyAmount(item.current_market_fmv, item.fmv_currency_code ?? "USD")
-                            : "—"}
-                        </p>
-                        {item.fmv_stale_data ? (
-                          <p className="text-[11px] text-amber-200">Stale data</p>
-                        ) : null}
-                        {!item.current_market_fmv || item.valuation_scope === "no_market_data" ? (
-                          <p className="text-[11px] text-slate-500">No market data</p>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
-                          item.valuation_scope === "no_market_data"
-                            ? "border-slate-400/30 bg-white/5 text-slate-300"
-                            : item.valuation_scope === "cancelled_excluded"
-                              ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
-                              : item.valuation_scope === "low_confidence"
-                                ? "border-amber-400/35 bg-amber-400/10 text-amber-100"
-                                : "border-cyan-400/35 bg-cyan-400/10 text-cyan-100"
-                        }`}
-                      >
-                        {item.valuation_scope?.replace(/_/g, " ") ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={fMvDrafts[item.inventory_copy_id] ?? ""}
-                          onChange={(event) =>
-                            setFmvDrafts((current) => ({
-                              ...current,
-                              [item.inventory_copy_id]: event.target.value,
-                            }))
-                          }
-                          className="w-24 rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                        />
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() =>
-                            void saveInventoryUpdate(item.inventory_copy_id, {
-                              current_fmv: normalizeDecimalInput(
-                                fMvDrafts[item.inventory_copy_id] ?? "",
-                              ),
-                            })
-                          }
-                          className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </td>
-                    <td className={`px-4 py-3.5 ${gainLossClass(item.gain_loss)}`}>
-                      {formatUsdCurrency(item.gain_loss)}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <select
-                        value={gradeDrafts[item.inventory_copy_id] ?? item.grade_status}
-                        onChange={(event) =>
-                          setGradeDrafts((current) => ({
-                            ...current,
-                            [item.inventory_copy_id]:
-                              event.target.value as InventoryItem["grade_status"],
-                          }))
-                        }
-                        onBlur={() =>
-                          void saveInventoryUpdate(item.inventory_copy_id, {
-                            grade_status: gradeDrafts[item.inventory_copy_id] ?? item.grade_status,
-                          })
-                        }
-                        className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      >
-                        <option value="raw">Raw</option>
-                        <option value="submitted">Submitted</option>
-                        <option value="graded">Graded</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <select
-                        value={holdDrafts[item.inventory_copy_id] ?? item.hold_status}
-                        onChange={(event) =>
-                          setHoldDrafts((current) => ({
-                            ...current,
-                            [item.inventory_copy_id]:
-                              event.target.value as InventoryItem["hold_status"],
-                          }))
-                        }
-                        onBlur={() =>
-                          void saveInventoryUpdate(item.inventory_copy_id, {
-                            hold_status: holdDrafts[item.inventory_copy_id] ?? item.hold_status,
-                          })
-                        }
-                        className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      >
-                        <option value="hold">Hold</option>
-                        <option value="sell">Sell</option>
-                        <option value="sold">Sold</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <select
-                        value={starDrafts[item.inventory_copy_id] ?? ""}
-                        onChange={(event) =>
-                          setStarDrafts((current) => ({
-                            ...current,
-                            [item.inventory_copy_id]: event.target.value,
-                          }))
-                        }
-                        onBlur={() =>
-                          void saveInventoryUpdate(item.inventory_copy_id, {
-                            star_rating: starDrafts[item.inventory_copy_id]
-                              ? Number(starDrafts[item.inventory_copy_id])
-                              : null,
-                          })
-                        }
-                        className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      >
-                        <option value="">-</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveNotesItem(item);
-                          setNotesDraft(item.condition_notes ?? "");
-                        }}
-                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
-                      >
-                        Notes
-                      </button>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Link
-                        to={`/inventory/${item.inventory_copy_id}`}
-                        className="inline-flex rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300/50 hover:bg-cyan-400/20"
-                      >
-                        View Details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="space-y-4 p-5 xl:hidden">
-            {inventory.map((item) => (
-              <article
-                key={item.inventory_copy_id}
-                className="rounded-3xl border border-white/10 bg-slate-950/70 p-4 shadow-lg shadow-black/10"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                      Inventory Copy #{item.inventory_copy_id}
-                    </p>
-                    <h3 className="mt-1 text-lg font-semibold text-white">
-                      {item.title} #{item.issue_number}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {item.publisher} | {variantLabel(item) || "Standard cover"}
-                    </p>
-                    <p className="mt-2">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${assetStateTone(
-                          item.asset_state,
-                        )}`}
-                      >
-                        {assetStateLabel(item.asset_state)}
-                      </span>
-                    </p>
-                    <InventoryIntelBadges item={item} />
-                    <InventoryRiskBadges risks={item.inventory_risks} />
-                    <InventoryActionCenterBadges attachment={item.inventory_action_center} />
-                    <OrderArrivalBadges classifications={item.order_arrival_classifications} />
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(item.inventory_copy_id)}
-                      onChange={() => toggleSelection(item.inventory_copy_id)}
-                    />
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
-                      {item.hold_status}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                  <div>
-                    <p className="text-slate-500">Retailer</p>
-                    <p>{item.retailer}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Order Date</p>
-                    <p>{formatDate(item.order_date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Release chronology</p>
-                    {inventoryReleaseChronologyCell(item)}
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Acquisition</p>
-                    <p>{formatUsdCurrency(item.acquisition_cost)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Gain / Loss</p>
-                    <p className={gainLossClass(item.gain_loss)}>{formatUsdCurrency(item.gain_loss)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Current FMV</p>
-                    <div className="mt-1 flex gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={fMvDrafts[item.inventory_copy_id] ?? ""}
-                        onChange={(event) =>
-                          setFmvDrafts((current) => ({
-                            ...current,
-                            [item.inventory_copy_id]: event.target.value,
-                          }))
-                        }
-                        className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void saveInventoryUpdate(item.inventory_copy_id, {
-                            current_fmv: normalizeDecimalInput(
-                              fMvDrafts[item.inventory_copy_id] ?? "",
-                            ),
-                          })
-                        }
-                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-100"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Grade Status</p>
-                    <select
-                      value={gradeDrafts[item.inventory_copy_id] ?? item.grade_status}
-                      onChange={(event) =>
-                        setGradeDrafts((current) => ({
-                          ...current,
-                          [item.inventory_copy_id]:
-                            event.target.value as InventoryItem["grade_status"],
-                        }))
-                      }
-                      onBlur={() =>
-                        void saveInventoryUpdate(item.inventory_copy_id, {
-                          grade_status: gradeDrafts[item.inventory_copy_id] ?? item.grade_status,
-                        })
-                      }
-                      className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
-                    >
-                      <option value="raw">Raw</option>
-                      <option value="submitted">Submitted</option>
-                      <option value="graded">Graded</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Hold Status</p>
-                    <select
-                      value={holdDrafts[item.inventory_copy_id] ?? item.hold_status}
-                      onChange={(event) =>
-                        setHoldDrafts((current) => ({
-                          ...current,
-                          [item.inventory_copy_id]:
-                            event.target.value as InventoryItem["hold_status"],
-                        }))
-                      }
-                      onBlur={() =>
-                        void saveInventoryUpdate(item.inventory_copy_id, {
-                          hold_status: holdDrafts[item.inventory_copy_id] ?? item.hold_status,
-                        })
-                      }
-                      className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
-                    >
-                      <option value="hold">Hold</option>
-                      <option value="sell">Sell</option>
-                      <option value="sold">Sold</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Star Rating</p>
-                    <select
-                      value={starDrafts[item.inventory_copy_id] ?? ""}
-                      onChange={(event) =>
-                        setStarDrafts((current) => ({
-                          ...current,
-                          [item.inventory_copy_id]: event.target.value,
-                        }))
-                      }
-                      onBlur={() =>
-                        void saveInventoryUpdate(item.inventory_copy_id, {
-                          star_rating: starDrafts[item.inventory_copy_id]
-                            ? Number(starDrafts[item.inventory_copy_id])
-                            : null,
-                        })
-                      }
-                      className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
-                    >
-                      <option value="">-</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                    </select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveNotesItem(item);
-                          setNotesDraft(item.condition_notes ?? "");
-                        }}
-                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-100"
-                      >
-                        Edit notes
-                      </button>
-                      <Link
-                        to={`/inventory/${item.inventory_copy_id}`}
-                        className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300/50 hover:bg-cyan-400/20"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+              <div className="flex items-center gap-3 border-b border-white/10 px-4 py-2 text-xs text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={Boolean(inventory.length) && selectedIds.length === inventory.length}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all on this page"
+                />
+                <span>Select all on this page</span>
+              </div>
+              <PortfolioInventoryList
+                inventory={inventory}
+                selectedIds={selectedIds}
+                isSaving={isSaving}
+                fMvDrafts={fMvDrafts}
+                gradeDrafts={gradeDrafts}
+                holdDrafts={holdDrafts}
+                starDrafts={starDrafts}
+                normalizeDecimalInput={normalizeDecimalInput}
+                onToggleSelection={toggleSelection}
+                onFmvDraftChange={(id, value) =>
+                  setFmvDrafts((current) => ({ ...current, [id]: value }))
+                }
+                onGradeDraftChange={(id, value) =>
+                  setGradeDrafts((current) => ({ ...current, [id]: value }))
+                }
+                onHoldDraftChange={(id, value) =>
+                  setHoldDrafts((current) => ({ ...current, [id]: value }))
+                }
+                onStarDraftChange={(id, value) =>
+                  setStarDrafts((current) => ({ ...current, [id]: value }))
+                }
+                onSave={saveInventoryUpdate}
+                onOpenNotes={(item) => {
+                  setActiveNotesItem(item);
+                  setNotesDraft(item.condition_notes ?? "");
+                }}
+              />
             </>
           )}
 
