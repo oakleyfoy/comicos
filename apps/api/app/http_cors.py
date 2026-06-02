@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
 
@@ -36,22 +35,69 @@ def resolve_cors_origins(settings: Settings) -> list[str]:
     return unique
 
 
-class EnsureCorsHeadersMiddleware(BaseHTTPMiddleware):
-    """Guarantee ACAO on every response (including 500s from exception handlers)."""
+def _origin_from_scope(scope: Scope) -> str | None:
+    for name, value in scope.get("headers", ()):
+        if name == b"origin":
+            return value.decode("latin-1")
+    return None
 
-    def __init__(self, app, allowed_origins: list[str]):
-        super().__init__(app)
+
+def _header_names(headers: list[tuple[bytes, bytes]]) -> set[bytes]:
+    return {name.lower() for name, _ in headers}
+
+
+def _append_cors_headers(headers: list[tuple[bytes, bytes]], origin: str) -> list[tuple[bytes, bytes]]:
+    names = _header_names(headers)
+    out = list(headers)
+    if b"access-control-allow-origin" not in names:
+        out.append((b"access-control-allow-origin", origin.encode("latin-1")))
+    if b"access-control-allow-credentials" not in names:
+        out.append((b"access-control-allow-credentials", b"true"))
+    if b"vary" not in names:
+        out.append((b"vary", b"Origin"))
+    return out
+
+
+class OriginReflectASGIMiddleware:
+    """Outermost ASGI wrapper — injects ACAO on every http.response.start (including 500s).
+
+    BaseHTTPMiddleware can skip header injection when the inner stack raises or times out;
+    wrapping ``send`` catches all successful response starts from the app and proxies.
+    """
+
+    def __init__(self, app: ASGIApp, allowed_origins: list[str]) -> None:
+        self.app = app
         self._allowed = frozenset(allowed_origins)
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        origin = request.headers.get("origin")
-        response = await call_next(request)
-        if origin and origin in self._allowed:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            existing_vary = response.headers.get("Vary")
-            response.headers["Vary"] = "Origin" if not existing_vary else f"{existing_vary}, Origin"
-        return response
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        origin = _origin_from_scope(scope)
+        allow_origin = origin if origin and origin in self._allowed else None
+
+        async def send_with_cors(message: Message) -> None:
+            if allow_origin and message["type"] == "http.response.start":
+                headers = _append_cors_headers(list(message.get("headers", [])), allow_origin)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_cors)
+        except Exception:
+            if not allow_origin:
+                raise
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+                headers={
+                    "Access-Control-Allow-Origin": allow_origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Vary": "Origin",
+                },
+            )
+            await response(scope, receive, send)
 
 
 def register_cors_middleware(app: FastAPI, settings: Settings) -> None:
@@ -64,4 +110,4 @@ def register_cors_middleware(app: FastAPI, settings: Settings) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(EnsureCorsHeadersMiddleware, allowed_origins=allowed)
+    app.add_middleware(OriginReflectASGIMiddleware, allowed_origins=allowed)
