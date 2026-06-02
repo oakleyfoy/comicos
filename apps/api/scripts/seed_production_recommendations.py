@@ -203,9 +203,17 @@ def _run_release_intelligence_refresh_with_logging(
     from app.services.key_issue_agent import detect_key_issues
     from app.services.new_number_one_agent import detect_new_number_ones
     from app.services.run_continuity_agent import run_continuity_detection
-    from app.services.spec_recommendation_agent import run_spec_recommendations
+    from app.services.spec_recommendation_agent import (
+        SpecRecommendationsRunOptions,
+        run_spec_recommendations,
+    )
     from app.services.spec_scoring_agent import run_spec_scoring
     from app.services.variant_intelligence_agent import detect_variant_signals
+
+    spec_opts = SpecRecommendationsRunOptions(
+        forward_window_only=True,
+        progress_callback=lambda message: progress.log(message, stage=2),
+    )
 
     substeps: list[tuple[str, Callable[[], None]]] = [
         ("detect_new_number_ones", lambda: detect_new_number_ones(session, owner_user_id=owner_user_id)),
@@ -214,7 +222,10 @@ def _run_release_intelligence_refresh_with_logging(
         ("run_continuity_detection", lambda: run_continuity_detection(session, owner_user_id=owner_user_id)),
         ("run_auto_watchlists", lambda: run_auto_watchlists(session, owner_user_id=owner_user_id)),
         ("run_spec_scoring", lambda: run_spec_scoring(session, owner_user_id=owner_user_id)),
-        ("run_spec_recommendations", lambda: run_spec_recommendations(session, owner_user_id=owner_user_id)),
+        (
+            "run_spec_recommendations",
+            lambda: run_spec_recommendations(session, owner_user_id=owner_user_id, options=spec_opts),
+        ),
         ("build_future_buy_queue", lambda: build_future_buy_queue(session, owner_user_id=owner_user_id)),
         (
             "run_industry_scanner_refresh",

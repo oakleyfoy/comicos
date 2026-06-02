@@ -57,8 +57,10 @@ def score_issue_for_owner(
     issue: ReleaseIssue,
     series: ReleaseSeries,
     base_score: float,
+    profile: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    profile = build_owner_preference_profile(session, owner_user_id=owner_user_id)
+    if profile is None:
+        profile = build_owner_preference_profile(session, owner_user_id=owner_user_id)
     matched_preferences: list[str] = []
     adjustment = 0.0
     publisher_weights = profile["publisher_weights"]
@@ -103,6 +105,7 @@ def generate_personalized_scores(session: Session, *, owner_user_id: int) -> lis
     from app.services.spec_recommendation_agent import latest_score_rows_for_owner
 
     scores = latest_score_rows_for_owner(session, owner_user_id=owner_user_id)
+    profile = build_owner_preference_profile(session, owner_user_id=owner_user_id)
     issues = {
         int(issue.id or 0): (issue, series)
         for issue, series in session.exec(
@@ -123,6 +126,7 @@ def generate_personalized_scores(session: Session, *, owner_user_id: int) -> lis
             issue=issue,
             series=series,
             base_score=score.score_value,
+            profile=profile,
         )
         personalized.append(
             {
