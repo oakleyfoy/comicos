@@ -58,7 +58,7 @@ export function LoginPage() {
       footer={
         <>
           New to ComicOS?{" "}
-          <Link to="/register" className="font-semibold text-cyan-300 hover:text-cyan-200">
+          <Link to="/register" className="font-semibold text-patriot-blue hover:text-patriot-red">
             Create an account
           </Link>
         </>
@@ -66,31 +66,31 @@ export function LoginPage() {
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-300">Email</span>
+          <span className="text-sm font-medium text-slate-700">Email</span>
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none ring-0 transition placeholder:text-slate-500 focus:border-cyan-300/40"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500"
             placeholder="you@example.com"
             required
           />
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-slate-300">Password</span>
+          <span className="text-sm font-medium text-slate-700">Password</span>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none ring-0 transition placeholder:text-slate-500 focus:border-cyan-300/40"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500"
             placeholder="Enter your password"
             required
           />
         </label>
 
         {error ? (
-          <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
             {error}
           </div>
         ) : null}
@@ -98,7 +98,7 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-patriot-blue px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? "Signing in..." : "Sign in"}
         </button>

@@ -62,6 +62,7 @@ import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collec
 
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
+import { FavoriteStarRating } from "../components/FavoriteStarRating";
 import { HighResReviewInventorySection } from "../components/HighResReviewInventorySection";
 import { MarketIntelligenceFeedPanel } from "../components/MarketIntelligenceFeedPanel";
 import { LoadingState } from "../components/LoadingState";
@@ -5916,21 +5917,17 @@ export function InventoryDetailPage() {
                 </label>
               </div>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-300">Star Rating</span>
-                <select
-                  value={starDraft}
-                  onChange={(event) => setStarDraft(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                >
-                  <option value="">No rating</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                </select>
-              </label>
+              <div className="block">
+                <p className="text-sm font-medium text-slate-300">Favorite</p>
+                <p className="mt-1 text-xs text-slate-500">1–5 stars — tap again on the same star to clear.</p>
+                <div className="mt-3">
+                  <FavoriteStarRating
+                    value={starDraft ? Number(starDraft) : null}
+                    onChange={(rating) => setStarDraft(rating ? String(rating) : "")}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
 
               <label className="block">
                 <span className="text-sm font-medium text-slate-300">Condition Notes</span>

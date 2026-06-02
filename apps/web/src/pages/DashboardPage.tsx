@@ -192,15 +192,15 @@ function marketSaleStatusTone(status: MarketSaleSummaryRead["normalization_statu
       return "border-slate-400/35 bg-slate-400/10 text-slate-100";
     case "raw":
     default:
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
   }
 }
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-patriot-navy">{value}</p>
     </div>
   );
 }
@@ -221,7 +221,7 @@ function inventoryReleaseChronologyCell(item: InventoryItem): JSX.Element {
       >
         {assetStateLabel(item.asset_state)}
       </p>
-      <p className="text-slate-400">{item.release_year ?? "—"}</p>
+      <p className="text-slate-600">{item.release_year ?? "—"}</p>
       {item.release_date ? (
         <p className="text-[11px] text-slate-500">{formatDate(item.release_date)}</p>
       ) : null}
@@ -257,11 +257,11 @@ function assetStateTone(state: InventoryItem["asset_state"]): string {
     case "ordered_not_received":
       return "border-amber-400/30 bg-amber-400/10 text-amber-100";
     case "preorder_not_released_yet":
-      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-100";
+      return "border-blue-300 bg-blue-50 text-blue-800";
     case "cancelled":
       return "border-rose-400/30 bg-rose-400/10 text-rose-200";
     default:
-      return "border-white/10 bg-white/5 text-slate-300";
+      return "border-slate-200 bg-white/5 text-slate-700";
   }
 }
 
@@ -287,11 +287,11 @@ function intelligenceHealthTone(level: InventoryIntelligenceHealthLevel): string
     case "needs_review":
       return "border-amber-400/35 bg-amber-400/10 text-amber-100";
     case "incomplete":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     case "blocked":
       return "border-rose-400/35 bg-rose-400/10 text-rose-100";
     default:
-      return "border-white/10 bg-white/5 text-slate-300";
+      return "border-slate-200 bg-white/5 text-slate-700";
   }
 }
 
@@ -323,7 +323,7 @@ function duplicateOwnershipBadgeTone(value: DuplicateOwnershipClassification): s
       return "border-violet-400/35 bg-violet-400/10 text-violet-100";
     case "preorder_plus_owned":
     case "graded_plus_raw":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     default:
       return "border-white/15 bg-white/5 text-slate-200";
   }
@@ -353,7 +353,7 @@ function runDetectionBadgeTone(value: RunDetectionSeriesStatus): string {
     case "partial_run":
       return "border-amber-400/35 bg-amber-400/10 text-amber-100";
     case "probable_ongoing_series":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     case "complete_limited_series":
       return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
     default:
@@ -366,7 +366,7 @@ function marketTrendTone(value: string): string {
     case "rising":
       return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
     case "stable":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     case "falling":
       return "border-amber-400/35 bg-amber-400/10 text-amber-100";
     case "volatile":
@@ -418,7 +418,7 @@ function InventoryIntelBadges(props: { item: InventoryItem; compact?: boolean })
             Health: {intel.inventory_health.replace(/_/g, " ")}
           </span>
           {!intel.has_cover_scan ? (
-            <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+            <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
               Unscanned
             </span>
           ) : null}
@@ -469,7 +469,7 @@ function inventoryRiskPriorityTone(priority: InventoryRiskPriority): string {
     case "high":
       return "border-amber-400/35 bg-amber-400/10 text-amber-100";
     case "medium":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     case "low":
       return "border-violet-400/35 bg-violet-400/10 text-violet-100";
     default:
@@ -529,7 +529,7 @@ function InventoryRiskBadges(props: { risks?: InventoryRiskRead[] | null }): JSX
         </span>
       ))}
       {more > 0 ? (
-        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
           +{more} more
         </span>
       ) : null}
@@ -620,7 +620,7 @@ function InventoryActionCenterBadges(props: {
         </span>
       ))}
       {more > 0 ? (
-        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
           +{more} actions
         </span>
       ) : null}
@@ -638,15 +638,15 @@ function orderArrivalTone(value: OrderArrivalClassification): string {
       return "border-amber-400/35 bg-amber-400/10 text-amber-100";
     case "upcoming_preorder":
     case "releases_this_week":
-      return "border-cyan-400/35 bg-cyan-400/10 text-cyan-100";
+      return "border-cyan-400/35 bg-cyan-400/10 text-blue-800";
     case "expected_to_ship_soon":
       return "border-violet-400/35 bg-violet-400/10 text-violet-100";
     case "received_recently":
       return "border-emerald-400/35 bg-emerald-400/10 text-emerald-100";
     case "cancelled_order":
-      return "border-white/15 bg-white/5 text-slate-300";
+      return "border-white/15 bg-white/5 text-slate-700";
     default:
-      return "border-white/15 bg-white/5 text-slate-300";
+      return "border-white/15 bg-white/5 text-slate-700";
   }
 }
 
@@ -695,7 +695,7 @@ function OrderArrivalBadges(props: { classifications?: OrderArrivalClassificatio
         </span>
       ))}
       {more > 0 ? (
-        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+        <span className="inline-flex rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
           +{more} more
         </span>
       ) : null}
@@ -719,7 +719,7 @@ function totalInventoryIntelUnresolvedRollup(summary: InventoryIntelligenceRollu
 
 function gainLossClass(value: string | null): string {
   if (value === null) {
-    return "text-slate-400";
+    return "text-slate-600";
   }
 
   const amount = Number(value);
@@ -729,7 +729,7 @@ function gainLossClass(value: string | null): string {
   if (amount < 0) {
     return "text-rose-300";
   }
-  return "text-slate-300";
+  return "text-slate-700";
 }
 
 function normalizeDecimalInput(value: string): string | null {
@@ -755,12 +755,12 @@ function ScanSessionMiniTable(props: {
   const itemsSum = rows.reduce((acc, r) => acc + r.total_items, 0);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{caption}</p>
         <p className="text-[11px] text-slate-500">
           Row progress rollup:{" "}
-          <span className="font-semibold text-slate-300">
+          <span className="font-semibold text-slate-700">
             {processedSum}/{itemsSum}
           </span>{" "}
           processed / total scans
@@ -783,11 +783,11 @@ function ScanSessionMiniTable(props: {
             </thead>
             <tbody className="text-slate-200">
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-white/10">
+                <tr key={row.id} className="border-t border-slate-200">
                   <td className="py-2 pr-3 font-mono text-[11px] text-white">#{row.id}</td>
-                  <td className="py-2 pr-3 capitalize text-slate-300">{formatScanSessionType(row.session_type)}</td>
-                  <td className="py-2 pr-3 capitalize text-slate-300">{row.status.replace(/_/g, " ")}</td>
-                  <td className="py-2 pr-3 text-slate-300">
+                  <td className="py-2 pr-3 capitalize text-slate-700">{formatScanSessionType(row.session_type)}</td>
+                  <td className="py-2 pr-3 capitalize text-slate-700">{row.status.replace(/_/g, " ")}</td>
+                  <td className="py-2 pr-3 text-slate-700">
                     {row.processed_items}/{row.total_items}
                   </td>
                   <td className="py-2 pr-3">{row.failed_items}</td>
@@ -2998,8 +2998,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           title={profileMeta.title}
           description={profileMeta.description}
           actions={
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-              Signed in as <span className="font-medium text-white">{user?.email ?? "Loading..."}</span>
+            <div className="rounded-2xl border border-slate-200 bg-white/5 px-4 py-3 text-sm text-slate-700">
+              Signed in as <span className="font-medium text-slate-900">{user?.email ?? "Loading..."}</span>
             </div>
           }
         />
@@ -3025,13 +3025,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         description={profileMeta.description}
         actions={
           <>
-            <div className="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300 sm:block">
-              Signed in as <span className="font-medium text-white">{user?.email ?? "Loading..."}</span>
+            <div className="hidden rounded-2xl border border-slate-200 bg-blue-50 px-4 py-3 text-sm text-slate-700 sm:block">
+              Signed in as <span className="font-medium text-slate-900">{user?.email ?? "Loading..."}</span>
             </div>
             {loadProfile !== "portfolio" && loadProfile !== "full" ? (
               <Link
                 to="/dashboard"
-                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/50"
+                className="rounded-2xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-800 transition hover:border-cyan-300/50"
               >
                 Portfolio
               </Link>
@@ -3040,13 +3040,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <>
                 <Link
                   to="/orders/import"
-                  className="rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                  className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
                 >
                   Import
                 </Link>
                 <Link
                   to="/scan-sessions"
-                  className="rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/5"
+                  className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
                 >
                   Scan
                 </Link>
@@ -3054,7 +3054,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             ) : null}
             <Link
               to="/orders/new"
-              className="rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              className="rounded-2xl bg-patriot-blue px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900"
             >
               Add order
             </Link>
@@ -3109,15 +3109,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         {cards.map((card) => (
           <article
             key={card.label}
-            className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15"
+            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50"
           >
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">{card.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{card.value}</p>
+            <p className="mt-2 text-2xl font-semibold text-patriot-navy sm:text-3xl">{card.value}</p>
           </article>
         ))}
       </section>
       {portfolioValue ? (
-        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-300">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
           Showing {normalizeCurrencyCode(portfolioValue.currency_code)} market value.{" "}
           {portfolioHasMultipleCurrencies ? "Multiple currencies are kept separate." : "Single-currency summary."}{" "}
           Low-confidence and stale values are surfaced in the cards above without changing acquisition data.
@@ -3131,10 +3131,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {compactHeadlineCards.map((card) => (
             <article
               key={card.label}
-              className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
+              className="rounded-2xl border border-slate-200 bg-white p-4"
             >
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-              <p className="mt-2 text-xl font-semibold text-white">{card.value}</p>
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">{card.value}</p>
             </article>
           ))}
         </section>
@@ -3143,13 +3143,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       {loadProfile === "portfolio" && physicalIntakeSummary ? (
         <section
           id="physical-intake"
-          className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15"
+          className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-slate-200/50"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">Receiving &amp; scan placeholders</h2>
-              <p className="mt-1 max-w-prose text-sm text-slate-400">
+              <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Receiving &amp; scan placeholders</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-600">
                 Mark copies received on each inventory detail page, then stage scan sessions when ready.
               </p>
             </div>
@@ -3161,21 +3161,21 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </Link>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {physicalIntakeSummary.counts.released_not_received}
               </p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {physicalIntakeSummary.counts.received_pending_scan}
               </p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Shipment overdue (expected ship)</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {physicalIntakeSummary.counts.overdue_expected_ship}
               </p>
             </article>
@@ -3189,13 +3189,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {physicalIntakeSummary ? (
             <section
               id="physical-intake"
-              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15"
+              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Receiving & scan placeholders</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Receiving & scan placeholders</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Canonical receiving counts stay here — mark received explicitly, then stage intake scan sessions via
                     the API when eligible. Same logic backs pipeline intake rollups elsewhere (no OCR or ingest runs automatically).
                   </p>
@@ -3216,23 +3216,23 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                     {physicalIntakeSummary.counts.released_not_received}
                   </p>
                 </article>
-                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                     {physicalIntakeSummary.counts.received_pending_scan}
                   </p>
                 </article>
-                <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
                     Shipment overdue (expected ship)
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-white">
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                     {physicalIntakeSummary.counts.overdue_expected_ship}
                   </p>
                 </article>
@@ -3248,13 +3248,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {scanPipelineDash ? (
             <section
               id="bulk-scan-pipeline"
-              className="rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-black/15"
+              className="rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">Bulk scan pipeline · read-only snapshot</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Session & queue visibility</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Session & queue visibility</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Condensed aggregates (QA ledger, unresolved routing signals, queued high-res asks, presets, replay deltas).
                     Receiving placeholders stay in Physical intake above — avoids duplicating shipment vs scan semantics here.
                   </p>
@@ -3292,9 +3292,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     ["Sessions · completed with errors", scanPipelineDash.summary.sessions_completed_with_errors],
                   ] as const
                 ).map(([label, value]) => (
-                  <article key={label} className="rounded-2xl border border-white/10 bg-slate-900/65 p-3">
+                  <article key={label} className="rounded-2xl border border-slate-200 bg-white p-3">
                     <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                    <p className="mt-1 text-xl font-semibold text-patriot-navy">{value}</p>
                   </article>
                 ))}
               </div>
@@ -3306,9 +3306,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     ["Replay runs with changes", scanPipelineDash.summary.replay_runs_with_changes],
                   ] as const
                 ).map(([label, value]) => (
-                  <article key={label} className="rounded-2xl border border-white/10 bg-slate-900/65 p-3">
+                  <article key={label} className="rounded-2xl border border-slate-200 bg-white p-3">
                     <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                    <p className="mt-1 text-xl font-semibold text-patriot-navy">{value}</p>
                   </article>
                 ))}
               </div>
@@ -3328,10 +3328,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 ).map(([label, value]) => (
                   <article
                     key={label}
-                    className="rounded-2xl border border-teal-500/15 bg-slate-900/65 p-3"
+                    className="rounded-2xl border border-teal-500/15 bg-white p-3"
                   >
                     <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+                    <p className="mt-1 text-xl font-semibold text-patriot-navy">{value}</p>
                   </article>
                 ))}
               </div>
@@ -3374,13 +3374,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {marketSalesLoading || marketSalesError || marketSalesPreview.length > 0 ? (
             <section
               id="market-intelligence"
-              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15"
+              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market sales foundation</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only record preview</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only record preview</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic sales records, source names, and normalization states from the new market-sales layer.
                     The dashboard stays read-only; see the ops panel for explicit import-upsert detail.
                   </p>
@@ -3393,7 +3393,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {marketSalesLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market sales preview…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market sales preview…</p>
               ) : marketSalesError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketSalesError}</StatusBanner>
@@ -3401,7 +3401,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               ) : marketSalesPreview.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">No market-sale records recorded yet.</p>
               ) : (
-                <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                <div className="mt-5 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                   <table className="w-full border-collapse text-left text-xs">
                     <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                       <tr>
@@ -3421,7 +3421,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           </td>
                           <td className="p-3 align-top">
                             <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
-                            <div className="mt-1 text-[11px] text-slate-400">
+                            <div className="mt-1 text-[11px] text-slate-600">
                               Issue {row.normalized_issue ?? row.raw_issue}
                             </div>
                           </td>
@@ -3454,25 +3454,25 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           <MarketIntelligenceDashboard ownerUserId={user?.id} />
 
           {marketSaleReviewQueueSummaryLoading || marketSaleReviewQueueSummaryError || marketSaleReviewQueueSummary ? (
-            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market sale review queue</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only review summary</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/70">Market sale review queue</p>
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only review summary</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic queue counts only. Operators can open the review workspace to update normalized fields
                     and log explicit review actions; the dashboard stays read-only.
                   </p>
                 </div>
                 <Link
                   to="/ops#market-sale-review-queue"
-                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-blue-800 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
                 >
                   Open ops review queue
                 </Link>
               </div>
               {marketSaleReviewQueueSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market sale review summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market sale review summary…</p>
               ) : marketSaleReviewQueueSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketSaleReviewQueueSummaryError}</StatusBanner>
@@ -3507,12 +3507,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketCompEligibilitySummaryLoading || marketCompEligibilitySummaryError || marketCompEligibilitySummary ? (
-            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market comp eligibility</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only readiness counts</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only readiness counts</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic comp eligibility only. The dashboard stays read-only and shows lightweight readiness
                     counts; inspect the ops workspace for the full evidence drawer and filters.
                   </p>
@@ -3525,7 +3525,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {marketCompEligibilitySummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market comp eligibility summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market comp eligibility summary…</p>
               ) : marketCompEligibilitySummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketCompEligibilitySummaryError}</StatusBanner>
@@ -3581,12 +3581,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketCompsSummaryLoading || marketCompsSummaryError || marketCompsSummary ? (
-            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Comparable sales</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Comp readiness overview</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Comp readiness overview</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Lightweight grouped-comp summary. Open the ops explorer for full included and excluded sales evidence.
                   </p>
                 </div>
@@ -3598,7 +3598,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {marketCompsSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading comparable sales summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading comparable sales summary…</p>
               ) : marketCompsSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketCompsSummaryError}</StatusBanner>
@@ -3624,25 +3624,25 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketFmvSummaryLoading || marketFmvSummaryError || marketFmvSummary ? (
-            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market FMV snapshots</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic valuation ledger</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/70">Market FMV snapshots</p>
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic valuation ledger</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Snapshot-only FMV built from eligible comparable sales. This stays separate from manual inventory FMV edits
                     and never performs prediction, FX conversion, or automated portfolio mutation.
                   </p>
                 </div>
                 <Link
                   to="/ops#market-fmv"
-                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-blue-800 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
                 >
                   Open ops FMV workspace
                 </Link>
               </div>
               {marketFmvSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market FMV snapshots…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market FMV snapshots…</p>
               ) : marketFmvSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketFmvSummaryError}</StatusBanner>
@@ -3671,12 +3671,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketTrendSummaryLoading || marketTrendSummaryError || marketTrendSummary ? (
-            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market trend snapshots</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic trend signal strip</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic trend signal strip</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Compare FMV history over fixed windows to surface rising, falling, stable, and volatile movement without
                     forecasting, speculation scoring, or inventory mutation.
                   </p>
@@ -3689,7 +3689,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {marketTrendSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market trend snapshots…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market trend snapshots…</p>
               ) : marketTrendSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketTrendSummaryError}</StatusBanner>
@@ -3706,12 +3706,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketMatchSuggestionsPendingLoading || marketMatchSuggestionsPendingError || marketMatchSuggestionsPendingCount >= 0 ? (
-            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-black/15">
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market match suggestions</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Read-only pending-count widget</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only pending-count widget</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic match suggestions only. Open the ops review workspace to inspect evidence and approve,
                     reject, or ignore suggestion artifacts without mutating canonical or inventory data.
                   </p>
@@ -3724,7 +3724,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {marketMatchSuggestionsPendingLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading market match suggestion count…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading market match suggestion count…</p>
               ) : marketMatchSuggestionsPendingError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{marketMatchSuggestionsPendingError}</StatusBanner>
@@ -3740,13 +3740,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {user ? (
             <section
               id="dealer-command-dash"
-              className="mt-6 rounded-3xl border border-lime-500/35 bg-slate-950/85 p-5 shadow-xl shadow-black/35"
+              className="mt-6 rounded-3xl border border-lime-500/35 bg-white p-5 shadow-xl shadow-black/35"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-lime-200/85">Dealer command</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Operational cockpit · Bloomberg-style density</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Operational cockpit · Bloomberg-style density</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic overlays only: inventory movement, liquidity posture, exporter health, show operations, ledger sales,
                     listing intelligence completeness. No forecasting, staffing, outbound notifications, repricing bots, or automatic
                     alert resolution — generate snapshots explicitly to freeze evidence.
@@ -3781,7 +3781,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
 
               {dealerDashLoading ? (
-                <p className="mt-6 text-sm text-slate-400">Loading dealer rollups…</p>
+                <p className="mt-6 text-sm text-slate-600">Loading dealer rollups…</p>
               ) : dealerDashError ? (
                 <div className="mt-6">
                   <StatusBanner tone="error">{dealerDashError}</StatusBanner>
@@ -3815,7 +3815,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         <div className="grid gap-5 xl:grid-cols-2">
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">B · Alerts</p>
-                            <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                            <div className="mt-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                               <table className="w-full border-collapse text-left text-xs">
                                 <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                   <tr>
@@ -3836,7 +3836,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                       <tr key={a.id}>
                                         <td className="p-3 font-semibold text-lime-200/90">{a.severity}</td>
                                         <td className="p-3 text-slate-100">{a.alert_type}</td>
-                                        <td className="p-3 text-slate-400">{a.message}</td>
+                                        <td className="p-3 text-slate-600">{a.message}</td>
                                       </tr>
                                     ))
                                   )}
@@ -3847,7 +3847,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">C · Operational feed</p>
-                            <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                            <div className="mt-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                               <table className="w-full border-collapse text-left text-xs">
                                 <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                   <tr>
@@ -3868,7 +3868,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                       <tr key={evt.id}>
                                         <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(evt.created_at)}</td>
                                         <td className="p-3 font-semibold text-slate-100">{evt.event_type}</td>
-                                        <td className="p-3 text-slate-400">{evt.summary}</td>
+                                        <td className="p-3 text-slate-600">{evt.summary}</td>
                                       </tr>
                                     ))
                                   )}
@@ -3882,7 +3882,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">D · Convention snapshot</p>
                             {conventionSummaryLoading ? (
-                              <p className="mt-2 text-sm text-slate-400">Loading convention aggregates…</p>
+                              <p className="mt-2 text-sm text-slate-600">Loading convention aggregates…</p>
                             ) : conventionSummaryError ? (
                               <StatusBanner tone="error">{conventionSummaryError}</StatusBanner>
                             ) : conventionSummary ? (
@@ -3900,7 +3900,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">E · Export ops</p>
                             {listingExportDashLoading ? (
-                              <p className="mt-2 text-sm text-slate-400">Loading exporter rollups…</p>
+                              <p className="mt-2 text-sm text-slate-600">Loading exporter rollups…</p>
                             ) : listingExportDashError ? (
                               <StatusBanner tone="error">{listingExportDashError}</StatusBanner>
                             ) : listingExportDash ? (
@@ -3920,7 +3920,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">F · Ledger sales · 30d</p>
                             {salesLedgerSummaryLoading ? (
-                              <p className="mt-2 text-sm text-slate-400">Loading ledger summary…</p>
+                              <p className="mt-2 text-sm text-slate-600">Loading ledger summary…</p>
                             ) : salesLedgerSummaryError ? (
                               <StatusBanner tone="error">{salesLedgerSummaryError}</StatusBanner>
                             ) : salesLedgerSummary ? (
@@ -3938,7 +3938,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">G · Listing intelligence</p>
                             {listingIntelligenceSummaryLoading ? (
-                              <p className="mt-2 text-sm text-slate-400">Loading intelligence rollup…</p>
+                              <p className="mt-2 text-sm text-slate-600">Loading intelligence rollup…</p>
                             ) : listingIntelligenceSummaryError ? (
                               <StatusBanner tone="error">{listingIntelligenceSummaryError}</StatusBanner>
                             ) : listingIntelligenceSummary ? (
@@ -3965,13 +3965,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             <>
               <section
                 id="portfolio-intelligence-dash"
-              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Portfolio intelligence</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic exposure & allocation truth</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic exposure & allocation truth</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Registry-grade rollups: portfolio counts, FMV and cost basis anchors (when present), concentration flags,
                     liquidity split, graded vs raw posture. Observational — no trades, acquisitions, predictive signals, or
                     hidden inventory mutation.
@@ -3996,7 +3996,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
 
               {portfolioIntelLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading portfolio rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading portfolio rollup…</p>
               ) : portfolioIntelError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{portfolioIntelError}</StatusBanner>
@@ -4039,13 +4039,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
             <section
               id="portfolio-liquidity-dash"
-              className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-teal-100/90">Portfolio liquidity allocation</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic capital &amp; liquidity posture</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic capital &amp; liquidity posture</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Portfolio-wide liquidity buckets, weighted FMV posture, observational dead-capital estimate, balance status,
                     and explicit checksum fingerprints. Inputs are read-only liquidity engine, FMV, listings, sales ledger,
                     allocations, and convention assignments — no liquidation, predictive timing, or FMV/portfolio mutation.
@@ -4069,7 +4069,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
               </div>
               {portfolioLiquidityLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading portfolio liquidity rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading portfolio liquidity rollup…</p>
               ) : portfolioLiquidityError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{portfolioLiquidityError}</StatusBanner>
@@ -4107,13 +4107,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       value={`${portfolioLiquidityDetail.snapshot.low_liquidity_count} · ${portfolioLiquidityDetail.snapshot.illiquid_count}`}
                     />
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-xs text-slate-300">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
                     <p className="font-semibold uppercase tracking-[0.14em] text-slate-500">Liquidity buckets (% of FMV)</p>
                     <ul className="mt-2 space-y-1">
                       {portfolioLiquidityDetail.buckets.map((b) => (
                         <li key={b.id} className="flex justify-between gap-4">
                           <span>{b.liquidity_bucket}</span>
-                          <span className="text-slate-400">
+                          <span className="text-slate-600">
                             {(b.percentage_of_portfolio ?? "—").toString()}% · counts {b.item_count}
                           </span>
                         </li>
@@ -4128,13 +4128,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
             <section
               id="duplicate-intelligence-dash"
-              className="mt-6 rounded-3xl border border-rose-400/30 bg-rose-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-rose-400/30 bg-rose-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-rose-100/90">Duplicate intelligence</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic overlaps & consolidation posture</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic overlaps & consolidation posture</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Observational duplicate clusters, deterministic strength tiers, liquidity-aware profiles, and consolidation
                     captions only. No auto-selling, acquisitions, predictive AI, FMV mutation, or hidden inventory changes.
                   </p>
@@ -4157,7 +4157,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
               </div>
               {dupIntelLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading duplicate rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading duplicate rollup…</p>
               ) : dupIntelError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{dupIntelError}</StatusBanner>
@@ -4201,13 +4201,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {user ? (
             <section
               id="dealer-grading-command-center"
-              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/12 p-5 shadow-xl shadow-black/20"
+              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/60"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/80">Dealer grading dashboard</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Unified grading intelligence cockpit</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/80">Dealer grading dashboard</p>
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Unified grading intelligence cockpit</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Dense dealer-grade grading operations only: candidate posture, recommendation quality, submission flow,
                     reconciliation outcomes, risk overlays, alerts, and append-safe feed evidence. No scan AI, autonomous
                     grading, or hidden mutation.
@@ -4226,7 +4226,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     type="button"
                     onClick={() => void generateDealerGradingDashboardSnapshot()}
                     disabled={dealerGradingGenBusy}
-                    className="rounded-xl border border-cyan-400/45 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-xl border border-cyan-400/45 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-blue-800 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {dealerGradingGenBusy ? "Generating…" : "Generate grading snapshot"}
                   </button>
@@ -4240,7 +4240,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
 
               {dealerGradingDashLoading ? (
-                <p className="mt-6 text-sm text-slate-400">Loading grading command center…</p>
+                <p className="mt-6 text-sm text-slate-600">Loading grading command center…</p>
               ) : dealerGradingDashError ? (
                 <div className="mt-6">
                   <StatusBanner tone="error">{dealerGradingDashError}</StatusBanner>
@@ -4328,9 +4328,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                               <p className="text-sm text-slate-500">No grader performance rollups on this snapshot.</p>
                             ) : (
                               graderRollup.slice(0, 4).map((row) => (
-                                <div key={String(row.grader ?? Math.random())} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                                  <p className="text-sm font-semibold text-white">{String(row.grader ?? "Unknown grader")}</p>
-                                  <p className="mt-1 text-xs text-slate-400">
+                                <div key={String(row.grader ?? Math.random())} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                  <p className="text-sm font-semibold text-patriot-navy">{String(row.grader ?? "Unknown grader")}</p>
+                                  <p className="mt-1 text-xs text-slate-600">
                                     submissions {String(row.submission_count ?? "—")} · below {String(row.below_expectation_count ?? "—")}
                                   </p>
                                   <p className="mt-1 text-[11px] text-slate-500">
@@ -4346,7 +4346,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <div className="grid gap-5 xl:grid-cols-2">
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">F · Alerts panel</p>
-                          <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                          <div className="mt-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                             <table className="w-full border-collapse text-left text-xs">
                               <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                 <tr>
@@ -4365,9 +4365,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                 ) : (
                                   dealerGradingAlerts.slice(0, 12).map((row) => (
                                     <tr key={row.id}>
-                                      <td className="p-3 font-semibold text-cyan-200/90">{row.severity}</td>
+                                      <td className="p-3 font-semibold text-blue-700/90">{row.severity}</td>
                                       <td className="p-3 text-slate-100">{row.alert_type}</td>
-                                      <td className="p-3 text-slate-400">{row.message}</td>
+                                      <td className="p-3 text-slate-600">{row.message}</td>
                                     </tr>
                                   ))
                                 )}
@@ -4378,7 +4378,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">G · Grading feed</p>
-                          <div className="mt-2 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                          <div className="mt-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                             <table className="w-full border-collapse text-left text-xs">
                               <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                 <tr>
@@ -4399,7 +4399,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                     <tr key={evt.id}>
                                       <td className="whitespace-nowrap p-3 text-slate-500">{formatDateTime(evt.created_at)}</td>
                                       <td className="p-3 font-semibold text-slate-100">{evt.event_type}</td>
-                                      <td className="p-3 text-slate-400">{evt.summary}</td>
+                                      <td className="p-3 text-slate-600">{evt.summary}</td>
                                     </tr>
                                   ))
                                 )}
@@ -4423,8 +4423,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-200/85">Grading reporting</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 closeout CSV registry</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 closeout CSV registry</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Deterministic grading closeout reports for candidates, economics, submissions, reconciliation,
                     recommendations, risk, the grading dashboard, and grader performance. Reports are observational only
                     and keep replay-safe checksums plus append-safe history.
@@ -4449,27 +4449,27 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
 
               {gradingReportsLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading report registry…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading report registry…</p>
               ) : gradingReportsError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingReportsError}</StatusBanner>
                 </div>
               ) : (
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recent grading reports</p>
                     {gradingReportsRecent && gradingReportsRecent.items.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-slate-200">
                         {gradingReportsRecent.items.map((run) => (
-                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
+                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
                             <div>
-                              <p className="font-semibold text-white">{run.report_type}</p>
+                              <p className="font-semibold text-slate-900">{run.report_type}</p>
                               <p className="font-mono text-[10px] text-slate-500">
                                 #{run.id} · {run.status} · rows {run.csv_row_count}
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-300">
+                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-700">
                                 {shortenChecksum(run.checksum)}
                               </span>
                               {run.status === "COMPLETED" ? (
@@ -4495,7 +4495,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     {gradingReportsFailed && gradingReportsFailed.items.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-rose-100">
                         {gradingReportsFailed.items.map((run) => (
-                          <li key={run.id} className="border-b border-white/10 pb-2">
+                          <li key={run.id} className="border-b border-slate-200 pb-2">
                             <p className="font-semibold">{run.report_type}</p>
                             <p className="font-mono text-[10px] text-rose-200/80">
                               #{run.id} · {shortenChecksum(run.checksum)} · {(run.failure_reason ?? "UNKNOWN").slice(0, 120)}
@@ -4520,8 +4520,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/85">Grading operations</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading candidate ledger</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading candidate ledger</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Owner-scoped grading intentions, economics placeholders, replay-safe inserts, checksum snapshots, and
                     append-only evidence — not grade prediction or scan AI on this lane.
                   </p>
@@ -4534,7 +4534,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingDashLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading candidate rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading candidate rollup…</p>
               ) : gradingDashError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingDashError}</StatusBanner>
@@ -4562,8 +4562,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/85">Grading economics</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 raw-vs-graded spread engine</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 raw-vs-graded spread engine</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic spread checks compare raw FMV, graded FMV, grading cost assumptions, and liquidity
                     weighting. No prediction, recommendation, or scan AI enters this lane.
                   </p>
@@ -4576,7 +4576,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingSpreadLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading spread rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading spread rollup…</p>
               ) : gradingSpreadError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingSpreadError}</StatusBanner>
@@ -4609,8 +4609,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/85">Grading economics</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading ROI engine</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading ROI engine</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic ROI snapshots combine grading fees, shipping, insurance, liquidity weighting, and
                     realized-sale evidence. The lane stays explainable and mutation-free.
                   </p>
@@ -4623,7 +4623,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingRoiLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading ROI rollup…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading ROI rollup…</p>
               ) : gradingRoiError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingRoiError}</StatusBanner>
@@ -4653,8 +4653,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/85">Submission workflow</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 submission batch operations</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 submission batch operations</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic submission batches track grading groups, shipment states, lifecycle milestones, and
                     estimated turnaround without any carrier or grader integrations.
                   </p>
@@ -4667,7 +4667,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingSubmissionLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading submissions…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading submissions…</p>
               ) : gradingSubmissionError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingSubmissionError}</StatusBanner>
@@ -4696,22 +4696,22 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/85">Result reconciliation</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading outcome reconciliation</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/85">Result reconciliation</p>
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading outcome reconciliation</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Actual returned grades, ROI deltas, and grader performance snapshots without changing FMV,
                     pricing, or inventory automatically.
                   </p>
                 </div>
                 <Link
                   to="/ops#grading-reconciliation-ops"
-                  className="rounded-xl border border-cyan-300/35 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/60 hover:bg-white/5"
+                  className="rounded-xl border border-cyan-300/35 px-4 py-2 text-xs font-semibold text-blue-800 transition hover:border-cyan-200/60 hover:bg-white/5"
                 >
                   Ops reconciliation
                 </Link>
               </div>
               {gradingReconciliationLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading reconciliation…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading reconciliation…</p>
               ) : gradingReconciliationError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingReconciliationError}</StatusBanner>
@@ -4735,9 +4735,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <p className="text-sm text-slate-500">No grader performance snapshots yet.</p>
                     ) : (
                       gradingReconciliationSummary.grader_performance.map((row) => (
-                        <div key={`${row.grader}-${row.snapshot_date}`} className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-                          <p className="text-sm font-semibold text-white">{row.grader}</p>
-                          <p className="mt-1 text-xs text-slate-400">
+                        <div key={`${row.grader}-${row.snapshot_date}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm font-semibold text-patriot-navy">{row.grader}</p>
+                          <p className="mt-1 text-xs text-slate-600">
                             submissions {row.submission_count} · ROI delta {row.average_roi_delta ?? "—"}
                           </p>
                           <p className="mt-1 text-[11px] text-slate-500">
@@ -4763,8 +4763,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/85">Recommendation engine</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading decision support</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading decision support</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Explainable grading recommendations built from ROI, spread, liquidity, reconciliation, grader
                     performance, and listing-intelligence evidence.
                   </p>
@@ -4777,7 +4777,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingRecommendationLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading recommendations…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading recommendations…</p>
               ) : gradingRecommendationError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingRecommendationError}</StatusBanner>
@@ -4812,8 +4812,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/90">Portfolio strategy dashboard</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Unified strategic portfolio command center</h2>
-                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Unified strategic portfolio command center</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Dealer-grade portfolio cockpit consolidating exposure, duplicates, liquidity, hold/sell posture,
                   concentration risk, and acquisition gaps into one deterministic strategic readout.
                 </p>
@@ -4836,7 +4836,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
             </div>
             {strategyDashLoading ? (
-              <p className="mt-4 text-sm text-slate-400">Loading strategy dashboard…</p>
+              <p className="mt-4 text-sm text-slate-600">Loading strategy dashboard…</p>
             ) : strategyDashResp?.snapshot ? (
               <>
                 {strategyDashError ? (
@@ -4852,7 +4852,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   <StatCard label="Diversification" value={strategyDashResp.snapshot.diversification_score ?? "—"} />
                 </div>
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Exposure & diversification</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
                       <StatCard label="Overexposed categories" value={String(strategyDashResp.snapshot.overexposed_category_count)} />
@@ -4863,7 +4863,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       />
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Liquidity & capital efficiency</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-4">
                       <StatCard label="Liquidity efficiency" value={strategyDashResp.snapshot.liquidity_efficiency_score ?? "—"} />
@@ -4872,7 +4872,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <StatCard label="Illiquid %" value={strategyDashResp.snapshot.illiquid_inventory_percentage ?? "—"} />
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Duplicate & consolidation</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <StatCard label="Duplicate clusters" value={String(strategyDashResp.snapshot.duplicate_cluster_count)} />
@@ -4881,12 +4881,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         value={strategyMetricMap.get("duplicate_warning_clusters")?.metric_value_decimal ?? "0"}
                       />
                     </div>
-                    <div className="mt-3 space-y-2 text-xs text-slate-300">
+                    <div className="mt-3 space-y-2 text-xs text-slate-700">
                       {strategyDuplicateClusters.length ? (
                         strategyDuplicateClusters.slice(0, 3).map((row) => (
-                          <div key={String(row.cluster_id ?? row.cluster_key)} className="rounded-xl border border-white/10 px-3 py-2">
-                            <p className="font-semibold text-white">{String(row.cluster_key ?? "cluster")}</p>
-                            <p className="text-[11px] text-slate-400">
+                          <div key={String(row.cluster_id ?? row.cluster_key)} className="rounded-xl border border-slate-200 px-3 py-2">
+                            <p className="font-semibold text-slate-900">{String(row.cluster_key ?? "cluster")}</p>
+                            <p className="text-[11px] text-slate-600">
                               {String(row.duplication_status ?? "UNKNOWN")} · items {String(row.total_item_count ?? "—")} · FMV{" "}
                               {formatMaybeCurrency(String(row.total_fmv_amount ?? ""))}
                             </p>
@@ -4897,7 +4897,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       )}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hold / sell intelligence</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-4">
                       <StatCard label="HOLD" value={String(strategyDashResp.snapshot.hold_recommendation_count)} />
@@ -4906,7 +4906,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <StatCard label="Capital release" value={formatMaybeCurrency(strategyMetricMap.get("capital_release_estimate")?.metric_value_decimal)} />
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Acquisition intelligence</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-4">
                       <StatCard label="Opportunities" value={String(strategyDashResp.snapshot.acquisition_opportunity_count)} />
@@ -4920,14 +4920,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         value={strategyMetricMap.get("liquidity_improvement_acquisitions")?.metric_value_decimal ?? "0"}
                       />
                     </div>
-                    <div className="mt-3 space-y-2 text-xs text-slate-300">
+                    <div className="mt-3 space-y-2 text-xs text-slate-700">
                       {strategyAcquisitionFocusRows.length ? (
                         strategyAcquisitionFocusRows.slice(0, 3).map((row) => (
-                          <div key={String(row.snapshot_id ?? row.issue_id)} className="rounded-xl border border-white/10 px-3 py-2">
-                            <p className="font-semibold text-white">
+                          <div key={String(row.snapshot_id ?? row.issue_id)} className="rounded-xl border border-slate-200 px-3 py-2">
+                            <p className="font-semibold text-slate-900">
                               {String(row.acquisition_category ?? "Opportunity")} · {String(row.acquisition_priority ?? "—")}
                             </p>
-                            <p className="text-[11px] text-slate-400">
+                            <p className="text-[11px] text-slate-600">
                               issue {String(row.issue_id ?? "gap")} · diversification {String(row.diversification_impact ?? "—")}
                               {" · "}liquidity {String(row.liquidity_impact ?? "—")}
                             </p>
@@ -4938,16 +4938,16 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       )}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Strategic alerts</p>
                     <div className="mt-3 space-y-2 text-xs text-slate-200">
                       {strategyAlerts.length ? (
                         strategyAlerts.slice(0, 5).map((row) => (
-                          <div key={row.alert_replay_key} className="rounded-xl border border-white/10 px-3 py-2">
-                            <p className="font-semibold text-white">
-                              {row.alert_type} · <span className="text-slate-300">{row.severity}</span>
+                          <div key={row.alert_replay_key} className="rounded-xl border border-slate-200 px-3 py-2">
+                            <p className="font-semibold text-slate-900">
+                              {row.alert_type} · <span className="text-slate-700">{row.severity}</span>
                             </p>
-                            <p className="mt-1 text-[11px] text-slate-400">{row.message}</p>
+                            <p className="mt-1 text-[11px] text-slate-600">{row.message}</p>
                           </div>
                         ))
                       ) : (
@@ -4956,15 +4956,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Strategic feed</p>
                   <div className="mt-3 space-y-2 text-xs text-slate-200">
                     {strategyFeed.length ? (
                       strategyFeed.slice(0, 8).map((row) => (
-                        <div key={row.deterministic_key} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                        <div key={row.deterministic_key} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2">
                           <div>
-                            <p className="font-semibold text-white">{row.event_type}</p>
-                            <p className="mt-1 text-[11px] text-slate-400">{row.summary}</p>
+                            <p className="font-semibold text-slate-900">{row.event_type}</p>
+                            <p className="mt-1 text-[11px] text-slate-600">{row.summary}</p>
                           </div>
                           <span className="text-[10px] text-slate-500">{formatDate(row.created_at)}</span>
                         </div>
@@ -4991,8 +4991,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-sky-100/90">Acquisition intelligence</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic expansion and gap-analysis layer</h2>
-                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic expansion and gap-analysis layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explainable acquisition priorities that highlight diversification, liquidity, grading upside, sales velocity,
                   and low-overlap growth opportunities without any autonomous buying or predictive market timing.
                 </p>
@@ -5015,7 +5015,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
             </div>
             {acquisitionPriorityLoading ? (
-              <p className="mt-4 text-sm text-slate-400">Loading acquisition priorities…</p>
+              <p className="mt-4 text-sm text-slate-600">Loading acquisition priorities…</p>
             ) : acquisitionPriorityError ? (
               <div className="mt-4">
                 <StatusBanner tone="error">{acquisitionPriorityError}</StatusBanner>
@@ -5047,8 +5047,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Hold / sell intelligence</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic strategic recommendation layer</h2>
-                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic strategic recommendation layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explainable HOLD, SELL, REDUCE_EXPOSURE, GRADE_THEN_SELL, CONSOLIDATE, and WATCH signals built from
                   liquidity, exposure, duplicates, grading economics, sales history, listing activity, and risk evidence.
                 </p>
@@ -5071,7 +5071,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
             </div>
             {portfolioRecommendationLoading ? (
-              <p className="mt-4 text-sm text-slate-400">Loading portfolio recommendations…</p>
+              <p className="mt-4 text-sm text-slate-600">Loading portfolio recommendations…</p>
             ) : portfolioRecommendationError ? (
               <div className="mt-4">
                 <StatusBanner tone="error">{portfolioRecommendationError}</StatusBanner>
@@ -5105,8 +5105,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-100/90">Concentration intelligence</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Deterministic concentration-risk layer</h2>
-                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic concentration-risk layer</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explicit portfolio concentration modeling across publishers, titles, eras, grading posture, liquidity posture,
                   variant families, and acquisition channels. Scores remain replay-safe and fully formula-driven.
                 </p>
@@ -5129,7 +5129,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
             </div>
             {concentrationRiskLoading ? (
-              <p className="mt-4 text-sm text-slate-400">Loading concentration risk…</p>
+              <p className="mt-4 text-sm text-slate-600">Loading concentration risk…</p>
             ) : concentrationRiskError ? (
               <div className="mt-4">
                 <StatusBanner tone="error">{concentrationRiskError}</StatusBanner>
@@ -5159,8 +5159,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-rose-200/85">Risk and confidence</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P37 grading uncertainty layer</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading uncertainty layer</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic risk and confidence snapshots explaining where grading economics are stable, thin,
                     or too volatile to trust fully.
                   </p>
@@ -5173,7 +5173,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {gradingRiskLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading grading risk snapshots…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading grading risk snapshots…</p>
               ) : gradingRiskError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{gradingRiskError}</StatusBanner>
@@ -5198,13 +5198,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {user ? (
             <section
               id="operational-reporting-dash"
-              className="mt-6 rounded-3xl border border-sky-400/30 bg-slate-950/80 p-5 shadow-xl shadow-black/20"
+              className="mt-6 rounded-3xl border border-sky-400/30 bg-white p-5 shadow-xl shadow-slate-200/60"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Operational reporting</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">P36 closeout CSV registry</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P36 closeout CSV registry</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic, checksum-backed summaries across listings, liquidity, conventions, exporters, ledger sales,
                     dealer snapshots, and inventory health signals. Replay keys keep generation idempotent — no corrective writes,
                     forecasting, or notification fan-out on this lane.
@@ -5229,27 +5229,27 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </div>
 
               {opReportRollupsLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading operational report fingerprints…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading operational report fingerprints…</p>
               ) : opReportRollupsError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{opReportRollupsError}</StatusBanner>
                 </div>
               ) : (
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recent runs (14d)</p>
                     {opReportRollups && opReportRollups.recent_runs.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-slate-200">
                         {opReportRollups.recent_runs.map((run) => (
-                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
+                          <li key={run.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
                             <div>
-                              <p className="font-semibold text-white">{run.report_type}</p>
+                              <p className="font-semibold text-slate-900">{run.report_type}</p>
                               <p className="font-mono text-[10px] text-slate-500">
                                 #{run.id} · {run.status} · rows {run.csv_row_count}
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-300">
+                              <span className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-slate-700">
                                 {shortenChecksum(run.checksum)}
                               </span>
                               {run.status === "COMPLETED" ? (
@@ -5275,7 +5275,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     {opReportRollups && opReportRollups.failed_runs.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-rose-100">
                         {opReportRollups.failed_runs.map((run) => (
-                          <li key={run.id} className="border-b border-white/10 pb-2">
+                          <li key={run.id} className="border-b border-slate-200 pb-2">
                             <p className="font-semibold">{run.report_type}</p>
                             <p className="font-mono text-[10px] text-rose-200/80">
                               #{run.id} · {(run.failure_reason ?? "UNKNOWN").slice(0, 120)}
@@ -5297,13 +5297,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           listingRegistrySummary ? (
             <section
               id="listing-registry-dash"
-              className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">Listing registry</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Canonical listing truth (manual + exports)</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Canonical listing truth (manual + exports)</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Read-only workbook snapshot: draft/ready roll-up, live and sold counts, and the most recent lifecycle audit
                     spine. No marketplace posting, auto pricing, or inventory decrements on this path.
                   </p>
@@ -5316,7 +5316,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {listingRegistrySummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading listing registry summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading listing registry summary…</p>
               ) : listingRegistrySummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{listingRegistrySummaryError}</StatusBanner>
@@ -5329,7 +5329,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     <StatCard label="Sold listings (ledger)" value={String(listingRegistrySummary.sold_count)} />
                     <StatCard label="Recent audit events shown" value={String(listingRegistrySummary.recent_events.length)} />
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5342,12 +5342,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <tbody className="divide-y divide-white/10 text-slate-200">
                         {listingRegistrySummary.recent_events.slice(0, 6).map((evt) => (
                           <tr key={evt.id}>
-                            <td className="p-3 font-mono text-[11px] text-slate-300">#{evt.listing_id}</td>
+                            <td className="p-3 font-mono text-[11px] text-slate-700">#{evt.listing_id}</td>
                             <td className="p-3">{evt.event_type.replace(/_/g, " ")}</td>
-                            <td className="p-3 text-slate-400">
+                            <td className="p-3 text-slate-600">
                               {(evt.prior_status ?? "—")} → {(evt.new_status ?? "—")}
                             </td>
-                            <td className="p-3 text-slate-400">{formatDateTime(evt.created_at)}</td>
+                            <td className="p-3 text-slate-600">{formatDateTime(evt.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -5363,13 +5363,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           listingIntelligenceSummary ? (
             <section
               id="listing-intelligence-dash"
-              className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/80">Listing intelligence</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Completeness, export readiness, and cleanup signals</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Completeness, export readiness, and cleanup signals</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic analysis only: listing quality, missing fields, stale-risk flags, and channel performance
                     rollups. No recommendations, repricing, or hidden mutation.
                   </p>
@@ -5382,7 +5382,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {listingIntelligenceSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading listing intelligence summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading listing intelligence summary…</p>
               ) : listingIntelligenceSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{listingIntelligenceSummaryError}</StatusBanner>
@@ -5401,7 +5401,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     <StatCard label="Export-ready listings" value={String(listingIntelligenceSummary.export_ready_count)} />
                     <StatCard label="Stale-risk listings" value={String(listingIntelligenceSummary.stale_risk_count)} />
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5415,22 +5415,22 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       <tbody className="divide-y divide-white/10 text-slate-200">
                         {listingIntelligenceSummary.recent_weak_or_incomplete.length === 0 ? (
                           <tr>
-                            <td className="p-3 text-slate-400" colSpan={5}>
+                            <td className="p-3 text-slate-600" colSpan={5}>
                               No weak or incomplete listings were found in the latest intelligence snapshot.
                             </td>
                           </tr>
                         ) : (
                           listingIntelligenceSummary.recent_weak_or_incomplete.slice(0, 6).map((row) => (
                             <tr key={row.id}>
-                              <td className="p-3 font-mono text-[11px] text-slate-300">#{row.listing_id}</td>
+                              <td className="p-3 font-mono text-[11px] text-slate-700">#{row.listing_id}</td>
                               <td className="p-3">{row.intelligence_status}</td>
-                              <td className="p-3 text-slate-300">{row.completeness_score}</td>
-                              <td className="p-3 text-slate-400">
+                              <td className="p-3 text-slate-700">{row.completeness_score}</td>
+                              <td className="p-3 text-slate-600">
                                 {row.missing_required_fields_json.length > 0
                                   ? row.missing_required_fields_json.join(", ")
                                   : "—"}
                               </td>
-                              <td className="p-3 text-slate-400">{row.stale_risk_flag ? "Yes" : "No"}</td>
+                              <td className="p-3 text-slate-600">{row.stale_risk_flag ? "Yes" : "No"}</td>
                             </tr>
                           ))
                         )}
@@ -5445,13 +5445,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {liquiditySummaryLoading || liquiditySummaryError || liquiditySummary ? (
             <section
               id="liquidity-dash"
-              className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Liquidity engine</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Evidence-backed inventory liquidity snapshot</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Evidence-backed inventory liquidity snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic snapshots derived from listing velocity, stale thresholds, and actual sales. This panel is
                     descriptive only and never reprices, predicts, or auto-closes inventory.
                   </p>
@@ -5464,7 +5464,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {liquiditySummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading liquidity summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading liquidity summary…</p>
               ) : liquiditySummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{liquiditySummaryError}</StatusBanner>
@@ -5480,7 +5480,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     />
                     <StatCard label="Sell-through %" value={`${liquiditySummary.sell_through_pct}%`} />
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5501,9 +5501,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           liquiditySummary.recent_stale_events.slice(0, 6).map((event) => (
                             <tr key={event.id}>
                               <td className="p-3 text-slate-200">{event.event_type.replace(/_/g, " ")}</td>
-                              <td className="p-3 text-slate-300">{event.threshold_days}+ days</td>
-                              <td className="p-3 text-slate-300">{event.days_active} days</td>
-                              <td className="p-3 font-mono text-[11px] text-slate-300">#{event.listing_id}</td>
+                              <td className="p-3 text-slate-700">{event.threshold_days}+ days</td>
+                              <td className="p-3 text-slate-700">{event.days_active} days</td>
+                              <td className="p-3 font-mono text-[11px] text-slate-700">#{event.listing_id}</td>
                             </tr>
                           ))
                         )}
@@ -5518,13 +5518,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {conventionSummaryLoading || conventionSummaryError || conventionSummary ? (
             <section
               id="convention-dash"
-              className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/80">Convention ops</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Dealer workflow and show inventory snapshot</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Dealer workflow and show inventory snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic convention assignments, movement history, temporary pricing, and active sale sessions.
                     This panel stays operational and never mutates inventory quantities or posts payments.
                   </p>
@@ -5537,7 +5537,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {conventionSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading convention summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading convention summary…</p>
               ) : conventionSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{conventionSummaryError}</StatusBanner>
@@ -5551,7 +5551,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     <StatCard label="Showcases" value={String(conventionSummary.showcase_count)} />
                     <StatCard label="Active sale sessions" value={String(conventionSummary.active_sale_session_count)} />
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5572,9 +5572,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           conventionSummary.recent_events.slice(0, 5).map((event) => (
                             <tr key={event.id}>
                               <td className="p-3 text-slate-200">{event.name}</td>
-                              <td className="p-3 text-slate-300">{event.event_type.replace(/_/g, " ")}</td>
-                              <td className="p-3 text-slate-300">{event.status}</td>
-                              <td className="p-3 text-slate-300">
+                              <td className="p-3 text-slate-700">{event.event_type.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-700">{event.status}</td>
+                              <td className="p-3 text-slate-700">
                                 {formatDate(event.start_date)} - {formatDate(event.end_date)}
                               </td>
                             </tr>
@@ -5591,13 +5591,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {salesLedgerSummaryLoading || salesLedgerSummaryError || salesLedgerSummary ? (
             <section
               id="sales-ledger-dash"
-              className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/80">Sales ledger</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Realized sale truth and profit snapshot</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Realized sale truth and profit snapshot</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Recorded sales only. This ledger captures realized outcomes, linked listing transitions, and stable money
                     math without marketplace posting, inventory decrements, or hidden mutation.
                   </p>
@@ -5610,7 +5610,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </Link>
               </div>
               {salesLedgerSummaryLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading sales ledger summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading sales ledger summary…</p>
               ) : salesLedgerSummaryError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{salesLedgerSummaryError}</StatusBanner>
@@ -5633,7 +5633,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       </span>
                     ))}
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5657,14 +5657,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         ) : (
                           salesLedgerSummary.recent_sales.slice(0, 6).map((sale) => (
                             <tr key={sale.id}>
-                              <td className="p-3 font-mono text-[11px] text-slate-300">#{sale.id}</td>
+                              <td className="p-3 font-mono text-[11px] text-slate-700">#{sale.id}</td>
                               <td className="p-3 text-slate-200">{sale.channel.replace(/_/g, " ")}</td>
                               <td className="p-3 text-slate-200">{sale.status}</td>
-                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.gross_sale_amount)}</td>
-                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.net_proceeds_amount)}</td>
-                              <td className="p-3 text-slate-300">{formatUsdCurrency(sale.realized_profit_amount)}</td>
-                              <td className="p-3 text-slate-400">{formatDate(sale.sale_date)}</td>
-                              <td className="p-3 text-slate-400">{sale.listing_id ? `#${sale.listing_id}` : "—"}</td>
+                              <td className="p-3 text-slate-700">{formatUsdCurrency(sale.gross_sale_amount)}</td>
+                              <td className="p-3 text-slate-700">{formatUsdCurrency(sale.net_proceeds_amount)}</td>
+                              <td className="p-3 text-slate-700">{formatUsdCurrency(sale.realized_profit_amount)}</td>
+                              <td className="p-3 text-slate-600">{formatDate(sale.sale_date)}</td>
+                              <td className="p-3 text-slate-600">{sale.listing_id ? `#${sale.listing_id}` : "—"}</td>
                             </tr>
                           ))
                         )}
@@ -5679,27 +5679,27 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {listingExportDashLoading || listingExportDashError || listingExportDash ? (
             <section
               id="listing-export-dash"
-              className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15"
+              className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/75">Marketplace exports</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">Deterministic CSV ledger (read-only)</h2>
-                  <p className="mt-1 max-w-prose text-sm text-slate-400">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/75">Marketplace exports</p>
+                  <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic CSV ledger (read-only)</h2>
+                  <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Channel-shaped listing files with checksums and append-only run history. Exports never post to marketplaces,
                     mutate listing status, or touch inventory balances. Bulk multi-select in the SPA is deferred; use the API for
-                    batch <span className="font-mono text-[11px] text-cyan-100/90">POST /listing-export-runs</span> calls.
+                    batch <span className="font-mono text-[11px] text-blue-800/90">POST /listing-export-runs</span> calls.
                   </p>
                 </div>
                 <Link
                   to="/ops#listing-export-ops"
-                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
+                  className="rounded-full border border-cyan-400/35 px-3 py-1.5 text-xs font-semibold text-blue-800 transition hover:border-cyan-300/60 hover:bg-cyan-500/10"
                 >
                   Ops export runs
                 </Link>
               </div>
               {listingExportDashLoading ? (
-                <p className="mt-4 text-sm text-slate-400">Loading marketplace export summary…</p>
+                <p className="mt-4 text-sm text-slate-600">Loading marketplace export summary…</p>
               ) : listingExportDashError ? (
                 <div className="mt-4">
                   <StatusBanner tone="error">{listingExportDashError}</StatusBanner>
@@ -5712,7 +5712,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     <StatCard label="Latest completed checksum" value={shortenChecksum(listingExportDash.latest_completed_checksum)} />
                     <StatCard label="Recent runs shown" value={String(listingExportDash.recent_runs.length)} />
                   </div>
-                  <div className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/45">
+                  <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                         <tr>
@@ -5735,13 +5735,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         ) : (
                           listingExportDash.recent_runs.slice(0, 6).map((run) => (
                             <tr key={run.id}>
-                              <td className="p-3 font-mono text-[11px] text-slate-300">#{run.id}</td>
+                              <td className="p-3 font-mono text-[11px] text-slate-700">#{run.id}</td>
                               <td className="p-3 text-slate-200">{run.channel}</td>
                               <td className="p-3 text-slate-200">{run.status}</td>
-                              <td className="p-3 text-slate-300">{run.exported_listing_count}</td>
-                              <td className="p-3 text-slate-300">{run.skipped_listing_count}</td>
-                              <td className="p-3 font-mono text-[10px] text-slate-400">{shortenChecksum(run.checksum)}</td>
-                              <td className="p-3 text-slate-400">
+                              <td className="p-3 text-slate-700">{run.exported_listing_count}</td>
+                              <td className="p-3 text-slate-700">{run.skipped_listing_count}</td>
+                              <td className="p-3 font-mono text-[10px] text-slate-600">{shortenChecksum(run.checksum)}</td>
+                              <td className="p-3 text-slate-600">
                                 {run.completed_at ? formatDateTime(run.completed_at) : "—"}
                               </td>
                             </tr>
@@ -5761,19 +5761,19 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       marketImportRunsError ||
       marketSources.length > 0 ||
       marketImportRuns.length > 0 ? (
-        <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/12 p-5 shadow-xl shadow-black/15">
+        <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/12 p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/70">Market source registry</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">Registry and import-run summaries</h2>
-              <p className="mt-1 max-w-prose text-sm text-slate-400">
+              <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Registry and import-run summaries</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-600">
                 Deterministic source rows and append-only import-run history. The dashboard only reads these records;
                 lifecycle changes remain in the ops API.
               </p>
             </div>
           </div>
           {marketSourcesLoading || marketImportRunsLoading ? (
-            <p className="mt-4 text-sm text-slate-400">Loading market registry…</p>
+            <p className="mt-4 text-sm text-slate-600">Loading market registry…</p>
           ) : marketSourcesError || marketImportRunsError ? (
             <div className="mt-4 space-y-3">
               {marketSourcesError ? <StatusBanner tone="error">{marketSourcesError}</StatusBanner> : null}
@@ -5781,7 +5781,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </div>
           ) : (
             <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Source registry</p>
                 {marketSources.length === 0 ? (
                   <p className="mt-3 text-sm text-slate-500">No market sources available yet.</p>
@@ -5798,11 +5798,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       </thead>
                       <tbody className="text-slate-200">
                         {marketSources.slice(0, 8).map((row) => (
-                          <tr key={row.id} className="border-t border-white/10">
+                          <tr key={row.id} className="border-t border-slate-200">
                             <td className="py-2 pr-3 text-slate-100">{row.source_name}</td>
-                            <td className="py-2 pr-3 text-slate-300">{row.source_type}</td>
-                            <td className="py-2 pr-3 text-slate-300">{row.import_priority}</td>
-                            <td className="py-2 text-slate-300">{row.enabled ? "Yes" : "No"}</td>
+                            <td className="py-2 pr-3 text-slate-700">{row.source_type}</td>
+                            <td className="py-2 pr-3 text-slate-700">{row.import_priority}</td>
+                            <td className="py-2 text-slate-700">{row.enabled ? "Yes" : "No"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -5811,7 +5811,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 )}
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent import runs</p>
                 {marketImportRuns.length === 0 ? (
                   <p className="mt-3 text-sm text-slate-500">No import runs recorded yet.</p>
@@ -5828,16 +5828,16 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       </thead>
                       <tbody className="text-slate-200">
                         {marketImportRuns.slice(0, 8).map((row) => (
-                          <tr key={row.id} className="border-t border-white/10">
+                          <tr key={row.id} className="border-t border-slate-200">
                             <td className="py-2 pr-3">
                               <div className="text-slate-100">{row.source_name}</div>
                               <div className="mt-1 text-[11px] text-slate-500">#{row.market_source_id}</div>
                             </td>
-                            <td className="py-2 pr-3 text-slate-300">{row.status.replace(/_/g, " ")}</td>
-                            <td className="py-2 pr-3 text-slate-300">
+                            <td className="py-2 pr-3 text-slate-700">{row.status.replace(/_/g, " ")}</td>
+                            <td className="py-2 pr-3 text-slate-700">
                               {row.imported_records}/{row.total_records} imported
                             </td>
-                            <td className="py-2 text-slate-400">
+                            <td className="py-2 text-slate-600">
                               <div>{row.started_at ? formatDateTime(row.started_at) : "Not started"}</div>
                               <div className="mt-1 text-[11px] text-slate-500">{formatDateTime(row.updated_at)}</div>
                             </td>
@@ -5859,17 +5859,17 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       {showCollectionPanels || loadsFullWorkspace ? (
       <>
       {loadsFullWorkspace ? (
-      <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">
+      <details className="group mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-slate-200 hover:bg-slate-50">
           <div>
-            <h2 className="text-sm font-semibold text-white">Deterministic exports (CSV / JSON)</h2>
-            <p className="mt-1 max-w-xl text-[11px] text-slate-400">
+            <h2 className="text-sm font-semibold text-patriot-navy">Deterministic exports (CSV / JSON)</h2>
+            <p className="mt-1 max-w-xl text-[11px] text-slate-600">
               Read-only snapshots aligned with risk, action center, order/arrival, run gaps, timeline, collection summary,
               and market intelligence (eligible comps, FMV/trend CSVs, inventory FMV subsets, deterministic JSON rollup).
               Filtered exports mirror the workbook controls below when exporting from filtered inventory grids.
             </p>
           </div>
-          <span className="rounded-full border border-cyan-400/25 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/80">
+          <span className="rounded-full border border-cyan-400/25 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-800/80">
             Owner scope
           </span>
         </summary>
@@ -5972,11 +5972,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {inventoryRiskSummary ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+        <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Inventory risk lanes</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Inventory risk lanes</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Attention surface derived deterministically from conflicts, canonical reviews, scans/OCR, preorder gaps,
                 duplicate uncertainty, and run gaps — no pricing or automated fixes.
               </p>
@@ -5988,31 +5988,31 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <article className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">Critical copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.critical_copies}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.critical_copies}</p>
             </article>
             <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">High copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.high_copies}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.high_copies}</p>
             </article>
             <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Medium copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.medium_copies}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-blue-800/80">Medium copies</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.medium_copies}</p>
             </article>
             <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Low copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.low_copies}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.low_copies}</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Risk items</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.total_risk_items}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.total_risk_items}</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Copies with risk</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryRiskSummary.copies_with_risk}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryRiskSummary.copies_with_risk}</p>
             </article>
           </div>
-          <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <h3 className="text-sm font-semibold text-white">Top action items</h3>
+          <div className="mt-5 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-patriot-navy">Top action items</h3>
             <div className="mt-3 overflow-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
@@ -6025,9 +6025,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </thead>
                 <tbody className="text-slate-200">
                   {inventoryRiskSummary.top_action_items.slice(0, 5).map((item) => (
-                    <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
-                      <td className="py-2 pr-3 font-medium text-white">
-                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                    <tr key={item.inventory_copy_id} className="border-t border-slate-100 align-top">
+                      <td className="py-2 pr-3 font-medium text-slate-900">
+                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-blue-700">
                           {item.publisher} · {item.title} #{item.issue_number}
                         </Link>
                       </td>
@@ -6045,14 +6045,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           {item.risk_types.map((riskType) => (
                             <span
                               key={riskType}
-                              className="inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200"
+                              className="inline-flex rounded-full border border-slate-200 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200"
                             >
                               {inventoryRiskLabel(riskType)}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="py-2 text-slate-400">
+                      <td className="py-2 text-slate-600">
                         {item.evidence_preview.join(" · ")}
                       </td>
                     </tr>
@@ -6065,11 +6065,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {inventoryActionSummary ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+        <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Workflow action center</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Workflow action center</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Same priority ladder as risk lanes: conflicts, canon, duplication, scans/OCR, preorder-arrival overlaps.
                 Read-only — no mutations.
               </p>
@@ -6083,48 +6083,48 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">
                 Critical actions
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.critical_actions}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.critical_actions}</p>
             </article>
             <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">High actions</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.high_actions}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.high_actions}</p>
             </article>
             <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Medium actions</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.medium_actions}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-blue-800/80">Medium actions</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.medium_actions}</p>
             </article>
             <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Low actions</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.low_actions}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.low_actions}</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Copies with actions</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.copies_with_actions}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.copies_with_actions}</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Total actions</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryActionSummary.total_actions}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryActionSummary.total_actions}</p>
             </article>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
-            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-              <h3 className="text-sm font-semibold text-white">Actions by category</h3>
-              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+            <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-patriot-navy">Actions by category</h3>
+              <ul className="mt-3 space-y-2 text-xs text-slate-700">
                 {inventoryActionSummary.by_category
                   .filter((row) => row.count > 0)
                   .slice(0, 8)
                   .map((row) => (
-                    <li key={row.key ?? "null"} className="flex justify-between gap-3 border-b border-white/5 pb-2">
-                      <span className="text-slate-400">
+                    <li key={row.key ?? "null"} className="flex justify-between gap-3 border-b border-slate-100 pb-2">
+                      <span className="text-slate-600">
                         {row.key ? inventoryActionCenterCategoryUiLabel(row.key as InventoryActionCenterCategory) : "—"}
                       </span>
-                      <span className="font-semibold text-white">{row.count}</span>
+                      <span className="font-semibold text-slate-900">{row.count}</span>
                     </li>
                   ))}
               </ul>
             </div>
-            <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-              <h3 className="text-sm font-semibold text-white">Copies needing the most workflows</h3>
+            <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-patriot-navy">Copies needing the most workflows</h3>
               <div className="mt-3 overflow-auto">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
@@ -6137,9 +6137,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   </thead>
                   <tbody className="text-slate-200">
                     {inventoryActionSummary.top_unresolved_inventory.slice(0, 6).map((item) => (
-                      <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
-                        <td className="py-2 pr-3 font-medium text-white">
-                          <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                      <tr key={item.inventory_copy_id} className="border-t border-slate-100 align-top">
+                        <td className="py-2 pr-3 font-medium text-slate-900">
+                          <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-blue-700">
                             {item.publisher} · {item.title} #{item.issue_number}
                           </Link>
                         </td>
@@ -6152,8 +6152,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                             {item.highest_lane_priority}
                           </span>
                         </td>
-                        <td className="py-2 pr-3 text-slate-400">{item.action_count}</td>
-                        <td className="py-2 text-slate-400">
+                        <td className="py-2 pr-3 text-slate-600">{item.action_count}</td>
+                        <td className="py-2 text-slate-600">
                           {item.action_categories
                             .map((c) => inventoryActionCenterCategoryUiLabel(c))
                             .join(" · ")}
@@ -6169,15 +6169,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {collectionHistoricalTimeline && collectionHistoricalTimeline.events.length > 0 ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+        <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Collection timeline (activity history)</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Collection timeline (activity history)</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Persisted timestamps for purchases, arrivals, scans/OCR (and replays), link decisions, duplicate reviews,
                 conflicts, variants — valuations never appear here.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-white/5 pt-3">
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                 <p className="w-full text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   Release / preorder markers
                 </p>
@@ -6189,11 +6189,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   .map((event) => (
                     <article
                       key={`strip-${event.stable_id}`}
-                      className="flex min-w-[10rem] flex-1 gap-3 rounded-2xl border border-cyan-400/25 bg-slate-950/50 p-3"
+                      className="flex min-w-[10rem] flex-1 gap-3 rounded-2xl border border-cyan-400/25 bg-slate-50 p-3"
                     >
                       <span className={`mt-1 inline-block size-2.5 shrink-0 rounded-full ${timelineDotClass(event)}`} />
                       <div className="text-xs">
-                        <p className="font-semibold text-cyan-100">{describeHistoricalTimelineEvent(event)}</p>
+                        <p className="font-semibold text-blue-800">{describeHistoricalTimelineEvent(event)}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
                           {new Intl.DateTimeFormat("en-US", {
                             month: "short",
@@ -6201,12 +6201,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                             year: "numeric",
                           }).format(new Date(event.occurred_at))}
                         </p>
-                        <p className="mt-1 font-medium text-white">
+                        <p className="mt-1 font-medium text-slate-900">
                           {event.publisher} · {event.series_title} #{event.issue_number}
                         </p>
                         <Link
                           to={`/inventory/${event.inventory_copy_id}`}
-                          className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                          className="mt-2 inline-flex text-[11px] font-semibold text-blue-700 hover:text-blue-800"
                         >
                           Open copy #{event.inventory_copy_id}
                         </Link>
@@ -6227,8 +6227,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           </div>
           <div className="mt-6 space-y-6">
             <div>
-              <h3 className="text-sm font-semibold text-white">Recent reconciliation & reviews</h3>
-              <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50">
+              <h3 className="text-sm font-semibold text-patriot-navy">Recent reconciliation & reviews</h3>
+              <div className="mt-3 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                     <tr>
@@ -6252,8 +6252,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                       )
                       .slice(0, 10)
                       .map((event) => (
-                        <tr key={`review-${event.stable_id}`} className="border-t border-white/5">
-                          <td className="px-4 py-2 text-[11px] text-slate-400">
+                        <tr key={`review-${event.stable_id}`} className="border-t border-slate-100">
+                          <td className="px-4 py-2 text-[11px] text-slate-600">
                             {new Intl.DateTimeFormat("en-US", {
                               month: "short",
                               day: "numeric",
@@ -6262,7 +6262,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                               minute: "2-digit",
                             }).format(new Date(event.occurred_at))}
                           </td>
-                          <td className="px-4 py-2 font-semibold text-white">
+                          <td className="px-4 py-2 font-semibold text-slate-900">
                             {describeHistoricalTimelineEvent(event)}
                           </td>
                           <td className="px-4 py-2">
@@ -6270,7 +6270,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           </td>
                           <td className="px-4 py-2">
                             <Link
-                              className="text-cyan-200 hover:text-cyan-50"
+                              className="text-blue-700 hover:text-cyan-50"
                               to={`/inventory/${event.inventory_copy_id}`}
                             >
                               #{event.inventory_copy_id}
@@ -6284,8 +6284,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-white">Latest collection activity</h3>
-              <div className="mt-3 overflow-auto rounded-2xl border border-white/10 bg-slate-950/40">
+              <h3 className="text-sm font-semibold text-patriot-navy">Latest collection activity</h3>
+              <div className="mt-3 overflow-auto rounded-2xl border border-slate-200 bg-slate-50">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
                     <tr>
@@ -6297,8 +6297,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   </thead>
                   <tbody className="text-slate-200">
                     {collectionHistoricalTimeline.events.slice(0, 14).map((event) => (
-                      <tr key={`all-${event.stable_id}`} className="border-t border-white/5 align-top">
-                        <td className="px-4 py-2 text-[11px] text-slate-400 whitespace-nowrap">
+                      <tr key={`all-${event.stable_id}`} className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-2 text-[11px] text-slate-600 whitespace-nowrap">
                           {new Intl.DateTimeFormat("en-US", {
                             month: "short",
                             day: "numeric",
@@ -6308,18 +6308,18 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           }).format(new Date(event.occurred_at))}
                         </td>
                         <td className="px-4 py-2">
-                          <p className="font-semibold text-white">{describeHistoricalTimelineEvent(event)}</p>
+                          <p className="font-semibold text-slate-900">{describeHistoricalTimelineEvent(event)}</p>
                           <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{event.event_type}</p>
                         </td>
                         <td className="px-4 py-2">
                           <p>{event.publisher}</p>
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-slate-600">
                             {event.series_title} #{event.issue_number}
                           </p>
                         </td>
                         <td className="px-4 py-2">
                           <Link
-                            className="text-cyan-200 hover:text-cyan-50"
+                            className="text-blue-700 hover:text-cyan-50"
                             to={`/inventory/${event.inventory_copy_id}`}
                           >
                             #{event.inventory_copy_id}
@@ -6336,11 +6336,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {orderArrivalSummary ? (
-        <section className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15">
+        <section className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">Order / arrival lanes</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Order / arrival lanes</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Derived from persisted purchase, release, expected-ship, and receipt fields plus order status — logistics
                 only (no FMV, pricing, speculation, or auto-receiving).
               </p>
@@ -6351,10 +6351,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-blue-800/80">
                 Releases this week
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {orderArrivalBucketCount(orderArrivalSummary, "releases_this_week")}
               </p>
             </article>
@@ -6362,25 +6362,25 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">
                 Released / not received
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {orderArrivalBucketCount(orderArrivalSummary, "released_not_received")}
               </p>
             </article>
             <article className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-100/80">Shipping soon</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {orderArrivalBucketCount(orderArrivalSummary, "expected_to_ship_soon")}
               </p>
             </article>
             <article className="rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/80">Shipment overdue</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {orderArrivalBucketCount(orderArrivalSummary, "overdue_expected_ship")}
               </p>
             </article>
           </div>
-          <div className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <h3 className="text-sm font-semibold text-white">Upcoming preorder / arrivals</h3>
+          <div className="mt-5 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-patriot-navy">Upcoming preorder / arrivals</h3>
             <div className="mt-3 overflow-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
@@ -6392,9 +6392,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </thead>
                 <tbody className="text-slate-200">
                   {orderArrivalSummary.top_action_items.slice(0, 6).map((item) => (
-                    <tr key={item.inventory_copy_id} className="border-t border-white/5 align-top">
-                      <td className="py-2 pr-3 font-medium text-white">
-                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-cyan-200">
+                    <tr key={item.inventory_copy_id} className="border-t border-slate-100 align-top">
+                      <td className="py-2 pr-3 font-medium text-slate-900">
+                        <Link to={`/inventory/${item.inventory_copy_id}`} className="hover:text-blue-700">
                           {item.publisher} · {item.title} #{item.issue_number}
                         </Link>
                         <div className="text-[11px] text-slate-500">{item.retailer}</div>
@@ -6413,7 +6413,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           ))}
                         </div>
                       </td>
-                      <td className="py-2 text-slate-400">{item.evidence_preview.join(" · ")}</td>
+                      <td className="py-2 text-slate-600">{item.evidence_preview.join(" · ")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -6433,20 +6433,20 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         dashboardWidgetErrors.collectionAnalyticsQuality ||
         dashboardWidgetErrors.collectionAnalyticsPublishers) ? (
         <details
-          className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+          className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50 [&>summary::-webkit-details-marker]:hidden"
           open={loadProfile === "collection"}
         >
-          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/45 p-4">
+          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Coverage rollup & publishers</h2>
-              <p className="mt-1 max-w-prose text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Coverage rollup & publishers</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-600">
                 {loadProfile === "collection"
                   ? "Ownership mix, health buckets, preorder exposure, and publisher totals."
                   : "Collapsed by default — ownership mix, health buckets, preorder exposure, OCR/canon coverage and deterministic publisher totals."}
               </p>
             </div>
           </summary>
-          <div className="mt-8 space-y-12 border-t border-white/5 pt-8">
+          <div className="mt-8 space-y-12 border-t border-slate-100 pt-8">
             {dashboardWidgetErrors.inventoryIntelSummary ||
             dashboardWidgetErrors.inventoryIntelHealth ? (
               <div className="space-y-2">
@@ -6465,46 +6465,46 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             {inventoryIntelSummary && inventoryIntelHealth ? (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-white">Inventory intelligence rollup</h3>
-                  <p className="mt-1 text-sm text-slate-400">
+                  <h3 className="text-base font-semibold text-patriot-navy">Inventory intelligence rollup</h3>
+                  <p className="mt-1 text-sm text-slate-600">
                     Scans/OCR backlog, unresolved review workloads, deterministic duplicate/variant clustering touch —
                     read-only projections.
                   </p>
                 </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
-            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">In hand</p>
-              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_in_hand}</p>
+              <p className="mt-1 text-lg font-semibold text-patriot-navy">{inventoryIntelSummary.ownership_in_hand}</p>
             </article>
-            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Preorder</p>
-              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_preorder}</p>
+              <p className="mt-1 text-lg font-semibold text-patriot-navy">{inventoryIntelSummary.ownership_preorder}</p>
             </article>
-            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Ordered (not recv)</p>
-              <p className="mt-1 text-lg font-semibold text-white">
+              <p className="mt-1 text-lg font-semibold text-patriot-navy">
                 {inventoryIntelSummary.ownership_ordered_not_received}
               </p>
             </article>
-            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Cancelled</p>
-              <p className="mt-1 text-lg font-semibold text-white">{inventoryIntelSummary.ownership_cancelled}</p>
+              <p className="mt-1 text-lg font-semibold text-patriot-navy">{inventoryIntelSummary.ownership_cancelled}</p>
             </article>
-            <article className="rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Unknown ops state</p>
-              <p className="mt-1 text-lg font-semibold text-white">
+              <p className="mt-1 text-lg font-semibold text-patriot-navy">
                 {inventoryIntelSummary.ownership_unknown_state}
               </p>
             </article>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Tracked copies</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelSummary.total_inventory_copies}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryIntelSummary.total_inventory_copies}</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Cover scans</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelSummary.scanned_copies}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryIntelSummary.scanned_copies}</p>
               <p className="mt-1 text-[11px] text-slate-500">
                 {inventoryIntelSummary.unscanned_copies} still unscanned · OCR pending{" "}
                 {inventoryIntelSummary.ocr_pending_copies}, complete {inventoryIntelSummary.ocr_complete_copies} · corrupt
@@ -6512,9 +6512,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 {inventoryIntelSummary.ocr_failed_copies}
               </p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Unresolved rollups</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {totalInventoryIntelUnresolvedRollup(inventoryIntelSummary)}
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
@@ -6527,16 +6527,16 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </article>
             <article className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-emerald-200/80">Healthy</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.healthy}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryIntelHealth.healthy}</p>
             </article>
             <article className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-100/80">Needs review</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.needs_review}</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryIntelHealth.needs_review}</p>
             </article>
             <article className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-cyan-100/80">Incomplete</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{inventoryIntelHealth.incomplete}</p>
-              <p className="mt-1 text-[11px] text-slate-400">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-blue-800/80">Incomplete</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">{inventoryIntelHealth.incomplete}</p>
+              <p className="mt-1 text-[11px] text-slate-600">
                 Blocked copies: {inventoryIntelHealth.blocked} (normally cancelled/stranded workflows)
               </p>
             </article>
@@ -6567,9 +6567,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             {collectionAnalyticsSummary || collectionAnalyticsQuality ? (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-white">Publisher & quality rollups</h3>
+                  <h3 className="text-base font-semibold text-patriot-navy">Publisher & quality rollups</h3>
                   {collectionAnalyticsSummary ? (
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-sm text-slate-600">
                       As-of anchor:{" "}
                       <span className="font-semibold text-slate-200">
                         {collectionAnalyticsSummary.generated_as_of_date}
@@ -6579,32 +6579,32 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 {collectionAnalyticsSummary ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Preorder exposure</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.preorder_copies}</p>
+                      <p className="mt-2 text-2xl font-semibold text-patriot-navy">{collectionAnalyticsSummary.preorder_copies}</p>
                       <p className="mt-1 text-[11px] text-slate-500">
                         Missing calendar cues: {collectionAnalyticsSummary.preorder_missing_calendar_copies}
                       </p>
                     </article>
-                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">In hand copies</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{collectionAnalyticsSummary.in_hand_copies}</p>
+                      <p className="mt-2 text-2xl font-semibold text-patriot-navy">{collectionAnalyticsSummary.in_hand_copies}</p>
                       <p className="mt-1 text-[11px] text-slate-500">
                         Total tracked: {collectionAnalyticsSummary.total_copies}
                       </p>
                     </article>
-                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
                         Unresolved review workload
                       </p>
-                      <p className="mt-2 text-2xl font-semibold text-white">
+                      <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                         {collectionAnalyticsSummary.unresolved_review_copies}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">Distinct copies in needs_review health bucket.</p>
                     </article>
-                    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Canonical-linked copies</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">
+                      <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                         {collectionAnalyticsSummary.canonical_linked_copies}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">
@@ -6617,19 +6617,19 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <article className="rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-200">OCR complete</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {collectionAnalyticsQuality.inventory_quality.ocr_complete.percent}%{" "}
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   ({collectionAnalyticsQuality.inventory_quality.ocr_complete.numerator}/
                   {collectionAnalyticsQuality.inventory_quality.ocr_complete.denominator})
                 </span>
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/5 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100">Canonical coverage</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-800">Canonical coverage</p>
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {collectionAnalyticsQuality.inventory_quality.canonical_linked.percent}%{" "}
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   ({collectionAnalyticsQuality.inventory_quality.canonical_linked.numerator}/
                   {collectionAnalyticsQuality.inventory_quality.canonical_linked.denominator})
                 </span>
@@ -6637,9 +6637,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </article>
             <article className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100">Dup ownership touch</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {collectionAnalyticsQuality.inventory_quality.duplicate_ownership_exposure_copies.percent}%{" "}
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   (
                   {
                     collectionAnalyticsQuality.inventory_quality.duplicate_ownership_exposure_copies.numerator
@@ -6650,11 +6650,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </article>
             <article className="rounded-2xl border border-violet-400/25 bg-violet-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-100">Open conflicts touch</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {
                   collectionAnalyticsQuality.inventory_quality.unresolved_open_conflict_copies.percent
                 }%
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   {" "}
                   (
                   {collectionAnalyticsQuality.inventory_quality.unresolved_open_conflict_copies.numerator}
@@ -6665,11 +6665,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </article>
             <article className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-100">Cover processing failures</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {
                   collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.percent
                 }%
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   {" "}
                   ({collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.numerator}/
                   {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_processing.denominator})
@@ -6678,9 +6678,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </article>
             <article className="rounded-2xl border border-orange-400/25 bg-orange-400/5 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-100">Latest OCR failures</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="mt-2 text-xl font-semibold text-patriot-navy">
                 {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.percent}%
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-600">
                   {" "}
                   ({collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.numerator}/
                   {collectionAnalyticsQuality.inventory_quality.primary_cover_failed_ocr.denominator})
@@ -6690,8 +6690,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   </div>
                 ) : null}
           {collectionAnalyticsPublishers && collectionAnalyticsPublishers.publishers.length ? (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-              <h3 className="text-sm font-semibold text-white">Publisher breakdown</h3>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-patriot-navy">Publisher breakdown</h3>
               <p className="mt-1 text-xs text-slate-500">Sorted deterministically by publisher name.</p>
               <div className="mt-3 overflow-auto">
                 <table className="w-full border-collapse text-left text-xs">
@@ -6707,8 +6707,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   </thead>
                   <tbody className="text-slate-200">
                     {collectionAnalyticsPublishers.publishers.slice(0, 20).map((row) => (
-                      <tr key={row.publisher_name} className="border-t border-white/5 align-top">
-                        <td className="py-2 pr-3 font-medium text-white">{row.publisher_name}</td>
+                      <tr key={row.publisher_name} className="border-t border-slate-100 align-top">
+                        <td className="py-2 pr-3 font-medium text-slate-900">{row.publisher_name}</td>
                         <td className="py-2 pr-3">{row.total_copies}</td>
                         <td className="py-2 pr-3">{row.in_hand_copies}</td>
                         <td className="py-2 pr-3">{row.preorder_copies}</td>
@@ -6729,7 +6729,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
       {duplicateOwnershipReport ? (
         <details
-          className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden"
+          className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50 [&>summary::-webkit-details-marker]:hidden"
           open={
             duplicateOwnershipReport.summary.probable_accidental_duplicate_groups > 0 ||
             duplicateOwnershipReport.summary.unresolved_duplicate_groups > 0
@@ -6738,28 +6738,28 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">Duplicate ownership clustering</h2>
-                <p className="mt-1 text-sm text-slate-400">
+                <h2 className="text-lg font-semibold text-patriot-navy">Duplicate ownership clustering</h2>
+                <p className="mt-1 text-sm text-slate-600">
                   Read-only owner overlap buckets (deterministic clustering — never auto-dedupe or silent metadata edits).
                   <span className="ml-1 text-[11px] text-slate-500"> Tap header to collapse.</span>
                 </p>
               </div>
             </div>
           </summary>
-          <div className="mt-4 border-t border-white/5 pt-4">
+          <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Overlap groups</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.total_groups}
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">Multi-copy groups only (&ge; two inventory IDs).</p>
+              <p className="mt-1 text-[11px] text-slate-600">Multi-copy groups only (&ge; two inventory IDs).</p>
             </article>
             <article className="rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-rose-100">
                 Probable accidental
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.probable_accidental_duplicate_groups}
               </p>
               <p className="mt-1 text-[11px] text-slate-100/80">
@@ -6767,10 +6767,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-blue-800">
                 Preorder + received
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.preorder_plus_owned_groups}
               </p>
               <p className="mt-1 text-[11px] text-slate-100/70">
@@ -6781,13 +6781,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-violet-100">
                 Duplicate scan only
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.duplicate_scan_only_groups}
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-300/25 bg-white/5 p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Graded + raw</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-blue-800">Graded + raw</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.graded_plus_raw_groups}
               </p>
             </article>
@@ -6795,7 +6795,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100">
                 Unresolved duplicates
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.unresolved_duplicate_groups}
               </p>
               <p className="mt-1 text-[11px] text-slate-100/75">
@@ -6806,7 +6806,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-100">
                 Intentional multi-copy
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {duplicateOwnershipReport.summary.intentional_multi_copy_groups}
               </p>
               <p className="mt-1 text-[11px] text-slate-100/70">
@@ -6819,27 +6819,27 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {runDetectionReport ? (
-        <details className="mt-4 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+        <details className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50 [&>summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <div>
-              <h2 className="text-lg font-semibold text-white">Series progress & missing-issue rows</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-patriot-navy">Series progress & missing-issue rows</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Canonical series grouping, deterministic issue ordering, gaps by ownership / release visibility — tap to
                 expand metrics.
               </p>
             </div>
           </summary>
-          <div className="mt-4 border-t border-white/5 pt-4">
+          <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Tracked series</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.total_series_groups}
               </p>
             </article>
             <article className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100">Partial runs</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.partial_run_groups}
               </p>
             </article>
@@ -6847,7 +6847,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-100">
                 Completed runs
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.complete_limited_series_groups}
               </p>
             </article>
@@ -6855,19 +6855,19 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-rose-100">
                 Incomplete limited
               </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.incomplete_limited_series_groups}
               </p>
             </article>
             <article className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100">Likely ongoing series</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-blue-800">Likely ongoing series</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.probable_ongoing_series_groups}
               </p>
             </article>
             <article className="rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-violet-100">Missing issue rows</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.total_missing_issue_rows}
               </p>
               <p className="mt-1 text-[11px] text-slate-100/70">
@@ -6875,14 +6875,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 {runDetectionReport.summary.likely_missing_rows}
               </p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-300">Future / unresolved</p>
-              <p className="mt-2 text-2xl font-semibold text-white">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-700">Future / unresolved</p>
+              <p className="mt-2 text-2xl font-semibold text-patriot-navy">
                 {runDetectionReport.summary.preorder_pending_rows +
                   runDetectionReport.summary.unreleased_future_issue_rows +
                   runDetectionReport.summary.unresolved_identity_gap_rows}
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">
+              <p className="mt-1 text-[11px] text-slate-600">
                 Preorder {runDetectionReport.summary.preorder_pending_rows} · unreleased{" "}
                 {runDetectionReport.summary.unreleased_future_issue_rows} · identity{" "}
                 {runDetectionReport.summary.unresolved_identity_gap_rows}
@@ -6908,13 +6908,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Link
                     to="/orders/import"
-                    className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5"
                   >
                     Paste Receipt/Text
                   </Link>
                   <Link
                     to="/orders/new"
-                    className="rounded-2xl bg-cyan-400 px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                    className="rounded-2xl bg-patriot-blue px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-900"
                   >
                     Add Your First Order
                   </Link>
@@ -6924,23 +6924,23 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           )}
         </div>
       ) : (
-        <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-4 shadow-xl shadow-black/15 [&>summary::-webkit-details-marker]:hidden">
+        <details className="group mt-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/50 [&>summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none">
-            <h2 className="text-lg font-semibold text-white">Portfolio performance (FMV)</h2>
-            <p className="mt-1 max-w-xl text-sm text-slate-400">
+            <h2 className="text-lg font-semibold text-patriot-navy">Portfolio performance (FMV)</h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-600">
               Separate from deterministic intelligence lanes. Expand for gain / loss boards after FMV assignments.
             </p>
           </summary>
-          <div className="mt-6 grid gap-4 border-t border-white/5 pt-6 xl:grid-cols-3">
+          <div className="mt-6 grid gap-4 border-t border-slate-100 pt-6 xl:grid-cols-3">
           {analyticsSections.map((section) => (
             <article
               key={section.title}
-              className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-lg shadow-black/20"
+              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-200/60"
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">{section.title}</h2>
-                  <p className="mt-1 text-sm text-slate-400">
+                  <h2 className="text-lg font-semibold text-patriot-navy">{section.title}</h2>
+                  <p className="mt-1 text-sm text-slate-600">
                     Premium portfolio analytics for your strongest signals.
                   </p>
                 </div>
@@ -6952,12 +6952,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     <Link
                       key={`${section.title}-${item.inventory_copy_id}`}
                       to={`/inventory/${item.inventory_copy_id}`}
-                      className="block rounded-2xl border border-white/10 bg-slate-950/70 p-4 transition hover:border-cyan-300/40 hover:bg-slate-950"
+                      className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-400 hover:bg-blue-50"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <p className="font-medium text-white">{performanceLabel(item)}</p>
-                          <p className="mt-1 text-sm text-slate-400">{item.publisher}</p>
+                          <p className="font-medium text-slate-900">{performanceLabel(item)}</p>
+                          <p className="mt-1 text-sm text-slate-600">{item.publisher}</p>
                           <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
                             {item.cover_name ?? "Standard cover"}
                           </p>
@@ -6969,7 +6969,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <p
                             className={`mt-1 text-sm font-semibold ${
                               section.title === "Highest Value Books"
-                                ? "text-cyan-200"
+                                ? "text-blue-700"
                                 : gainLossClass(section.valueFor(item))
                             }`}
                           >
@@ -6980,7 +6980,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     </Link>
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
                     {section.empty}
                   </div>
                 )}
@@ -6997,7 +6997,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
       {showInventoryGrid ? (
       <>
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/60">
           <div className="flex flex-col gap-4">
             <form className="grid gap-3 lg:grid-cols-[2fr_repeat(4,1fr)]" onSubmit={applySearch}>
               <input
@@ -7005,7 +7005,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="Search by title, publisher, issue, or cover"
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
               />
               <input
                 type="text"
@@ -7016,7 +7016,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   })
                 }
                 placeholder="Publisher"
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
               />
               <select
                 value={holdStatus}
@@ -7025,7 +7025,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setHoldStatus(event.target.value);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">All hold statuses</option>
                 <option value="hold">Hold</option>
@@ -7039,7 +7039,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setGradeStatus(event.target.value);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">All grade statuses</option>
                 <option value="raw">Raw</option>
@@ -7048,7 +7048,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               </select>
               <button
                 type="submit"
-                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                className="rounded-2xl bg-patriot-blue px-4 py-3 text-sm font-semibold text-patriot-navy transition hover:bg-blue-900"
               >
                 Search
               </button>
@@ -7066,7 +7066,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   })
                 }
                 placeholder="Release year (optional)"
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
               />
               <select
                 value={releaseCalendarFilter}
@@ -7077,7 +7077,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     );
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any calendar release date state</option>
                 <option value="present">Has exact calendar release date</option>
@@ -7090,7 +7090,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setAssetStateFilter(event.target.value as "" | InventoryItem["asset_state"]);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any ownership / release state</option>
                 <option value="preorder_not_released_yet">Upcoming preorder</option>
@@ -7110,7 +7110,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     );
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any inventory health bucket</option>
                 <option value="not_healthy">Not healthy (review + incomplete + blocked)</option>
@@ -7126,7 +7126,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setOwnershipIntelFilter(event.target.value as "" | InventoryOwnershipNormalized);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any normalized ownership (intel)</option>
                 <option value="in_hand">Normalized: in_hand</option>
@@ -7145,7 +7145,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setValuationScopeFilter(event.target.value as "" | InventoryValuationScope);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any FMV scope</option>
                 <option value="raw">Raw</option>
@@ -7162,7 +7162,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setConfidenceBucketFilter(event.target.value as "" | MarketFmvConfidenceBucket);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any confidence</option>
                 <option value="very_high">Very high</option>
@@ -7181,7 +7181,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setRiskPriorityFilter(event.target.value as "" | InventoryRiskPriority);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any risk priority</option>
                 <option value="critical">Critical</option>
@@ -7197,7 +7197,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setRiskTypeFilter(event.target.value as "" | InventoryRiskType);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any risk type</option>
                 <option value="needs_conflict_review">Conflict review</option>
@@ -7212,7 +7212,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 <option value="low_quality_scan">Low quality scan</option>
                 <option value="high_confidence_match_unreviewed">High confidence match</option>
               </select>
-              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-200">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-200">
                 <input
                   type="checkbox"
                   checked={needsAttentionFilter}
@@ -7231,7 +7231,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setArrivalClassificationFilter(event.target.value as "" | OrderArrivalClassification);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any order/arrival classification</option>
                 <option value="upcoming_preorder">Upcoming preorder</option>
@@ -7254,7 +7254,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setActionCategoryFilter(event.target.value as "" | InventoryActionCenterCategory);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="">Any action center category</option>
                 <option value="review_relationship_conflict">{inventoryActionCenterCategoryUiLabel(
@@ -7287,7 +7287,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   "review_high_confidence_match",
                 )}</option>
               </select>
-              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 md:col-span-2">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-200 md:col-span-2">
                 <input
                   type="checkbox"
                   checked={actionAttentionFilter}
@@ -7310,7 +7310,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setSortBy(event.target.value as SortBy);
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 {sortOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -7325,7 +7325,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     setSortDir(event.target.value as "asc" | "desc");
                   })
                 }
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
               >
                 <option value="asc">Ascending</option>
                 <option value="desc">Descending</option>
@@ -7349,14 +7349,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   setSortDir("asc");
                   setPage(1);
                 }}
-                className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5"
               >
                 Reset filters
               </button>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm text-slate-400">
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-slate-600">
                 {selectedIds.length} selected for bulk updates
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -7365,7 +7365,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   onChange={(event) =>
                     setBulkHoldStatus(event.target.value as "hold" | "sell" | "sold")
                   }
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500"
                 >
                   <option value="hold">Mark Hold</option>
                   <option value="sell">Mark Sell</option>
@@ -7375,7 +7375,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   type="button"
                   disabled={!selectedIds.length || isSaving}
                   onClick={() => void applyBulkHoldUpdate()}
-                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-2xl bg-patriot-blue px-4 py-3 text-sm font-semibold text-patriot-navy transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Apply bulk update
                 </button>
@@ -7390,16 +7390,16 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 shadow-xl shadow-black/20">
-          <div className="border-b border-white/10 px-5 py-4">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+          <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-white">Inventory</h2>
-                <p className="text-sm text-slate-400">
+                <h2 className="text-xl font-semibold text-patriot-navy">Inventory</h2>
+                <p className="text-sm text-slate-600">
                   Page {page} of {pageCount} with {total} tracked copies
                 </p>
               </div>
-              {isLoading ? <p className="text-sm text-slate-400">Refreshing inventory...</p> : null}
+              {isLoading ? <p className="text-sm text-slate-600">Refreshing inventory...</p> : null}
             </div>
           </div>
 
@@ -7417,13 +7417,13 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Link
                       to="/orders/import"
-                      className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                      className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5"
                     >
                       Import Order
                     </Link>
                     <Link
                       to="/orders/new"
-                      className="rounded-2xl bg-cyan-400 px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                      className="rounded-2xl bg-patriot-blue px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-900"
                     >
                       Add Order
                     </Link>
@@ -7434,7 +7434,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-3 border-b border-white/10 px-4 py-2 text-xs text-slate-500">
+              <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2 text-xs text-slate-500">
                 <input
                   type="checkbox"
                   checked={Boolean(inventory.length) && selectedIds.length === inventory.length}
@@ -7474,23 +7474,23 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </>
           )}
 
-          <div className="flex items-center justify-between border-t border-white/10 px-5 py-4">
+          <div className="flex items-center justify-between border-t border-slate-200 px-5 py-4">
             <button
               type="button"
               disabled={page === 1}
               onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
-              className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous
             </button>
-            <span className="text-sm text-slate-400">
+            <span className="text-sm text-slate-600">
               Showing page {page} of {pageCount}
             </span>
             <button
               type="button"
               disabled={page >= pageCount}
               onClick={() => setPage((currentPage) => Math.min(pageCount, currentPage + 1))}
-              className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next
             </button>
@@ -7500,19 +7500,19 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       ) : null}
 
       {activeNotesItem ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white px-4">
+          <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-slate-900 p-6 shadow-2xl shadow-black/30">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-semibold text-white">Condition Notes</h3>
-                <p className="mt-2 text-sm text-slate-400">
+                <h3 className="text-xl font-semibold text-patriot-navy">Condition Notes</h3>
+                <p className="mt-2 text-sm text-slate-600">
                   {activeNotesItem.title} #{activeNotesItem.issue_number}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setActiveNotesItem(null)}
-                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-100"
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-100"
               >
                 Close
               </button>
@@ -7523,7 +7523,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               onChange={(event) => setNotesDraft(event.target.value)}
               maxLength={2000}
               rows={8}
-              className="mt-6 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/40"
+              className="mt-6 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
               placeholder="Add condition notes, grading observations, or sale prep notes."
             />
 
@@ -7538,7 +7538,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   });
                   setActiveNotesItem(null);
                 }}
-                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl bg-patriot-blue px-4 py-3 text-sm font-semibold text-patriot-navy transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Save notes
               </button>

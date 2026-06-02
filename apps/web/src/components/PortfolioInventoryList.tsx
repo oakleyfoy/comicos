@@ -8,6 +8,7 @@ import {
   type OrderArrivalClassification,
 } from "../api/client";
 import { formatCurrencyAmount, formatUsdCurrency } from "../lib/currencyFormat";
+import { FavoriteStarRating } from "./FavoriteStarRating";
 
 type Chip = { key: string; label: string; className: string; title?: string };
 
@@ -41,22 +42,22 @@ function assetStateShort(state: InventoryItem["asset_state"]): string {
 function assetStateTone(state: InventoryItem["asset_state"]): string {
   switch (state) {
     case "in_hand":
-      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+      return "border-emerald-300 bg-emerald-50 text-emerald-900";
     case "ordered_not_received":
-      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+      return "border-amber-300 bg-amber-50 text-amber-900";
     case "preorder_not_released_yet":
-      return "border-cyan-400/30 bg-cyan-400/10 text-cyan-100";
+      return "border-blue-300 bg-blue-50 text-blue-900";
     case "cancelled":
-      return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+      return "border-red-300 bg-red-50 text-red-900";
     default:
-      return "border-white/10 bg-white/5 text-slate-300";
+      return "border-slate-200 bg-slate-50 text-slate-700";
   }
 }
 
 function gainLossClass(value: string): string {
   const n = Number.parseFloat(value);
-  if (Number.isNaN(n) || n === 0) return "text-slate-400";
-  return n > 0 ? "text-emerald-300" : "text-rose-300";
+  if (Number.isNaN(n) || n === 0) return "text-slate-500";
+  return n > 0 ? "text-emerald-700" : "text-red-700";
 }
 
 function inventoryRiskLabel(value: InventoryRiskType): string {
@@ -214,7 +215,7 @@ function releaseMetaLine(item: InventoryItem): string {
 }
 
 const selectClass =
-  "rounded-lg border border-white/10 bg-slate-950/80 px-2 py-1 text-xs text-white outline-none focus:border-cyan-300/40";
+  "rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-blue-500";
 
 export function PortfolioInventoryList(props: {
   inventory: InventoryItem[];
@@ -252,7 +253,7 @@ export function PortfolioInventoryList(props: {
   } = props;
 
   return (
-    <div className="divide-y divide-white/5">
+    <div className="divide-y divide-slate-200">
       {inventory.map((item) => {
         const id = item.inventory_copy_id;
         const variant = variantLabel(item) || "Standard cover";
@@ -262,7 +263,7 @@ export function PortfolioInventoryList(props: {
           : null;
 
         return (
-          <article key={id} className="px-4 py-3 transition hover:bg-white/[0.02]">
+          <article key={id} className="px-4 py-3 transition hover:bg-blue-50/60">
             <div className="flex gap-3">
               <input
                 type="checkbox"
@@ -277,7 +278,7 @@ export function PortfolioInventoryList(props: {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Link
                       to={`/inventory/${id}`}
-                      className="truncate text-sm font-semibold text-white hover:text-cyan-200"
+                      className="truncate text-sm font-semibold text-patriot-navy hover:text-patriot-blue"
                     >
                       {item.title} #{item.issue_number}
                     </Link>
@@ -289,7 +290,7 @@ export function PortfolioInventoryList(props: {
                       {assetStateShort(item.asset_state)}
                     </span>
                   </div>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-400">
+                  <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-600">
                     {item.publisher}
                     <span className="text-slate-600"> · </span>
                     {variant}
@@ -309,10 +310,10 @@ export function PortfolioInventoryList(props: {
                   <SignalChips item={item} />
                 </div>
 
-                <div className="flex flex-wrap items-end justify-between gap-3 gap-y-2 border-t border-white/5 pt-2">
+                <div className="flex flex-wrap items-end justify-between gap-3 gap-y-2 border-t border-slate-100 pt-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                     <span className="text-slate-500">Market</span>
-                    <span className="font-medium text-slate-100">{marketFmv ?? "—"}</span>
+                    <span className="font-medium text-slate-900">{marketFmv ?? "—"}</span>
                     <span className={`${gainLossClass(item.gain_loss ?? "0")} font-medium`}>
                       {formatUsdCurrency(item.gain_loss ?? "0")}
                     </span>
@@ -321,7 +322,7 @@ export function PortfolioInventoryList(props: {
                         No FMV
                       </span>
                     ) : item.valuation_scope ? (
-                      <span className="rounded-md border border-cyan-400/25 px-1 py-0.5 text-[9px] uppercase text-cyan-200/80">
+                      <span className="rounded-md border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] uppercase text-blue-800">
                         {item.valuation_scope.replace(/_/g, " ")}
                       </span>
                     ) : null}
@@ -333,7 +334,7 @@ export function PortfolioInventoryList(props: {
                       step="0.01"
                       value={fMvDrafts[id] ?? ""}
                       onChange={(event) => onFmvDraftChange(id, event.target.value)}
-                      className="w-[4.25rem] rounded-lg border border-white/10 bg-slate-950/80 px-2 py-1 text-xs text-white outline-none focus:border-cyan-300/40"
+                      className="w-[4.25rem] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-blue-500"
                     />
                     <button
                       type="button"
@@ -343,7 +344,7 @@ export function PortfolioInventoryList(props: {
                           current_fmv: normalizeDecimalInput(fMvDrafts[id] ?? ""),
                         })
                       }
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-200 hover:border-cyan-300/40 disabled:opacity-50"
+                      className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-patriot-blue hover:bg-blue-100 disabled:opacity-50"
                     >
                       Save
                     </button>
@@ -384,34 +385,30 @@ export function PortfolioInventoryList(props: {
                       <option value="sell">Sell</option>
                       <option value="sold">Sold</option>
                     </select>
-                    <select
-                      value={starDrafts[id] ?? ""}
-                      onChange={(event) => onStarDraftChange(id, event.target.value)}
-                      onBlur={() =>
-                        void onSave(id, {
-                          star_rating: starDrafts[id] ? Number(starDrafts[id]) : null,
-                        })
+                    <FavoriteStarRating
+                      size="sm"
+                      label={`Favorite rating for ${item.title}`}
+                      disabled={isSaving}
+                      value={
+                        starDrafts[id]
+                          ? Number(starDrafts[id])
+                          : item.star_rating
                       }
-                      className={`${selectClass} max-w-[3rem]`}
-                      aria-label="Star rating"
-                    >
-                      <option value="">★</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                    </select>
+                      onChange={(rating) => {
+                        onStarDraftChange(id, rating ? String(rating) : "");
+                        void onSave(id, { star_rating: rating });
+                      }}
+                    />
                     <button
                       type="button"
                       onClick={() => onOpenNotes(item)}
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-200 hover:border-cyan-300/40"
+                      className="rounded-lg border border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:border-blue-400 hover:text-patriot-blue"
                     >
                       Notes
                     </button>
                     <Link
                       to={`/inventory/${id}`}
-                      className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-100 hover:border-cyan-300/50"
+                      className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
                     >
                       Open
                     </Link>

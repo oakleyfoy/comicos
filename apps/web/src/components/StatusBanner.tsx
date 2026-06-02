@@ -8,13 +8,13 @@ export function StatusBanner({
   children: ReactNode;
 }) {
   const toneClasses = {
-    error: "border-rose-400/20 bg-rose-400/10 text-rose-200",
-    success: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
-    info: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
-    warning: "border-amber-400/35 bg-amber-500/10 text-amber-50",
+    error: "border-red-300 bg-red-50 text-red-900",
+    success: "border-emerald-300 bg-emerald-50 text-emerald-900",
+    info: "border-blue-300 bg-blue-50 text-blue-900",
+    warning: "border-amber-300 bg-amber-50 text-amber-950",
   };
 
   return (
-    <div className={`rounded-2xl border px-5 py-4 text-sm ${toneClasses[tone]}`}>{children}</div>
+    <div className={`rounded-xl border px-5 py-4 text-sm ${toneClasses[tone]}`}>{children}</div>
   );
 }

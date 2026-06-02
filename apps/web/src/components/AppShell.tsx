@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { ComicOsMark } from "./ComicOsMark";
 import {
   DEFAULT_EXPANDED_GROUP_IDS,
   NAV_EXPANDED_STORAGE_KEY,
@@ -43,11 +44,11 @@ function NavLinkRow({ link, pathname }: { link: NavLinkItem; pathname: string })
       to={link.to}
       className={`block rounded-lg px-3 py-1.5 text-sm transition ${
         link.prominent && !active
-          ? "font-semibold text-cyan-200 hover:bg-cyan-400/10"
+          ? "font-semibold text-patriot-blue hover:bg-blue-50"
           : active
-            ? "bg-cyan-400 font-semibold text-slate-950"
-            : "text-slate-300 hover:bg-white/5 hover:text-white"
-      } ${link.prominent && active ? "ring-1 ring-cyan-300/50" : ""}`}
+            ? "bg-patriot-blue font-semibold text-white shadow-sm"
+            : "text-slate-700 hover:bg-slate-100 hover:text-patriot-navy"
+      } ${link.prominent && active ? "ring-1 ring-blue-300" : ""}`}
     >
       {link.label}
     </Link>
@@ -118,19 +119,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           const isPrimary = group.id === "primary";
           const isExpanded = isPrimary || expandedGroupIds.has(group.id);
           return (
-            <section key={group.id} className="rounded-xl border border-white/5 bg-slate-900/40">
+            <section key={group.id} className="rounded-xl border border-blue-100 bg-white shadow-sm">
               <button
                 type="button"
                 onClick={() => toggleGroup(group.id)}
                 disabled={isPrimary}
                 aria-expanded={isExpanded}
                 className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] ${
-                  isPrimary ? "cursor-default text-cyan-200/90" : "text-slate-400 hover:text-slate-200"
+                  isPrimary ? "cursor-default text-patriot-red" : "text-slate-600 hover:text-patriot-navy"
                 }`}
               >
                 <span>{group.title}</span>
                 {!isPrimary ? (
-                  <span className="text-slate-500" aria-hidden>
+                  <span className="text-slate-400" aria-hidden>
                     {isExpanded ? "−" : "+"}
                   </span>
                 ) : null}
@@ -145,12 +146,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </section>
           );
         })}
-        <section className="rounded-xl border border-white/5 bg-slate-900/40 px-2 py-2">
-          <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Account</p>
+        <section className="rounded-xl border border-blue-100 bg-white px-2 py-2 shadow-sm">
+          <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Account</p>
           <button
             type="button"
             onClick={handleLogout}
-            className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-slate-700 transition hover:bg-red-50 hover:text-patriot-red"
           >
             Logout
           </button>
@@ -160,13 +161,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur">
+    <div className="min-h-screen text-slate-900">
+      <header className="sticky top-0 z-30 border-b-4 border-patriot-red bg-patriot-navy text-white shadow-md">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
-              className="rounded-lg border border-white/10 px-2 py-1 text-sm text-slate-200 lg:hidden"
+              className="rounded-lg border border-white/30 bg-white/10 px-2 py-1 text-sm text-white lg:hidden"
               onClick={() => setMobileNavOpen((open) => !open)}
               aria-expanded={mobileNavOpen}
               aria-label="Toggle navigation menu"
@@ -175,17 +176,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <Link
               to="/executive-dashboard"
-              className="inline-flex shrink-0 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-patriot-navy"
             >
+              <ComicOsMark size={18} />
               ComicOS
             </Link>
-            <p className="hidden truncate text-sm text-slate-500 md:block">
+            <p className="hidden truncate text-sm text-blue-100 md:block">
               Portfolio Intelligence for Comic Investors
             </p>
           </div>
           <Link
             to="/executive-dashboard"
-            className="hidden rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-sm font-semibold text-cyan-100 sm:inline-flex"
+            className="hidden rounded-lg border border-white/40 bg-patriot-red px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 sm:inline-flex"
           >
             Executive Dashboard
           </Link>
