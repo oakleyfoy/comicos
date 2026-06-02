@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
+import { parseReleaseYearFilterInput } from "../lib/inventoryQueryParams";
 import { formatCurrencyAmount, formatUsdCurrency, normalizeCurrencyCode } from "../lib/currencyFormat";
 import {
   ApiError,
@@ -1219,10 +1220,7 @@ export function DashboardPage() {
       publisher: publisher || undefined,
       hold_status: holdStatus || undefined,
       grade_status: gradeStatus || undefined,
-      release_year: (() => {
-        const n = Number(releaseYearFilter.trim());
-        return Number.isInteger(n) ? n : undefined;
-      })(),
+      release_year: parseReleaseYearFilterInput(releaseYearFilter),
       release_calendar: releaseCalendarFilter || undefined,
       asset_state: assetStateFilter || undefined,
       intelligence_health:

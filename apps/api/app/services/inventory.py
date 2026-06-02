@@ -84,7 +84,9 @@ SORTABLE_FIELDS = {
 }
 
 
-def quantize_money(value: Decimal) -> Decimal:
+def quantize_money(value: Decimal | None) -> Decimal:
+    if value is None:
+        return Decimal("0.00")
     return value.quantize(Decimal("0.01"))
 
 

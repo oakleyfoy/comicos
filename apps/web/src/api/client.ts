@@ -1,3 +1,4 @@
+import { normalizeInventoryQueryParams } from "../lib/inventoryQueryParams";
 import { handleApi401Response } from "../lib/auth401Policy";
 import { ApiError } from "./apiError";
 
@@ -7488,7 +7489,7 @@ function buildQueryString(
 
 export function inventoryListingQueryToReportQueryString(filters: InventoryQueryParams): string {
   const { page: _page, page_size: _pageSize, ...rest } = filters;
-  return buildQueryString(rest as Record<string, string | number | boolean | undefined>);
+  return buildQueryString(normalizeInventoryQueryParams(rest) as Record<string, string | number | boolean | undefined>);
 }
 
 export type ScanIngestionSourceType = "EPSON" | "FUJITSU" | "MOBILE" | "ZIP_IMPORT" | "MANUAL_UPLOAD";
@@ -16636,7 +16637,7 @@ export const apiClient = {
   },
 
   getInventory(params: InventoryQueryParams): Promise<InventoryResponse> {
-    const query = buildQueryString(params);
+    const query = buildQueryString(normalizeInventoryQueryParams(params));
     return request<InventoryResponse>(`/inventory${query}`);
   },
 

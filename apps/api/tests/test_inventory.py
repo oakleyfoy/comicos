@@ -187,6 +187,17 @@ def test_inventory_search_by_title_works(client: TestClient) -> None:
     assert response.json()["items"][0]["title"] == "Saga"
 
 
+def test_inventory_rejects_release_year_zero(client: TestClient) -> None:
+    token = register_and_login(client, "release-year-zero@example.com")
+
+    response = client.get(
+        "/inventory?page=1&page_size=25&release_year=0&sort_by=purchase_date&sort_dir=asc",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 422
+
+
 def test_inventory_filter_by_release_year_works(client: TestClient) -> None:
     token = register_and_login(client, "release-year-inv@example.com")
     create_order(
