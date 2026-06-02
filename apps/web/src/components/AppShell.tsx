@@ -30,7 +30,10 @@ function saveExpandedGroupIds(ids: Set<string>): void {
 }
 
 function isLinkActive(pathname: string, to: string): boolean {
-  return pathname === to || (to !== "/dashboard" && pathname.startsWith(`${to}/`));
+  if (to === "/dashboard") {
+    return pathname === "/dashboard";
+  }
+  return pathname === to || pathname.startsWith(`${to}/`);
 }
 
 function NavLinkRow({ link, pathname }: { link: NavLinkItem; pathname: string }) {

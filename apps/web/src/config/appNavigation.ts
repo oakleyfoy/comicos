@@ -29,7 +29,11 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "collection",
     title: "Collection",
     links: [
-      { label: "Dashboard", to: "/dashboard" },
+      { label: "Inventory portfolio", to: "/dashboard", prominent: true },
+      { label: "Collection insights", to: "/dashboard/collection" },
+      { label: "Market & FMV", to: "/dashboard/market" },
+      { label: "Grading ops", to: "/dashboard/grading" },
+      { label: "Dealer & strategy", to: "/dashboard/dealer" },
       { label: "Want Lists", to: "/want-lists" },
       { label: "Collection Gaps", to: "/collection-gaps" },
       { label: "Collected Runs", to: "/collected-runs" },
@@ -152,6 +156,9 @@ export function findGroupIdForPath(pathname: string): string | null {
         return group.id;
       }
     }
+  }
+  if (pathname.startsWith("/dashboard")) {
+    return "collection";
   }
   if (pathname.startsWith("/orders")) {
     return "imports";

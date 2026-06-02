@@ -2,6 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
+import { DashboardHubNav } from "../components/DashboardHubNav";
+import {
+  buildDashboardWidgetPromises,
+  dashboardLoadsDealerEffects,
+  dashboardLoadsGradingEffects,
+  dashboardLoadsMarketEffects,
+  dashboardProfileMeta,
+  dashboardShowsAutomationScanCards,
+  dashboardShowsCollectionPanels,
+  dashboardShowsExtendedWorkbench,
+  dashboardShowsInventoryGrid,
+  type DashboardLoadProfile,
+  type DashboardPortfolioFilters,
+} from "../lib/dashboardLoadProfile";
 import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
 import { parseReleaseYearFilterInput } from "../lib/inventoryQueryParams";
 import { formatCurrencyAmount, formatUsdCurrency, normalizeCurrencyCode } from "../lib/currencyFormat";
@@ -784,53 +798,17 @@ function ScanSessionMiniTable(props: {
   );
 }
 
-type DashboardPortfolioFilters = {
-  publisher: string;
-  ownershipIntelFilter: InventoryOwnershipNormalized | "";
-  valuationScopeFilter: InventoryValuationScope | "";
-  confidenceBucketFilter: MarketFmvConfidenceBucket | "";
-};
-
-function buildDashboardWidgetPromises(
-  query: InventoryQueryParams,
-  filters: DashboardPortfolioFilters,
-  includeInventoryIntel: boolean,
-): Record<string, Promise<unknown>> {
-  const portfolioValueParams = {
-    publisher: filters.publisher || undefined,
-    ownership_state: filters.ownershipIntelFilter || undefined,
-    valuation_scope: filters.valuationScopeFilter || undefined,
-    confidence_bucket: filters.confidenceBucketFilter || undefined,
-  };
-
-  const widgets: Record<string, Promise<unknown>> = {
-    inventorySummary: apiClient.getInventorySummary(),
-    inventoryList: apiClient.getInventory(query),
-    portfolioPerformance: apiClient.getPortfolioPerformance(),
-    portfolioValue: apiClient.getPortfolioValueSummary(portfolioValueParams),
-    inventoryRisks: apiClient.getInventoryRisksSummary(),
-    inventoryAction: apiClient.getInventoryActionCenterSummary(),
-    orderArrival: apiClient.getOrderArrivalIntelligenceSummary(),
-    collectionTimeline: apiClient.getCollectionHistoricalTimeline({ sort: "desc", limit: 40 }),
-    duplicateOwnership: apiClient.getDuplicateOwnershipList(),
-    runDetection: apiClient.getRunDetectionList(),
-    collectionAnalyticsSummary: apiClient.getCollectionAnalyticsSummary(),
-    collectionAnalyticsPublishers: apiClient.getCollectionAnalyticsPublishers(),
-    collectionAnalyticsQuality: apiClient.getCollectionAnalyticsQuality(),
-    scanPipeline: apiClient.getScanPipelineDashboard(),
-    physicalIntake: apiClient.getPhysicalIntakeSummary(),
-  };
-
-  if (includeInventoryIntel) {
-    widgets.inventoryIntelSummary = apiClient.getInventoryIntelligenceSummary();
-    widgets.inventoryIntelHealth = apiClient.getInventoryIntelligenceHealth();
-  }
-
-  return widgets;
-}
-
-export function DashboardPage() {
+export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: DashboardLoadProfile }) {
   const { user } = useAuth();
+  const profileMeta = dashboardProfileMeta(loadProfile);
+  const loadsMarketData = dashboardLoadsMarketEffects(loadProfile);
+  const loadsDealerData = dashboardLoadsDealerEffects(loadProfile);
+  const loadsGradingData = dashboardLoadsGradingEffects(loadProfile);
+  const showExtendedWorkbench = dashboardShowsExtendedWorkbench(loadProfile);
+  const showCollectionPanels = dashboardShowsCollectionPanels(loadProfile);
+  const showInventoryGrid = dashboardShowsInventoryGrid(loadProfile);
+  const showAutomationScanCards = dashboardShowsAutomationScanCards(loadProfile);
+  const loadsFullWorkspace = loadProfile === "full";
 
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [performance, setPerformance] = useState<PortfolioPerformance | null>(null);
@@ -1352,7 +1330,7 @@ export function DashboardPage() {
 
   async function loadDashboardData(query: InventoryQueryParams = inventoryQuery): Promise<void> {
     const { data, errors } = await settleDashboardWidgets(
-      buildDashboardWidgetPromises(query, dashboardPortfolioFilters, false),
+      buildDashboardWidgetPromises(query, dashboardPortfolioFilters, loadProfile),
     );
     setDashboardWidgetErrors(errors);
     applyDashboardWidgetResults(data);
@@ -1366,7 +1344,7 @@ export function DashboardPage() {
       setError(null);
 
       const { data, errors } = await settleDashboardWidgets(
-        buildDashboardWidgetPromises(inventoryQuery, dashboardPortfolioFilters, true),
+        buildDashboardWidgetPromises(inventoryQuery, dashboardPortfolioFilters, loadProfile),
       );
 
       if (ignore) {
@@ -1389,9 +1367,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, inventoryQuery]);
+  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, inventoryQuery, loadProfile]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketSalesLoading(true);
@@ -1415,9 +1396,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketSaleReviewQueueSummaryLoading(true);
@@ -1443,9 +1427,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketCompEligibilitySummaryLoading(true);
@@ -1471,9 +1458,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketCompsSummaryLoading(true);
@@ -1497,9 +1487,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketFmvSummaryLoading(true);
@@ -1523,9 +1516,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketTrendSummaryLoading(true);
@@ -1549,9 +1545,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketMatchSuggestionsPendingLoading(true);
@@ -1579,9 +1578,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketSourcesLoading(true);
@@ -1605,9 +1607,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsMarketData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setMarketImportRunsLoading(true);
@@ -1633,9 +1638,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsMarketData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setListingRegistrySummaryLoading(true);
@@ -1661,9 +1669,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setListingIntelligenceSummaryLoading(true);
@@ -1689,9 +1700,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setSalesLedgerSummaryLoading(true);
@@ -1717,9 +1731,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setLiquiditySummaryLoading(true);
@@ -1745,9 +1762,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setConventionSummaryLoading(true);
@@ -1773,9 +1793,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       setListingExportDashLoading(true);
@@ -1801,9 +1824,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -1845,13 +1871,19 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     void loadPortfolioStrategyDashboard();
-  }, [loadPortfolioStrategyDashboard]);
+  }, [loadPortfolioStrategyDashboard, loadsDealerData]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -1885,9 +1917,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -1919,9 +1954,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -1959,9 +1997,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2009,9 +2050,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2045,9 +2089,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2079,9 +2126,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2123,9 +2173,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsDealerData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2159,9 +2212,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsDealerData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2193,9 +2249,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2229,9 +2288,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2265,9 +2327,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2301,9 +2366,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2335,9 +2403,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsFullWorkspace) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2371,9 +2442,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsFullWorkspace, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2407,9 +2481,12 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
+    if (!loadsGradingData) {
+      return;
+    }
     let ignore = false;
     void (async () => {
       if (!user) {
@@ -2443,7 +2520,7 @@ export function DashboardPage() {
     return () => {
       ignore = true;
     };
-  }, [user?.id]);
+  }, [loadsGradingData, user?.id]);
 
   useEffect(() => {
     const nextFmvDrafts: Record<number, string> = {};
@@ -2902,8 +2979,8 @@ export function DashboardPage() {
       <AppShell>
         <PageHeader
           eyebrow="ComicOS Dashboard"
-          title="Inventory Portfolio"
-          description="Review cost basis, FMV, performance leaders, and book-level metadata from one premium workspace."
+          title={profileMeta.title}
+          description={profileMeta.description}
           actions={
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
               Signed in as <span className="font-medium text-white">{user?.email ?? "Loading..."}</span>
@@ -2924,8 +3001,8 @@ export function DashboardPage() {
     <AppShell>
       <PageHeader
         eyebrow="ComicOS Dashboard"
-        title="Inventory Portfolio"
-        description="Review cost basis, monitor held inventory, and manage book-level portfolio metadata from one dark-mode workspace."
+        title={profileMeta.title}
+        description={profileMeta.description}
         actions={
           <>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
@@ -2962,7 +3039,7 @@ export function DashboardPage() {
               Receiving intake
             </Link>
             <Link
-              to="/dashboard#market-intelligence"
+              to="/dashboard/market"
               className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-emerald-300/35 hover:bg-white/5"
             >
               Market sales
@@ -2976,6 +3053,8 @@ export function DashboardPage() {
           </>
         }
       />
+
+      <DashboardHubNav activeProfile={loadProfile} />
 
       {dashboardWidgetErrors.inventorySummary ||
       dashboardWidgetErrors.portfolioPerformance ||
@@ -3018,7 +3097,51 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {physicalIntakeSummary || scanPipelineDash || marketWorkbenchRailsVisible || marketRegistryRailsVisible ? (
+      {loadProfile === "portfolio" && physicalIntakeSummary ? (
+        <section
+          id="physical-intake"
+          className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-black/15"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">Receiving &amp; scan placeholders</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-400">
+                Mark copies received on each inventory detail page, then stage scan sessions when ready.
+              </p>
+            </div>
+            <Link
+              to="/scan-sessions"
+              className="rounded-2xl border border-emerald-400/35 px-4 py-3 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+            >
+              Open scan sessions
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Released, not received</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {physicalIntakeSummary.counts.released_not_received}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Received, pending scan</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {physicalIntakeSummary.counts.received_pending_scan}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Shipment overdue (expected ship)</p>
+              <p className="mt-2 text-2xl font-semibold text-white">
+                {physicalIntakeSummary.counts.overdue_expected_ship}
+              </p>
+            </article>
+          </div>
+        </section>
+      ) : null}
+
+      {showExtendedWorkbench &&
+      (physicalIntakeSummary || scanPipelineDash || marketWorkbenchRailsVisible || marketRegistryRailsVisible) ? (
         <section className="mt-6 space-y-6" aria-label="Receiving, scan pipeline, and market intelligence">
           {physicalIntakeSummary ? (
             <section
@@ -5690,6 +5813,8 @@ export function DashboardPage() {
         </section>
       ) : null}
 
+      {showCollectionPanels || loadsFullWorkspace ? (
+      <>
       <details className="group mt-6 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-inner shadow-black/30 [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-2xl border border-transparent p-3 transition hover:border-white/10 hover:bg-slate-950/40">
           <div>
@@ -6816,6 +6941,11 @@ export function DashboardPage() {
         </details>
       )}
 
+      </>
+      ) : null}
+
+      {showInventoryGrid ? (
+      <>
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
           <div className="flex flex-col gap-4">
             <form className="grid gap-3 lg:grid-cols-[2fr_repeat(4,1fr)]" onSubmit={applySearch}>
@@ -7694,6 +7824,8 @@ export function DashboardPage() {
             </button>
           </div>
       </section>
+      </>
+      ) : null}
 
       {activeNotesItem ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
@@ -7742,6 +7874,8 @@ export function DashboardPage() {
           </div>
         </div>
       ) : null}
+      {showAutomationScanCards ? (
+        <>
       <ScanIngestionSummaryCard />
       <ScanNormalizationSummaryCard />
       <ScanBoundarySummaryCard />
@@ -7769,6 +7903,8 @@ export function DashboardPage() {
       <AutomationRecoverySummaryCard />
       <AutomationWorkersSummaryCard />
       <AutomationWorkflowsSummaryCard />
+        </>
+      ) : null}
     </AppShell>
   );
 }

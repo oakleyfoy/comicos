@@ -162,7 +162,12 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage loadProfile="portfolio" />} />
+        <Route path="/dashboard/collection" element={<DashboardPage loadProfile="collection" />} />
+        <Route path="/dashboard/market" element={<DashboardPage loadProfile="market" />} />
+        <Route path="/dashboard/grading" element={<DashboardPage loadProfile="grading" />} />
+        <Route path="/dashboard/dealer" element={<DashboardPage loadProfile="dealer" />} />
+        <Route path="/dashboard/full" element={<DashboardPage loadProfile="full" />} />
         <Route path="/executive-dashboard" element={<ExecutiveDashboardPage />} />
         <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
         <Route path="/marketplace-dashboard" element={<MarketplaceDashboardPage />} />
