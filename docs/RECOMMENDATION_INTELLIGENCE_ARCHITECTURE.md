@@ -36,3 +36,31 @@ Recommendations do not create orders, purchases, cart actions, or marketplace li
 
 - `/recommendations-v2` — tier buckets and component breakdown
 - `/recommendation-intelligence-certification` — validation, health, calibration, certification
+- Executive Dashboard **Top Recommendations** — cross-system, forward-looking advisory (see below)
+
+## Top Recommendations (Executive Dashboard)
+
+Top Recommendations must be **forward-looking across a 90-day release window**, not limited to “tomorrow” or new-release day alone, and **must not be limited to inventory-derived books**.
+
+### Inclusion scope
+
+Candidates may come from release catalog and intelligence layers, including:
+
+- Books already owned (run continuation)
+- Pull-list books
+- Releases in the next 90 days
+- Upcoming #1 issues
+- FOC / preorder opportunities
+- Key and special issues (key signals)
+- Ratio and incentive variants worth watching
+- Hot spec books the user has never purchased
+
+### Priority ranking (highest first)
+
+1. FOC / preorder deadline risk
+2. Upcoming #1s and key issues
+3. User-profile matches (Recommendation V2)
+4. Market / spec heat
+5. Inventory / run continuation
+
+Implementation: `recommendation_forward_window.py` (window + priority tiers), unified collector forward catalog drafts (`P50_RELEASE`), cross-system merge for the executive dashboard, and V2 weekly buy horizon aligned to 90 days.

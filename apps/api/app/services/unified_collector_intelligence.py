@@ -18,6 +18,21 @@ from app.services.hold_sell_intelligence import _latest_hold_sell_rows, _to_read
 from app.services.portfolio_rebalancing import _latest_rows as _latest_rebalance_rows
 from app.services.pull_list_decisions import _latest_decision_rows as _latest_pull_decisions
 from app.services.purchase_quantities import _latest_quantity_rows, _to_read as purchase_qty_to_read
+from app.services.recommendation_forward_window import (
+    FORWARD_RECOMMENDATION_WINDOW_DAYS,
+    _key_signals_by_issue,
+    _latest_spec_by_issue,
+    _normalize_issue_number,
+    _normalize_publisher,
+    _normalize_series,
+    _owned_issue_keys,
+    compute_forward_catalog_priority,
+    foc_deadline_priority,
+    hot_variants_for_issue,
+    issue_in_forward_recommendation_window,
+    iter_forward_release_rows,
+)
+from app.services.recommendation_v2_engine import _latest_scores_by_issue
 from app.services.sell_candidates import _latest_sell_candidate_rows, _to_read as sell_candidate_to_read
 
 SRC_PULL = "P52_PULL_LIST"
@@ -25,6 +40,7 @@ SRC_PURCHASE = "P53_PURCHASE"
 SRC_PORTFOLIO = "P54_PORTFOLIO"
 SRC_ACQUISITION = "P55_ACQUISITION"
 SRC_EXIT = "P56_EXIT"
+SRC_RELEASE = "P50_RELEASE"
 
 TYPE_PREORDER = "PREORDER"
 TYPE_ACQUIRE = "ACQUIRE"
@@ -100,18 +116,7 @@ def _merge_draft(store: dict[str, _Draft], draft: _Draft) -> None:
 
 
 def _foc_priority(foc_date) -> float:
-    days = days_until_foc(foc_date, today=utc_today())
-    if days is None:
-        return 78.0
-    if days < 0:
-        return 82.0
-    if days <= 7:
-        return 92.0
-    if days <= 14:
-        return 87.0
-    if days <= 30:
-        return 80.0
-    return 70.0
+    return foc_deadline_priority(foc_date)
 
 
 def _collect_pull_list_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
@@ -125,7 +130,7 @@ def _collect_pull_list_drafts(session: Session, *, owner_user_id: int) -> list[_
         title = _display_title(series_name=series.series_name if series else "", issue_number=issue.issue_number)
         if row.decision_type in {"START_RUN", "CONTINUE_RUN"}:
             days = days_until_foc(issue.foc_date, today=utc_today())
-            if days is not None and days <= 30:
+            if days is not None and days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
                 rationale = "FOC deadline approaching."
                 if days is not None and days >= 0:
                     rationale = f"FOC deadline approaching ({days} days)."
@@ -140,6 +145,8 @@ def _collect_pull_list_drafts(session: Session, *, owner_user_id: int) -> list[_
                     )
                 )
         elif row.decision_type == "WATCH":
+            if not issue_in_forward_recommendation_window(issue):
+                continue
             drafts.append(
                 _Draft(
                     recommendation_type=TYPE_WATCH,
@@ -161,6 +168,8 @@ def _collect_purchase_drafts(session: Session, *, owner_user_id: int) -> list[_D
         read = purchase_qty_to_read(session, row=row, pull_decision=None)
         title = _display_title(series_name=read.series_name, issue_number=read.issue_number)
         issue = session.get(ReleaseIssue, release_id)
+        if issue is not None and not issue_in_forward_recommendation_window(issue):
+            continue
         priority = 82.0
         if issue and issue.foc_date is not None:
             priority = max(priority, _foc_priority(issue.foc_date))
@@ -296,10 +305,88 @@ def _collect_exit_drafts(session: Session, *, owner_user_id: int) -> list[_Draft
     return drafts
 
 
+def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
+    """90-day forward catalog: releases, FOC, #1/key, spec heat, variants — not limited to owned inventory."""
+    today = utc_today()
+    forward_rows = iter_forward_release_rows(session, owner_user_id=owner_user_id, today=today)
+    if not forward_rows:
+        return []
+
+    owned_keys = _owned_issue_keys(session, owner_user_id=owner_user_id)
+    v2_by_issue = _latest_scores_by_issue(session, owner_user_id=owner_user_id)
+    spec_by_issue = _latest_spec_by_issue(session, owner_user_id=owner_user_id)
+    issue_ids = [int(issue.id or 0) for issue, _ in forward_rows if issue.id is not None]
+    signals_by_issue = _key_signals_by_issue(session, issue_ids=issue_ids)
+
+    drafts: list[_Draft] = []
+    for issue, series in forward_rows:
+        issue_id = int(issue.id or 0)
+        title = _display_title(series_name=series.series_name, issue_number=issue.issue_number)
+        own_key = (
+            _normalize_publisher(series.publisher),
+            _normalize_series(series.series_name),
+            _normalize_issue_number(issue.issue_number),
+        )
+        is_owned = own_key in owned_keys
+        v2 = v2_by_issue.get(issue_id)
+        v2_score = float(v2.total_score) if v2 is not None else None
+        spec = spec_by_issue.get(issue_id)
+        spec_type = spec.recommendation_type if spec is not None else None
+        key_signals = signals_by_issue.get(issue_id, [])
+        variants = hot_variants_for_issue(session, issue_id=issue_id)
+        has_ratio = any((v.ratio_value is not None and v.ratio_value > 0) or v.is_incentive_variant for v in variants)
+
+        priority, rationale = compute_forward_catalog_priority(
+            issue=issue,
+            series=series,
+            owned=is_owned,
+            key_signals=key_signals,
+            v2_total_score=v2_score,
+            spec_type=spec_type,
+            has_ratio_variant=has_ratio,
+            today=today,
+        )
+
+        if spec_type in {"STRONG_BUY", "BUY"} and not is_owned:
+            rec_type = TYPE_ACQUIRE
+        elif issue.foc_date is not None and days_until_foc(issue.foc_date, today=today) is not None:
+            rec_type = TYPE_PREORDER
+        elif has_ratio or spec_type == "WATCH":
+            rec_type = TYPE_WATCH
+        else:
+            rec_type = TYPE_PREORDER if is_owned else TYPE_WATCH
+
+        drafts.append(
+            _Draft(
+                recommendation_type=rec_type,
+                title=title,
+                rationale=rationale or f"Forward release within {FORWARD_RECOMMENDATION_WINDOW_DAYS}-day window.",
+                source_systems={SRC_RELEASE},
+                priority_score=_clamp_priority(priority),
+                confidence_score=_clamp_confidence(float(v2.confidence_score) if v2 else 0.62),
+            )
+        )
+
+        if has_ratio and rec_type != TYPE_WATCH:
+            variant_title = f"{title} (variants)"
+            drafts.append(
+                _Draft(
+                    recommendation_type=TYPE_WATCH,
+                    title=variant_title,
+                    rationale="Ratio or incentive variant in the forward window.",
+                    source_systems={SRC_RELEASE},
+                    priority_score=_clamp_priority(max(72.0, priority - 4.0)),
+                    confidence_score=_clamp_confidence(0.58),
+                )
+            )
+    return drafts
+
+
 def _build_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
     store: dict[str, _Draft] = {}
     for draft in (
-        _collect_pull_list_drafts(session, owner_user_id=owner_user_id)
+        _collect_forward_release_catalog_drafts(session, owner_user_id=owner_user_id)
+        + _collect_pull_list_drafts(session, owner_user_id=owner_user_id)
         + _collect_purchase_drafts(session, owner_user_id=owner_user_id)
         + _collect_portfolio_acquire_drafts(session, owner_user_id=owner_user_id)
         + _collect_acquisition_drafts(session, owner_user_id=owner_user_id)

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from datetime import date, timedelta
 
 from sqlmodel import Session, select
+
+from app.services.recommendation_forward_window import FORWARD_RECOMMENDATION_WINDOW_DAYS
 
 from app.models.recommendation_v2 import (
     RecommendationDecisionV2,
@@ -109,9 +113,30 @@ def score_release_variant_v2(
     return row
 
 
-def generate_recommendations_v2(session: Session, *, owner_user_id: int) -> RecommendationRunV2:
-    refresh_market_demand(session)
-    refresh_user_preferences(session, owner_user_id=owner_user_id)
+def generate_recommendations_v2(
+    session: Session,
+    *,
+    owner_user_id: int,
+    progress_callback: Callable[[str], None] | None = None,
+) -> RecommendationRunV2:
+    def _progress(message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(message)
+
+    def _timed_step(label: str, fn: Callable[[], None]) -> None:
+        started = time.monotonic()
+        _progress(f"{label} start")
+        fn()
+        elapsed = time.monotonic() - started
+        _progress(f"{label} done secs={elapsed:.1f}")
+        if elapsed >= 60.0:
+            _progress(f"SLOW STEP (>60s): {label} took {elapsed:.1f}s")
+
+    _timed_step("refresh_market_demand", lambda: refresh_market_demand(session))
+    _timed_step(
+        "refresh_user_preferences",
+        lambda: refresh_user_preferences(session, owner_user_id=owner_user_id),
+    )
 
     run = RecommendationRunV2(owner_user_id=owner_user_id, status="RUNNING")
     session.add(run)
@@ -123,13 +148,20 @@ def generate_recommendations_v2(session: Session, *, owner_user_id: int) -> Reco
     variants_scored = 0
     created = 0
 
+    load_started = time.monotonic()
     rows = session.exec(
         select(ReleaseIssue, ReleaseSeries)
         .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
         .where(ReleaseIssue.owner_user_id == owner_user_id)
         .order_by(ReleaseIssue.release_date.asc(), ReleaseIssue.id.asc())
     ).all()
+    load_elapsed = time.monotonic() - load_started
+    _progress(f"load_release_issues rows={len(rows)} secs={load_elapsed:.1f}")
+    if load_elapsed >= 60.0:
+        _progress(f"SLOW QUERY (>60s): load_release_issues took {load_elapsed:.1f}s rows={len(rows)}")
 
+    batch_started = time.monotonic()
+    batch_size = 250
     for issue, series in rows:
         score_release_issue_v2(session, owner_user_id=owner_user_id, run_id=run_id, issue=issue, series=series)
         issues_scored += 1
@@ -147,6 +179,18 @@ def generate_recommendations_v2(session: Session, *, owner_user_id: int) -> Reco
                 )
                 variants_scored += 1
                 created += 1
+        if issues_scored % batch_size == 0 or issues_scored == len(rows):
+            batch_elapsed = time.monotonic() - batch_started
+            _progress(
+                f"score_progress issues={issues_scored}/{len(rows)} "
+                f"variants={variants_scored} batch_secs={batch_elapsed:.1f}"
+            )
+            if batch_elapsed >= 60.0:
+                _progress(
+                    f"SLOW BATCH (>60s): scored {batch_size} issues in {batch_elapsed:.1f}s "
+                    f"(total issues={issues_scored}/{len(rows)})"
+                )
+            batch_started = time.monotonic()
 
     run.issues_scored = issues_scored
     run.variants_scored = variants_scored
@@ -175,7 +219,7 @@ def _latest_scores_by_issue(session: Session, *, owner_user_id: int) -> dict[int
 
 def generate_weekly_buy_list_v2(session: Session, *, owner_user_id: int, limit: int = 50) -> list[RecommendationScoreV2]:
     latest = _latest_scores_by_issue(session, owner_user_id=owner_user_id)
-    horizon = date.today() + timedelta(days=45)
+    horizon = date.today() + timedelta(days=FORWARD_RECOMMENDATION_WINDOW_DAYS)
     ranked: list[RecommendationScoreV2] = []
     for score in latest.values():
         issue = session.get(ReleaseIssue, score.release_issue_id)

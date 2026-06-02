@@ -47,7 +47,10 @@ ACTIONS_LIMIT = 25
 
 SECTION_META: dict[str, tuple[str, str]] = {
     SECTION_DAILY_ACTIONS: ("Today's Top Actions", "No daily actions queued yet."),
-    SECTION_TOP_RECOMMENDATIONS: ("Top Recommendations", "No cross-system recommendations yet."),
+    SECTION_TOP_RECOMMENDATIONS: (
+        "Top Recommendations",
+        "No forward recommendations in the next 90 days yet. Import release catalog and refresh intelligence.",
+    ),
     SECTION_PREORDER_THIS_WEEK: ("Preorder This Week", "No urgent preorder actions."),
     SECTION_ACQUIRE_TARGETS: ("Acquisition Targets", "No acquisition targets found."),
     SECTION_GRADE_OPPORTUNITIES: ("Grade Opportunities", "No grading opportunities right now."),

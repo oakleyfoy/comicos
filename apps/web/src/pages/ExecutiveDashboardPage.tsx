@@ -18,16 +18,16 @@ function money(value: number | null | undefined): string {
 
 function SectionPanel({ block }: { block: ExecutiveDashboardSectionRead }): JSX.Element {
   return (
-    <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{block.title}</h3>
+    <div className="rounded-2xl border border-blue-900/40 bg-patriot-navy p-4 text-white shadow-md">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-white">{block.title}</h3>
       {block.items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">{block.empty_message}</p>
+        <p className="mt-3 text-sm text-white">{block.empty_message}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {block.items.map((item) => (
             <li
               key={`${block.section}-${item.item_type}-${item.item_id}`}
-              className="rounded-xl border border-white/5 bg-slate-950/50 px-3 py-2 text-sm"
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white [&_p]:text-white"
             >
               <ItemRow item={item} />
             </li>
@@ -38,26 +38,33 @@ function SectionPanel({ block }: { block: ExecutiveDashboardSectionRead }): JSX.
   );
 }
 
+function ItemMetaLine({ item }: { item: ExecutiveDashboardItemRead }): JSX.Element | null {
+  const parts: string[] = [];
+  if (item.publisher) parts.push(item.publisher);
+  if (item.recommendation_rank != null) parts.push(`Rank ${item.recommendation_rank}`);
+  if (item.priority_score != null) parts.push(`Priority ${item.priority_score.toFixed(1)}`);
+  if (item.confidence_score != null) parts.push(`Conf ${item.confidence_score.toFixed(2)}`);
+  if (item.due_date) parts.push(`Due ${item.due_date}`);
+  if (item.estimated_value != null) parts.push(`Est ${money(item.estimated_value)}`);
+  if (parts.length === 0) return null;
+  return <p className="mt-1 text-xs text-white">{parts.join(" · ")}</p>;
+}
+
 function ItemRow({ item }: { item: ExecutiveDashboardItemRead }): JSX.Element {
   const badge = item.action_type || item.recommendation_type || item.health_status;
   return (
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="font-medium text-white">{item.title}</span>
-        {badge ? <span className="text-cyan-200">{badge.replace(/_/g, " ")}</span> : null}
+        {badge ? (
+          <span className="shrink-0 font-medium uppercase tracking-wide text-sky-200">{badge.replace(/_/g, " ")}</span>
+        ) : null}
       </div>
-      <p className="mt-1 text-xs text-slate-500">
-        {item.publisher ? `${item.publisher} · ` : ""}
-        {item.recommendation_rank != null ? `Rank ${item.recommendation_rank} · ` : ""}
-        {item.priority_score != null ? `Priority ${item.priority_score.toFixed(1)} · ` : ""}
-        {item.confidence_score != null ? `Conf ${item.confidence_score.toFixed(2)} · ` : ""}
-        {item.due_date ? `Due ${item.due_date} · ` : ""}
-        {item.estimated_value != null ? `Est ${money(item.estimated_value)}` : ""}
-      </p>
+      <ItemMetaLine item={item} />
       {item.source_systems.length > 0 ? (
-        <p className="mt-1 text-xs text-slate-500">Sources: {item.source_systems.join(", ")}</p>
+        <p className="mt-1 text-xs text-white">Sources: {item.source_systems.join(", ")}</p>
       ) : null}
-      {item.rationale ? <p className="mt-1 text-xs text-slate-400">{item.rationale}</p> : null}
+      {item.rationale ? <p className="mt-1 text-xs leading-relaxed text-white">{item.rationale}</p> : null}
     </>
   );
 }
@@ -148,7 +155,7 @@ export function ExecutiveDashboardPage(): JSX.Element {
         />
         <button
           type="button"
-          className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500"
+          className="rounded-xl bg-patriot-blue px-4 py-2 text-sm font-medium text-white hover:bg-blue-900"
           onClick={() => void load()}
         >
           Refresh
@@ -166,7 +173,7 @@ export function ExecutiveDashboardPage(): JSX.Element {
           <SummaryCard label="Budget Remaining" value={s.budget_remaining != null ? money(s.budget_remaining) : "—"} />
         </div>
       ) : null}
-      {loading && !dashboard ? <p className="text-sm text-slate-500">Loading executive dashboard…</p> : null}
+      {loading && !dashboard ? <p className="text-sm text-slate-600">Loading executive dashboard…</p> : null}
       {dashboard ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionPanel block={dashboard.daily_actions} />
@@ -188,8 +195,8 @@ export function ExecutiveDashboardPage(): JSX.Element {
 
 function SummaryCard({ label, value }: { label: string; value: string | number }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-      <p className="text-slate-500">{label}</p>
+    <div className="rounded-xl border border-blue-900/40 bg-patriot-navy px-3 py-2 text-sm text-white shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-white">{label}</p>
       <p className="text-lg font-semibold text-white">{value}</p>
     </div>
   );

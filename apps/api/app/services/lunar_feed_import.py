@@ -11,6 +11,7 @@ from app.services.lunar_csv_parser import parse_lunar_product_csv, row_product_c
 from app.services.lunar_feed_downloader import download_latest_monthly_products_csv
 from app.services.lunar_foc_intelligence import generate_foc_alerts
 from app.services.lunar_release_normalizer import normalize_lunar_rows
+from app.services.lunar_release_refresh import refresh_release_intelligence_after_lunar_import
 from app.services.release_import import import_release_feed
 
 STATUS_RUNNING = "RUNNING"
@@ -135,6 +136,8 @@ def import_lunar_csv_bytes(
             foc_alerts_created=len(foc_alerts),
             status=status,
         )
+        if status in {STATUS_COMPLETED, STATUS_PARTIAL}:
+            refresh_release_intelligence_after_lunar_import(session, owner_user_id=owner_user_id)
         return LunarFeedImportSummaryRead.from_run(run, errors=validation_errors)
     except Exception as exc:  # noqa: BLE001
         _store_errors(session, run_id=int(run.id or 0), errors=[("feed", "IMPORT_ERROR", str(exc))])
