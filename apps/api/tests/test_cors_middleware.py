@@ -58,3 +58,22 @@ def test_cors_headers_on_validation_error(client: TestClient) -> None:
     )
     assert response.status_code == 422
     assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:5173"
+
+
+def test_reports_dashboard_rollups_returns_200_with_cors(client: TestClient) -> None:
+    client.post("/auth/register", json={"email": "rollup-user@example.com", "password": "supersecret123"})
+    login = client.post(
+        "/auth/login",
+        json={"email": "rollup-user@example.com", "password": "supersecret123"},
+    )
+    token = login.json()["access_token"]
+
+    response = client.get(
+        "/reports/dashboard-rollups",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:5173"

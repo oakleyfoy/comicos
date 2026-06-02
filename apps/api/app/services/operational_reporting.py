@@ -292,7 +292,7 @@ def dashboard_rollup_owner(session: Session, *, owner_user_id: int, window: int 
             OperationalReportRun.status == "FAILED",
         )
         .order_by(col(OperationalReportRun.created_at).desc(), col(OperationalReportRun.id).desc())
-        .limit(8),
+        .limit(8)
     )
     failed_rows = session.exec(stmt_failed).all()
     return OperationalReportingDashboardRollup(
