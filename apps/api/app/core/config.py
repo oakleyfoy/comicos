@@ -127,7 +127,9 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+        from app.http_cors import resolve_cors_origins
+
+        return resolve_cors_origins(self)
 
     @property
     def cover_images_storage_root(self) -> Path:
@@ -366,6 +368,16 @@ def validate_production_settings(settings: Settings) -> None:
 
     if settings.secret_key == "change-me-in-development":
         raise RuntimeError("SECRET_KEY must be replaced before starting in production.")
+
+    from app.http_cors import COMIC_OS_PRODUCTION_WEB_ORIGINS, resolve_cors_origins
+
+    allowed = set(resolve_cors_origins(settings))
+    missing_web_origins = [origin for origin in COMIC_OS_PRODUCTION_WEB_ORIGINS if origin not in allowed]
+    if missing_web_origins:
+        raise RuntimeError(
+            "Production CORS must allow ComicOS web origins: "
+            + ", ".join(missing_web_origins)
+        )
 
 
 @lru_cache

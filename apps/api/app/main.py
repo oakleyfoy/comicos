@@ -8,7 +8,11 @@ from typing import Annotated, Literal
 from pydantic import ValidationError
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Body, Query, Request, UploadFile, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import (
+    http_exception_handler as default_http_exception_handler,
+    request_validation_exception_handler as default_request_validation_exception_handler,
+)
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,6 +27,7 @@ from app.api.report_params import (
     parse_timeline_export_params,
 )
 from app.core.config import Settings, get_settings, validate_production_settings
+from app.http_cors import register_cors_middleware
 from app.core.security import create_access_token, get_password_hash, token_expiration_utc, verify_password
 from app.db.session import get_session
 from app.models import GradingOperationalReportRun, InventoryCopy, OperationalReportRun, PortfolioStrategyDashboardSnapshot, User
@@ -1253,13 +1258,6 @@ settings = get_settings()
 validate_production_settings(settings)
 
 app = FastAPI(title="ComicOS API")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 attach_market_v1_layer(app)
 attach_scan_ingestion_layer(app)
@@ -1408,8 +1406,6 @@ attach_scan_replay_layer(app)
 
 @app.exception_handler(HTTPException)
 async def _v1_http_exception_dispatcher(request: Request, exc: HTTPException):
-    from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
-
     path = request.url.path
     if not (path.startswith("/api/v1/") or path.startswith("/ops/") or path.startswith("/market-")):
         return await default_http_exception_handler(request, exc)
@@ -1431,6 +1427,19 @@ async def _v1_http_exception_dispatcher(request: Request, exc: HTTPException):
         status_code=exc.status_code,
         content={"error": {"code": f"HTTP_{exc.status_code}", "message": message, "details": details}},
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def _request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    return await default_request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    import logging
+
+    logging.getLogger(__name__).exception("Unhandled error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: str, extension: str) -> Response:
@@ -16457,3 +16466,6 @@ def ops_list_listing_staleness_events(
         limit=lim,
         offset=off,
     )
+
+
+register_cors_middleware(app, settings)
