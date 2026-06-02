@@ -9,7 +9,7 @@ from app.models.industry_release_signal import IndustryReleaseSignal
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries, ReleaseVariant
 from app.services.key_issue_catalog import MILESTONE_ISSUE_NUMBERS
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
-from app.services.opportunity_scoring import user_owns_series
+from app.services.opportunity_scoring import user_owns_series, user_owns_series_cached
 
 PUBLISHER_STRENGTH_BY_CODE: dict[str, float] = {
     "MARVEL": 12.0,
@@ -139,6 +139,7 @@ def compute_industry_opportunity_score(
     series: ReleaseSeries,
     variants: list[ReleaseVariant],
     signals: list[IndustryReleaseSignal],
+    owned_series_keys: set[tuple[str, str]] | None = None,
 ) -> IndustryOpportunityComputation:
     signal_types = {row.signal_type for row in signals}
     publisher_bonus = PUBLISHER_STRENGTH_BY_CODE.get(candidate.publisher_code.upper(), 5.0)
@@ -167,12 +168,20 @@ def compute_industry_opportunity_score(
         rationale_parts.append(f"Franchise keywords ({', '.join(franchise_hits)}): +{franchise_bonus:.1f}")
 
     collector_bonus = 0.0
-    if user_owns_series(
-        session,
-        owner_user_id=owner_user_id,
-        publisher=series.publisher,
-        series_name=series.series_name,
-    ):
+    if owned_series_keys is not None:
+        owns = user_owns_series_cached(
+            owned_series_keys,
+            publisher=series.publisher,
+            series_name=series.series_name,
+        )
+    else:
+        owns = user_owns_series(
+            session,
+            owner_user_id=owner_user_id,
+            publisher=series.publisher,
+            series_name=series.series_name,
+        )
+    if owns:
         collector_bonus = 8.0
         rationale_parts.append("Collector relevance (series in collection): +8.0")
 

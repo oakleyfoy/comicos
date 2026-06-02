@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 from sqlmodel import Session, select
 
 from app.models.asset_ledger import utc_now
 from app.models.industry_release_scan import IndustryReleaseCandidate
 from app.models.industry_release_signal import IndustryReleaseSignal
-from app.models.release_intelligence import ReleaseIssue, ReleaseSeries, ReleaseVariant
+from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, ReleaseSeries, ReleaseVariant
 from app.schemas.industry_release_signal import IndustryReleaseSignalLatestRead, IndustryReleaseSignalRead
 from app.services.industry_release_scans import latest_scan_run_id
 from app.services.industry_release_signal_classifier import classify_industry_release_candidate
@@ -75,7 +78,61 @@ def _upsert_signal(
     return row, True
 
 
-def synchronize_industry_release_signals(session: Session, *, owner_user_id: int, scan_run_id: int) -> int:
+PROGRESS_BATCH_SIZE = 50
+SLOW_STEP_SECONDS = 60.0
+
+
+def _upsert_signal_cached(
+    session: Session,
+    *,
+    owner_user_id: int,
+    candidate: IndustryReleaseCandidate,
+    signal_type: str,
+    confidence_score: float,
+    rationale: str,
+    existing_by_key: dict[tuple[int, str], IndustryReleaseSignal],
+) -> tuple[IndustryReleaseSignal, bool]:
+    cache_key = (int(candidate.id or 0), signal_type)
+    row = existing_by_key.get(cache_key)
+    if row is None:
+        row = IndustryReleaseSignal(
+            owner_user_id=owner_user_id,
+            candidate_id=int(candidate.id or 0),
+            scan_run_id=int(candidate.scan_run_id),
+            release_id=int(candidate.release_id),
+            signal_type=signal_type,
+            confidence_score=confidence_score,
+            rationale=rationale,
+        )
+        session.add(row)
+        existing_by_key[cache_key] = row
+        return row, True
+    unchanged = (
+        float(row.confidence_score) >= float(confidence_score)
+        and row.rationale == rationale
+        and int(row.scan_run_id) == int(candidate.scan_run_id)
+    )
+    if unchanged:
+        return row, False
+    row.confidence_score = max(float(row.confidence_score), float(confidence_score))
+    row.rationale = rationale
+    row.scan_run_id = int(candidate.scan_run_id)
+    row.updated_at = utc_now()
+    session.add(row)
+    return row, True
+
+
+def synchronize_industry_release_signals(
+    session: Session,
+    *,
+    owner_user_id: int,
+    scan_run_id: int,
+    progress_callback: Callable[[str], None] | None = None,
+) -> int:
+    def _progress(message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(message)
+
     candidates = session.exec(
         select(IndustryReleaseCandidate)
         .where(IndustryReleaseCandidate.owner_user_id == owner_user_id)
@@ -85,6 +142,7 @@ def synchronize_industry_release_signals(session: Session, *, owner_user_id: int
         return 0
 
     release_ids = [int(c.release_id) for c in candidates]
+    candidate_ids = [int(c.id or 0) for c in candidates]
     issues = {
         int(row.id or 0): row
         for row in session.exec(select(ReleaseIssue).where(ReleaseIssue.id.in_(release_ids))).all()
@@ -99,8 +157,22 @@ def synchronize_industry_release_signals(session: Session, *, owner_user_id: int
     for variant in variant_rows:
         variants_by_issue.setdefault(int(variant.issue_id), []).append(variant)
 
+    key_rows = session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id.in_(release_ids))).all()
+    key_signals_by_issue: dict[int, list[str]] = {}
+    for row in key_rows:
+        key_signals_by_issue.setdefault(int(row.issue_id), []).append(str(row.signal_type))
+
+    existing_by_key: dict[tuple[int, str], IndustryReleaseSignal] = {}
+    for row in session.exec(
+        select(IndustryReleaseSignal).where(IndustryReleaseSignal.candidate_id.in_(candidate_ids))
+    ).all():
+        existing_by_key[(int(row.candidate_id), str(row.signal_type))] = row
+
     changed = 0
+    processed = 0
+    loop_started = time.monotonic()
     for candidate in candidates:
+        processed += 1
         issue = issues.get(int(candidate.release_id))
         if issue is None:
             continue
@@ -113,19 +185,33 @@ def synchronize_industry_release_signals(session: Session, *, owner_user_id: int
             issue=issue,
             series=series,
             variants=variants_by_issue.get(int(candidate.release_id), []),
+            key_signal_types=key_signals_by_issue.get(int(candidate.release_id), []),
         )
         for detection in detections:
-            _, did_change = _upsert_signal(
+            _, did_change = _upsert_signal_cached(
                 session,
                 owner_user_id=owner_user_id,
                 candidate=candidate,
                 signal_type=detection.signal_type,
                 confidence_score=detection.confidence_score,
                 rationale=detection.rationale,
+                existing_by_key=existing_by_key,
             )
             if did_change:
                 changed += 1
+        if processed % PROGRESS_BATCH_SIZE == 0:
+            batch_secs = time.monotonic() - loop_started
+            _progress(
+                f"step=signal_sync progress processed={processed}/{len(candidates)} "
+                f"changed={changed} batch_secs={batch_secs:.1f}"
+            )
+            if batch_secs >= SLOW_STEP_SECONDS:
+                _progress(f"SLOW LOOP (>{int(SLOW_STEP_SECONDS)}s): signal_sync batch took {batch_secs:.1f}s")
+            loop_started = time.monotonic()
+
+    commit_started = time.monotonic()
     session.commit()
+    _progress(f"step=signal_sync commit secs={time.monotonic() - commit_started:.1f} changed={changed}")
     return changed
 
 

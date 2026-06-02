@@ -57,20 +57,24 @@ def _build_haystack(
     return " ".join(part for part in parts if part).upper()
 
 
-def _metadata_first_appearance_signals(session: Session, *, release_id: int) -> list[IndustrySignalDetection]:
-    rows = session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == release_id)).all()
+def _metadata_first_appearance_signals_from_types(signal_types: list[str]) -> list[IndustrySignalDetection]:
     detections: list[IndustrySignalDetection] = []
-    for row in rows:
-        signal_type = row.signal_type.upper()
-        if "FIRST_APPEARANCE" in signal_type or signal_type == "FIRST APPEARANCE":
+    for signal_type in signal_types:
+        upper = signal_type.upper()
+        if "FIRST_APPEARANCE" in upper or upper == "FIRST APPEARANCE":
             detections.append(
                 IndustrySignalDetection(
                     signal_type="FIRST_APPEARANCE",
-                    confidence_score=min(float(row.confidence_score), 0.95),
-                    rationale=f"ReleaseKeySignal metadata: {row.signal_type}",
+                    confidence_score=0.9,
+                    rationale=f"ReleaseKeySignal metadata: {signal_type}",
                 )
             )
     return detections
+
+
+def _metadata_first_appearance_signals(session: Session, *, release_id: int) -> list[IndustrySignalDetection]:
+    rows = session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == release_id)).all()
+    return _metadata_first_appearance_signals_from_types([str(row.signal_type) for row in rows])
 
 
 def classify_industry_release_candidate(
@@ -80,6 +84,7 @@ def classify_industry_release_candidate(
     issue: ReleaseIssue,
     series: ReleaseSeries,
     variants: list[ReleaseVariant],
+    key_signal_types: list[str] | None = None,
 ) -> list[IndustrySignalDetection]:
     haystack = _build_haystack(issue=issue, series=series, variants=variants)
     issue_number = _normalize_issue_number(candidate.issue_number or issue.issue_number)
@@ -109,7 +114,10 @@ def classify_industry_release_candidate(
             )
         )
 
-    detections.extend(_metadata_first_appearance_signals(session, release_id=int(candidate.release_id)))
+    if key_signal_types is not None:
+        detections.extend(_metadata_first_appearance_signals_from_types(key_signal_types))
+    else:
+        detections.extend(_metadata_first_appearance_signals(session, release_id=int(candidate.release_id)))
     if FIRST_APPEARANCE_PATTERN.search(haystack):
         detections.append(
             IndustrySignalDetection(

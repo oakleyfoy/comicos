@@ -49,9 +49,24 @@ def _series_owned_issue_values(session: Session, *, owner_user_id: int, publishe
     return owned
 
 
+def owned_series_keys(session: Session, *, owner_user_id: int) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for row in _inventory_issue_rows(session, owner_user_id=owner_user_id):
+        keys.add((row.publisher.lower(), row.series_name.lower()))
+    return keys
+
+
 def user_owns_series(session: Session, *, owner_user_id: int, publisher: str, series_name: str) -> bool:
     return bool(_series_owned_issue_values(session, owner_user_id=owner_user_id, publisher=publisher, series_name=series_name))
 
+
+def user_owns_series_cached(
+    owned_keys: set[tuple[str, str]],
+    *,
+    publisher: str,
+    series_name: str,
+) -> bool:
+    return (publisher.lower(), series_name.lower()) in owned_keys
 
 def compute_opportunity_score_components(
     session: Session,

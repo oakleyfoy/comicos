@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 from sqlmodel import Session, select
 
 from app.models.asset_ledger import utc_now
@@ -16,6 +19,10 @@ from app.services.industry_opportunity_engine import compute_industry_opportunit
 from app.services.industry_release_scans import latest_scan_run_id
 from app.services.industry_release_scanner import scan_industry_releases
 from app.services.industry_release_signals import classify_latest_industry_release_signals
+from app.services.opportunity_scoring import owned_series_keys
+
+PROGRESS_BATCH_SIZE = 50
+SLOW_STEP_SECONDS = 60.0
 
 
 def _to_read(row: IndustryOpportunityScore) -> IndustryOpportunityRead:
@@ -89,7 +96,17 @@ def _upsert_score(
     return row, True
 
 
-def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: int, scan_run_id: int) -> int:
+def synchronize_industry_opportunity_scores(
+    session: Session,
+    *,
+    owner_user_id: int,
+    scan_run_id: int,
+    progress_callback: Callable[[str], None] | None = None,
+) -> int:
+    def _progress(message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(message)
+
     candidates = session.exec(
         select(IndustryReleaseCandidate)
         .where(IndustryReleaseCandidate.owner_user_id == owner_user_id)
@@ -98,6 +115,7 @@ def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: 
     if not candidates:
         return 0
 
+    owned_keys = owned_series_keys(session, owner_user_id=owner_user_id)
     candidate_ids = [int(c.id or 0) for c in candidates]
     release_ids = [int(c.release_id) for c in candidates]
     signals_by_candidate: dict[int, list[IndustryReleaseSignal]] = {}
@@ -121,7 +139,10 @@ def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: 
         variants_by_issue.setdefault(int(variant.issue_id), []).append(variant)
 
     updated = 0
+    processed = 0
+    loop_started = time.monotonic()
     for candidate in candidates:
+        processed += 1
         issue = issues.get(int(candidate.release_id))
         if issue is None:
             continue
@@ -136,6 +157,7 @@ def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: 
             series=series,
             variants=variants_by_issue.get(int(candidate.release_id), []),
             signals=signals_by_candidate.get(int(candidate.id or 0), []),
+            owned_series_keys=owned_keys,
         )
         _, changed = _upsert_score(
             session,
@@ -148,7 +170,19 @@ def synchronize_industry_opportunity_scores(session: Session, *, owner_user_id: 
         )
         if changed:
             updated += 1
+        if processed % PROGRESS_BATCH_SIZE == 0:
+            batch_secs = time.monotonic() - loop_started
+            _progress(
+                f"step=opportunity_sync progress processed={processed}/{len(candidates)} "
+                f"updated={updated} batch_secs={batch_secs:.1f}"
+            )
+            if batch_secs >= SLOW_STEP_SECONDS:
+                _progress(f"SLOW LOOP (>{int(SLOW_STEP_SECONDS)}s): opportunity_sync batch took {batch_secs:.1f}s")
+            loop_started = time.monotonic()
+
+    commit_started = time.monotonic()
     session.commit()
+    _progress(f"step=opportunity_sync commit secs={time.monotonic() - commit_started:.1f} updated={updated}")
     return updated
 
 

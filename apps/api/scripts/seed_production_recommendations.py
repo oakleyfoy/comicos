@@ -199,7 +199,10 @@ def _run_release_intelligence_refresh_with_logging(
 ) -> dict[str, Any]:
     from app.services.auto_watchlist_agent import run_auto_watchlists
     from app.services.future_buy_queue import build_future_buy_queue
-    from app.services.industry_scanner_automation import run_industry_scanner_refresh
+    from app.services.industry_scanner_automation import (
+        IndustryScannerRefreshOptions,
+        run_industry_scanner_refresh,
+    )
     from app.services.key_issue_agent import detect_key_issues
     from app.services.new_number_one_agent import detect_new_number_ones
     from app.services.run_continuity_agent import run_continuity_detection
@@ -230,7 +233,14 @@ def _run_release_intelligence_refresh_with_logging(
         (
             "run_industry_scanner_refresh",
             lambda: run_industry_scanner_refresh(
-                session, owner_user_id=owner_user_id, trigger_type="LUNAR_REFRESH"
+                session,
+                owner_user_id=owner_user_id,
+                trigger_type="LUNAR_REFRESH",
+                options=IndustryScannerRefreshOptions(
+                    forward_window_only=True,
+                    progress_callback=lambda message: progress.log(message, stage=2),
+                    run_downstream_spec_refresh=False,
+                ),
             ),
         ),
     ]
@@ -531,6 +541,16 @@ def main() -> int:
 
         report["diagnostics_after"] = {
             "release_issues": release_count_after,
+            "recommendation_summary": {
+                "release_issues": release_count_after,
+                "recommendation_v2_issues_scored": report["steps"]
+                .get("recommendation_v2", {})
+                .get("issues_scored", 0),
+                "unified_rows_appended": unified_created,
+                "cross_system_rows_appended": cross_created,
+                "cross_system_snapshot_size": snapshot_size,
+                "cross_system_candidate_count": candidate_count,
+            },
             "pipeline": progress.run_step(
                 9,
                 "pipeline_metrics_after",
