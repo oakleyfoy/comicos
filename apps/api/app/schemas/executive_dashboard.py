@@ -4,6 +4,8 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.schemas.recommendation_ranking import RecommendationRankingDiagnosticsRead
+
 SECTION_DAILY_ACTIONS = "DAILY_ACTIONS"
 SECTION_TOP_RECOMMENDATIONS = "TOP_RECOMMENDATIONS"
 SECTION_PREORDER_THIS_WEEK = "PREORDER_THIS_WEEK"
@@ -65,6 +67,7 @@ class ExecutiveDashboardSectionRead(BaseModel):
     title: str
     empty_message: str
     items: list[ExecutiveDashboardItemRead] = Field(default_factory=list)
+    ranking_diagnostics: RecommendationRankingDiagnosticsRead | None = None
 
 
 class ExecutiveDashboardRead(BaseModel):

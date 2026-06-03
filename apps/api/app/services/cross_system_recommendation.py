@@ -59,10 +59,10 @@ def list_latest_cross_system_recommendations(
         items.append(_to_read(row))
     items.sort(
         key=lambda r: (
-            r.recommendation_rank,
             -r.priority_score,
             -r.confidence_score,
             -(r.estimated_value or 0.0),
+            r.recommendation_rank,
             -r.id,
         )
     )

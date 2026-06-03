@@ -13,6 +13,13 @@ from app.services.unified_collector_intelligence import (
     _latest_recommendation_rows as _latest_unified_rows,
     generate_unified_collector_recommendations,
 )
+from app.services.recommendation_catalog_quality import (
+    apply_price_discipline,
+    build_forward_release_title_index,
+    classify_catalog_text,
+    classify_forward_release,
+    should_include_in_top_recommendations,
+)
 
 SRC_UNIFIED = "P57_UNIFIED"
 SRC_DAILY = "P57_DAILY"
@@ -219,13 +226,67 @@ def _apply_budget_awareness(session: Session, *, owner_user_id: int, candidates:
             cand.rationale = f"{cand.rationale} Budget constrained; critical acquisition prioritized.".strip()
 
 
+def _parse_title_for_quality(title: str) -> tuple[str, str | None]:
+    if "#" in title:
+        series, issue = title.split("#", 1)
+        return series.strip(), issue.strip()
+    return title.strip(), None
+
+
+def _candidate_passes_quality_filter(
+    cand: _Candidate,
+    *,
+    release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
+    signals_by_issue: dict[int, list[str]],
+) -> bool:
+    title_key = cand.title.strip().lower()
+    if title_key.endswith(" (variants)"):
+        title_key = title_key[: -len(" (variants)")]
+    pair = release_index.get(title_key)
+    if pair is not None:
+        issue, series = pair
+        issue_id = int(issue.id or 0)
+        signals = signals_by_issue.get(issue_id, [])
+        quality = classify_forward_release(
+            issue,
+            series,
+            key_signals=signals,
+            confidence_score=cand.confidence_score,
+        )
+        return should_include_in_top_recommendations(quality)
+
+    series, issue = _parse_title_for_quality(cand.title)
+    quality = classify_catalog_text(series_name=series, issue_number=issue, title=cand.title)
+    quality = apply_price_discipline(quality, cover_price=None, issue_number=issue, title=cand.title)
+    return should_include_in_top_recommendations(quality)
+
+
 def _sort_key(c: _Candidate, *, created_ord: int, row_id: int) -> tuple:
     est = c.estimated_value if c.estimated_value is not None else 0.0
     return (-c.priority_score, -c.confidence_score, -est, created_ord, row_id)
 
 
+def _stable_tiebreak_token(title_key: str) -> int:
+    """Deterministic tie-breaker that does not sort alphabetically by title."""
+    acc = 0
+    for idx, ch in enumerate(title_key):
+        acc = (acc + (ord(ch) * (idx + 17))) % 10007
+    return acc
+
+
+def _candidate_sort_key(c: _Candidate) -> tuple:
+    return (
+        -c.priority_score,
+        -c.confidence_score,
+        -(c.estimated_value or 0.0),
+        -len(c.source_systems),
+        _stable_tiebreak_token(c.title_key),
+    )
+
+
 def build_cross_system_candidates(session: Session, *, owner_user_id: int) -> list[_Candidate]:
     from app.services.daily_action_engine import generate_daily_actions
+    from app.services.recommendation_forward_window import _key_signals_by_issue
 
     generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
     generate_daily_actions(session, owner_user_id=owner_user_id)
@@ -234,15 +295,16 @@ def build_cross_system_candidates(session: Session, *, owner_user_id: int) -> li
     )
     _enrich_estimated_values(session, owner_user_id=owner_user_id, candidates=raw)
     resolved = _merge_raw_candidates(raw)
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    issue_ids = [int(issue.id or 0) for issue, _ in release_index.values() if issue.id is not None]
+    signals_by_issue = _key_signals_by_issue(session, issue_ids=issue_ids)
+    resolved = [
+        c
+        for c in resolved
+        if _candidate_passes_quality_filter(c, release_index=release_index, signals_by_issue=signals_by_issue)
+    ]
     _apply_budget_awareness(session, owner_user_id=owner_user_id, candidates=resolved)
-    resolved.sort(
-        key=lambda c: (
-            -c.priority_score,
-            -c.confidence_score,
-            -(c.estimated_value or 0.0),
-            c.title.lower(),
-        )
-    )
+    resolved.sort(key=_candidate_sort_key)
     return resolved
 
 

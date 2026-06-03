@@ -32,6 +32,12 @@ from app.services.recommendation_forward_window import (
     issue_in_forward_recommendation_window,
     iter_forward_release_rows,
 )
+from app.services.recommendation_catalog_quality import (
+    apply_quality_to_priority,
+    classify_catalog_text,
+    classify_forward_release,
+    should_include_in_top_recommendations,
+)
 from app.services.recommendation_v2_engine import _latest_scores_by_issue
 from app.services.sell_candidates import _latest_sell_candidate_rows, _to_read as sell_candidate_to_read
 
@@ -336,6 +342,27 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
         variants = hot_variants_for_issue(session, issue_id=issue_id)
         has_ratio = any((v.ratio_value is not None and v.ratio_value > 0) or v.is_incentive_variant for v in variants)
 
+        owns_run = any(
+            k[0] == _normalize_publisher(series.publisher) and k[1] == _normalize_series(series.series_name)
+            for k in owned_keys
+        )
+        has_incentive = any(v.is_incentive_variant for v in variants)
+
+        quality = classify_forward_release(
+            issue,
+            series,
+            key_signals=key_signals,
+            spec_type=spec_type,
+            v2_total_score=v2_score,
+            has_ratio_variant=has_ratio,
+            has_incentive_variant=has_incentive,
+            user_owns_series_run=owns_run,
+            confidence_score=float(v2.confidence_score) if v2 else None,
+            today=today,
+        )
+        if not should_include_in_top_recommendations(quality):
+            continue
+
         priority, rationale = compute_forward_catalog_priority(
             issue=issue,
             series=series,
@@ -346,6 +373,14 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
             has_ratio_variant=has_ratio,
             today=today,
         )
+        priority = apply_quality_to_priority(priority, quality)
+        if quality.recommendation_exclusion_reason and quality.spec_eligible:
+            rationale = f"{rationale} Spec/key override for {quality.recommendation_exclusion_reason.replace('_', ' ')}."
+        if quality.price_exception_reason:
+            rationale = (
+                f"{rationale} Cover above ${quality.recommendation_price_cap:.0f}; "
+                f"price exception ({quality.price_exception_reason.replace('_', ' ')})."
+            ).strip()
 
         if spec_type in {"STRONG_BUY", "BUY"} and not is_owned:
             rec_type = TYPE_ACQUIRE

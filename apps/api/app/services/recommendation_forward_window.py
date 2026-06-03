@@ -190,7 +190,20 @@ def compute_forward_catalog_priority(
     elif spec_type in {"STRONG_BUY", "BUY", "WATCH"}:
         rationale_parts.append("Not in inventory — forward acquisition target.")
 
-    return round(min(100.0, max(0.0, priority)), 1), " ".join(rationale_parts).strip()
+    # Sub-point spread so equal FOC tiers do not collapse to title-sort order.
+    if v2_total_score is not None:
+        priority += min(4.95, max(0.0, float(v2_total_score) - 50.0) * 0.0495)
+    priority += min(2.45, len(key_signals) * 0.35)
+    if issue.foc_date is not None:
+        foc_days = days_until_foc(issue.foc_date, today=ref)
+        if foc_days is not None:
+            priority += max(-0.5, min(2.5, (21 - float(foc_days)) * 0.08))
+    elif issue.release_date is not None:
+        release_days = (issue.release_date - ref).days
+        if 0 <= release_days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
+            priority += max(0.0, min(2.0, (45 - float(release_days)) * 0.04))
+
+    return round(min(100.0, max(0.0, priority)), 2), " ".join(rationale_parts).strip()
 
 
 def iter_forward_release_rows(

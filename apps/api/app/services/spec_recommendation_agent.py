@@ -11,6 +11,10 @@ from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, Rele
 from app.models.spec_intelligence import SpecRecommendation, SpecScore
 from app.schemas.spec_intelligence import SpecAgentExecutionRead, SpecRecommendationRead
 from app.services.personalization_agent import build_owner_preference_profile, score_issue_for_owner
+from app.services.recommendation_catalog_quality import (
+    classify_forward_release,
+    should_include_in_top_recommendations,
+)
 from app.services.recommendation_forward_window import (
     FORWARD_RECOMMENDATION_WINDOW_DAYS,
     iter_forward_release_rows,
@@ -275,6 +279,11 @@ def run_spec_recommendations(
             if issue_pair is None:
                 continue
             issue, series = issue_pair
+            signals = signals_by_issue.get(int(issue.id or 0), [])
+            quality = classify_forward_release(issue, series, key_signals=signals)
+            if not should_include_in_top_recommendations(quality):
+                processed += 1
+                continue
             personalization = score_issue_for_owner(
                 session,
                 owner_user_id=owner_user_id,
@@ -283,7 +292,6 @@ def run_spec_recommendations(
                 base_score=score.score_value,
                 profile=profile,
             )
-            signals = signals_by_issue.get(int(issue.id or 0), [])
             adjusted_score = float(personalization["adjusted_score"])
             rec_type = _recommendation_type(adjusted_score)
             reason = _build_reason(

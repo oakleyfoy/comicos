@@ -23,6 +23,10 @@ from app.schemas.executive_dashboard import (
     ExecutiveDashboardSectionRead,
     ExecutiveDashboardSummaryRead,
 )
+from app.schemas.recommendation_ranking import (
+    RecommendationRankingAuditRead,
+    RecommendationRankingDiagnosticsRead,
+)
 from app.schemas.exit_dashboard import ExitDashboardItemRead
 from app.schemas.foc_dashboard import FocDashboardItemRead
 from app.services.acquisition_certification import get_latest_acquisition_certification
@@ -41,6 +45,10 @@ from app.services.foc_dates import utc_today
 from app.services.portfolio_certification import build_portfolio_certification_ops_panel
 from app.services.production_readiness import validate_production_readiness
 from app.services.purchase_budgets import build_purchase_budget_summary
+from app.services.recommendation_ranking_diagnostics import (
+    build_recommendation_ranking_audit,
+    diagnostics_from_audit,
+)
 
 TOP_N = 12
 ACTIONS_LIMIT = 25
@@ -89,6 +97,12 @@ def _due_ord(d: date | None) -> int:
     return d.toordinal() if d is not None else 999999
 
 
+def _priority_for_sort(item: ExecutiveDashboardItemRead) -> float:
+    if item.priority_score is not None:
+        return float(item.priority_score)
+    return 0.0
+
+
 def _sort_key(row: _Sortable) -> tuple:
     return (
         -row.primary,
@@ -100,13 +114,34 @@ def _sort_key(row: _Sortable) -> tuple:
     )
 
 
+def _sort_top_recommendations(
+    items: list[ExecutiveDashboardItemRead],
+    *,
+    limit: int = TOP_N,
+) -> list[ExecutiveDashboardItemRead]:
+    """Rank Top Recommendations strictly by stored priority score (not title)."""
+    ordered = sorted(
+        items,
+        key=lambda item: (
+            -_priority_for_sort(item),
+            -(float(item.confidence_score or 0.0)),
+            -(float(item.estimated_value or 0.0)),
+            item.item_id,
+        ),
+    )[:limit]
+    ranked: list[ExecutiveDashboardItemRead] = []
+    for display_rank, item in enumerate(ordered, start=1):
+        ranked.append(item.model_copy(update={"recommendation_rank": display_rank}))
+    return ranked
+
+
 def _sort_and_trim(items: list[ExecutiveDashboardItemRead], *, limit: int = TOP_N) -> list[ExecutiveDashboardItemRead]:
     sortable: list[_Sortable] = []
     for item in items:
         sortable.append(
             _Sortable(
                 payload=item,
-                primary=float(item.priority_score or item.recommendation_rank or 0),
+                primary=_priority_for_sort(item),
                 confidence=float(item.confidence_score or 0),
                 due_ord=_due_ord(item.due_date),
                 value=float(item.estimated_value or 0),
@@ -117,14 +152,23 @@ def _sort_and_trim(items: list[ExecutiveDashboardItemRead], *, limit: int = TOP_
     return [r.payload for r in sorted(sortable, key=_sort_key)[:limit]]
 
 
-def _section_read(section: str, items: list[ExecutiveDashboardItemRead]) -> ExecutiveDashboardSectionRead:
+def _section_read(
+    section: str,
+    items: list[ExecutiveDashboardItemRead],
+    *,
+    ranking_diagnostics: RecommendationRankingDiagnosticsRead | None = None,
+) -> ExecutiveDashboardSectionRead:
     title, empty_message = SECTION_META[section]
-    trimmed = _sort_and_trim(items)
+    if section == SECTION_TOP_RECOMMENDATIONS:
+        trimmed = _sort_top_recommendations(items)
+    else:
+        trimmed = _sort_and_trim(items)
     return ExecutiveDashboardSectionRead(
         section=section,
         title=title,
         empty_message=empty_message,
         items=trimmed,
+        ranking_diagnostics=ranking_diagnostics if section == SECTION_TOP_RECOMMENDATIONS else None,
     )
 
 
@@ -455,10 +499,21 @@ def get_executive_dashboard(
         for key, items in raw.items()
     }
     summary = _build_summary(session, owner_user_id=owner_user_id, sections=raw)
+    ranking_audit = build_recommendation_ranking_audit(
+        session,
+        owner_user_id=owner_user_id,
+        limit=100,
+        refresh=False,
+    )
+    ranking_diag = diagnostics_from_audit(ranking_audit)
     return ExecutiveDashboardRead(
         summary=summary,
         daily_actions=_section_read(SECTION_DAILY_ACTIONS, filtered[SECTION_DAILY_ACTIONS]),
-        top_recommendations=_section_read(SECTION_TOP_RECOMMENDATIONS, filtered[SECTION_TOP_RECOMMENDATIONS]),
+        top_recommendations=_section_read(
+            SECTION_TOP_RECOMMENDATIONS,
+            filtered[SECTION_TOP_RECOMMENDATIONS],
+            ranking_diagnostics=ranking_diag,
+        ),
         preorder_this_week=_section_read(SECTION_PREORDER_THIS_WEEK, filtered[SECTION_PREORDER_THIS_WEEK]),
         acquire_targets=_section_read(SECTION_ACQUIRE_TARGETS, filtered[SECTION_ACQUIRE_TARGETS]),
         grade_opportunities=_section_read(SECTION_GRADE_OPPORTUNITIES, filtered[SECTION_GRADE_OPPORTUNITIES]),
@@ -493,6 +548,20 @@ def get_executive_dashboard_summary(
             for key, items in raw.items()
         }
     return _build_summary(session, owner_user_id=owner_user_id, sections=raw)
+
+
+def get_executive_dashboard_ranking_audit(
+    session: Session,
+    *,
+    owner_user_id: int,
+    limit: int = 100,
+) -> RecommendationRankingAuditRead:
+    return build_recommendation_ranking_audit(
+        session,
+        owner_user_id=owner_user_id,
+        limit=limit,
+        refresh=True,
+    )
 
 
 def get_executive_dashboard_actions(
