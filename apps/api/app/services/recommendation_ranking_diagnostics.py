@@ -78,6 +78,26 @@ def audit_from_listed_items(
     )
 
 
+def build_score_trace_map(
+    session: Session,
+    *,
+    owner_user_id: int,
+    refresh_upstream: bool = False,
+) -> dict[tuple[str, str], tuple[float, float]]:
+    trace_candidates = build_cross_system_candidates(
+        session,
+        owner_user_id=owner_user_id,
+        refresh_upstream=refresh_upstream,
+    )
+    return {
+        (c.recommendation_type.strip().upper(), c.title_key): (
+            round(float(c.raw_priority_score or c.priority_score), 2),
+            round(float(c.normalized_priority_score or c.priority_score), 2),
+        )
+        for c in trace_candidates
+    }
+
+
 def build_recommendation_ranking_audit(
     session: Session,
     *,
@@ -92,14 +112,7 @@ def build_recommendation_ranking_audit(
         generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
         generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False)
         generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=False)
-    trace_candidates = build_cross_system_candidates(session, owner_user_id=owner_user_id, refresh_upstream=False)
-    score_trace = {
-        (c.recommendation_type.strip().upper(), c.title_key): (
-            round(float(c.raw_priority_score or c.priority_score), 2),
-            round(float(c.normalized_priority_score or c.priority_score), 2),
-        )
-        for c in trace_candidates
-    }
+    score_trace = build_score_trace_map(session, owner_user_id=owner_user_id, refresh_upstream=False)
     items, total = list_latest_cross_system_recommendations(
         session,
         owner_user_id=owner_user_id,

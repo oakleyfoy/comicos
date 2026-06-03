@@ -472,6 +472,30 @@ def _candidate_signature(candidates: list[_Candidate]) -> list[tuple]:
     ]
 
 
+def _snapshot_priorities_stale_vs_candidates(
+    snapshot: dict[int, CrossSystemRecommendation],
+    candidates: list[_Candidate],
+) -> bool:
+    """True when DB snapshot still has saturated/clamped scores but in-memory candidates differ."""
+    if not snapshot or not candidates:
+        return False
+    db_rows = [snapshot[r] for r in sorted(snapshot.keys())]
+    top_db = db_rows[: min(20, len(db_rows))]
+    if len(top_db) >= 2:
+        db_scores = [float(r.priority_score) for r in top_db]
+        if max(db_scores) - min(db_scores) >= 0.05:
+            return False
+    if all(float(r.priority_score) < 99.0 for r in top_db):
+        return False
+    for rank, cand in enumerate(candidates[: len(top_db)], start=1):
+        row = snapshot.get(rank)
+        if row is None:
+            continue
+        if abs(float(row.priority_score) - float(cand.priority_score)) >= 0.05:
+            return True
+    return False
+
+
 def _prior_snapshot_signature(session: Session, *, owner_user_id: int) -> list[tuple] | None:
     snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
     if not snapshot:
@@ -515,12 +539,16 @@ def generate_cross_system_recommendations(
         lambda: _prior_snapshot_signature(session, owner_user_id=owner_user_id),
     )
     if prior_sig is not None and prior_sig == new_sig:
-        if persist_timings is not None:
-            persist_timings.update(timer.steps_ms)
-            persist_timings["rows_inserted"] = 0.0
-        elif owned_timer:
-            timer.log_summary()
-        return 0
+        snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
+        if snapshot and _snapshot_priorities_stale_vs_candidates(snapshot, candidates):
+            pass
+        else:
+            if persist_timings is not None:
+                persist_timings.update(timer.steps_ms)
+                persist_timings["rows_inserted"] = 0.0
+            elif owned_timer:
+                timer.log_summary()
+            return 0
     created = 0
 
     def _persist() -> int:

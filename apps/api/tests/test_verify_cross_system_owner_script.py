@@ -30,8 +30,9 @@ def test_verify_script_module_has_read_only_default() -> None:
     assert "generate_cross_system_recommendations" in source
     assert "if args.rebuild:" in source
     assert "read_only" in source
-    assert "build_recommendation_ranking_audit" not in source
-    assert "audit_from_listed_items" in source
+    assert "build_recommendation_ranking_audit" in source
+    assert "RECOMMENDATION_PIPELINE_EPOCH" in source
+    assert "spread_verification" in source
     assert '_stage_start("unified_recommendations")' in source
     assert '_stage_end("cross_system_recommendations"' in source
     assert "stage_elapsed_seconds" in source

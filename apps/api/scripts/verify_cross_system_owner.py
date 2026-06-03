@@ -162,9 +162,12 @@ def main() -> int:
     from app.models.cross_system_recommendation import CrossSystemRecommendation
     from app.models.daily_action_engine import DailyCollectorAction
     from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
-    from app.services.cross_system_recommendation_engine import _latest_snapshot_rows
+    from app.services.cross_system_recommendation_engine import (
+        RECOMMENDATION_PIPELINE_EPOCH,
+        _latest_snapshot_rows,
+    )
     from app.services.recommendation_ranking_diagnostics import (
-        audit_from_listed_items,
+        build_recommendation_ranking_audit,
         diagnostics_from_audit,
     )
 
@@ -233,9 +236,36 @@ def main() -> int:
         )
         ranking_audit = timer.run(
             "compute.ranking_diagnostics",
-            lambda: audit_from_listed_items(items, total_count=list_total),
+            lambda: build_recommendation_ranking_audit(
+                session,
+                owner_user_id=owner_user_id,
+                limit=top_limit,
+                refresh=False,
+            ),
         )
         ranking_diag = diagnostics_from_audit(ranking_audit)
+        top20 = ranking_audit.items[: min(20, len(ranking_audit.items))]
+        spread_ms = None
+        if rebuild_stats is not None:
+            cross_timings = rebuild_stats.get("cross_system_build_timings_ms")
+            if isinstance(cross_timings, dict):
+                spread_ms = cross_timings.get("priority_spread")
+        spread_verification = {
+            "recommendation_pipeline_epoch": RECOMMENDATION_PIPELINE_EPOCH,
+            "priority_spread_module": "app.services.recommendation_priority_spread",
+            "priority_spread_timing_ms": spread_ms,
+            "top20_raw_populated": bool(top20) and all(r.raw_priority_score is not None for r in top20),
+            "top20_normalized_populated": bool(top20)
+            and all(r.normalized_priority_score is not None for r in top20),
+            "top20_all_priority_100": bool(top20)
+            and all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20),
+            "pass": bool(top20)
+            and all(r.raw_priority_score is not None for r in top20)
+            and all(r.normalized_priority_score is not None for r in top20)
+            and ranking_diag.distinct_score_count > 15
+            and (ranking_diag.top_20_score_spread or 0.0) > 10.0
+            and not all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20),
+        }
 
         latest_created_ts = scalar_value(cross_latest_created)
         top_rows = [
@@ -268,6 +298,7 @@ def main() -> int:
                 "distinct_score_count": ranking_diag.distinct_score_count,
                 "top_20_score_spread": ranking_diag.top_20_score_spread,
             },
+            "spread_verification": spread_verification,
             "top_20_score_trace": [
                 {
                     "rank": row.rank,
