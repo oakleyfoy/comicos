@@ -15,6 +15,8 @@ class CrossSystemBuildTiming:
         started = time.monotonic()
         result = fn()
         elapsed_ms = round((time.monotonic() - started) * 1000.0, 2)
+        if elapsed_ms <= 0.0:
+            elapsed_ms = 0.01
         self.steps_ms[name] = elapsed_ms
         print(f"timing cross_system.{name} {elapsed_ms:.1f}ms", file=sys.stderr, flush=True)
         return result

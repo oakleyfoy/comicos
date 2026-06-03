@@ -14,6 +14,8 @@ from app.schemas.recommendation_ranking import (
 )
 from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
 from app.services.cross_system_recommendation_engine import (
+    _confidence_for_persist,
+    _priority_for_persist,
     build_cross_system_candidates,
     generate_cross_system_recommendations,
 )
@@ -37,7 +39,7 @@ def audit_from_listed_items(
     items: list[CrossSystemRecommendationRead],
     *,
     total_count: int,
-    score_trace: dict[tuple[str, str], tuple[float, float]] | None = None,
+    score_trace: dict[tuple[str, str], tuple[float, float, float, float, float, float]] | None = None,
 ) -> RecommendationRankingAuditRead:
     scores = [float(i.priority_score) for i in items]
     null_count = sum(1 for i in items if i.priority_score is None)
@@ -50,6 +52,10 @@ def audit_from_listed_items(
     for i in items:
         trace_key = (i.recommendation_type.strip().upper(), i.title.strip().lower())
         raw_norm = score_trace.get(trace_key) if score_trace else None
+        computed = raw_norm[2] if raw_norm and len(raw_norm) > 2 else None
+        raw_conf = raw_norm[3] if raw_norm and len(raw_norm) > 3 else None
+        norm_conf = raw_norm[4] if raw_norm and len(raw_norm) > 4 else None
+        computed_conf = raw_norm[5] if raw_norm and len(raw_norm) > 5 else None
         rows.append(
             RecommendationRankingAuditRow(
                 rank=int(i.recommendation_rank),
@@ -59,6 +65,10 @@ def audit_from_listed_items(
                 recommendation_type=i.recommendation_type,
                 raw_priority_score=raw_norm[0] if raw_norm else None,
                 normalized_priority_score=raw_norm[1] if raw_norm else None,
+                computed_priority_score=computed,
+                raw_confidence_score=raw_conf,
+                normalized_confidence_score=norm_conf,
+                computed_confidence_score=computed_conf,
             )
         )
     titles = [i.title for i in items]
@@ -83,7 +93,7 @@ def build_score_trace_map(
     *,
     owner_user_id: int,
     refresh_upstream: bool = False,
-) -> dict[tuple[str, str], tuple[float, float]]:
+) -> dict[tuple[str, str], tuple[float, float, float, float, float, float]]:
     trace_candidates = build_cross_system_candidates(
         session,
         owner_user_id=owner_user_id,
@@ -93,6 +103,10 @@ def build_score_trace_map(
         (c.recommendation_type.strip().upper(), c.title_key): (
             round(float(c.raw_priority_score or c.priority_score), 2),
             round(float(c.normalized_priority_score or c.priority_score), 2),
+            round(float(_priority_for_persist(c)), 2),
+            round(float(c.raw_confidence_score or c.confidence_score), 4),
+            round(float(c.normalized_confidence_score or c.confidence_score), 4),
+            round(float(_confidence_for_persist(c)), 4),
         )
         for c in trace_candidates
     }

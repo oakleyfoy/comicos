@@ -250,21 +250,45 @@ def main() -> int:
             cross_timings = rebuild_stats.get("cross_system_build_timings_ms")
             if isinstance(cross_timings, dict):
                 spread_ms = cross_timings.get("priority_spread")
+        top20_conf = [float(r.confidence_score) for r in top20]
+        distinct_conf = len({round(c, 4) for c in top20_conf}) if top20_conf else 0
         spread_verification = {
             "recommendation_pipeline_epoch": RECOMMENDATION_PIPELINE_EPOCH,
             "priority_spread_module": "app.services.recommendation_priority_spread",
             "priority_spread_timing_ms": spread_ms,
+            "confidence_spread_timing_ms": (
+                cross_timings.get("confidence_spread")
+                if rebuild_stats is not None and isinstance(rebuild_stats.get("cross_system_build_timings_ms"), dict)
+                else None
+            ),
             "top20_raw_populated": bool(top20) and all(r.raw_priority_score is not None for r in top20),
             "top20_normalized_populated": bool(top20)
             and all(r.normalized_priority_score is not None for r in top20),
             "top20_all_priority_100": bool(top20)
             and all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20),
+            "top20_distinct_confidence_count": distinct_conf,
+            "top20_all_confidence_1": bool(top20) and all(c >= 0.999 for c in top20_conf),
+            "top20_persisted_matches_spread": bool(top20)
+            and all(
+                r.computed_priority_score is not None
+                and r.normalized_priority_score is not None
+                and abs(float(r.priority_score) - float(r.computed_priority_score)) < 0.05
+                and abs(float(r.computed_priority_score) - float(r.normalized_priority_score)) < 0.05
+                for r in top20
+            ),
             "pass": bool(top20)
             and all(r.raw_priority_score is not None for r in top20)
             and all(r.normalized_priority_score is not None for r in top20)
             and ranking_diag.distinct_score_count > 15
             and (ranking_diag.top_20_score_spread or 0.0) > 10.0
-            and not all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20),
+            and not all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20)
+            and all(
+                r.computed_priority_score is not None
+                and abs(float(r.priority_score) - float(r.computed_priority_score)) < 0.05
+                for r in top20
+            )
+            and distinct_conf >= min(15, len(top20))
+            and not (bool(top20) and all(c >= 0.999 for c in top20_conf)),
         }
 
         latest_created_ts = scalar_value(cross_latest_created)
@@ -306,7 +330,11 @@ def main() -> int:
                     "recommendation_type": row.recommendation_type,
                     "raw_priority_score": row.raw_priority_score,
                     "normalized_priority_score": row.normalized_priority_score,
+                    "computed_priority_score": row.computed_priority_score,
                     "priority_score": row.priority_score,
+                    "raw_confidence_score": row.raw_confidence_score,
+                    "normalized_confidence_score": row.normalized_confidence_score,
+                    "computed_confidence_score": row.computed_confidence_score,
                     "confidence_score": row.confidence_score,
                 }
                 for row in ranking_audit.items[:20]

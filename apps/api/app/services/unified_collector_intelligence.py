@@ -95,8 +95,8 @@ def _clamp_confidence(value: float) -> float:
 
 
 def _combined_confidence(base: float, source_count: int) -> float:
-    boost = min(0.25, 0.08 * max(0, source_count - 1))
-    return _clamp_confidence(base + boost)
+    boost = min(0.08, 0.022 * max(0, source_count - 1))
+    return _clamp_confidence(min(0.96, base + boost))
 
 
 def _combined_priority(base: float, source_count: int) -> float:

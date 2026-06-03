@@ -106,8 +106,8 @@ def _priority_with_due(*, action_type: str, base: float, due_date: date | None) 
 
 
 def _confidence_from_sources(base: float, sources: list[str]) -> float:
-    boost = min(0.2, 0.06 * max(0, len(sources) - 1))
-    return _clamp_confidence(base + boost)
+    boost = min(0.08, 0.022 * max(0, len(sources) - 1))
+    return _clamp_confidence(min(0.96, base + boost))
 
 
 def _build_drafts(session: Session, *, owner_user_id: int, refresh_unified: bool = True) -> list[_ActionDraft]:

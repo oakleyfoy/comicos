@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.services.recommendation_priority_spread import (
+    MIN_CONF_GAP,
     MIN_RANK_GAP,
     SPREAD_CEILING,
+    apply_confidence_spread_inplace,
     apply_priority_spread_inplace,
     composite_rank_score,
 )
@@ -20,9 +22,25 @@ class _Item:
     raw_priority_score: float = 0.0
     normalized_priority_score: float = 0.0
 
+    raw_confidence_score: float = 0.0
+    normalized_confidence_score: float = 0.0
+
     @property
     def title_key(self) -> str:
         return self.title.lower()
+
+
+def test_spread_breaks_flat_confidence_ceiling() -> None:
+    items = [
+        _Item(f"Title {i}", priority_score=90.0 - i, confidence_score=1.0, raw_confidence_score=0.86 - i * 0.02)
+        for i in range(20)
+    ]
+    apply_confidence_spread_inplace(items)
+    scores = [i.confidence_score for i in items]
+    assert len({round(s, 4) for s in scores}) >= 15
+    assert max(scores) <= 0.96
+    assert min(scores) >= 0.52
+    assert not all(abs(s - 1.0) < 1e-9 for s in scores)
 
 
 def test_spread_breaks_flat_100_ceiling() -> None:

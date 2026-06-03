@@ -15,7 +15,10 @@ from app.services.unified_collector_intelligence import (
     _latest_recommendation_rows as _latest_unified_rows,
 )
 from app.services.recommendation_latest_rows import latest_by_key_bounded_scan
-from app.services.recommendation_priority_spread import apply_priority_spread_inplace
+from app.services.recommendation_priority_spread import (
+    apply_confidence_spread_inplace,
+    apply_priority_spread_inplace,
+)
 from app.services.recommendation_catalog_quality import (
     build_forward_release_title_index,
     quality_for_recommendation_title,
@@ -60,6 +63,9 @@ class _Candidate:
     rationale: str = ""
     raw_priority_score: float = 0.0
     normalized_priority_score: float = 0.0
+    raw_confidence_score: float = 0.0
+    normalized_confidence_score: float = 0.0
+    budget_priority_adjusted: bool = False
 
     @property
     def title_key(self) -> str:
@@ -75,10 +81,10 @@ def _clamp_confidence(value: float) -> float:
 
 
 def _confidence_boost(base: float, source_count: int, *, consistent: bool) -> float:
-    boost = min(0.25, 0.08 * max(0, source_count - 1))
+    boost = min(0.08, 0.022 * max(0, source_count - 1))
     if consistent:
-        boost += 0.04
-    return _clamp_confidence(base + boost)
+        boost += 0.012
+    return _clamp_confidence(min(0.96, base + boost))
 
 
 def _list_daily_collector_actions(
@@ -120,6 +126,7 @@ def _list_daily_collector_actions(
                 source_systems=systems,
                 rationale=row.rationale or "Daily action priority item.",
                 raw_priority_score=float(row.priority_score),
+                raw_confidence_score=float(row.confidence_score),
             )
         )
     return out
@@ -153,6 +160,7 @@ def _unified_candidates(
                 source_systems=systems,
                 rationale=row.rationale,
                 raw_priority_score=float(row.priority_score),
+                raw_confidence_score=float(row.confidence_score),
             )
         )
     return out
@@ -198,6 +206,7 @@ def _resolve_conflicts(group: list[_Candidate]) -> _Candidate:
         merged_sources.update(c.source_systems)
     best_priority = max(c.priority_score for c in group)
     best_raw = max(c.raw_priority_score or c.priority_score for c in group)
+    best_raw_conf = max(c.raw_confidence_score or c.confidence_score for c in group)
     best_confidence = max(c.confidence_score for c in group)
     est = next((c.estimated_value for c in group if c.estimated_value is not None), None)
     rationales = [c.rationale for c in group if c.rationale]
@@ -245,6 +254,7 @@ def _resolve_conflicts(group: list[_Candidate]) -> _Candidate:
         source_systems=merged_sources,
         rationale=rationale,
         raw_priority_score=raw_priority,
+        raw_confidence_score=best_raw_conf,
     )
 
 
@@ -263,10 +273,12 @@ def _apply_budget_awareness(session: Session, *, owner_user_id: int, candidates:
     for cand in candidates:
         if cand.recommendation_type == TYPE_PREORDER and top_preorder > 0 and cand.priority_score < top_preorder + 1:
             cand.priority_score = _clamp_priority(cand.priority_score - 14.0)
+            cand.budget_priority_adjusted = True
             cand.rationale = f"{cand.rationale} Budget constrained; critical acquisition preferred over low-priority preorder.".strip()
         if cand.recommendation_type == TYPE_ACQUIRE:
             floor = top_preorder + 2.0 if top_preorder > 0 else cand.priority_score + 6.0
             cand.priority_score = _clamp_priority(max(cand.priority_score + 6.0, floor))
+            cand.budget_priority_adjusted = True
             cand.rationale = f"{cand.rationale} Budget constrained; critical acquisition prioritized.".strip()
 
 
@@ -384,6 +396,10 @@ def build_cross_system_candidates(
         lambda: apply_priority_spread_inplace(resolved),
     )
     timer.run(
+        "confidence_spread",
+        lambda: apply_confidence_spread_inplace(resolved),
+    )
+    timer.run(
         "budget_awareness",
         lambda: _apply_budget_awareness(session, owner_user_id=owner_user_id, candidates=resolved),
     )
@@ -427,6 +443,10 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
             existing.raw_priority_score or existing.priority_score,
             cand.raw_priority_score or cand.priority_score,
         )
+        existing.raw_confidence_score = max(
+            existing.raw_confidence_score or existing.confidence_score,
+            cand.raw_confidence_score or cand.confidence_score,
+        )
         existing.confidence_score = max(existing.confidence_score, cand.confidence_score)
         if cand.estimated_value is not None:
             existing.estimated_value = max(existing.estimated_value or 0.0, cand.estimated_value)
@@ -454,7 +474,92 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
 
 
 # Bump when quality/ranking logic changes so persisted snapshots refresh after deploy.
-RECOMMENDATION_PIPELINE_EPOCH = 6
+RECOMMENDATION_PIPELINE_EPOCH = 8
+
+
+def _confidence_for_persist(cand: _Candidate) -> float:
+    norm = float(cand.normalized_confidence_score or 0.0)
+    if norm > 0.0:
+        return _clamp_confidence(norm)
+    return _clamp_confidence(float(cand.confidence_score))
+
+
+def _priority_for_persist(cand: _Candidate) -> float:
+    """Score written to cross_system_recommendation.priority_score."""
+    if cand.budget_priority_adjusted:
+        return _clamp_priority(float(cand.priority_score))
+    norm = float(cand.normalized_priority_score or 0.0)
+    if norm > 0.0:
+        return _clamp_priority(norm)
+    return _clamp_priority(float(cand.priority_score))
+
+
+def _finalize_candidate_priorities_for_persist(candidates: list[_Candidate]) -> None:
+    """Ensure spread-normalized scores are on candidate.priority_score before persist."""
+    for cand in candidates:
+        if cand.budget_priority_adjusted:
+            continue
+        norm = float(cand.normalized_priority_score or 0.0)
+        if norm <= 0.0:
+            continue
+        if cand.priority_score >= 99.0 or abs(float(cand.priority_score) - norm) >= 0.05:
+            cand.priority_score = _clamp_priority(norm)
+
+
+def _snapshot_scores_by_title(
+    snapshot: dict[int, CrossSystemRecommendation],
+) -> dict[tuple[str, str], float]:
+    out: dict[tuple[str, str], float] = {}
+    for row in snapshot.values():
+        key = (row.recommendation_type.strip().upper(), row.title.strip().lower())
+        out[key] = float(row.priority_score)
+    return out
+
+
+def _persisted_priorities_stale(
+    snapshot: dict[int, CrossSystemRecommendation],
+    candidates: list[_Candidate],
+) -> bool:
+    if not candidates:
+        return False
+    if not snapshot:
+        return True
+    db_by_title = _snapshot_scores_by_title(snapshot)
+    for cand in candidates:
+        key = (cand.recommendation_type.strip().upper(), cand.title_key)
+        db_score = db_by_title.get(key)
+        if db_score is None:
+            return True
+        expected = _priority_for_persist(cand)
+        if abs(db_score - expected) >= 0.05:
+            return True
+    return False
+
+
+def _persisted_confidence_stale(
+    snapshot: dict[int, CrossSystemRecommendation],
+    candidates: list[_Candidate],
+) -> bool:
+    if not candidates:
+        return False
+    if not snapshot:
+        return True
+    conf_by_title: dict[tuple[str, str], float] = {}
+    for row in snapshot.values():
+        key = (row.recommendation_type.strip().upper(), row.title.strip().lower())
+        conf_by_title[key] = float(row.confidence_score)
+    for cand in candidates:
+        key = (cand.recommendation_type.strip().upper(), cand.title_key)
+        db_conf = conf_by_title.get(key)
+        if db_conf is None:
+            return True
+        expected = _confidence_for_persist(cand)
+        if abs(db_conf - expected) >= 0.01:
+            return True
+    top_db = [float(row.confidence_score) for row in list(snapshot.values())[:20]]
+    if len(top_db) >= 5 and len({round(c, 3) for c in top_db}) <= 1 and top_db[0] >= 0.999:
+        return True
+    return False
 
 
 def _candidate_signature(candidates: list[_Candidate]) -> list[tuple]:
@@ -464,36 +569,12 @@ def _candidate_signature(candidates: list[_Candidate]) -> list[tuple]:
             rank,
             c.recommendation_type,
             c.title,
-            c.priority_score,
-            c.confidence_score,
+            _priority_for_persist(c),
+            _confidence_for_persist(c),
             c.rationale,
         )
         for rank, c in enumerate(candidates, start=1)
     ]
-
-
-def _snapshot_priorities_stale_vs_candidates(
-    snapshot: dict[int, CrossSystemRecommendation],
-    candidates: list[_Candidate],
-) -> bool:
-    """True when DB snapshot still has saturated/clamped scores but in-memory candidates differ."""
-    if not snapshot or not candidates:
-        return False
-    db_rows = [snapshot[r] for r in sorted(snapshot.keys())]
-    top_db = db_rows[: min(20, len(db_rows))]
-    if len(top_db) >= 2:
-        db_scores = [float(r.priority_score) for r in top_db]
-        if max(db_scores) - min(db_scores) >= 0.05:
-            return False
-    if all(float(r.priority_score) < 99.0 for r in top_db):
-        return False
-    for rank, cand in enumerate(candidates[: len(top_db)], start=1):
-        row = snapshot.get(rank)
-        if row is None:
-            continue
-        if abs(float(row.priority_score) - float(cand.priority_score)) >= 0.05:
-            return True
-    return False
 
 
 def _prior_snapshot_signature(session: Session, *, owner_user_id: int) -> list[tuple] | None:
@@ -538,27 +619,29 @@ def generate_cross_system_recommendations(
         "prior_snapshot_signature",
         lambda: _prior_snapshot_signature(session, owner_user_id=owner_user_id),
     )
-    if prior_sig is not None and prior_sig == new_sig:
-        snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
-        if snapshot and _snapshot_priorities_stale_vs_candidates(snapshot, candidates):
-            pass
-        else:
-            if persist_timings is not None:
-                persist_timings.update(timer.steps_ms)
-                persist_timings["rows_inserted"] = 0.0
-            elif owned_timer:
-                timer.log_summary()
-            return 0
+    snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
+    must_repersist = _persisted_priorities_stale(snapshot, candidates) or _persisted_confidence_stale(
+        snapshot, candidates
+    )
+    if prior_sig is not None and prior_sig == new_sig and not must_repersist:
+        if persist_timings is not None:
+            persist_timings.update(timer.steps_ms)
+            persist_timings["rows_inserted"] = 0.0
+        elif owned_timer:
+            timer.log_summary()
+        return 0
     created = 0
 
     def _persist() -> int:
         nonlocal created
+        _finalize_candidate_priorities_for_persist(candidates)
         for rank, cand in enumerate(candidates, start=1):
+            priority = _priority_for_persist(cand)
             row = CrossSystemRecommendation(
                 owner_user_id=owner_user_id,
                 recommendation_type=cand.recommendation_type,
-                priority_score=cand.priority_score,
-                confidence_score=cand.confidence_score,
+                priority_score=priority,
+                confidence_score=_confidence_for_persist(cand),
                 title=cand.title,
                 estimated_value=cand.estimated_value,
                 recommendation_rank=rank,
