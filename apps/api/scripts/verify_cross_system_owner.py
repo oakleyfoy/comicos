@@ -252,6 +252,12 @@ def main() -> int:
                 spread_ms = cross_timings.get("priority_spread")
         top20_conf = [float(r.confidence_score) for r in top20]
         distinct_conf = len({round(c, 4) for c in top20_conf}) if top20_conf else 0
+        computed_conf = [
+            float(r.computed_confidence_score)
+            for r in top20
+            if r.computed_confidence_score is not None
+        ]
+        distinct_computed_conf = len({round(c, 4) for c in computed_conf}) if computed_conf else 0
         spread_verification = {
             "recommendation_pipeline_epoch": RECOMMENDATION_PIPELINE_EPOCH,
             "priority_spread_module": "app.services.recommendation_priority_spread",
@@ -267,7 +273,16 @@ def main() -> int:
             "top20_all_priority_100": bool(top20)
             and all(abs(float(r.priority_score) - 100.0) < 1e-9 for r in top20),
             "top20_distinct_confidence_count": distinct_conf,
+            "top20_distinct_computed_confidence_count": distinct_computed_conf,
             "top20_all_confidence_1": bool(top20) and all(c >= 0.999 for c in top20_conf),
+            "top20_persisted_matches_confidence": bool(top20)
+            and all(
+                r.computed_confidence_score is not None
+                and r.normalized_confidence_score is not None
+                and abs(float(r.confidence_score) - float(r.computed_confidence_score)) < 0.01
+                and abs(float(r.computed_confidence_score) - float(r.normalized_confidence_score)) < 0.01
+                for r in top20
+            ),
             "top20_persisted_matches_spread": bool(top20)
             and all(
                 r.computed_priority_score is not None
@@ -288,7 +303,13 @@ def main() -> int:
                 for r in top20
             )
             and distinct_conf >= min(15, len(top20))
-            and not (bool(top20) and all(c >= 0.999 for c in top20_conf)),
+            and distinct_computed_conf >= min(15, len(top20))
+            and not (bool(top20) and all(c >= 0.999 for c in top20_conf))
+            and all(
+                r.computed_confidence_score is not None
+                and abs(float(r.confidence_score) - float(r.computed_confidence_score)) < 0.01
+                for r in top20
+            ),
         }
 
         latest_created_ts = scalar_value(cross_latest_created)

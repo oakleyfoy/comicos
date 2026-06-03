@@ -474,7 +474,20 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
 
 
 # Bump when quality/ranking logic changes so persisted snapshots refresh after deploy.
-RECOMMENDATION_PIPELINE_EPOCH = 8
+RECOMMENDATION_PIPELINE_EPOCH = 9
+
+
+def _snapshot_rows_sorted(snapshot: dict[int, CrossSystemRecommendation]) -> list[CrossSystemRecommendation]:
+    return [snapshot[r] for r in sorted(snapshot.keys())]
+
+
+def _snapshot_confidence_saturated(snapshot: dict[int, CrossSystemRecommendation]) -> bool:
+    rows = _snapshot_rows_sorted(snapshot)
+    if len(rows) < 2:
+        return False
+    top = rows[: min(20, len(rows))]
+    scores = [float(row.confidence_score) for row in top]
+    return len({round(s, 3) for s in scores}) <= 1 and max(scores) >= 0.999
 
 
 def _confidence_for_persist(cand: _Candidate) -> float:
@@ -482,6 +495,15 @@ def _confidence_for_persist(cand: _Candidate) -> float:
     if norm > 0.0:
         return _clamp_confidence(norm)
     return _clamp_confidence(float(cand.confidence_score))
+
+
+def _finalize_confidence_for_persist(candidates: list[_Candidate]) -> None:
+    for cand in candidates:
+        norm = float(cand.normalized_confidence_score or 0.0)
+        if norm <= 0.0:
+            continue
+        if cand.confidence_score >= 0.999 or abs(float(cand.confidence_score) - norm) >= 0.01:
+            cand.confidence_score = _clamp_confidence(norm)
 
 
 def _priority_for_persist(cand: _Candidate) -> float:
@@ -544,6 +566,8 @@ def _persisted_confidence_stale(
         return False
     if not snapshot:
         return True
+    if _snapshot_confidence_saturated(snapshot):
+        return any(float(c.normalized_confidence_score or 0.0) < 0.99 for c in candidates)
     conf_by_title: dict[tuple[str, str], float] = {}
     for row in snapshot.values():
         key = (row.recommendation_type.strip().upper(), row.title.strip().lower())
@@ -556,8 +580,8 @@ def _persisted_confidence_stale(
         expected = _confidence_for_persist(cand)
         if abs(db_conf - expected) >= 0.01:
             return True
-    top_db = [float(row.confidence_score) for row in list(snapshot.values())[:20]]
-    if len(top_db) >= 5 and len({round(c, 3) for c in top_db}) <= 1 and top_db[0] >= 0.999:
+    top_db = [float(row.confidence_score) for row in _snapshot_rows_sorted(snapshot)[:20]]
+    if len(top_db) >= 2 and len({round(c, 3) for c in top_db}) <= 1 and top_db[0] >= 0.999:
         return True
     return False
 
@@ -635,13 +659,15 @@ def generate_cross_system_recommendations(
     def _persist() -> int:
         nonlocal created
         _finalize_candidate_priorities_for_persist(candidates)
+        _finalize_confidence_for_persist(candidates)
         for rank, cand in enumerate(candidates, start=1):
             priority = _priority_for_persist(cand)
+            confidence = _confidence_for_persist(cand)
             row = CrossSystemRecommendation(
                 owner_user_id=owner_user_id,
                 recommendation_type=cand.recommendation_type,
                 priority_score=priority,
-                confidence_score=_confidence_for_persist(cand),
+                confidence_score=confidence,
                 title=cand.title,
                 estimated_value=cand.estimated_value,
                 recommendation_rank=rank,
