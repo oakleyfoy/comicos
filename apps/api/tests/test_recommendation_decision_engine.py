@@ -18,8 +18,8 @@ def test_action_for_aggressive_buy_on_strong_preorder() -> None:
 
 
 def test_headline_formats_quantity() -> None:
-    assert _headline("BUY", 2) == "BUY 2 COPIES"
-    assert _headline("BUY", 1) == "BUY 1 COPY"
+    assert _headline("BUY", 2) == "BUY 2 TOTAL"
+    assert _headline("BUY", 1) == "BUY 1 TOTAL"
     assert _headline("WATCH", 0) == "WATCH"
 
 
@@ -72,3 +72,6 @@ def test_compute_decision_includes_reason_codes_without_release() -> None:
     assert decision.quantity >= 1
     assert "MULTI_SOURCE" in decision.reason_codes
     assert decision.decision_headline.startswith("BUY")
+    if decision.quantity >= 2:
+        assert decision.cover_purchase_plan
+        assert sum(r.recommended_quantity for r in decision.cover_purchase_plan) == decision.quantity

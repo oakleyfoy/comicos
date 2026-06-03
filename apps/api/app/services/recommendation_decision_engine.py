@@ -16,7 +16,18 @@ from app.services.foc_dates import days_until_foc, utc_today
 from app.services.recommendation_catalog_quality import build_forward_release_title_index
 from app.services.recommendation_title_index import RecommendationPipelineIndexCache
 from app.services.recommendation_forward_window import _key_signals_by_issue, _latest_spec_by_issue
-from app.services.recommendation_intelligence_enrichment import build_collector_significance_enrichment
+from app.services.recommendation_decision_explainability import (
+    SIGNAL_ABBREVIATIONS,
+    build_cover_purchase_plan,
+    build_quantity_reasoning,
+    build_score_breakdown,
+    build_signal_matrix,
+    decision_headline_total,
+    normalize_top_reasons,
+    strategy_allocation_hint,
+    _build_cover_candidates,
+)
+from app.services.recommendation_intelligence_enrichment import build_collector_significance_with_breakdown
 from app.services.recommendation_priority_enrichment import (
     KEY_SIGNAL_TYPES,
     NEW_ONE_SIGNALS,
@@ -133,13 +144,7 @@ def _resolve_release(
 
 
 def _headline(action: str, quantity: int) -> str:
-    if action == "BUY_AGGRESSIVE":
-        return f"BUY {quantity} COPIES" if quantity > 1 else "BUY AGGRESSIVE"
-    if action == "BUY":
-        return f"BUY {quantity} COPIES" if quantity != 1 else "BUY 1 COPY"
-    if action == "WATCH":
-        return "WATCH"
-    return "PASS"
+    return decision_headline_total(action, quantity)
 
 
 def _pick_quantity(
@@ -303,6 +308,7 @@ def compute_recommendation_decision(
     enrichment_rationale: tuple[str, ...] = ()
     priority_enrichment = None
     collector_intel = None
+    score_breakdown_src = None
     if issue is not None and series is not None:
         series_key = (series.publisher or "").strip().lower(), (series.series_name or "").strip().lower()
         owned_in = ctx.owned_stats.copies_by_series.get(series_key, 0) if hasattr(ctx.owned_stats, "copies_by_series") else 0
@@ -326,7 +332,7 @@ def compute_recommendation_decision(
         enrichment_rationale = priority_enrichment.rationale_bits
         owns_run = owns_run or priority_enrichment.continuity_bonus >= 2.0
         variants = ctx.variants_by_issue.get(issue_id or -1, [])
-        collector_intel = build_collector_significance_enrichment(
+        collector_intel, score_breakdown_src = build_collector_significance_with_breakdown(
             session,
             series=series,
             issue=issue,
@@ -335,8 +341,8 @@ def compute_recommendation_decision(
             key_signals=signals_list,
             priority_enrichment=priority_enrichment,
             owned_stats=ctx.owned_stats if hasattr(ctx.owned_stats, "copies_by_series") else None,
+            base_score=rec.priority_score,
         )
-
     decision_priority = rec.priority_score
     decision_confidence = rec.confidence_score
     if collector_intel is not None:
@@ -355,6 +361,16 @@ def compute_recommendation_decision(
         quantity = 0
     elif action == "WATCH" and kind in PURCHASE_TYPES:
         quantity = 0
+    elif action in {"BUY", "BUY_AGGRESSIVE"}:
+        if decision_confidence < 0.58 and quantity > 2:
+            quantity = 2
+            if decision_priority < 68.0:
+                action = "WATCH"
+                quantity = 0
+        elif decision_confidence < 0.72 and quantity > 3:
+            quantity = 3
+        elif decision_confidence < 0.78 and quantity > 4:
+            quantity = 4
 
     has_high_ratio = any(
         (v.ratio_value or 0) >= 25 for v in ctx.variants_by_issue.get(issue_id or -1, [])
@@ -426,11 +442,54 @@ def compute_recommendation_decision(
 
     foc_date = issue.foc_date if issue else None
     release_date = issue.release_date if issue else None
+    foc_active = False
+    if issue and issue.foc_date is not None:
+        foc_days = days_until_foc(issue.foc_date, today=utc_today())
+        foc_active = foc_days is not None and foc_days <= 21
+
+    variant_recs = ctx.variant_recs_by_release.get(release_id or -1, [])
+    release_variants = ctx.variants_by_issue.get(issue_id or -1, [])
+    cover_candidates = _build_cover_candidates(
+        variant_recs=variant_recs,
+        release_variants=release_variants,
+    )
+    cover_plan = build_cover_purchase_plan(
+        total_quantity=quantity,
+        action=action,
+        candidates=cover_candidates,
+        signal_set=signal_set,
+        reason_codes=reason_codes,
+    )
+    plan_total = sum(row.recommended_quantity for row in cover_plan)
+    if action in {"BUY", "BUY_AGGRESSIVE"} and quantity > 0 and plan_total != quantity:
+        cover_plan = build_cover_purchase_plan(
+            total_quantity=quantity,
+            action=action,
+            candidates=cover_candidates,
+            signal_set=signal_set,
+            reason_codes=reason_codes,
+        )
+
+    top_reasons = normalize_top_reasons(
+        reason_codes=reason_codes,
+        reason_summary=reason_summary,
+        collector_intel=collector_intel,
+        rationale=rec.rationale,
+    )
+    signal_matrix = build_signal_matrix(
+        signal_set=signal_set,
+        reason_codes=reason_codes,
+        collector_intel=collector_intel,
+        rationale=rec.rationale,
+        source_systems=rec.source_systems,
+        owns_run=owns_run,
+        foc_active=foc_active,
+    )
 
     return RecommendationDecisionRead(
         action=action,  # type: ignore[arg-type]
         quantity=quantity,
-        cover_recommendations=covers,
+        cover_recommendations=[row.cover_label for row in cover_plan if row.recommended_quantity > 0] or covers,
         risk=risk,  # type: ignore[arg-type]
         strategy=strategy,  # type: ignore[arg-type]
         reason_codes=reason_codes,
@@ -439,6 +498,20 @@ def compute_recommendation_decision(
         foc_date=foc_date,
         release_date=release_date,
         decision_headline=_headline(action, quantity if quantity else 1),
+        cover_purchase_plan=cover_plan,
+        quantity_reasoning=build_quantity_reasoning(
+            final_quantity=quantity,
+            action=action,
+            priority=decision_priority,
+            confidence=decision_confidence,
+            reason_codes=reason_codes,
+            signal_set=signal_set,
+        ),
+        signal_matrix=signal_matrix,
+        signal_abbreviations=list(SIGNAL_ABBREVIATIONS),
+        score_breakdown=build_score_breakdown(score_breakdown_src, priority=decision_priority),
+        top_reasons=top_reasons,
+        strategy_allocation_hint=strategy_allocation_hint(strategy, quantity, action),
     )
 
 

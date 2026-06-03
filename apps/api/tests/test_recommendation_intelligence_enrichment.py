@@ -148,8 +148,8 @@ def test_decision_engine_applies_enrichment_boost() -> None:
             return_value=RecommendationPriorityEnrichment(),
         ),
         patch(
-            "app.services.recommendation_decision_engine.build_collector_significance_enrichment",
-            return_value=stub_intel,
+            "app.services.recommendation_decision_engine.build_collector_significance_with_breakdown",
+            return_value=(stub_intel, None),
         ),
     ):
         decision = compute_recommendation_decision(

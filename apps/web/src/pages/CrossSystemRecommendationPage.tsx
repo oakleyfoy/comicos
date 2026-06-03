@@ -64,28 +64,28 @@ export function CrossSystemRecommendationPage(): JSX.Element {
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {summary ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Total</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Total</p>
             <p className="text-lg font-semibold text-white">{summary.total_recommendations}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Top acquire</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Top acquire</p>
             <p className="text-lg font-semibold text-white">{summary.top_acquisitions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Top preorder</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Top preorder</p>
             <p className="text-lg font-semibold text-white">{summary.top_preorders}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Top grade</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Top grade</p>
             <p className="text-lg font-semibold text-white">{summary.top_grading_opportunities}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Top sell</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Top sell</p>
             <p className="text-lg font-semibold text-white">{summary.top_sell_opportunities}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
-            <p className="text-slate-500">Top rebalance</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+            <p className="text-white/70">Top rebalance</p>
             <p className="text-lg font-semibold text-white">{summary.top_rebalance_opportunities}</p>
           </div>
         </div>
@@ -132,25 +132,43 @@ export function CrossSystemRecommendationPage(): JSX.Element {
       ) : (
         <ul className="space-y-4">
           {items.map((row) => (
-            <li key={row.id} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+            <li
+              key={row.id}
+              className="rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-sm"
+            >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                  <p className="text-xs uppercase tracking-wide text-white/75">
                     #{row.recommendation_rank} · {row.recommendation_type}
                   </p>
                   <h2 className="text-lg font-semibold text-white">{row.title}</h2>
                 </div>
-                <div className="text-right text-xs text-slate-400">
+                <div className="text-right text-xs text-white/90">
                   <p>Priority {row.priority_score.toFixed(1)}</p>
                   <p>Confidence {row.confidence_score.toFixed(2)}</p>
                   <p>{money(row.estimated_value)}</p>
                 </div>
               </div>
               {row.decision ? <RecommendationDecisionPanel decision={row.decision} /> : null}
-              {row.source_systems.length > 0 ? (
-                <p className="mt-2 text-xs text-slate-500">Sources: {row.source_systems.join(", ")}</p>
-              ) : null}
-              <p className="mt-2 text-sm text-slate-400">{row.rationale}</p>
+              {(row.source_systems.length > 0 || row.rationale) && (
+                <div
+                  className={
+                    row.source_systems.length > 0
+                      ? "mt-3 grid gap-3 sm:grid-cols-2 sm:items-start"
+                      : "mt-3"
+                  }
+                >
+                  {row.source_systems.length > 0 ? (
+                    <p className="text-xs leading-relaxed text-white/90">
+                      <span className="font-medium text-white">Sources:</span>{" "}
+                      {row.source_systems.join(", ")}
+                    </p>
+                  ) : null}
+                  {row.rationale ? (
+                    <p className="text-sm leading-relaxed text-white">{row.rationale}</p>
+                  ) : null}
+                </div>
+              )}
             </li>
           ))}
         </ul>

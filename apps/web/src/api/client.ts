@@ -14502,7 +14502,7 @@ export interface RecommendationComponentRead {
   explanation: string;
 }
 
-export interface RecommendationDecisionRead {
+export interface RecommendationV2DecisionRead {
   decision_summary: string;
   primary_reason: string;
   risk_note: string;
@@ -14512,7 +14512,7 @@ export interface RecommendationDecisionRead {
 
 export interface RecommendationV2DetailRead extends RecommendationV2Read {
   components: RecommendationComponentRead[];
-  decision: RecommendationDecisionRead | null;
+  decision: RecommendationV2DecisionRead | null;
 }
 
 export interface RecommendationV2DashboardRead {
@@ -15415,6 +15415,56 @@ export interface CrossSystemRecommendationRead {
   decision: RecommendationDecisionRead | null;
 }
 
+export interface CoverPurchasePlanRow {
+  cover_label: string;
+  recommended_quantity: number;
+  reason_codes: string[];
+  reason_summary: string;
+}
+
+export interface QuantityAdjustmentRow {
+  label: string;
+  delta: number;
+  reason_code: string;
+}
+
+export interface QuantityReasoningRead {
+  base_quantity: number;
+  adjustments: QuantityAdjustmentRow[];
+  final_quantity: number;
+}
+
+export interface SignalMatrixRead {
+  issue_launch: boolean;
+  milestone_issue: boolean;
+  first_appearance: boolean;
+  death_or_major_event: boolean;
+  anniversary_legacy: boolean;
+  creator_significance: boolean;
+  homage_cover: boolean;
+  franchise_strength: boolean;
+  active_collector_audience: boolean;
+  ratio_variant_opportunity: boolean;
+  market_heat: boolean;
+  user_profile_match: boolean;
+  pull_list_relevance: boolean;
+  not_in_inventory: boolean;
+  foc_window: boolean;
+}
+
+export interface SignalAbbreviationRead {
+  key: keyof SignalMatrixRead;
+  label: string;
+  description: string;
+}
+
+export interface ScoreBreakdownRow {
+  label: string;
+  points: number;
+  max_points: number;
+  not_available?: boolean;
+}
+
 export interface RecommendationDecisionRead {
   action: "BUY" | "BUY_AGGRESSIVE" | "WATCH" | "PASS";
   quantity: number;
@@ -15427,6 +15477,13 @@ export interface RecommendationDecisionRead {
   foc_date: string | null;
   release_date: string | null;
   decision_headline: string;
+  cover_purchase_plan?: CoverPurchasePlanRow[];
+  quantity_reasoning?: QuantityReasoningRead | null;
+  signal_matrix?: SignalMatrixRead | null;
+  signal_abbreviations?: SignalAbbreviationRead[];
+  score_breakdown?: ScoreBreakdownRow[];
+  top_reasons?: string[];
+  strategy_allocation_hint?: string | null;
 }
 
 export interface CrossSystemRecommendationSummaryRead {
