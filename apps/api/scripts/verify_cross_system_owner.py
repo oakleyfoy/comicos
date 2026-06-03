@@ -95,6 +95,7 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
 
     started = _stage_start("cross_system_recommendations")
     cross_timings: dict[str, float] = {}
+    persist_audit: dict[str, object] = {}
     cross_created = timer.run(
         "rebuild.generate_cross_system_recommendations",
         lambda: generate_cross_system_recommendations(
@@ -102,9 +103,11 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
             owner_user_id=owner_user_id,
             refresh_upstream=False,
             persist_timings=cross_timings,
+            persist_audit=persist_audit,
         ),
     )
     stage_seconds["cross_system_recommendations"] = _stage_end("cross_system_recommendations", started)
+    session.expire_all()
 
     return {
         "cross_system_rows_inserted": int(cross_created),
@@ -112,6 +115,7 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
         "unified_rows_inserted": int(unified_created),
         "stage_elapsed_seconds": stage_seconds,
         "cross_system_build_timings_ms": cross_timings,
+        "cross_system_persist_audit": persist_audit,
     }
 
 
@@ -366,6 +370,8 @@ def main() -> int:
         }
         if rebuild_stats is not None:
             report["rebuild"] = rebuild_stats
+            if isinstance(rebuild_stats.get("cross_system_persist_audit"), dict):
+                report["cross_system_persist_audit"] = rebuild_stats["cross_system_persist_audit"]
         print(json.dumps(report, indent=2))
     return 0
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from sqlmodel import Session, select
 
-from app.models.cross_system_recommendation import CrossSystemRecommendation
+from app.models.cross_system_recommendation import CrossSystemRecommendation, utc_now
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.acquisition_opportunities import latest_acquisition_opportunity_rows
 from app.services.grade_before_sell import _latest_rows as _latest_grade_rows
@@ -474,7 +475,7 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
 
 
 # Bump when quality/ranking logic changes so persisted snapshots refresh after deploy.
-RECOMMENDATION_PIPELINE_EPOCH = 9
+RECOMMENDATION_PIPELINE_EPOCH = 11
 
 
 def _snapshot_rows_sorted(snapshot: dict[int, CrossSystemRecommendation]) -> list[CrossSystemRecommendation]:
@@ -483,10 +484,13 @@ def _snapshot_rows_sorted(snapshot: dict[int, CrossSystemRecommendation]) -> lis
 
 def _snapshot_confidence_saturated(snapshot: dict[int, CrossSystemRecommendation]) -> bool:
     rows = _snapshot_rows_sorted(snapshot)
-    if len(rows) < 2:
+    if not rows:
         return False
-    top = rows[: min(20, len(rows))]
-    scores = [float(row.confidence_score) for row in top]
+    scores = [float(row.confidence_score) for row in rows[: min(20, len(rows))]]
+    if not scores:
+        return False
+    if len(scores) == 1:
+        return scores[0] >= 0.999
     return len({round(s, 3) for s in scores}) <= 1 and max(scores) >= 0.999
 
 
@@ -627,6 +631,7 @@ def generate_cross_system_recommendations(
     refresh_upstream: bool = False,
     build_timings: CrossSystemBuildTiming | None = None,
     persist_timings: dict[str, float] | None = None,
+    persist_audit: dict[str, object] | None = None,
 ) -> int:
     timer = build_timings or CrossSystemBuildTiming()
     owned_timer = build_timings is None
@@ -647,6 +652,15 @@ def generate_cross_system_recommendations(
     must_repersist = _persisted_priorities_stale(snapshot, candidates) or _persisted_confidence_stale(
         snapshot, candidates
     )
+    if _snapshot_confidence_saturated(snapshot) and candidates:
+        must_repersist = True
+    top_expected_conf = [_confidence_for_persist(c) for c in candidates[:20]]
+    if (
+        top_expected_conf
+        and len({round(c, 4) for c in top_expected_conf}) >= 2
+        and _snapshot_confidence_saturated(snapshot)
+    ):
+        must_repersist = True
     if prior_sig is not None and prior_sig == new_sig and not must_repersist:
         if persist_timings is not None:
             persist_timings.update(timer.steps_ms)
@@ -658,11 +672,23 @@ def generate_cross_system_recommendations(
 
     def _persist() -> int:
         nonlocal created
+        apply_confidence_spread_inplace(candidates)
         _finalize_candidate_priorities_for_persist(candidates)
         _finalize_confidence_for_persist(candidates)
+        batch_ts = utc_now()
+        pre_insert: list[dict[str, object]] = []
         for rank, cand in enumerate(candidates, start=1):
             priority = _priority_for_persist(cand)
             confidence = _confidence_for_persist(cand)
+            pre_insert.append(
+                {
+                    "rank": rank,
+                    "title": cand.title,
+                    "normalized_confidence_score": round(float(cand.normalized_confidence_score or 0.0), 4),
+                    "confidence_for_persist": round(float(confidence), 4),
+                    "row_confidence_score": round(float(confidence), 4),
+                }
+            )
             row = CrossSystemRecommendation(
                 owner_user_id=owner_user_id,
                 recommendation_type=cand.recommendation_type,
@@ -673,11 +699,28 @@ def generate_cross_system_recommendations(
                 recommendation_rank=rank,
                 source_systems=sorted(cand.source_systems),
                 rationale=cand.rationale,
+                created_at=batch_ts,
             )
             session.add(row)
             created += 1
         if created:
             session.commit()
+            session.expire_all()
+        if persist_audit is not None:
+            persist_audit["pipeline_epoch"] = RECOMMENDATION_PIPELINE_EPOCH
+            persist_audit["pre_insert_sample"] = pre_insert[:12]
+            persist_audit["pre_insert_distinct_confidence"] = len(
+                {entry["row_confidence_score"] for entry in pre_insert}
+            )
+            post_snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
+            post_rows = _snapshot_rows_sorted(post_snapshot)
+            post_scores = [round(float(row.confidence_score), 4) for row in post_rows[:20]]
+            persist_audit["post_snapshot_distinct_confidence"] = len(set(post_scores))
+            persist_audit["post_snapshot_confidence_sample"] = post_scores[:12]
+            persist_audit["post_snapshot_matches_pre_insert"] = bool(pre_insert) and bool(post_rows) and all(
+                abs(float(entry["row_confidence_score"]) - float(post_rows[idx].confidence_score)) < 0.001
+                for idx, entry in enumerate(pre_insert[: min(len(pre_insert), len(post_rows))])
+            )
         return created
 
     timer.run("persist_snapshot", _persist)
@@ -695,16 +738,54 @@ def _latest_snapshot_rows(
     owner_user_id: int,
     scan_limit: int = 1000,
 ) -> dict[int, CrossSystemRecommendation]:
-    """Latest consecutive-id snapshot batch (bounded scan — avoids loading full history)."""
-    max_id_row = session.exec(
-        select(CrossSystemRecommendation.id)
+    """Latest snapshot batch: rows sharing the newest created_at, else id chain fallback."""
+    anchor = session.exec(
+        select(CrossSystemRecommendation)
         .where(CrossSystemRecommendation.owner_user_id == owner_user_id)
-        .order_by(CrossSystemRecommendation.id.desc())
+        .order_by(
+            CrossSystemRecommendation.created_at.desc(),
+            CrossSystemRecommendation.id.desc(),
+        )
         .limit(1)
-    ).one_or_none()
-    if max_id_row is None:
+    ).first()
+    if anchor is None:
         return {}
-    max_id = int(getattr(max_id_row, "id", max_id_row) or 0)
+
+    anchor_ts = anchor.created_at
+    batch_rows = list(
+        session.exec(
+            select(CrossSystemRecommendation)
+            .where(CrossSystemRecommendation.owner_user_id == owner_user_id)
+            .where(CrossSystemRecommendation.created_at == anchor_ts)
+            .order_by(CrossSystemRecommendation.recommendation_rank.asc())
+            .limit(max(1, int(scan_limit)))
+        ).all()
+    )
+    if batch_rows:
+        snapshot: dict[int, CrossSystemRecommendation] = {}
+        for row in batch_rows:
+            snapshot[int(row.recommendation_rank)] = row
+        return snapshot
+
+    window_start = anchor_ts - timedelta(seconds=2)
+    window_end = anchor_ts + timedelta(seconds=2)
+    batch_rows = list(
+        session.exec(
+            select(CrossSystemRecommendation)
+            .where(CrossSystemRecommendation.owner_user_id == owner_user_id)
+            .where(CrossSystemRecommendation.created_at >= window_start)
+            .where(CrossSystemRecommendation.created_at <= window_end)
+            .order_by(CrossSystemRecommendation.recommendation_rank.asc())
+            .limit(max(1, int(scan_limit)))
+        ).all()
+    )
+    if batch_rows:
+        snapshot = {}
+        for row in batch_rows:
+            snapshot[int(row.recommendation_rank)] = row
+        return snapshot
+
+    max_id = int(anchor.id or 0)
     if max_id <= 0:
         return {}
     rows = session.exec(
@@ -718,13 +799,13 @@ def _latest_snapshot_rows(
     ).all()
     if not rows:
         return {}
-    batch: list[CrossSystemRecommendation] = [rows[0]]
+    chain: list[CrossSystemRecommendation] = [rows[0]]
     for row in rows[1:]:
-        if int(row.id or 0) != int(batch[-1].id or 0) - 1:
+        if int(row.id or 0) != int(chain[-1].id or 0) - 1:
             break
-        batch.append(row)
-    snapshot: dict[int, CrossSystemRecommendation] = {}
-    for row in batch:
+        chain.append(row)
+    snapshot = {}
+    for row in chain:
         snapshot[int(row.recommendation_rank)] = row
     return snapshot
 

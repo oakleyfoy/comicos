@@ -154,7 +154,9 @@ def test_confidence_boost_works(client: TestClient, session: Session) -> None:
     generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id)
     acquire = next(i for i in items if i.title.endswith("#3") and i.recommendation_type == "ACQUIRE")
-    assert acquire.confidence_score >= 0.58
+    assert len(acquire.source_systems) >= 2
+    assert acquire.confidence_score >= 0.52
+    assert acquire.confidence_score < 0.999
 
 
 def test_conflict_resolution_grade_over_sell(client: TestClient, session: Session) -> None:
