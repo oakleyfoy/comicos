@@ -39,7 +39,12 @@ from app.services.recommendation_catalog_quality import (
     should_include_in_top_recommendations,
     title_passes_top_recommendation_quality,
 )
+from app.services.recommendation_priority_enrichment import (
+    build_owned_series_inventory_stats,
+    build_recommendation_priority_enrichment,
+)
 from app.services.recommendation_v2_engine import _latest_scores_by_issue
+from app.services.recommendation_v2_scoring_context import build_recommendation_v2_scoring_context
 from app.services.sell_candidates import _latest_sell_candidate_rows, _to_read as sell_candidate_to_read
 
 SRC_PULL = "P52_PULL_LIST"
@@ -324,6 +329,12 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
     spec_by_issue = _latest_spec_by_issue(session, owner_user_id=owner_user_id)
     issue_ids = [int(issue.id or 0) for issue, _ in forward_rows if issue.id is not None]
     signals_by_issue = _key_signals_by_issue(session, issue_ids=issue_ids)
+    owned_stats = build_owned_series_inventory_stats(session, owner_user_id=owner_user_id)
+    scoring_ctx = build_recommendation_v2_scoring_context(
+        session,
+        owner_user_id=owner_user_id,
+        issue_ids=issue_ids,
+    )
 
     drafts: list[_Draft] = []
     for issue, series in forward_rows:
@@ -364,7 +375,24 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
         if not should_include_in_top_recommendations(quality):
             continue
 
-        priority, rationale = compute_forward_catalog_priority(
+        enrichment = build_recommendation_priority_enrichment(
+            session,
+            owner_user_id=owner_user_id,
+            series_name=series.series_name,
+            issue_title=issue.title,
+            publisher=series.publisher,
+            key_signals=key_signals,
+            v2_confidence=float(v2.confidence_score) if v2 else None,
+            spec_type=spec_type,
+            owns_series_run=owns_run,
+            owned_stats=owned_stats,
+            scoring_ctx=scoring_ctx,
+            issue_id=issue_id,
+            issue=issue,
+            series=series,
+        )
+
+        priority, rationale, rec_confidence = compute_forward_catalog_priority(
             issue=issue,
             series=series,
             owned=is_owned,
@@ -373,6 +401,7 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
             spec_type=spec_type,
             has_ratio_variant=has_ratio,
             has_incentive_variant=has_incentive,
+            enrichment=enrichment,
             today=today,
         )
         priority = apply_quality_to_priority(priority, quality)
@@ -400,7 +429,11 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
                 rationale=rationale or f"Forward release within {FORWARD_RECOMMENDATION_WINDOW_DAYS}-day window.",
                 source_systems={SRC_RELEASE},
                 priority_score=_clamp_priority(priority),
-                confidence_score=_clamp_confidence(float(v2.confidence_score) if v2 else 0.62),
+                confidence_score=_clamp_confidence(
+                    rec_confidence
+                    if rec_confidence is not None
+                    else (float(v2.confidence_score) if v2 else enrichment.confidence_score)
+                ),
             )
         )
 

@@ -21,6 +21,7 @@ import {
 } from "../lib/dashboardLoadProfile";
 import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
 import { parseReleaseYearFilterInput } from "../lib/inventoryQueryParams";
+import { canQuickReceiveInventoryCopy } from "../lib/inventoryReceiving";
 import { formatCurrencyAmount, formatUsdCurrency, normalizeCurrencyCode } from "../lib/currencyFormat";
 import {
   ApiError,
@@ -855,6 +856,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [receivingCopyIds, setReceivingCopyIds] = useState<ReadonlySet<number>>(() => new Set());
   const [dashboardWidgetErrors, setDashboardWidgetErrors] = useState<
     Partial<Record<DashboardWidgetKey, string>>
   >({});
@@ -2819,6 +2822,96 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
     }
   }
 
+  async function markInventoryCopyReceived(inventoryCopyId: number): Promise<void> {
+    setError(null);
+    setSuccessMessage(null);
+    setReceivingCopyIds((current) => new Set(current).add(inventoryCopyId));
+    try {
+      const updated = await apiClient.markInventoryPhysicallyReceived(inventoryCopyId, {});
+      setInventory((current) =>
+        current.map((item) =>
+          item.inventory_copy_id === inventoryCopyId ? { ...item, ...updated } : item,
+        ),
+      );
+      await loadDashboardData();
+      setSuccessMessage("Marked copy as received.");
+    } catch (saveError) {
+      if (saveError instanceof ApiError) {
+        setError(saveError.message);
+      } else {
+        setError("Unable to mark copy as received.");
+      }
+    } finally {
+      setReceivingCopyIds((current) => {
+        const next = new Set(current);
+        next.delete(inventoryCopyId);
+        return next;
+      });
+    }
+  }
+
+  async function applyBulkMarkReceived(): Promise<void> {
+    if (!selectedIds.length) {
+      return;
+    }
+    const eligibleIds = selectedIds.filter((id) => {
+      const item = inventory.find((row) => row.inventory_copy_id === id);
+      return item != null && canQuickReceiveInventoryCopy(item);
+    });
+    if (!eligibleIds.length) {
+      setError("No selected copies are eligible to mark received (already in hand, sold, or cancelled).");
+      return;
+    }
+
+    setError(null);
+    setSuccessMessage(null);
+    setIsSaving(true);
+    setReceivingCopyIds((current) => {
+      const next = new Set(current);
+      for (const id of eligibleIds) {
+        next.add(id);
+      }
+      return next;
+    });
+
+    let marked = 0;
+    let failed = 0;
+    try {
+      for (const id of eligibleIds) {
+        try {
+          const updated = await apiClient.markInventoryPhysicallyReceived(id, {});
+          marked += 1;
+          setInventory((current) =>
+            current.map((item) => (item.inventory_copy_id === id ? { ...item, ...updated } : item)),
+          );
+        } catch {
+          failed += 1;
+        }
+      }
+      await loadDashboardData();
+      setSelectedIds([]);
+      const skipped = selectedIds.length - eligibleIds.length;
+      if (failed > 0) {
+        setError(`Marked ${marked} received; ${failed} failed.`);
+      } else {
+        setSuccessMessage(
+          skipped > 0
+            ? `Marked ${marked} cop${marked === 1 ? "y" : "ies"} received (${skipped} selected skipped).`
+            : `Marked ${marked} cop${marked === 1 ? "y" : "ies"} received.`,
+        );
+      }
+    } finally {
+      setIsSaving(false);
+      setReceivingCopyIds((current) => {
+        const next = new Set(current);
+        for (const id of eligibleIds) {
+          next.delete(id);
+        }
+        return next;
+      });
+    }
+  }
+
   async function applyBulkHoldUpdate(): Promise<void> {
     if (!selectedIds.length) {
       return;
@@ -3150,7 +3243,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="text-xs uppercase tracking-[0.16em] text-emerald-200/70">Physical intake</p>
               <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Receiving &amp; scan placeholders</h2>
               <p className="mt-1 max-w-prose text-sm text-slate-600">
-                Mark copies received on each inventory detail page, then stage scan sessions when ready.
+                Mark copies received from the inventory list or detail page, then stage scan sessions when ready.
               </p>
             </div>
             <Link
@@ -7360,6 +7453,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 {selectedIds.length} selected for bulk updates
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={!selectedIds.length || isSaving}
+                  onClick={() => void applyBulkMarkReceived()}
+                  className="rounded-2xl border border-emerald-400 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Mark selected received
+                </button>
                 <select
                   value={bulkHoldStatus}
                   onChange={(event) =>
@@ -7383,6 +7484,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </div>
           </div>
       </section>
+
+      {successMessage ? (
+        <div className="mt-6">
+          <StatusBanner tone="success">{successMessage}</StatusBanner>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mt-6">
@@ -7470,6 +7577,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   setActiveNotesItem(item);
                   setNotesDraft(item.condition_notes ?? "");
                 }}
+                receivingCopyIds={receivingCopyIds}
+                onMarkReceived={(id) => void markInventoryCopyReceived(id)}
               />
             </>
           )}

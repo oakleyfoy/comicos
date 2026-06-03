@@ -147,23 +147,46 @@ def compute_forward_catalog_priority(
     spec_type: str | None,
     has_ratio_variant: bool,
     has_incentive_variant: bool = False,
+    enrichment: "RecommendationPriorityEnrichment | None" = None,
     today: date | None = None,
-) -> tuple[float, str]:
-    """Return (priority_score, rationale_snippet) with additive signal separation."""
-    from app.services.recommendation_catalog_quality import publisher_boost_for
+) -> tuple[float, str, float | None]:
+    """Return (priority_score, rationale_snippet, confidence_score) with additive signal separation."""
+    from app.services.recommendation_priority_enrichment import (
+        RecommendationPriorityEnrichment,
+        generic_number_one_bonus,
+    )
 
     ref = today or utc_today()
     base = foc_deadline_priority(issue.foc_date, today=ref)
     bonus = 0.0
     rationale_parts: list[str] = []
 
-    bonus += publisher_boost_for(series.publisher) * 0.75
+    if enrichment is not None:
+        bonus += enrichment.franchise_bonus
+        bonus += enrichment.publisher_bonus
+        bonus += enrichment.historical_demand_bonus
+        bonus += enrichment.continuity_bonus
+        rationale_parts.extend(enrichment.rationale_bits)
+    else:
+        from app.services.recommendation_catalog_quality import publisher_boost_for
+
+        bonus += publisher_boost_for(series.publisher) * 0.75
 
     signal_set = {s.upper() for s in key_signals}
     bonus += min(8.5, len(signal_set) * 1.1)
-    if _is_number_one(issue.issue_number) or signal_set.intersection(NEW_ONE_SIGNALS):
-        bonus += 4.75
+
+    franchise_tier = enrichment.franchise_bonus if enrichment is not None else 0.0
+    number_one_bonus = generic_number_one_bonus(
+        issue_number=issue.issue_number,
+        key_signals=key_signals,
+        franchise_bonus=franchise_tier,
+    )
+    if number_one_bonus > 0:
+        bonus += number_one_bonus
         rationale_parts.append("Upcoming #1 or launch issue.")
+    elif signal_set.intersection(NEW_ONE_SIGNALS):
+        bonus += 2.75
+        rationale_parts.append("Universe launch or relaunch signal.")
     elif signal_set.intersection(KEY_SIGNAL_TYPES):
         bonus += 3.5
         rationale_parts.append("Key or special issue signal.")
@@ -188,7 +211,7 @@ def compute_forward_catalog_priority(
     if has_ratio_variant or has_incentive_variant:
         rationale_parts.append("Ratio or incentive variant worth watching.")
 
-    if owned:
+    if owned and (enrichment is None or enrichment.continuity_bonus < 2.0):
         bonus += 2.35
         rationale_parts.append("Run continuation — already collecting this series.")
     elif spec_type in {"STRONG_BUY", "BUY", "WATCH"}:
@@ -208,10 +231,11 @@ def compute_forward_catalog_priority(
 
     issue_id = int(issue.id or 0)
     series_ord = sum(ord(c) for c in (series.series_name or "")[:12])
-    bonus += (issue_id % 53) * 0.09 + (series_ord % 37) * 0.06
+    bonus += (issue_id % 53) * 0.12 + (series_ord % 37) * 0.09
 
     priority = min(99.99, base + bonus)
-    return round(max(0.0, priority), 2), " ".join(rationale_parts).strip()
+    confidence = enrichment.confidence_score if enrichment is not None else None
+    return round(max(0.0, priority), 2), " ".join(dict.fromkeys(rationale_parts)).strip(), confidence
 
 
 def iter_forward_release_rows(

@@ -8,6 +8,7 @@ import {
   type OrderArrivalClassification,
 } from "../api/client";
 import { formatCurrencyAmount, formatUsdCurrency } from "../lib/currencyFormat";
+import { canQuickReceiveInventoryCopy } from "../lib/inventoryReceiving";
 import { FavoriteStarRating } from "./FavoriteStarRating";
 
 type Chip = { key: string; label: string; className: string; title?: string };
@@ -233,6 +234,8 @@ export function PortfolioInventoryList(props: {
   onStarDraftChange: (id: number, value: string) => void;
   onSave: (id: number, payload: InventoryUpdatePayload) => Promise<void>;
   onOpenNotes: (item: InventoryItem) => void;
+  receivingCopyIds: ReadonlySet<number>;
+  onMarkReceived: (id: number) => void;
 }): JSX.Element {
   const {
     inventory,
@@ -250,6 +253,8 @@ export function PortfolioInventoryList(props: {
     onStarDraftChange,
     onSave,
     onOpenNotes,
+    receivingCopyIds,
+    onMarkReceived,
   } = props;
 
   return (
@@ -261,6 +266,8 @@ export function PortfolioInventoryList(props: {
         const marketFmv = item.current_market_fmv
           ? formatCurrencyAmount(item.current_market_fmv, item.fmv_currency_code ?? "USD")
           : null;
+        const canReceive = canQuickReceiveInventoryCopy(item);
+        const isReceiving = receivingCopyIds.has(id);
 
         return (
           <article key={id} className="px-4 py-3 transition hover:bg-blue-50/60">
@@ -287,8 +294,30 @@ export function PortfolioInventoryList(props: {
                         item.asset_state,
                       )}`}
                     >
-                      {assetStateShort(item.asset_state)}
+                      {canReceive ? (
+                        <button
+                          type="button"
+                          disabled={isSaving || isReceiving}
+                          title="Mark this copy in hand"
+                          onClick={() => onMarkReceived(id)}
+                          className="uppercase tracking-wide hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isReceiving ? "Receiving…" : assetStateShort(item.asset_state)}
+                        </button>
+                      ) : (
+                        assetStateShort(item.asset_state)
+                      )}
                     </span>
+                    {canReceive ? (
+                      <button
+                        type="button"
+                        disabled={isSaving || isReceiving}
+                        onClick={() => onMarkReceived(id)}
+                        className="shrink-0 rounded-md border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isReceiving ? "Marking…" : "Mark received"}
+                      </button>
+                    ) : null}
                   </div>
                   <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-600">
                     {item.publisher}

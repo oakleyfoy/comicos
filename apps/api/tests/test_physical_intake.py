@@ -203,7 +203,7 @@ def test_mark_received_requires_explicit_endpoint(client: TestClient, session: S
     assert sessions_after == sessions_before
 
     dup = client.post(f"/inventory/{copy.id}/mark-received", json={}, headers=hdr)
-    assert dup.status_code == 409
+    assert dup.status_code == 200
 
 
 def test_mark_received_owner_scoped(client: TestClient, session: Session) -> None:

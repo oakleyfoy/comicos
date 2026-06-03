@@ -1109,6 +1109,14 @@ def update_inventory_copy(
     session.add(inventory_copy)
     session.commit()
 
+    return inventory_row_for_copy(session, current_user, inventory_copy_id)
+
+
+def inventory_row_for_copy(
+    session: Session,
+    current_user: User,
+    inventory_copy_id: int,
+) -> InventoryRow:
     row_stmt = build_inventory_base_query(current_user).where(InventoryCopy.id == inventory_copy_id)
     row = session.exec(row_stmt).one()
     row_map = dict(row._mapping)

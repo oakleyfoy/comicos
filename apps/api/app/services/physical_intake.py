@@ -31,7 +31,7 @@ from app.schemas.scan_sessions import (
     ScanSessionItemCreatePayload,
     ScanSessionItemsAppendPayload,
 )
-from app.services.inventory import update_inventory_copy
+from app.services.inventory import inventory_row_for_copy, update_inventory_copy
 from app.services.inventory_intelligence import (
     _covers_by_inventory,
     _latest_ocr_map,
@@ -371,8 +371,10 @@ def mark_physical_received(
         raise HTTPException(status_code=404, detail="Inventory copy not found")
     if copy.order_status == "cancelled":
         raise HTTPException(status_code=400, detail="Cancelled inventory cannot be marked received")
+    if copy.hold_status == "sold":
+        raise HTTPException(status_code=400, detail="Sold inventory cannot be marked received")
     if copy.order_status == "received":
-        raise HTTPException(status_code=409, detail="Inventory copy already received")
+        return inventory_row_for_copy(session, current_user, inventory_copy_id)
     if copy.order_status not in {"ordered", "preordered", "shipped"}:
         raise HTTPException(status_code=400, detail="Order line cannot be physically received")
 

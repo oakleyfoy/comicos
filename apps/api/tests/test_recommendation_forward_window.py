@@ -68,7 +68,7 @@ def test_foc_priority_beats_profile_only() -> None:
         foc_date=today + timedelta(days=2),
         release_date=today + timedelta(days=23),
     )
-    foc_score, _ = compute_forward_catalog_priority(
+    foc_score, _, _ = compute_forward_catalog_priority(
         issue=issue,
         series=series,
         owned=False,
@@ -78,7 +78,7 @@ def test_foc_priority_beats_profile_only() -> None:
         has_ratio_variant=False,
         today=today,
     )
-    profile_only, _ = compute_forward_catalog_priority(
+    profile_only, _, _ = compute_forward_catalog_priority(
         issue=issue,
         series=series,
         owned=False,

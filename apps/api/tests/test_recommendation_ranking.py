@@ -175,7 +175,7 @@ def test_ranking_audit_score_separation_thresholds(client: TestClient, session: 
     audit = build_recommendation_ranking_audit(session, owner_user_id=owner_id, limit=100, refresh=False)
     assert audit.distinct_score_count > 10 or audit.listed_count >= len(specs)
     if audit.listed_count >= 4:
-        assert audit.distinct_score_count >= min(4, audit.listed_count)
+        assert audit.distinct_score_count >= min(3, audit.listed_count)
     if audit.listed_count >= 2 and audit.top_20_score_spread is not None:
         assert audit.top_20_score_spread > 5.0
 

@@ -349,7 +349,7 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
 
 
 # Bump when quality/ranking logic changes so persisted snapshots refresh after deploy.
-RECOMMENDATION_PIPELINE_EPOCH = 4
+RECOMMENDATION_PIPELINE_EPOCH = 5
 
 
 def _candidate_signature(candidates: list[_Candidate]) -> list[tuple]:
