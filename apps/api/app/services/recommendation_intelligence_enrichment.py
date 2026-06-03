@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sqlmodel import Session, select
 
@@ -15,6 +15,7 @@ from app.services.recommendation_priority_enrichment import (
     OwnedSeriesInventoryStats,
     RecommendationPriorityEnrichment,
     franchise_strength_bonus,
+    publisher_strength_bonus,
 )
 
 # Milestone issue numbers (collector numbering conventions — not title-specific).
@@ -87,6 +88,24 @@ _CREATOR_ROLE_WEIGHT: dict[str, float] = {
 
 
 @dataclass(frozen=True)
+class CollectorSignificanceScoreBreakdown:
+    """Per-signal scores for ranking audits (registry-driven; not title-specific)."""
+
+    base_score: float = 0.0
+    franchise_score: float = 0.0
+    publisher_score: float = 0.0
+    historical_demand_score: float = 0.0
+    continuity_score: float = 0.0
+    creator_score: float = 0.0
+    milestone_score: float = 0.0
+    homage_score: float = 0.0
+    audience_score: float = 0.0
+    combo_bonus: float = 0.0
+    ranking_boost: float = 0.0
+    final_score: float = 0.0
+
+
+@dataclass(frozen=True)
 class CollectorSignificanceEnrichment:
     milestone_issue_number: int | None = None
     milestone_bonus: float = 0.0
@@ -98,6 +117,7 @@ class CollectorSignificanceEnrichment:
     reason_codes: tuple[str, ...] = ()
     decision_boost: float = 0.0
     confidence_boost: float = 0.0
+    score_breakdown: CollectorSignificanceScoreBreakdown | None = None
 
 
 def parse_issue_number_milestone(issue_number: str) -> int | None:
@@ -246,6 +266,52 @@ def _franchise_historical_bonus(
     return round(min(10.0, bonus), 2), thesis
 
 
+def _audience_score_value(
+    tags: tuple[str, ...],
+    *,
+    milestone_num: int | None,
+    creator_bonus: float,
+    homage_bonus: float,
+) -> float:
+    score = min(4.0, len(tags) * 0.85)
+    if milestone_num is not None and milestone_num >= 100:
+        score += 1.0
+    if creator_bonus >= 3.0:
+        score += 0.75
+    if homage_bonus >= 2.5:
+        score += 0.75
+    return round(min(5.5, score), 2)
+
+
+def _ranking_combo_bonus(
+    *,
+    milestone_bonus: float,
+    creator_bonus: float,
+    homage_bonus: float,
+) -> float:
+    combo = 0.0
+    if milestone_bonus >= 3.0 and (creator_bonus >= 2.5 or homage_bonus >= 2.5):
+        combo += 4.0
+    if creator_bonus >= 3.0 and homage_bonus >= 2.5:
+        combo += 2.5
+    return combo
+
+
+def collector_ranking_boost(breakdown: CollectorSignificanceScoreBreakdown) -> float:
+    """Ranking path: milestone + creator + homage outweigh franchise-only continuation."""
+    core = (
+        breakdown.milestone_score * 1.25
+        + breakdown.creator_score * 1.2
+        + breakdown.homage_score * 1.2
+        + breakdown.audience_score
+        + breakdown.franchise_score * 0.42
+        + breakdown.publisher_score * 0.38
+        + breakdown.historical_demand_score * 0.32
+        + breakdown.continuity_score * 0.28
+    )
+    return round(min(22.0, core + breakdown.combo_bonus), 2)
+
+
 def _combine_decision_boost(
     *,
     milestone_bonus: float,
@@ -278,9 +344,37 @@ def build_collector_significance_enrichment(
     key_signals: list[str],
     priority_enrichment: RecommendationPriorityEnrichment | None = None,
     owned_stats: OwnedSeriesInventoryStats | None = None,
+    base_score: float = 0.0,
 ) -> CollectorSignificanceEnrichment:
+    enrichment, _ = build_collector_significance_with_breakdown(
+        session,
+        series=series,
+        issue=issue,
+        variants=variants,
+        rationale=rationale,
+        key_signals=key_signals,
+        priority_enrichment=priority_enrichment,
+        owned_stats=owned_stats,
+        base_score=base_score,
+    )
+    return enrichment
+
+
+def build_collector_significance_with_breakdown(
+    session: Session,
+    *,
+    series: ReleaseSeries | None,
+    issue: ReleaseIssue | None,
+    variants: list[ReleaseVariant] | None,
+    rationale: str,
+    key_signals: list[str],
+    priority_enrichment: RecommendationPriorityEnrichment | None = None,
+    owned_stats: OwnedSeriesInventoryStats | None = None,
+    base_score: float = 0.0,
+) -> tuple[CollectorSignificanceEnrichment, CollectorSignificanceScoreBreakdown]:
+    empty = CollectorSignificanceScoreBreakdown(base_score=round(float(base_score), 2))
     if issue is None or series is None:
-        return CollectorSignificanceEnrichment()
+        return CollectorSignificanceEnrichment(), empty
 
     blob = _text_blob(series=series, issue=issue, variants=variants, rationale=rationale)
     milestone_num, milestone_bonus, milestone_thesis = _milestone_signals(issue.issue_number, blob)
@@ -294,6 +388,53 @@ def build_collector_significance_enrichment(
         key_signals=key_signals,
     )
     audience_tags, _ = _audience_tags(blob, milestone_num=milestone_num, creator_bonus=creator_bonus)
+
+    if priority_enrichment is not None:
+        franchise_score = round(float(priority_enrichment.franchise_bonus), 2)
+        publisher_score = round(float(priority_enrichment.publisher_bonus), 2)
+        historical_demand_score = round(float(priority_enrichment.historical_demand_bonus), 2)
+        continuity_score = round(float(priority_enrichment.continuity_bonus), 2)
+    else:
+        franchise_score, _ = franchise_strength_bonus(
+            series_name=series.series_name,
+            issue_title=issue.title,
+        )
+        franchise_score = round(franchise_score, 2)
+        publisher_score = round(publisher_strength_bonus(series.publisher), 2)
+        historical_demand_score = 0.0
+        continuity_score = 0.0
+
+    audience_score = _audience_score_value(
+        audience_tags,
+        milestone_num=milestone_num,
+        creator_bonus=creator_bonus,
+        homage_bonus=homage_bonus,
+    )
+    combo_bonus = _ranking_combo_bonus(
+        milestone_bonus=milestone_bonus,
+        creator_bonus=creator_bonus,
+        homage_bonus=homage_bonus,
+    )
+    breakdown = CollectorSignificanceScoreBreakdown(
+        base_score=round(float(base_score), 2),
+        franchise_score=franchise_score,
+        publisher_score=publisher_score,
+        historical_demand_score=historical_demand_score,
+        continuity_score=continuity_score,
+        creator_score=creator_bonus,
+        milestone_score=milestone_bonus,
+        homage_score=homage_bonus,
+        audience_score=audience_score,
+        combo_bonus=combo_bonus,
+        ranking_boost=0.0,
+        final_score=0.0,
+    )
+    ranking_boost = collector_ranking_boost(breakdown)
+    breakdown = replace(
+        breakdown,
+        ranking_boost=ranking_boost,
+        final_score=round(base_score + ranking_boost, 2),
+    )
 
     reason_codes: list[str] = []
     if milestone_num is not None or milestone_bonus >= 2.0:
@@ -323,7 +464,7 @@ def build_collector_significance_enrichment(
         milestone_num=milestone_num,
     )
 
-    return CollectorSignificanceEnrichment(
+    enrichment = CollectorSignificanceEnrichment(
         milestone_issue_number=milestone_num,
         milestone_bonus=milestone_bonus,
         creator_bonus=creator_bonus,
@@ -334,4 +475,6 @@ def build_collector_significance_enrichment(
         reason_codes=tuple(dict.fromkeys(reason_codes)),
         decision_boost=boost,
         confidence_boost=conf_boost,
+        score_breakdown=breakdown,
     )
+    return enrichment, breakdown

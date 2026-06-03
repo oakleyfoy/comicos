@@ -133,7 +133,7 @@ import { ScanSessionsPage } from "./pages/ScanSessionsPage";
 import { ScannerProfilesPage } from "./pages/ScannerProfilesPage";
 
 function HomeRedirect() {
-  const { isAuthenticated, isLoading, securityContext } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -145,10 +145,6 @@ function HomeRedirect() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (securityContext?.active_organization_id) {
-    return <Navigate to={`/organizations/${securityContext.active_organization_id}`} replace />;
   }
 
   return <Navigate to="/executive-dashboard" replace />;

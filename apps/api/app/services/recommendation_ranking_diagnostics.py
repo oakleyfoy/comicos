@@ -19,6 +19,10 @@ from app.services.cross_system_recommendation_engine import (
     build_cross_system_candidates,
     generate_cross_system_recommendations,
 )
+from app.services.recommendation_intelligence_audit import (
+    attach_intelligence_scores_to_audit_rows,
+    build_intelligence_audit_from_candidates,
+)
 
 
 def _is_strictly_score_ordered(scores: list[float]) -> bool:
@@ -126,14 +130,33 @@ def build_recommendation_ranking_audit(
         generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
         generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False)
         generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=False)
-    score_trace = build_score_trace_map(session, owner_user_id=owner_user_id, refresh_upstream=False)
+    trace_candidates = build_cross_system_candidates(
+        session,
+        owner_user_id=owner_user_id,
+        refresh_upstream=False,
+    )
+    score_trace = {
+        (c.recommendation_type.strip().upper(), c.title_key): (
+            round(float(c.raw_priority_score or c.priority_score), 2),
+            round(float(c.normalized_priority_score or c.priority_score), 2),
+            round(float(_priority_for_persist(c)), 2),
+            round(float(c.raw_confidence_score or c.confidence_score), 4),
+            round(float(c.normalized_confidence_score or c.confidence_score), 4),
+            round(float(_confidence_for_persist(c)), 4),
+        )
+        for c in trace_candidates
+    }
     items, total = list_latest_cross_system_recommendations(
         session,
         owner_user_id=owner_user_id,
         limit=min(max(limit, 1), 200),
         offset=0,
     )
-    return audit_from_listed_items(items, total_count=total, score_trace=score_trace)
+    audit = audit_from_listed_items(items, total_count=total, score_trace=score_trace)
+    intel = build_intelligence_audit_from_candidates(trace_candidates, limit=limit)
+    attach_intelligence_scores_to_audit_rows(audit, trace_candidates)
+    audit.intelligence = intel
+    return audit
 
 
 def diagnostics_from_audit(audit: RecommendationRankingAuditRead) -> RecommendationRankingDiagnosticsRead:

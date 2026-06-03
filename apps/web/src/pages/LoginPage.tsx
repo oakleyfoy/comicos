@@ -20,16 +20,18 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const from = (location.state as LocationState | null)?.from?.pathname ?? "/dashboard";
+  const defaultAfterLogin = "/executive-dashboard";
+  const rawFrom = (location.state as LocationState | null)?.from?.pathname;
+  const from =
+    rawFrom === "/dashboard" || rawFrom === "/"
+      ? defaultAfterLogin
+      : rawFrom ?? defaultAfterLogin;
 
-  function resolvePostLoginPath(activeOrganizationId?: number | null): string {
-    if (from && from !== "/dashboard") {
+  function resolvePostLoginPath(_activeOrganizationId?: number | null): string {
+    if (from && from !== "/login" && from !== "/register") {
       return from;
     }
-    if (activeOrganizationId) {
-      return `/organizations/${activeOrganizationId}`;
-    }
-    return "/organizations";
+    return defaultAfterLogin;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -54,7 +56,7 @@ export function LoginPage() {
   return (
     <AuthShell
       title="Login"
-      subtitle="Sign in to view your inventory dashboard."
+      subtitle="Sign in to open your executive dashboard."
       footer={
         <>
           New to ComicOS?{" "}

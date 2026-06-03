@@ -377,9 +377,23 @@ def main() -> int:
                     "normalized_confidence_score": row.normalized_confidence_score,
                     "computed_confidence_score": row.computed_confidence_score,
                     "confidence_score": row.confidence_score,
+                    "base_score": row.base_score,
+                    "franchise_score": row.franchise_score,
+                    "publisher_score": row.publisher_score,
+                    "creator_score": row.creator_score,
+                    "milestone_score": row.milestone_score,
+                    "homage_score": row.homage_score,
+                    "audience_score": row.audience_score,
+                    "collector_ranking_boost": row.collector_ranking_boost,
+                    "final_pre_spread_score": row.final_pre_spread_score,
                 }
                 for row in ranking_audit.items[:20]
             ],
+            "intelligence_validation": (
+                ranking_audit.intelligence.model_dump()
+                if ranking_audit.intelligence is not None
+                else None
+            ),
             "top_latest_recommendations": top_rows,
             "query_timings_ms": timer.entries,
             "total_elapsed_ms": total_elapsed_ms,

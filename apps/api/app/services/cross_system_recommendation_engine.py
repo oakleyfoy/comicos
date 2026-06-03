@@ -26,6 +26,10 @@ from app.services.recommendation_catalog_quality import (
     should_include_in_top_recommendations,
     title_passes_top_recommendation_quality,
 )
+from app.services.recommendation_intelligence_enrichment import CollectorSignificanceScoreBreakdown
+from app.services.recommendation_intelligence_ranking import (
+    apply_collector_significance_priority_boost,
+)
 
 SRC_UNIFIED = "P57_UNIFIED"
 SRC_DAILY = "P57_DAILY"
@@ -67,6 +71,7 @@ class _Candidate:
     raw_confidence_score: float = 0.0
     normalized_confidence_score: float = 0.0
     budget_priority_adjusted: bool = False
+    collector_score_breakdown: CollectorSignificanceScoreBreakdown | None = None
 
     @property
     def title_key(self) -> str:
@@ -425,6 +430,17 @@ def build_cross_system_candidates(
         ]
 
     resolved = timer.run("quality_filter", _quality_filter)
+
+    def _collector_significance_boost() -> None:
+        apply_collector_significance_priority_boost(
+            session,
+            owner_user_id=owner_user_id,
+            candidates=resolved,
+            release_index=release_index,
+            signals_by_issue=signals_by_issue,
+        )
+
+    timer.run("collector_significance_boost", _collector_significance_boost)
     timer.run(
         "priority_spread",
         lambda: apply_priority_spread_inplace(resolved),
