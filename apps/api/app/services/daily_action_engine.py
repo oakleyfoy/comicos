@@ -15,6 +15,10 @@ from app.services.recommendation_catalog_quality import (
     build_forward_release_title_index,
     title_passes_top_recommendation_quality,
 )
+from app.services.recommendation_decision_engine import (
+    build_recommendation_decision_context,
+    decision_for_daily_action,
+)
 from app.services.recommendation_latest_rows import latest_by_key_bounded_scan
 from app.services.unified_collector_intelligence import (
     _latest_recommendation_rows,
@@ -248,7 +252,7 @@ def generate_daily_actions(session: Session, *, owner_user_id: int, refresh_unif
     return created
 
 
-def _to_read(row: DailyCollectorAction) -> DailyCollectorActionRead:
+def _to_read(row: DailyCollectorAction, *, decision=None) -> DailyCollectorActionRead:
     return DailyCollectorActionRead(
         id=int(row.id or 0),
         owner_id=int(row.owner_user_id),
@@ -261,6 +265,7 @@ def _to_read(row: DailyCollectorAction) -> DailyCollectorActionRead:
         source_recommendation_id=row.source_recommendation_id,
         source_systems=list(row.source_systems or []),
         created_at=row.created_at,
+        decision=decision,
     )
 
 
@@ -289,6 +294,7 @@ def list_latest_daily_actions(
     offset = max(offset, 0)
     latest = _latest_action_rows(session, owner_user_id=owner_user_id)
     release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    decision_ctx = build_recommendation_decision_context(session, owner_user_id=owner_user_id)
     rows: list[DailyCollectorAction] = []
     for row in latest.values():
         if not title_passes_top_recommendation_quality(
@@ -306,7 +312,20 @@ def list_latest_daily_actions(
             continue
         rows.append(row)
     rows.sort(key=_sort_key)
-    items = [_to_read(row) for row in rows]
+    items = []
+    for row in rows:
+        decision = decision_for_daily_action(
+            action_type=row.action_type,
+            title=row.title,
+            priority_score=float(row.priority_score),
+            confidence_score=float(row.confidence_score),
+            rationale=row.rationale,
+            source_systems=list(row.source_systems or []),
+            session=session,
+            owner_user_id=owner_user_id,
+            ctx=decision_ctx,
+        )
+        items.append(_to_read(row, decision=decision))
     total = len(items)
     return items[offset : offset + limit], total
 

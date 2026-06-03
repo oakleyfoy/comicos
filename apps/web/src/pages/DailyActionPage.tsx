@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { RecommendationDecisionPanel } from "../components/RecommendationDecisionPanel";
 import { StatusBanner } from "../components/StatusBanner";
 
 const ACTION_TYPES = ["", "PREORDER", "ACQUIRE", "GRADE", "SELL", "REBALANCE", "REVIEW", "WATCH"] as const;
@@ -48,8 +49,8 @@ export function DailyActionPage(): JSX.Element {
     <AppShell>
       <PageHeader
         eyebrow="P57-02"
-        title="Daily Actions"
-        description="Actionable daily tasks from unified collector intelligence with FOC due dates and stable priority ordering."
+        title="Today's Actions"
+        description="Daily tasks with explicit buy/watch/pass decisions, copy counts, cover guidance, and FOC deadlines."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {summary ? (
@@ -129,34 +130,28 @@ export function DailyActionPage(): JSX.Element {
       ) : items.length === 0 ? (
         <p className="text-sm text-slate-500">No daily actions yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
-              <tr>
-                <th className="px-3 py-2">Action</th>
-                <th className="px-3 py-2">Title</th>
-                <th className="px-3 py-2">Priority</th>
-                <th className="px-3 py-2">Confidence</th>
-                <th className="px-3 py-2">Due Date</th>
-                <th className="px-3 py-2">Sources</th>
-                <th className="px-3 py-2">Rationale</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((row) => (
-                <tr key={row.id} className="border-t border-white/5">
-                  <td className="px-3 py-2 text-cyan-200">{row.action_type}</td>
-                  <td className="px-3 py-2 font-medium text-white">{row.title}</td>
-                  <td className="px-3 py-2">{row.priority_score.toFixed(1)}</td>
-                  <td className="px-3 py-2">{row.confidence_score.toFixed(2)}</td>
-                  <td className="px-3 py-2">{row.due_date ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-slate-400">{row.source_systems.join(", ")}</td>
-                  <td className="px-3 py-2 text-slate-300">{row.rationale}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="space-y-4">
+          {items.map((row) => (
+            <li key={row.id} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">{row.action_type}</p>
+                  <h2 className="text-lg font-semibold text-white">{row.title}</h2>
+                </div>
+                <div className="text-right text-xs text-slate-400">
+                  <p>Priority {row.priority_score.toFixed(1)}</p>
+                  <p>Confidence {row.confidence_score.toFixed(2)}</p>
+                  {row.due_date ? <p>Due {row.due_date}</p> : null}
+                </div>
+              </div>
+              {row.decision ? <RecommendationDecisionPanel decision={row.decision} /> : null}
+              {row.source_systems.length > 0 ? (
+                <p className="mt-2 text-xs text-slate-500">Sources: {row.source_systems.join(", ")}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-slate-400">{row.rationale}</p>
+            </li>
+          ))}
+        </ul>
       )}
     </AppShell>
   );

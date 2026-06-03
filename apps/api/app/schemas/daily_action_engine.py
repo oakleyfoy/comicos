@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.recommendation_decision import RecommendationDecisionRead
+
 
 class DailyCollectorActionRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -19,6 +21,7 @@ class DailyCollectorActionRead(BaseModel):
     source_recommendation_id: int | None = None
     source_systems: list[str] = Field(default_factory=list)
     created_at: datetime
+    decision: RecommendationDecisionRead | None = None
 
 
 class DailyActionSummaryRead(BaseModel):

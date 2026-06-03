@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.recommendation_decision import RecommendationDecisionRead
+
 
 class CrossSystemRecommendationRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -19,6 +21,7 @@ class CrossSystemRecommendationRead(BaseModel):
     source_systems: list[str] = Field(default_factory=list)
     rationale: str
     created_at: datetime
+    decision: RecommendationDecisionRead | None = None
 
 
 class CrossSystemRecommendationSummaryRead(BaseModel):

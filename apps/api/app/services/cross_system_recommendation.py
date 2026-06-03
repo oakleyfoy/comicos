@@ -20,9 +20,17 @@ from app.services.recommendation_catalog_quality import (
     build_forward_release_title_index,
     title_passes_top_recommendation_quality,
 )
+from app.services.recommendation_decision_engine import (
+    build_recommendation_decision_context,
+    decision_for_cross_system,
+)
 
 
-def _to_read(row: CrossSystemRecommendation) -> CrossSystemRecommendationRead:
+def _to_read(
+    row: CrossSystemRecommendation,
+    *,
+    decision=None,
+) -> CrossSystemRecommendationRead:
     return CrossSystemRecommendationRead(
         id=int(row.id or 0),
         owner_id=int(row.owner_user_id),
@@ -35,6 +43,7 @@ def _to_read(row: CrossSystemRecommendation) -> CrossSystemRecommendationRead:
         source_systems=list(row.source_systems or []),
         rationale=row.rationale,
         created_at=row.created_at,
+        decision=decision,
     )
 
 
@@ -52,6 +61,7 @@ def list_latest_cross_system_recommendations(
     offset = max(offset, 0)
     snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
     release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    decision_ctx = build_recommendation_decision_context(session, owner_user_id=owner_user_id)
     items: list[CrossSystemRecommendationRead] = []
     for rank in sorted(snapshot.keys()):
         row = snapshot[rank]
@@ -68,7 +78,19 @@ def list_latest_cross_system_recommendations(
             release_index=release_index,
         ):
             continue
-        items.append(_to_read(row))
+        decision = decision_for_cross_system(
+            recommendation_type=row.recommendation_type,
+            title=row.title,
+            priority_score=float(row.priority_score),
+            confidence_score=float(row.confidence_score),
+            rationale=row.rationale,
+            source_systems=list(row.source_systems or []),
+            estimated_value=float(row.estimated_value) if row.estimated_value is not None else None,
+            session=session,
+            owner_user_id=owner_user_id,
+            ctx=decision_ctx,
+        )
+        items.append(_to_read(row, decision=decision))
     items.sort(
         key=lambda r: (
             -r.priority_score,

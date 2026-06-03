@@ -20,9 +20,9 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Primary",
     links: [
       { label: "Executive Dashboard", to: "/executive-dashboard", prominent: true },
-      { label: "Daily Actions", to: "/daily-actions" },
+      { label: "Today's Actions", to: "/daily-actions" },
       { label: "Unified Intelligence", to: "/unified-intelligence" },
-      { label: "Cross-System Recommendations", to: "/cross-system-recommendations" },
+      { label: "Top Recommendations", to: "/cross-system-recommendations" },
     ],
   },
   {

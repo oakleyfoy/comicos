@@ -15391,6 +15391,21 @@ export interface CrossSystemRecommendationRead {
   source_systems: string[];
   rationale: string;
   created_at: string;
+  decision: RecommendationDecisionRead | null;
+}
+
+export interface RecommendationDecisionRead {
+  action: "BUY" | "BUY_AGGRESSIVE" | "WATCH" | "PASS";
+  quantity: number;
+  cover_recommendations: string[];
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  strategy: "FLIP" | "HOLD" | "SELL_ONE_KEEP_ONE" | "LONG_TERM_HOLD" | "GRADE_CANDIDATE";
+  reason_codes: string[];
+  reason_summary: string[];
+  expected_roi_range: string;
+  foc_date: string | null;
+  release_date: string | null;
+  decision_headline: string;
 }
 
 export interface CrossSystemRecommendationSummaryRead {
@@ -15471,6 +15486,7 @@ export interface DailyCollectorActionRead {
   source_recommendation_id: number | null;
   source_systems: string[];
   created_at: string;
+  decision: RecommendationDecisionRead | null;
 }
 
 export interface DailyActionSummaryRead {
