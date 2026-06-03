@@ -231,3 +231,28 @@ class BulkInventoryUpdateRequest(BaseModel):
 
 class BulkInventoryUpdateResponse(BaseModel):
     updated_count: int
+
+
+BulkMarkInventoryReceivedOutcome = Literal["marked", "skipped", "error"]
+
+
+class BulkMarkInventoryReceivedRequest(BaseModel):
+    inventory_copy_ids: list[int] = Field(min_length=1)
+    received_at: datetime | None = Field(
+        default=None,
+        description="Optional shared receipt timestamp for all newly marked copies.",
+    )
+
+
+class BulkMarkInventoryReceivedItemResult(BaseModel):
+    inventory_copy_id: int
+    outcome: BulkMarkInventoryReceivedOutcome
+    detail: str | None = None
+    row: InventoryRow | None = None
+
+
+class BulkMarkInventoryReceivedResponse(BaseModel):
+    marked_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    error_count: int = Field(ge=0)
+    results: list[BulkMarkInventoryReceivedItemResult] = Field(default_factory=list)

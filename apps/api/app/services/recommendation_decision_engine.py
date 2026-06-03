@@ -14,6 +14,7 @@ from app.models.spec_intelligence import SpecRecommendation
 from app.schemas.recommendation_decision import REASON_CODE_LABELS, RecommendationDecisionRead
 from app.services.foc_dates import days_until_foc, utc_today
 from app.services.recommendation_catalog_quality import build_forward_release_title_index
+from app.services.recommendation_title_index import RecommendationPipelineIndexCache
 from app.services.recommendation_forward_window import _key_signals_by_issue, _latest_spec_by_issue
 from app.services.recommendation_priority_enrichment import (
     KEY_SIGNAL_TYPES,
@@ -67,8 +68,14 @@ def build_recommendation_decision_context(
     session: Session,
     *,
     owner_user_id: int,
+    index_cache: RecommendationPipelineIndexCache | None = None,
 ) -> RecommendationDecisionContext:
-    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(
+        session,
+        owner_user_id=owner_user_id,
+        pipeline_cache=cache,
+    )
     issue_ids = [int(pair[0].id or 0) for pair in release_index.values() if pair[0].id is not None]
     key_signals = _key_signals_by_issue(session, issue_ids=issue_ids)
 

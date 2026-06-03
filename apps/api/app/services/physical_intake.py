@@ -13,7 +13,13 @@ from sqlmodel import Session, select
 
 from app.models import ComicIssue, ComicTitle, InventoryCopy, Order, OrderItem, Publisher, Variant, User
 from app.models.asset_ledger import utc_now
-from app.schemas.inventory import InventoryRow, InventoryUpdate
+from app.schemas.inventory import (
+    BulkMarkInventoryReceivedItemResult,
+    BulkMarkInventoryReceivedRequest,
+    BulkMarkInventoryReceivedResponse,
+    InventoryRow,
+    InventoryUpdate,
+)
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.physical_intake import (
     CreatePhysicalIntakeScanSessionPayload,
@@ -359,6 +365,18 @@ def build_physical_intake_summary(
     return PhysicalIntakeSummaryResponse(generated_as_of=as_of, counts=summarize_physical_intake_items(items))
 
 
+def _physical_receive_skip_reason(copy: InventoryCopy) -> str | None:
+    if copy.order_status == "cancelled":
+        return "cancelled"
+    if copy.hold_status == "sold":
+        return "sold"
+    if copy.order_status == "received":
+        return None
+    if copy.order_status not in {"ordered", "preordered", "shipped"}:
+        return "invalid_order_status"
+    return None
+
+
 def mark_physical_received(
     session: Session,
     current_user: User,
@@ -369,14 +387,15 @@ def mark_physical_received(
     copy = session.get(InventoryCopy, inventory_copy_id)
     if copy is None or copy.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Inventory copy not found")
-    if copy.order_status == "cancelled":
+    skip = _physical_receive_skip_reason(copy)
+    if skip == "cancelled":
         raise HTTPException(status_code=400, detail="Cancelled inventory cannot be marked received")
-    if copy.hold_status == "sold":
+    if skip == "sold":
         raise HTTPException(status_code=400, detail="Sold inventory cannot be marked received")
+    if skip == "invalid_order_status":
+        raise HTTPException(status_code=400, detail="Order line cannot be physically received")
     if copy.order_status == "received":
         return inventory_row_for_copy(session, current_user, inventory_copy_id)
-    if copy.order_status not in {"ordered", "preordered", "shipped"}:
-        raise HTTPException(status_code=400, detail="Order line cannot be physically received")
 
     ts = payload.received_at if payload.received_at is not None else utc_now()
 
@@ -385,6 +404,113 @@ def mark_physical_received(
         current_user,
         inventory_copy_id,
         InventoryUpdate(received_at=ts, order_status="received"),
+    )
+
+
+def bulk_mark_physical_received(
+    session: Session,
+    current_user: User,
+    *,
+    payload: BulkMarkInventoryReceivedRequest,
+) -> BulkMarkInventoryReceivedResponse:
+    owner_id = int(current_user.id)  # type: ignore[arg-type]
+    ts = payload.received_at if payload.received_at is not None else utc_now()
+
+    uniq: list[int] = []
+    seen: set[int] = set()
+    for raw_id in payload.inventory_copy_ids:
+        cid = int(raw_id)
+        if cid not in seen:
+            uniq.append(cid)
+            seen.add(cid)
+
+    copies_by_id: dict[int, InventoryCopy] = {}
+    if uniq:
+        rows = session.exec(
+            select(InventoryCopy).where(
+                InventoryCopy.id.in_(uniq),
+                InventoryCopy.user_id == owner_id,
+            )
+        ).all()
+        copies_by_id = {int(row.id): row for row in rows if row.id is not None}
+
+    results: list[BulkMarkInventoryReceivedItemResult] = []
+    marked_count = 0
+    skipped_count = 0
+    error_count = 0
+    mutated = False
+
+    for cid in uniq:
+        copy = copies_by_id.get(cid)
+        if copy is None:
+            skipped_count += 1
+            results.append(
+                BulkMarkInventoryReceivedItemResult(
+                    inventory_copy_id=cid,
+                    outcome="skipped",
+                    detail="not_found",
+                )
+            )
+            continue
+
+        skip = _physical_receive_skip_reason(copy)
+        if skip in {"cancelled", "sold", "invalid_order_status"}:
+            skipped_count += 1
+            results.append(
+                BulkMarkInventoryReceivedItemResult(
+                    inventory_copy_id=cid,
+                    outcome="skipped",
+                    detail=skip,
+                )
+            )
+            continue
+
+        if copy.order_status == "received":
+            marked_count += 1
+            results.append(
+                BulkMarkInventoryReceivedItemResult(
+                    inventory_copy_id=cid,
+                    outcome="marked",
+                    detail="already_received",
+                    row=inventory_row_for_copy(session, current_user, cid),
+                )
+            )
+            continue
+
+        copy.received_at = ts
+        copy.order_status = "received"
+        session.add(copy)
+        mutated = True
+        marked_count += 1
+        results.append(
+            BulkMarkInventoryReceivedItemResult(
+                inventory_copy_id=cid,
+                outcome="marked",
+                row=None,
+            )
+        )
+
+    if mutated:
+        session.commit()
+
+    hydrated: list[BulkMarkInventoryReceivedItemResult] = []
+    for item in results:
+        if item.outcome == "marked" and item.row is None:
+            hydrated.append(
+                item.model_copy(
+                    update={
+                        "row": inventory_row_for_copy(session, current_user, item.inventory_copy_id),
+                    }
+                )
+            )
+        else:
+            hydrated.append(item)
+
+    return BulkMarkInventoryReceivedResponse(
+        marked_count=marked_count,
+        skipped_count=skipped_count,
+        error_count=error_count,
+        results=hydrated,
     )
 
 

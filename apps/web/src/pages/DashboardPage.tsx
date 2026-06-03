@@ -21,7 +21,12 @@ import {
 } from "../lib/dashboardLoadProfile";
 import { settleDashboardWidgets, type DashboardWidgetKey } from "../lib/dashboardPartialLoad";
 import { parseReleaseYearFilterInput } from "../lib/inventoryQueryParams";
-import { canQuickReceiveInventoryCopy } from "../lib/inventoryReceiving";
+import {
+  canQuickReceiveInventoryCopy,
+  countNewlyMarkedFromBulk,
+  mergeInventoryRowsAfterReceive,
+  summaryAfterReceiveMarked,
+} from "../lib/inventoryReceiving";
 import { formatCurrencyAmount, formatUsdCurrency, normalizeCurrencyCode } from "../lib/currencyFormat";
 import {
   ApiError,
@@ -2822,18 +2827,44 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
     }
   }
 
+  async function refreshReceivingSummaries(): Promise<void> {
+    try {
+      const [inventorySummary, intakeSummary] = await Promise.all([
+        apiClient.getInventorySummary(),
+        apiClient.getPhysicalIntakeSummary(),
+      ]);
+      setSummary(inventorySummary);
+      setPhysicalIntakeSummary(intakeSummary);
+    } catch {
+      // Keep optimistic summary if lightweight refresh fails.
+    }
+  }
+
   async function markInventoryCopyReceived(inventoryCopyId: number): Promise<void> {
     setError(null);
     setSuccessMessage(null);
     setReceivingCopyIds((current) => new Set(current).add(inventoryCopyId));
+    const wasEligible = inventory.some(
+      (row) => row.inventory_copy_id === inventoryCopyId && canQuickReceiveInventoryCopy(row),
+    );
     try {
       const updated = await apiClient.markInventoryPhysicallyReceived(inventoryCopyId, {});
-      setInventory((current) =>
-        current.map((item) =>
-          item.inventory_copy_id === inventoryCopyId ? { ...item, ...updated } : item,
-        ),
-      );
-      await loadDashboardData();
+      setInventory((current) => mergeInventoryRowsAfterReceive(current, [updated]));
+      if (wasEligible) {
+        setSummary((current) => summaryAfterReceiveMarked(current, 1));
+        setPhysicalIntakeSummary((current) =>
+          current
+            ? {
+                ...current,
+                counts: {
+                  ...current.counts,
+                  released_not_received: Math.max(0, current.counts.released_not_received - 1),
+                },
+              }
+            : current,
+        );
+      }
+      void refreshReceivingSummaries();
       setSuccessMessage("Marked copy as received.");
     } catch (saveError) {
       if (saveError instanceof ApiError) {
@@ -2874,31 +2905,49 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       return next;
     });
 
-    let marked = 0;
-    let failed = 0;
     try {
-      for (const id of eligibleIds) {
-        try {
-          const updated = await apiClient.markInventoryPhysicallyReceived(id, {});
-          marked += 1;
-          setInventory((current) =>
-            current.map((item) => (item.inventory_copy_id === id ? { ...item, ...updated } : item)),
-          );
-        } catch {
-          failed += 1;
-        }
+      const response = await apiClient.bulkMarkInventoryPhysicallyReceived({
+        inventory_copy_ids: eligibleIds,
+      });
+      const rows = response.results.map((r) => r.row).filter(Boolean);
+      setInventory((current) => mergeInventoryRowsAfterReceive(current, rows));
+      const newlyMarked = countNewlyMarkedFromBulk(response);
+      if (newlyMarked > 0) {
+        setSummary((current) => summaryAfterReceiveMarked(current, newlyMarked));
+        setPhysicalIntakeSummary((current) =>
+          current
+            ? {
+                ...current,
+                counts: {
+                  ...current.counts,
+                  released_not_received: Math.max(
+                    0,
+                    current.counts.released_not_received - newlyMarked,
+                  ),
+                },
+              }
+            : current,
+        );
       }
-      await loadDashboardData();
+      void refreshReceivingSummaries();
       setSelectedIds([]);
-      const skipped = selectedIds.length - eligibleIds.length;
-      if (failed > 0) {
-        setError(`Marked ${marked} received; ${failed} failed.`);
+      const skipped = selectedIds.length - eligibleIds.length + response.skipped_count;
+      if (response.error_count > 0) {
+        setError(
+          `Marked ${response.marked_count} received; ${response.skipped_count} skipped; ${response.error_count} errors.`,
+        );
       } else {
         setSuccessMessage(
           skipped > 0
-            ? `Marked ${marked} cop${marked === 1 ? "y" : "ies"} received (${skipped} selected skipped).`
-            : `Marked ${marked} cop${marked === 1 ? "y" : "ies"} received.`,
+            ? `Marked ${response.marked_count} cop${response.marked_count === 1 ? "y" : "ies"} received (${skipped} skipped).`
+            : `Marked ${response.marked_count} cop${response.marked_count === 1 ? "y" : "ies"} received.`,
         );
+      }
+    } catch (saveError) {
+      if (saveError instanceof ApiError) {
+        setError(saveError.message);
+      } else {
+        setError("Unable to mark selected copies as received.");
       }
     } finally {
       setIsSaving(false);
@@ -2953,6 +3002,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       setSelectedIds(inventory.map((item) => item.inventory_copy_id));
     }
   }
+
+  const hasEligibleReceivingSelection = useMemo(
+    () =>
+      selectedIds.some((id) => {
+        const item = inventory.find((row) => row.inventory_copy_id === id);
+        return item != null && canQuickReceiveInventoryCopy(item);
+      }),
+    [inventory, selectedIds],
+  );
 
   const marketWorkbenchRailsVisible =
     marketSalesLoading ||
@@ -7455,7 +7513,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
-                  disabled={!selectedIds.length || isSaving}
+                  disabled={!hasEligibleReceivingSelection || isSaving}
                   onClick={() => void applyBulkMarkReceived()}
                   className="rounded-2xl border border-emerald-400 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >

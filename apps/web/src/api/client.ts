@@ -2142,6 +2142,27 @@ export interface MarkInventoryReceivedPayload {
   received_at?: string | null;
 }
 
+export type BulkMarkInventoryReceivedOutcome = "marked" | "skipped" | "error";
+
+export interface BulkMarkInventoryReceivedPayload {
+  inventory_copy_ids: number[];
+  received_at?: string | null;
+}
+
+export interface BulkMarkInventoryReceivedItemResult {
+  inventory_copy_id: number;
+  outcome: BulkMarkInventoryReceivedOutcome;
+  detail?: string | null;
+  row?: InventoryItem | null;
+}
+
+export interface BulkMarkInventoryReceivedResponse {
+  marked_count: number;
+  skipped_count: number;
+  error_count: number;
+  results: BulkMarkInventoryReceivedItemResult[];
+}
+
 export interface CreatePhysicalIntakeScanSessionPayload {
   inventory_copy_ids: number[];
 }
@@ -17714,6 +17735,15 @@ export const apiClient = {
     return request<InventoryItem>(`/inventory/${inventoryCopyId}/mark-received`, {
       method: "POST",
       body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  bulkMarkInventoryPhysicallyReceived(
+    payload: BulkMarkInventoryReceivedPayload,
+  ): Promise<BulkMarkInventoryReceivedResponse> {
+    return request<BulkMarkInventoryReceivedResponse>("/inventory/bulk-mark-received", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   },
 

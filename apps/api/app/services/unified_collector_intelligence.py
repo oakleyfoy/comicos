@@ -28,7 +28,7 @@ from app.services.recommendation_forward_window import (
     _owned_issue_keys,
     compute_forward_catalog_priority,
     foc_deadline_priority,
-    hot_variants_for_issue,
+    hot_variants_by_issue_ids,
     issue_in_forward_recommendation_window,
     iter_forward_release_rows,
 )
@@ -341,6 +341,7 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
     spec_by_issue = _latest_spec_by_issue(session, owner_user_id=owner_user_id)
     issue_ids = [int(issue.id or 0) for issue, _ in forward_rows if issue.id is not None]
     signals_by_issue = _key_signals_by_issue(session, issue_ids=issue_ids)
+    variants_by_issue = hot_variants_by_issue_ids(session, issue_ids=issue_ids)
     owned_stats = build_owned_series_inventory_stats(session, owner_user_id=owner_user_id)
     scoring_ctx = build_recommendation_v2_scoring_context(
         session,
@@ -363,7 +364,7 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
         spec = spec_by_issue.get(issue_id)
         spec_type = spec.recommendation_type if spec is not None else None
         key_signals = signals_by_issue.get(issue_id, [])
-        variants = hot_variants_for_issue(session, issue_id=issue_id)
+        variants = variants_by_issue.get(issue_id, [])
         has_ratio = any((v.ratio_value is not None and v.ratio_value > 0) or v.is_incentive_variant for v in variants)
 
         owns_run = any(
@@ -464,9 +465,21 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
     return drafts
 
 
-def _build_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
+def _build_drafts(
+    session: Session,
+    *,
+    owner_user_id: int,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
+) -> list[_Draft]:
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
+
     store: dict[str, _Draft] = {}
-    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(
+        session,
+        owner_user_id=owner_user_id,
+        pipeline_cache=cache,
+    )
     for draft in (
         _collect_forward_release_catalog_drafts(session, owner_user_id=owner_user_id)
         + _collect_pull_list_drafts(session, owner_user_id=owner_user_id)
@@ -528,30 +541,74 @@ def _matches_idempotency(prior: UnifiedCollectorRecommendation, draft: _Draft) -
     )
 
 
-def generate_unified_collector_recommendations(session: Session, *, owner_user_id: int) -> int:
-    drafts = _build_drafts(session, owner_user_id=owner_user_id)
-    latest = _latest_recommendation_rows(session, owner_user_id=owner_user_id)
+def generate_unified_collector_recommendations(
+    session: Session,
+    *,
+    owner_user_id: int,
+    pipeline_report: dict[str, object] | None = None,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
+) -> int:
+    from app.services.recommendation_pipeline_diagnostics import RecommendationPipelineTracker
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
+
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
+    tracker = RecommendationPipelineTracker(prefix="unified_recommendations", session=session)
+
+    def _build() -> list[_Draft]:
+        drafts = _build_drafts(session, owner_user_id=owner_user_id, index_cache=cache)
+        cache.register_titles(d.title for d in drafts)
+        return drafts
+
+    drafts = tracker.run("build_drafts", _build)
+    latest = tracker.run(
+        "read_latest_rows",
+        lambda: _latest_recommendation_rows(session, owner_user_id=owner_user_id),
+    )
     created = 0
-    for draft in drafts:
-        key = (draft.recommendation_type, draft.title.strip().lower())
-        prior = latest.get(key)
-        sources = sorted(draft.source_systems)
-        if prior is not None and _matches_idempotency(prior, draft):
-            continue
-        row = UnifiedCollectorRecommendation(
-            owner_user_id=owner_user_id,
-            recommendation_type=draft.recommendation_type,
-            priority_score=draft.priority_score,
-            confidence_score=draft.confidence_score,
-            title=draft.title,
-            rationale=draft.rationale,
-            source_systems=sources,
-        )
-        session.add(row)
-        created += 1
-        latest[key] = row
-    if created:
-        session.commit()
+
+    def _persist() -> int:
+        nonlocal created
+        for draft in drafts:
+            key = (draft.recommendation_type, draft.title.strip().lower())
+            prior = latest.get(key)
+            sources = sorted(draft.source_systems)
+            if prior is not None and _matches_idempotency(prior, draft):
+                continue
+            row = UnifiedCollectorRecommendation(
+                owner_user_id=owner_user_id,
+                recommendation_type=draft.recommendation_type,
+                priority_score=draft.priority_score,
+                confidence_score=draft.confidence_score,
+                title=draft.title,
+                rationale=draft.rationale,
+                source_systems=sources,
+            )
+            session.add(row)
+            created += 1
+            latest[key] = row
+        if created:
+            session.commit()
+        return created
+
+    tracker.run("persist_rows", _persist)
+    report = tracker.finish()
+    report_dict = report.to_dict()
+    if pipeline_report is not None:
+        pipeline_report.update(report_dict)
+        pipeline_report.update(cache.diagnostics())
+    import sys
+
+    total_ms = round(sum(tracker.steps_ms.values()), 2)
+    print(
+        f"timing unified_recommendations.total {total_ms:.1f}ms "
+        f"memory_before_mb={report.memory_before_mb} "
+        f"memory_after_mb={report.memory_after_mb} "
+        f"peak_memory_mb={report.peak_memory_mb} "
+        f"queries={report.total_query_count}",
+        file=sys.stderr,
+        flush=True,
+    )
+    session.expire_all()
     return created
 
 

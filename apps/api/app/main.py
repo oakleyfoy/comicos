@@ -133,6 +133,8 @@ from app.schemas.imports import (
 from app.schemas.inventory import (
     BulkInventoryUpdateRequest,
     BulkInventoryUpdateResponse,
+    BulkMarkInventoryReceivedRequest,
+    BulkMarkInventoryReceivedResponse,
     InventoryDetailResponse,
     InventoryFmvSnapshotResponse,
     InventoryListResponse,
@@ -962,6 +964,7 @@ from app.services import liquidity_engine as liquidity_engine_service
 from app.services import sales_ledger as sales_ledger_service
 from app.services.physical_intake import (
     build_physical_intake_summary,
+    bulk_mark_physical_received,
     create_physical_intake_scan_session,
     list_physical_intake,
     mark_physical_received,
@@ -10415,6 +10418,15 @@ def post_inventory_mark_received(
         inventory_copy_id=inventory_copy_id,
         payload=payload,
     )
+
+
+@app.post("/inventory/bulk-mark-received", response_model=BulkMarkInventoryReceivedResponse)
+def post_inventory_bulk_mark_received(
+    payload: BulkMarkInventoryReceivedRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> BulkMarkInventoryReceivedResponse:
+    return bulk_mark_physical_received(session, current_user, payload=payload)
 
 
 # --- Listing registry foundation (P36-01) ------------------------------------

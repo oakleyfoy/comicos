@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { InventoryItem } from "../../api/client";
-import { canQuickReceiveInventoryCopy } from "../inventoryReceiving";
+import {
+  canQuickReceiveInventoryCopy,
+  countNewlyMarkedFromBulk,
+  summaryAfterReceiveMarked,
+} from "../inventoryReceiving";
 
 function item(partial: Partial<InventoryItem>): InventoryItem {
   return {
@@ -54,5 +58,45 @@ describe("canQuickReceiveInventoryCopy", () => {
       canQuickReceiveInventoryCopy(item({ asset_state: "cancelled", order_status: "cancelled" })),
     ).toBe(false);
     expect(canQuickReceiveInventoryCopy(item({ hold_status: "sold" }))).toBe(false);
+  });
+});
+
+describe("summaryAfterReceiveMarked", () => {
+  it("moves counts from ordered to in hand", () => {
+    const next = summaryAfterReceiveMarked(
+      {
+        total_copies: 5,
+        in_hand_copies: 2,
+        ordered_not_received_copies: 3,
+        preordered_copies: 0,
+        cancelled_copies: 0,
+        total_cost_basis: "0",
+        total_current_fmv: "0",
+        total_unrealized_gain_loss: "0",
+        raw_count: 5,
+        graded_count: 0,
+        hold_count: 5,
+        sell_count: 0,
+      },
+      2,
+    );
+    expect(next?.in_hand_copies).toBe(4);
+    expect(next?.ordered_not_received_copies).toBe(1);
+  });
+});
+
+describe("countNewlyMarkedFromBulk", () => {
+  it("ignores idempotent already_received rows", () => {
+    expect(
+      countNewlyMarkedFromBulk({
+        marked_count: 2,
+        skipped_count: 0,
+        error_count: 0,
+        results: [
+          { inventory_copy_id: 1, outcome: "marked", detail: "already_received" },
+          { inventory_copy_id: 2, outcome: "marked" },
+        ],
+      }),
+    ).toBe(1);
   });
 });

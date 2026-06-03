@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
 from app.models import ComicIssue, ComicTitle, InventoryCopy, Publisher, OrderItem, Variant
@@ -110,17 +111,25 @@ def _owned_issue_keys(session: Session, *, owner_user_id: int) -> set[tuple[str,
     return keys
 
 
-def _latest_spec_by_issue(session: Session, *, owner_user_id: int) -> dict[int, SpecRecommendation]:
+def _latest_spec_by_issue(
+    session: Session,
+    *,
+    owner_user_id: int,
+    scan_limit: int = 6000,
+) -> dict[int, SpecRecommendation]:
+    """Newest spec row per release issue (bounded scan — avoids full history load)."""
     rows = session.exec(
         select(SpecRecommendation)
         .join(ReleaseIssue, SpecRecommendation.release_issue_id == ReleaseIssue.id)
         .where(ReleaseIssue.owner_user_id == owner_user_id)
         .order_by(SpecRecommendation.created_at.desc(), SpecRecommendation.id.desc())
+        .limit(max(1, int(scan_limit)))
     ).all()
     latest: dict[int, SpecRecommendation] = {}
     for row in rows:
-        if row.release_issue_id not in latest:
-            latest[row.release_issue_id] = row
+        issue_id = int(row.release_issue_id or 0)
+        if issue_id and issue_id not in latest:
+            latest[issue_id] = row
     return latest
 
 
@@ -136,6 +145,18 @@ def _key_signals_by_issue(session: Session, *, issue_ids: list[int]) -> dict[int
 
 def hot_variants_for_issue(session: Session, *, issue_id: int) -> list[ReleaseVariant]:
     return list(session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all())
+
+
+def hot_variants_by_issue_ids(session: Session, *, issue_ids: list[int]) -> dict[int, list[ReleaseVariant]]:
+    if not issue_ids:
+        return {}
+    rows = session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id.in_(issue_ids))).all()
+    grouped: dict[int, list[ReleaseVariant]] = {}
+    for row in rows:
+        iid = int(row.issue_id or 0)
+        if iid:
+            grouped.setdefault(iid, []).append(row)
+    return grouped
 
 
 def compute_forward_catalog_priority(
@@ -247,10 +268,28 @@ def iter_forward_release_rows(
     today: date | None = None,
 ) -> list[tuple[ReleaseIssue, ReleaseSeries]]:
     ref = today or utc_today()
+    release_hi = ref + timedelta(days=FORWARD_RECOMMENDATION_WINDOW_DAYS)
+    foc_lo = ref - timedelta(days=FOC_ACTIONABLE_OVERDUE_DAYS)
+    foc_hi = ref + timedelta(days=FORWARD_RECOMMENDATION_WINDOW_DAYS)
     rows = session.exec(
         select(ReleaseIssue, ReleaseSeries)
         .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
         .where(ReleaseIssue.owner_user_id == owner_user_id)
+        .where(
+            or_(
+                and_(
+                    ReleaseIssue.release_date.is_not(None),
+                    ReleaseIssue.release_date >= ref,
+                    ReleaseIssue.release_date <= release_hi,
+                ),
+                and_(
+                    ReleaseIssue.foc_date.is_not(None),
+                    ReleaseIssue.foc_date >= foc_lo,
+                    ReleaseIssue.foc_date <= foc_hi,
+                ),
+                ReleaseIssue.release_status == "ANNOUNCED",
+            )
+        )
         .order_by(ReleaseIssue.foc_date.asc().nulls_last(), ReleaseIssue.release_date.asc().nulls_last())
     ).all()
     return [(issue, series) for issue, series in rows if issue_in_forward_recommendation_window(issue, today=ref)]

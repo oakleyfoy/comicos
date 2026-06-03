@@ -75,12 +75,21 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
     from app.services.daily_action_engine import generate_daily_actions
     from app.services.unified_collector_intelligence import generate_unified_collector_recommendations
 
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
+
     stage_seconds: dict[str, float] = {}
+    pipeline_memory: dict[str, object] = {}
+    index_cache = RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
 
     started = _stage_start("unified_recommendations")
     unified_created = timer.run(
         "rebuild.generate_unified_collector_recommendations",
-        lambda: generate_unified_collector_recommendations(session, owner_user_id=owner_user_id),
+        lambda: generate_unified_collector_recommendations(
+            session,
+            owner_user_id=owner_user_id,
+            pipeline_report=pipeline_memory,
+            index_cache=index_cache,
+        ),
     )
     stage_seconds["unified_recommendations"] = _stage_end("unified_recommendations", started)
 
@@ -88,7 +97,11 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
     daily_created = timer.run(
         "rebuild.generate_daily_actions",
         lambda: generate_daily_actions(
-            session, owner_user_id=owner_user_id, refresh_unified=False
+            session,
+            owner_user_id=owner_user_id,
+            refresh_unified=False,
+            pipeline_report=pipeline_memory,
+            index_cache=index_cache,
         ),
     )
     stage_seconds["daily_actions"] = _stage_end("daily_actions", started)
@@ -104,6 +117,8 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
             refresh_upstream=False,
             persist_timings=cross_timings,
             persist_audit=persist_audit,
+            pipeline_report=pipeline_memory,
+            index_cache=index_cache,
         ),
     )
     stage_seconds["cross_system_recommendations"] = _stage_end("cross_system_recommendations", started)
@@ -116,6 +131,7 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
         "stage_elapsed_seconds": stage_seconds,
         "cross_system_build_timings_ms": cross_timings,
         "cross_system_persist_audit": persist_audit,
+        "pipeline_memory": pipeline_memory,
     }
 
 

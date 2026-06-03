@@ -335,6 +335,7 @@ def build_cross_system_candidates(
     owner_user_id: int,
     refresh_upstream: bool = False,
     build_timings: CrossSystemBuildTiming | None = None,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
 ) -> list[_Candidate]:
     """Merge latest Unified + Daily rows into ranked cross-system candidates.
 
@@ -343,24 +344,40 @@ def build_cross_system_candidates(
     """
     from app.services.daily_action_engine import generate_daily_actions
     from app.services.recommendation_forward_window import _key_signals_by_issue
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
     from app.services.unified_collector_intelligence import generate_unified_collector_recommendations
 
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
     timer = build_timings or CrossSystemBuildTiming()
+    timer.attach_session(session)
 
     if refresh_upstream:
         timer.run(
             "refresh_unified",
-            lambda: generate_unified_collector_recommendations(session, owner_user_id=owner_user_id),
+            lambda: generate_unified_collector_recommendations(
+                session,
+                owner_user_id=owner_user_id,
+                index_cache=cache,
+            ),
         )
         timer.run(
             "refresh_daily",
-            lambda: generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False),
+            lambda: generate_daily_actions(
+                session,
+                owner_user_id=owner_user_id,
+                refresh_unified=False,
+                index_cache=cache,
+            ),
         )
 
-    release_index = timer.run(
-        "load_release_index",
-        lambda: build_forward_release_title_index(session, owner_user_id=owner_user_id),
-    )
+    def _load_index():
+        return build_forward_release_title_index(
+            session,
+            owner_user_id=owner_user_id,
+            pipeline_cache=cache,
+        )
+
+    release_index = timer.run("load_release_index", _load_index)
 
     unified = timer.run(
         "read_unified_candidates",
@@ -373,12 +390,28 @@ def build_cross_system_candidates(
         ),
     )
     raw = unified + daily
+    timer.run(
+        "merge_unified_daily_lists",
+        lambda: raw,
+    )
 
     timer.run("enrich_estimated_values", lambda: _enrich_estimated_values(session, owner_user_id=owner_user_id, candidates=raw))
 
     resolved = timer.run("merge_candidates", lambda: _merge_raw_candidates(raw))
 
-    issue_ids = [int(issue.id or 0) for issue, _ in release_index.values() if issue.id is not None]
+    def _issue_ids_for_resolved() -> list[int]:
+        ids: list[int] = []
+        for cand in resolved:
+            title_key = cand.title_key
+            if title_key.endswith(" (variants)"):
+                title_key = title_key[: -len(" (variants)")]
+            pair = release_index.get(title_key)
+            if pair is None or pair[0].id is None:
+                continue
+            ids.append(int(pair[0].id))
+        return list(dict.fromkeys(ids))
+
+    issue_ids = timer.run("resolve_issue_ids", _issue_ids_for_resolved)
     signals_by_issue = timer.run(
         "load_key_signals",
         lambda: _key_signals_by_issue(session, issue_ids=issue_ids),
@@ -408,6 +441,11 @@ def build_cross_system_candidates(
         "rank_candidates",
         lambda: resolved.sort(key=_candidate_sort_key) or resolved,
     )
+    timer.run(
+        "candidate_count",
+        lambda: resolved,
+    )
+    session.expire_all()
     if build_timings is None:
         timer.log_summary()
     return resolved
@@ -632,15 +670,21 @@ def generate_cross_system_recommendations(
     build_timings: CrossSystemBuildTiming | None = None,
     persist_timings: dict[str, float] | None = None,
     persist_audit: dict[str, object] | None = None,
+    pipeline_report: dict[str, object] | None = None,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
 ) -> int:
+    from app.services.recommendation_pipeline_diagnostics import process_rss_mb
+
     timer = build_timings or CrossSystemBuildTiming()
     owned_timer = build_timings is None
+    memory_before_mb = round(process_rss_mb(), 2)
 
     candidates = build_cross_system_candidates(
         session,
         owner_user_id=owner_user_id,
         refresh_upstream=refresh_upstream,
         build_timings=timer,
+        index_cache=index_cache,
     )
 
     new_sig = timer.run("candidate_signature", lambda: _candidate_signature(candidates))
@@ -724,11 +768,32 @@ def generate_cross_system_recommendations(
         return created
 
     timer.run("persist_snapshot", _persist)
+    memory_after_mb = round(process_rss_mb(), 2)
+    build_memory = timer.memory_report() if hasattr(timer, "memory_report") else {}
+    peak_memory_mb = float(build_memory.get("peak_memory_mb", memory_after_mb) or memory_after_mb)
+    memory_payload = {
+        "memory_before_mb": memory_before_mb,
+        "memory_after_mb": memory_after_mb,
+        "peak_memory_mb": peak_memory_mb,
+        "build_stages": build_memory.get("stages"),
+    }
+    if persist_audit is not None:
+        persist_audit.update(memory_payload)
+        if index_cache is not None:
+            persist_audit.update(index_cache.diagnostics())
+    if pipeline_report is not None:
+        pipeline_report["cross_system_recommendations"] = memory_payload
+        if index_cache is not None:
+            pipeline_report.update(index_cache.diagnostics())
     if persist_timings is not None:
         persist_timings.update(timer.steps_ms)
         persist_timings["rows_inserted"] = float(created)
+        persist_timings["memory_before_mb"] = memory_before_mb
+        persist_timings["memory_after_mb"] = memory_after_mb
+        persist_timings["peak_memory_mb"] = peak_memory_mb
     elif owned_timer:
         timer.log_summary()
+    session.expire_all()
     return created
 
 

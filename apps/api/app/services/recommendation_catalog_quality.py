@@ -390,19 +390,20 @@ def build_forward_release_title_index(
     session: Session,
     *,
     owner_user_id: int,
+    pipeline_cache: "RecommendationPipelineIndexCache | None" = None,
 ) -> dict[str, tuple[ReleaseIssue, ReleaseSeries]]:
-    from app.services.unified_collector_intelligence import _display_title
+    """Forward-scoped title index (90-day window + active recommendation titles)."""
+    from app.services.recommendation_title_index import (
+        RecommendationPipelineIndexCache,
+        build_scoped_forward_release_title_index,
+    )
 
-    rows = session.exec(
-        select(ReleaseIssue, ReleaseSeries)
-        .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
-        .where(ReleaseIssue.owner_user_id == owner_user_id)
-    ).all()
-    index: dict[str, tuple[ReleaseIssue, ReleaseSeries]] = {}
-    for issue, series in rows:
-        key = _display_title(series_name=series.series_name, issue_number=issue.issue_number).strip().lower()
-        index[key] = (issue, series)
-    return index
+    if pipeline_cache is not None:
+        return pipeline_cache.get_index(session)
+    return build_scoped_forward_release_title_index(
+        session,
+        owner_user_id=owner_user_id,
+    ).index
 
 
 def _hot_key_override(key_signals: list[str] | None, *, spec_type: str | None = None) -> bool:
@@ -556,7 +557,10 @@ def quality_for_recommendation_title(
         title_key = title_key[: -len(" (variants)")]
     index = release_index
     if index is None and session is not None and owner_user_id is not None:
-        index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+        index = build_forward_release_title_index(
+            session,
+            owner_user_id=owner_user_id,
+        )
     series_name, issue_number = parse_recommendation_display_title(title)
     display_quality = apply_price_discipline(
         classify_catalog_text(

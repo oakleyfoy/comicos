@@ -18,7 +18,7 @@ def test_build_cross_system_skips_upstream_regeneration_by_default() -> None:
     original_budget = engine.get_purchase_budget_row
     original_enrich = engine._enrich_estimated_values
 
-    def _fake_index(_session, *, owner_user_id: int):
+    def _fake_index(_session, *, owner_user_id: int, pipeline_cache=None):
         return {}
 
     import app.services.daily_action_engine as daily_mod

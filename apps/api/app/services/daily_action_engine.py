@@ -114,10 +114,27 @@ def _confidence_from_sources(base: float, sources: list[str]) -> float:
     return _clamp_confidence(min(0.96, base + boost))
 
 
-def _build_drafts(session: Session, *, owner_user_id: int, refresh_unified: bool = True) -> list[_ActionDraft]:
+def _build_drafts(
+    session: Session,
+    *,
+    owner_user_id: int,
+    refresh_unified: bool = True,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
+) -> list[_ActionDraft]:
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
+
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
     if refresh_unified:
-        generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
-    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+        generate_unified_collector_recommendations(
+            session,
+            owner_user_id=owner_user_id,
+            index_cache=cache,
+        )
+    release_index = build_forward_release_title_index(
+        session,
+        owner_user_id=owner_user_id,
+        pipeline_cache=cache,
+    )
     drafts: list[_ActionDraft] = []
     seen_titles: set[tuple[str, str]] = set()
 
@@ -224,31 +241,80 @@ def _matches_idempotency(prior: DailyCollectorAction, draft: _ActionDraft) -> bo
     )
 
 
-def generate_daily_actions(session: Session, *, owner_user_id: int, refresh_unified: bool = True) -> int:
-    drafts = _build_drafts(session, owner_user_id=owner_user_id, refresh_unified=refresh_unified)
-    latest = _latest_action_rows(session, owner_user_id=owner_user_id)
-    created = 0
-    for draft in drafts:
-        key = (draft.action_type, draft.title.strip().lower())
-        prior = latest.get(key)
-        if prior is not None and _matches_idempotency(prior, draft):
-            continue
-        row = DailyCollectorAction(
+def generate_daily_actions(
+    session: Session,
+    *,
+    owner_user_id: int,
+    refresh_unified: bool = True,
+    pipeline_report: dict[str, object] | None = None,
+    index_cache: "RecommendationPipelineIndexCache | None" = None,
+) -> int:
+    from app.services.recommendation_pipeline_diagnostics import RecommendationPipelineTracker
+    from app.services.recommendation_title_index import RecommendationPipelineIndexCache
+
+    cache = index_cache or RecommendationPipelineIndexCache(owner_user_id=owner_user_id)
+    tracker = RecommendationPipelineTracker(prefix="daily_actions", session=session)
+
+    def _build() -> list[_ActionDraft]:
+        drafts = _build_drafts(
+            session,
             owner_user_id=owner_user_id,
-            action_type=draft.action_type,
-            priority_score=draft.priority_score,
-            confidence_score=draft.confidence_score,
-            due_date=draft.due_date,
-            title=draft.title,
-            rationale=draft.rationale,
-            source_recommendation_id=draft.source_recommendation_id,
-            source_systems=draft.source_systems,
+            refresh_unified=refresh_unified,
+            index_cache=cache,
         )
-        session.add(row)
-        created += 1
-        latest[key] = row
-    if created:
-        session.commit()
+        cache.register_titles(d.title for d in drafts)
+        return drafts
+
+    drafts = tracker.run("build_drafts", _build)
+    latest = tracker.run(
+        "read_latest_rows",
+        lambda: _latest_action_rows(session, owner_user_id=owner_user_id),
+    )
+    created = 0
+
+    def _persist() -> int:
+        nonlocal created
+        for draft in drafts:
+            key = (draft.action_type, draft.title.strip().lower())
+            prior = latest.get(key)
+            if prior is not None and _matches_idempotency(prior, draft):
+                continue
+            row = DailyCollectorAction(
+                owner_user_id=owner_user_id,
+                action_type=draft.action_type,
+                priority_score=draft.priority_score,
+                confidence_score=draft.confidence_score,
+                due_date=draft.due_date,
+                title=draft.title,
+                rationale=draft.rationale,
+                source_recommendation_id=draft.source_recommendation_id,
+                source_systems=draft.source_systems,
+            )
+            session.add(row)
+            created += 1
+            latest[key] = row
+        if created:
+            session.commit()
+        return created
+
+    tracker.run("persist_rows", _persist)
+    report = tracker.finish()
+    if pipeline_report is not None:
+        pipeline_report.update(report.to_dict())
+        pipeline_report.update(cache.diagnostics())
+    import sys
+
+    total_ms = round(sum(tracker.steps_ms.values()), 2)
+    print(
+        f"timing daily_actions.total {total_ms:.1f}ms "
+        f"memory_before_mb={report.memory_before_mb} "
+        f"memory_after_mb={report.memory_after_mb} "
+        f"peak_memory_mb={report.peak_memory_mb} "
+        f"queries={report.total_query_count}",
+        file=sys.stderr,
+        flush=True,
+    )
+    session.expire_all()
     return created
 
 
