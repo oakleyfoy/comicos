@@ -53,9 +53,15 @@ def normalize_parsed_order_response(
     parsed: ParseOrderResponse,
     *,
     session: Session | None = None,
+    owner_user_id: int | None = None,
     raw_text: str,
 ) -> ParseOrderResponse:
-    return enrich_parse_order_metadata(parsed, session=session, raw_text=raw_text)
+    return enrich_parse_order_metadata(
+        parsed,
+        session=session,
+        owner_user_id=owner_user_id,
+        raw_text=raw_text,
+    )
 
 
 def sync_canonical_creators_for_payload(
@@ -118,6 +124,7 @@ def serialize_import(
     normalized_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
         session=session,
+        owner_user_id=draft_import.user_id,
         raw_text=draft_import.raw_text,
     )
     metadata_review_item_count = sum(
@@ -322,7 +329,12 @@ def persist_draft_import(
     parsed: ParseOrderResponse,
 ) -> DraftImportRead:
     timestamp = utc_now()
-    normalized_parsed = normalize_parsed_order_response(parsed, session=session, raw_text=raw_text)
+    normalized_parsed = normalize_parsed_order_response(
+        parsed,
+        session=session,
+        owner_user_id=current_user.id,
+        raw_text=raw_text,
+    )
     sync_canonical_creators_for_payload(
         session,
         normalized_parsed,
@@ -402,6 +414,7 @@ def update_import_for_user(
         validated_payload = normalize_parsed_order_response(
             ParseOrderResponse.model_validate(payload.parsed_payload_json),
             session=session,
+            owner_user_id=current_user.id,
             raw_text=draft_import.raw_text,
         )
         draft_import.parsed_payload_json = validated_payload.model_dump(mode="json")
@@ -416,6 +429,7 @@ def update_import_for_user(
     normalized_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
         session=session,
+        owner_user_id=current_user.id,
         raw_text=draft_import.raw_text,
     )
     sync_canonical_creators_for_payload(
@@ -454,6 +468,7 @@ def build_order_create_from_import(session: Session, draft_import: DraftImport) 
     parsed_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
         session=session,
+        owner_user_id=draft_import.user_id,
         raw_text=draft_import.raw_text,
     )
     draft_import.parsed_payload_json = parsed_payload.model_dump(mode="json")

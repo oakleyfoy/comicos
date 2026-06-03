@@ -28,3 +28,22 @@ def test_recommendation_v2_engine_append_only(client: TestClient, session: Sessi
     assert run1.recommendations_created >= 1
     assert count2 > count1
     assert v1_after == v1_before
+
+
+def test_recommendation_v2_logs_progress_after_load(client: TestClient, session: Session) -> None:
+    email = "rec-v2-progress@example.com"
+    register_and_login(client, email)
+    owner_id = int(session.exec(select(User).where(User.email == email)).one().id or 0)
+    seed_release_platform_horizons(session, owner_user_id=owner_id)
+    messages: list[str] = []
+    generate_recommendations_v2(
+        session,
+        owner_user_id=owner_id,
+        progress_callback=messages.append,
+    )
+    joined = "\n".join(messages)
+    assert "load_release_issues rows=" in joined
+    assert "filter_forward_window done" in joined
+    assert "preload_scoring_context done" in joined
+    assert "score_loop start" in joined
+    assert any("score_progress issues=" in line for line in messages)

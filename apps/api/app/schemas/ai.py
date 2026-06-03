@@ -77,6 +77,16 @@ class AiDraftOrderItem(BaseModel):
     metadata_identity_components: MetadataIdentityComponents | None = None
     metadata_review_required: bool = False
     metadata_review_notes: list[str] = Field(default_factory=list)
+    metadata_autofill_source: (
+        Literal[
+            "metadata_catalog",
+            "metadata_registry",
+            "metadata_prior_issue",
+            "metadata_ai",
+        ]
+        | None
+    ) = None
+    publisher_autofill_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     quantity: int | None = Field(default=None, ge=1)
     raw_item_price: Decimal | None = Field(default=None, ge=0)
 

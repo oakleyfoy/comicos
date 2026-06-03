@@ -18,6 +18,8 @@ from datetime import date, timedelta
 
 from sqlmodel import Session, select
 
+from app.services.recommendation_v2_scoring_context import RecommendationV2ScoringContext
+
 from app.models.collector_market_intelligence import MarketDemandProfile
 from app.models.key_issue_intelligence import KeyIssueClassification, KeyIssueProfile
 from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, ReleaseSeries, ReleaseVariant
@@ -139,17 +141,39 @@ def _is_collector_edition_number_one(*parts: str) -> bool:
     return any(marker in blob for marker in markers)
 
 
-def _has_investment_franchise_signal(session: Session, *, issue: ReleaseIssue, series: ReleaseSeries) -> bool:
-    match = match_release_issue(session, issue=issue, series=series)
+def _has_investment_franchise_signal(
+    session: Session,
+    *,
+    issue: ReleaseIssue,
+    series: ReleaseSeries,
+    ctx: RecommendationV2ScoringContext | None = None,
+) -> bool:
+    if ctx is not None:
+        match = ctx.match_release(session, issue=issue, series=series)
+    else:
+        match = match_release_issue(session, issue=issue, series=series)
     for entity in match.matched_entities:
-        if entity.entity_type == "FRANCHISE" and franchise_score(session, franchise_id=entity.entity_id) >= 65.0:
-            return True
-        if entity.entity_type == "CHARACTER" and character_score(session, character_id=entity.entity_id) >= 65.0:
-            return True
+        if entity.entity_type == "FRANCHISE":
+            score = (
+                ctx.popularity_score(session, entity_type="FRANCHISE", entity_id=entity.entity_id)
+                if ctx is not None
+                else franchise_score(session, franchise_id=entity.entity_id)
+            )
+            if score >= 65.0:
+                return True
+        if entity.entity_type == "CHARACTER":
+            score = (
+                ctx.popularity_score(session, entity_type="CHARACTER", entity_id=entity.entity_id)
+                if ctx is not None
+                else character_score(session, character_id=entity.entity_id)
+            )
+            if score >= 65.0:
+                return True
     series_blob = _text_blob(series.series_name, series.publisher)
     if any(token in series_blob for token in INVESTMENT_FRANCHISE_TOKENS):
         return True
-    for profile in session.exec(select(MarketDemandProfile)).all():
+    profiles = ctx.market_demand_profiles if ctx is not None else session.exec(select(MarketDemandProfile)).all()
+    for profile in profiles:
         name = profile.entity_name.lower()
         if float(profile.demand_score) >= 72.0 and name in series_blob:
             return True
@@ -161,8 +185,17 @@ def _creator_owned_image_launch(series: ReleaseSeries, issue: ReleaseIssue) -> b
     return "image" in pub and _is_number_one(issue)
 
 
-def _affordable_ratio_variant(session: Session, *, issue_id: int) -> bool:
-    variants = session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all()
+def _affordable_ratio_variant(
+    session: Session,
+    *,
+    issue_id: int,
+    ctx: RecommendationV2ScoringContext | None = None,
+) -> bool:
+    variants = (
+        ctx.variants_for(issue_id)
+        if ctx is not None
+        else session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all()
+    )
     for variant in variants:
         if variant.ratio_value and variant.ratio_value <= 25:
             return True
@@ -171,11 +204,25 @@ def _affordable_ratio_variant(session: Session, *, issue_id: int) -> bool:
     return False
 
 
-def _key_issue_rows(session: Session, *, issue_id: int) -> list[KeyIssueProfile]:
+def _key_issue_rows(
+    session: Session,
+    *,
+    issue_id: int,
+    ctx: RecommendationV2ScoringContext | None = None,
+) -> list[KeyIssueProfile]:
+    if ctx is not None:
+        return list(ctx.key_profiles_for(issue_id))
     return list(session.exec(select(KeyIssueProfile).where(KeyIssueProfile.release_issue_id == issue_id)).all())
 
 
-def _classification(session: Session, *, issue_id: int) -> str | None:
+def _classification(
+    session: Session,
+    *,
+    issue_id: int,
+    ctx: RecommendationV2ScoringContext | None = None,
+) -> str | None:
+    if ctx is not None:
+        return ctx.classification_for(issue_id)
     row = session.exec(
         select(KeyIssueClassification).where(KeyIssueClassification.release_issue_id == issue_id)
     ).first()
@@ -188,6 +235,7 @@ def is_investment_number_one(
     owner_user_id: int,
     issue: ReleaseIssue,
     series: ReleaseSeries,
+    ctx: RecommendationV2ScoringContext | None = None,
 ) -> tuple[bool, list[str]]:
     if not _is_number_one(issue):
         return False, []
@@ -195,28 +243,36 @@ def is_investment_number_one(
     if "facsimile" in blob or "reprint" in blob:
         return False, []
     if _is_collector_edition_number_one(series.series_name, issue.title, issue.issue_number):
-        fit = score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+        fit = (
+            ctx.market_user_fit(session, issue=issue, series=series)
+            if ctx is not None
+            else score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+        )
         if fit["user_preference_score"] < 72.0 and fit["market_demand_score"] < 78.0:
-            profiles = _key_issue_rows(session, issue_id=int(issue.id or 0))
+            profiles = _key_issue_rows(session, issue_id=int(issue.id or 0), ctx=ctx)
             if not any(p.key_issue_type in {"UNIVERSE_LAUNCH", "RELAUNCH", "FIRST_APPEARANCE", "ORIGIN"} for p in profiles):
                 return False, ["collector edition #1 — needs stronger key/market/user support"]
     reasons: list[str] = []
-    if _has_investment_franchise_signal(session, issue=issue, series=series):
+    if _has_investment_franchise_signal(session, issue=issue, series=series, ctx=ctx):
         reasons.append("major franchise or character demand")
     if _creator_owned_image_launch(series, issue):
         reasons.append("creator-owned Image launch")
-    profiles = _key_issue_rows(session, issue_id=int(issue.id or 0))
+    profiles = _key_issue_rows(session, issue_id=int(issue.id or 0), ctx=ctx)
     for profile in profiles:
         if profile.key_issue_type in {"UNIVERSE_LAUNCH", "RELAUNCH", "FIRST_APPEARANCE", "ORIGIN"}:
             reasons.append(f"key issue signal {profile.key_issue_type}")
-    fit = score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    fit = (
+        ctx.market_user_fit(session, issue=issue, series=series)
+        if ctx is not None
+        else score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    )
     if fit["market_demand_score"] >= 75.0:
         reasons.append("strong market demand")
     if fit["user_preference_score"] >= 65.0:
         reasons.append("matches user preferences")
-    if _affordable_ratio_variant(session, issue_id=int(issue.id or 0)):
+    if _affordable_ratio_variant(session, issue_id=int(issue.id or 0), ctx=ctx):
         reasons.append("affordable ratio variant")
-    classification = _classification(session, issue_id=int(issue.id or 0))
+    classification = _classification(session, issue_id=int(issue.id or 0), ctx=ctx)
     if classification in {"UNIVERSE_LAUNCH", "RELAUNCH"}:
         reasons.append(f"classification {classification}")
     if len(reasons) >= 2:
@@ -247,6 +303,7 @@ def compute_run_start_value_score(
     owner_user_id: int,
     issue: ReleaseIssue,
     series: ReleaseSeries,
+    ctx: RecommendationV2ScoringContext | None = None,
 ) -> tuple[float, str]:
     if not _is_number_one(issue):
         return 0.0, "Not a #1 issue"
@@ -258,13 +315,17 @@ def compute_run_start_value_score(
     if "facsimile" in blob or "reprint" in blob:
         return min(base, 28.0), "Facsimile/reprint #1 — limited run-start value"
     support = 0.0
-    if _has_investment_franchise_signal(session, issue=issue, series=series):
+    if _has_investment_franchise_signal(session, issue=issue, series=series, ctx=ctx):
         support += 22.0
-    fit = score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    fit = (
+        ctx.market_user_fit(session, issue=issue, series=series)
+        if ctx is not None
+        else score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    )
     support += min(fit["user_preference_score"] * 0.25, 18.0)
     support += min(fit["market_demand_score"] * 0.2, 16.0)
     score = round(min(72.0, base + support), 2)
-    if _has_investment_franchise_signal(session, issue=issue, series=series) and fit["user_preference_score"] >= 70.0:
+    if _has_investment_franchise_signal(session, issue=issue, series=series, ctx=ctx) and fit["user_preference_score"] >= 70.0:
         score = round(min(78.0, base + support), 2)
     if _is_collector_edition_number_one(series.series_name, issue.title, issue.issue_number):
         score = round(min(score, 38.0), 2)
@@ -323,23 +384,42 @@ def score_issue_components_v2(
     issue: ReleaseIssue,
     series: ReleaseSeries,
     variant: ReleaseVariant | None = None,
+    ctx: RecommendationV2ScoringContext | None = None,
 ) -> IssueComponentBundle:
     issue_id = int(issue.id or 0)
     is_new_one = _is_number_one(issue)
-    match = match_release_issue(session, issue=issue, series=series, variant=variant)
+    if ctx is not None:
+        match = ctx.match_release(session, issue=issue, series=series, variant=variant)
+    else:
+        match = match_release_issue(session, issue=issue, series=series, variant=variant)
     char_score = 0.0
     fr_score = 0.0
     cr_score = 0.0
     for entity in match.matched_entities:
         conf = entity.match_confidence
         if entity.entity_type == "CHARACTER":
-            char_score = max(char_score, character_score(session, character_id=entity.entity_id) * conf)
+            raw = (
+                ctx.popularity_score(session, entity_type="CHARACTER", entity_id=entity.entity_id)
+                if ctx is not None
+                else character_score(session, character_id=entity.entity_id)
+            )
+            char_score = max(char_score, raw * conf)
         elif entity.entity_type == "FRANCHISE":
-            fr_score = max(fr_score, franchise_score(session, franchise_id=entity.entity_id) * conf)
+            raw = (
+                ctx.popularity_score(session, entity_type="FRANCHISE", entity_id=entity.entity_id)
+                if ctx is not None
+                else franchise_score(session, franchise_id=entity.entity_id)
+            )
+            fr_score = max(fr_score, raw * conf)
         elif entity.entity_type == "CREATOR":
-            cr_score = max(cr_score, creator_score(session, creator_id=entity.entity_id) * conf)
+            raw = (
+                ctx.popularity_score(session, entity_type="CREATOR", entity_id=entity.entity_id)
+                if ctx is not None
+                else creator_score(session, creator_id=entity.entity_id)
+            )
+            cr_score = max(cr_score, raw * conf)
 
-    key_profiles = _key_issue_rows(session, issue_id=issue_id)
+    key_profiles = _key_issue_rows(session, issue_id=issue_id, ctx=ctx)
     key_types = {p.key_issue_type for p in key_profiles}
     key_overall = 0.0
     first_app = 0.0
@@ -355,21 +435,30 @@ def score_issue_components_v2(
         if profile.key_issue_type == "ANNIVERSARY":
             anniversary = max(anniversary, breakdown.overall_key_issue_score)
 
-    fit = score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    fit = (
+        ctx.market_user_fit(session, issue=issue, series=series)
+        if ctx is not None
+        else score_release_market_user_fit(session, owner_user_id=owner_user_id, issue=issue, series=series)
+    )
     market_score = float(fit["market_demand_score"])
     user_score = float(fit["user_preference_score"])
-    collector = collector_demand_components(
-        session, entity_type="FRANCHISE", entity_name=series.series_name
+    collector = (
+        ctx.collector_demand(session, entity_name=series.series_name)
+        if ctx is not None
+        else collector_demand_components(session, entity_type="FRANCHISE", entity_name=series.series_name)
     )
     market_score = round((market_score + collector["long_term_score"]) / 2.0, 2)
     series_blob = _text_blob(series.series_name, series.publisher)
-    for profile in session.exec(select(MarketDemandProfile)).all():
+    demand_profiles = ctx.market_demand_profiles if ctx is not None else session.exec(select(MarketDemandProfile)).all()
+    for profile in demand_profiles:
         if profile.entity_name.lower() in series_blob:
             market_score = max(market_score, float(profile.demand_score))
     if fr_score < 55.0 and market_score >= 75.0:
         fr_score = round(market_score * 0.88, 2)
 
-    variants = session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all()
+    variants = ctx.variants_for(issue_id) if ctx is not None else session.exec(
+        select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)
+    ).all()
     variant_scarcity = 0.0
     has_ratio = False
     for v in variants:
@@ -385,12 +474,14 @@ def score_issue_components_v2(
     new_one_score = 0.0
     if is_new_one:
         new_one_score = 36.0
-        signals = session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == issue_id)).all()
+        signals = ctx.signals_for(issue_id) if ctx is not None else session.exec(
+            select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == issue_id)
+        ).all()
         if any(s.signal_type == "NEW_NUMBER_ONE" for s in signals):
             new_one_score = 40.0
 
     investment_flag, investment_reasons = is_investment_number_one(
-        session, owner_user_id=owner_user_id, issue=issue, series=series
+        session, owner_user_id=owner_user_id, issue=issue, series=series, ctx=ctx
     )
     investment_score = 0.0
     if is_new_one and investment_flag:
@@ -399,7 +490,7 @@ def score_issue_components_v2(
         investment_score = 18.0
 
     run_start, run_explain = compute_run_start_value_score(
-        session, owner_user_id=owner_user_id, issue=issue, series=series
+        session, owner_user_id=owner_user_id, issue=issue, series=series, ctx=ctx
     )
 
     horizon_score = 50.0
@@ -415,18 +506,29 @@ def score_issue_components_v2(
             horizon_score = 35.0
 
     continuity_score = 0.0
-    runs = session.exec(select(CollectionRun).where(CollectionRun.owner_user_id == owner_user_id)).all()
-    for run in runs:
-        if run.series_name.lower() == series.series_name.lower():
+    series_lower = series.series_name.lower()
+    if ctx is not None:
+        if series_lower in ctx.collection_run_series:
             continuity_score = 75.0
-            break
-    watchlists = session.exec(select(ReleaseWatchlist).where(ReleaseWatchlist.owner_user_id == owner_user_id)).all()
-    wids = [int(w.id or 0) for w in watchlists]
-    if wids:
-        items = session.exec(select(ReleaseWatchlistItem).where(ReleaseWatchlistItem.watchlist_id.in_(wids))).all()
-        for item in items:
-            if item.series_name and item.series_name.lower() == series.series_name.lower():
-                continuity_score = max(continuity_score, 68.0)
+        if series_lower in ctx.watchlist_series:
+            continuity_score = max(continuity_score, 68.0)
+    else:
+        runs = session.exec(select(CollectionRun).where(CollectionRun.owner_user_id == owner_user_id)).all()
+        for run in runs:
+            if run.series_name.lower() == series_lower:
+                continuity_score = 75.0
+                break
+        watchlists = session.exec(
+            select(ReleaseWatchlist).where(ReleaseWatchlist.owner_user_id == owner_user_id)
+        ).all()
+        wids = [int(w.id or 0) for w in watchlists]
+        if wids:
+            items = session.exec(
+                select(ReleaseWatchlistItem).where(ReleaseWatchlistItem.watchlist_id.in_(wids))
+            ).all()
+            for item in items:
+                if item.series_name and item.series_name.lower() == series_lower:
+                    continuity_score = max(continuity_score, 68.0)
 
     risk_score = 0.0
     if is_new_one and not investment_flag and fr_score < 50 and key_overall < 45:

@@ -1,11 +1,83 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.models import DraftImport, InventoryCopy, Order, User
+from app.db.session import get_engine
+from app.models import DraftImport, InventoryCopy, Order, ReleaseIssue, ReleaseSeries, User
 from app.schemas.ai import ParseOrderResponse
+
+VALID_PUBLISHER_AUTOFILL_SOURCES = frozenset(
+    {
+        "metadata_catalog",
+        "metadata_registry",
+        "metadata_prior_issue",
+        "metadata_ai",
+    }
+)
+PUBLISHER_AUTOFILL_CONFIDENCE_MIN = 0.84
+
+
+def assert_publisher_autofill_applied(item: dict, *, expected_publisher: str) -> None:
+    assert item["publisher"] == expected_publisher
+    assert item["metadata_autofill_source"] in VALID_PUBLISHER_AUTOFILL_SOURCES
+    assert item["publisher_autofill_confidence"] is not None
+    assert item["publisher_autofill_confidence"] >= PUBLISHER_AUTOFILL_CONFIDENCE_MIN
+    assert item["metadata_review_required"] is False
+    review_notes = item.get("metadata_review_notes") or []
+    assert not any("Publisher missing" in note for note in review_notes)
+
+
+def assert_publisher_autofill_unresolved(item: dict) -> None:
+    assert item.get("publisher") is None
+    assert item.get("metadata_autofill_source") is None
+    assert item.get("publisher_autofill_confidence") is None
+    assert item["metadata_review_required"] is True
+    review_notes = item.get("metadata_review_notes") or []
+    assert any("Publisher missing" in note for note in review_notes)
+
+
+def assert_explicit_publisher_not_autofilled(item: dict, *, expected_publisher: str) -> None:
+    assert item["publisher"] == expected_publisher
+    assert item.get("metadata_autofill_source") is None
+    assert item.get("publisher_autofill_confidence") is None
+
+
+def _owner_user_id(session: Session, email: str) -> int:
+    return int(session.exec(select(User).where(User.email == email)).one().id or 0)
+
+
+def _seed_release_catalog_issue(
+    session: Session,
+    *,
+    owner_user_id: int,
+    series_name: str,
+    publisher: str,
+    issue_number: str = "1",
+) -> None:
+    series = ReleaseSeries(
+        owner_user_id=owner_user_id,
+        publisher=publisher,
+        series_name=series_name,
+        series_type="ONGOING",
+        status="ACTIVE",
+    )
+    session.add(series)
+    session.commit()
+    session.refresh(series)
+    session.add(
+        ReleaseIssue(
+            owner_user_id=owner_user_id,
+            release_uuid=f"import-test-{series_name.lower().replace(' ', '-')}-{issue_number}",
+            series_id=int(series.id or 0),
+            issue_number=issue_number,
+            title=f"{series_name} #{issue_number}",
+            release_status="SCHEDULED",
+            release_date=date.today() + timedelta(days=14),
+        )
+    )
+    session.commit()
 
 
 def register_and_login(client: TestClient, email: str = "imports@example.com") -> str:
@@ -396,7 +468,9 @@ def test_patch_import_auto_fills_obvious_publishers_server_side(
 
     assert patch_response.status_code == 200
     payload = patch_response.json()["parsed_payload_json"]
-    assert payload["items"][0]["publisher"] == "DC"
+    item = payload["items"][0]
+    assert_publisher_autofill_applied(item, expected_publisher="DC")
+    assert item["metadata_autofill_source"] == "metadata_ai"
 
 
 def test_confirm_import_uses_deterministic_publisher_normalization(
@@ -434,7 +508,9 @@ def test_confirm_import_uses_deterministic_publisher_normalization(
         headers=auth_headers(token),
     )
     assert create_response.status_code == 201
-    assert create_response.json()["parsed_payload_json"]["items"][0]["publisher"] == "Image"
+    created_item = create_response.json()["parsed_payload_json"]["items"][0]
+    assert_publisher_autofill_applied(created_item, expected_publisher="Image")
+    assert created_item["metadata_autofill_source"] == "metadata_ai"
 
     import_id = create_response.json()["id"]
     confirm_response = client.post(f"/imports/{import_id}/confirm", headers=auth_headers(token))
@@ -479,13 +555,62 @@ def test_confirm_import_still_rejects_items_with_unresolved_publishers(
         headers=auth_headers(token),
     )
     assert create_response.status_code == 201
-    assert create_response.json()["parsed_payload_json"]["items"][0]["publisher"] is None
+    unresolved_item = create_response.json()["parsed_payload_json"]["items"][0]
+    assert_publisher_autofill_unresolved(unresolved_item)
 
     import_id = create_response.json()["id"]
     confirm_response = client.post(f"/imports/{import_id}/confirm", headers=auth_headers(token))
 
     assert confirm_response.status_code == 422
     assert "items[1]: publisher" in confirm_response.json()["detail"]
+
+
+def test_manual_import_blank_publisher_odin_resolves_from_release_catalog(
+    client: TestClient,
+) -> None:
+    email = "odin-catalog-autofill@example.com"
+    token = register_and_login(client, email=email)
+    with Session(get_engine()) as session:
+        _seed_release_catalog_issue(
+            session,
+            owner_user_id=_owner_user_id(session, email),
+            series_name="Odin",
+            publisher="Image Comics",
+            issue_number="1",
+        )
+
+    create_response = client.post(
+        "/imports/manual",
+        json={
+            "raw_text": "Odin #1",
+            "retailer": "Midtown",
+            "order_date": "2026-05-21",
+            "source_type": "manual_draft",
+            "shipping_amount": "0.00",
+            "tax_amount": "0.00",
+            "items": [
+                {
+                    "publisher": None,
+                    "title": "Odin",
+                    "issue_number": "1",
+                    "cover_name": None,
+                    "printing": None,
+                    "ratio": None,
+                    "variant_type": None,
+                    "cover_artist": None,
+                    "quantity": 1,
+                    "raw_item_price": "4.99",
+                }
+            ],
+            "warnings": [],
+            "confidence_score": 1.0,
+        },
+        headers=auth_headers(token),
+    )
+    assert create_response.status_code == 201
+    item = create_response.json()["parsed_payload_json"]["items"][0]
+    assert_publisher_autofill_applied(item, expected_publisher="Image Comics")
+    assert item["metadata_autofill_source"] == "metadata_catalog"
 
 
 def test_get_imports_can_filter_for_metadata_review_items(client: TestClient) -> None:
@@ -521,6 +646,10 @@ def test_get_imports_can_filter_for_metadata_review_items(client: TestClient) ->
     )
     assert flagged_response.status_code == 201
     flagged_id = flagged_response.json()["id"]
+    assert_explicit_publisher_not_autofilled(
+        flagged_response.json()["parsed_payload_json"]["items"][0],
+        expected_publisher="Indie House",
+    )
 
     clean_response = client.post(
         "/imports/manual",
@@ -613,6 +742,7 @@ def test_import_response_payload_includes_metadata_review_fields(client: TestCli
     assert item["raw_variant_text"] == "foil edition / cover a"
     assert item["canonical_variant_text"] == "Foil Edition / Cover A"
     assert item["metadata_review_required"] is True
+    assert_explicit_publisher_not_autofilled(item, expected_publisher="Indie House")
     assert item["metadata_review_notes"] == [
         "Publisher preserved from raw parse. Review canonical publisher if needed."
     ]

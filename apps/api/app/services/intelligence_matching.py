@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlmodel import Session, select
@@ -38,6 +39,58 @@ class ReleaseMatchResult:
     combined_popularity_score: float = 0.0
 
 
+@dataclass(frozen=True)
+class IntelligenceMatchCatalog:
+    franchises: tuple[FranchiseProfile, ...]
+    characters: tuple[tuple[CharacterProfile, tuple[str, ...]], ...]
+    creators: tuple[tuple[CreatorProfile, tuple[str, ...]], ...]
+
+
+def build_intelligence_match_catalog(session: Session) -> IntelligenceMatchCatalog:
+    franchises = tuple(
+        session.exec(select(FranchiseProfile).where(FranchiseProfile.status == "ACTIVE")).all()
+    )
+    characters = tuple(
+        session.exec(select(CharacterProfile).where(CharacterProfile.status == "ACTIVE")).all()
+    )
+    char_ids = [int(c.id or 0) for c in characters if c.id is not None]
+    char_alias_map: dict[int, list[str]] = {cid: [] for cid in char_ids}
+    if char_ids:
+        for alias in session.exec(
+            select(CharacterAlias).where(CharacterAlias.character_id.in_(char_ids))
+        ).all():
+            char_alias_map.setdefault(int(alias.character_id), []).append(alias.alias_name)
+
+    character_rows: list[tuple[CharacterProfile, tuple[str, ...]]] = []
+    for character in characters:
+        cid = int(character.id or 0)
+        names = (character.character_name, *tuple(char_alias_map.get(cid, [])))
+        character_rows.append((character, names))
+
+    creators = tuple(
+        session.exec(select(CreatorProfile).where(CreatorProfile.status == "ACTIVE")).all()
+    )
+    creator_ids = [int(c.id or 0) for c in creators if c.id is not None]
+    creator_alias_map: dict[int, list[str]] = {cid: [] for cid in creator_ids}
+    if creator_ids:
+        for alias in session.exec(
+            select(CreatorAlias).where(CreatorAlias.creator_id.in_(creator_ids))
+        ).all():
+            creator_alias_map.setdefault(int(alias.creator_id), []).append(alias.alias_name)
+
+    creator_rows: list[tuple[CreatorProfile, tuple[str, ...]]] = []
+    for creator in creators:
+        cid = int(creator.id or 0)
+        names = (creator.creator_name, *tuple(creator_alias_map.get(cid, [])))
+        creator_rows.append((creator, names))
+
+    return IntelligenceMatchCatalog(
+        franchises=franchises,
+        characters=tuple(character_rows),
+        creators=tuple(creator_rows),
+    )
+
+
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
 
@@ -51,6 +104,33 @@ def _contains_token(haystack: str, needle: str) -> bool:
         return normalized_needle in normalized_haystack
     pattern = rf"\b{re.escape(normalized_needle)}\b"
     return re.search(pattern, normalized_haystack) is not None
+
+
+def _match_franchises_from_catalog(
+    catalog: IntelligenceMatchCatalog,
+    *,
+    series_name: str,
+    title: str,
+) -> list[MatchedEntityRead]:
+    matches: list[MatchedEntityRead] = []
+    for franchise in catalog.franchises:
+        name = franchise.franchise_name
+        confidence = 0.0
+        if _normalize(series_name) == _normalize(name):
+            confidence = 0.95
+        elif _contains_token(series_name, name) or _contains_token(title, name):
+            confidence = 0.82
+        if confidence > 0:
+            matches.append(
+                MatchedEntityRead(
+                    entity_type=ENTITY_FRANCHISE,
+                    entity_id=int(franchise.id or 0),
+                    entity_name=name,
+                    match_confidence=confidence,
+                )
+            )
+    matches.sort(key=lambda row: row.match_confidence, reverse=True)
+    return matches[:3]
 
 
 def _match_franchises(session: Session, *, series_name: str, title: str) -> list[MatchedEntityRead]:
@@ -73,6 +153,35 @@ def _match_franchises(session: Session, *, series_name: str, title: str) -> list
             )
     matches.sort(key=lambda row: row.match_confidence, reverse=True)
     return matches[:3]
+
+
+def _match_characters_from_catalog(
+    catalog: IntelligenceMatchCatalog,
+    *,
+    publisher: str,
+    series_name: str,
+    title: str,
+) -> list[MatchedEntityRead]:
+    haystack = f"{series_name} {title}"
+    matches: list[MatchedEntityRead] = []
+    for character, names in catalog.characters:
+        confidence = 0.0
+        for name in names:
+            if _contains_token(haystack, name):
+                confidence = max(confidence, 0.9 if _normalize(name) == _normalize(series_name) else 0.78)
+        if confidence > 0:
+            if publisher and character.publisher and _normalize(character.publisher) != _normalize(publisher):
+                confidence = round(confidence * 0.92, 3)
+            matches.append(
+                MatchedEntityRead(
+                    entity_type=ENTITY_CHARACTER,
+                    entity_id=int(character.id or 0),
+                    entity_name=character.character_name,
+                    match_confidence=confidence,
+                )
+            )
+    matches.sort(key=lambda row: row.match_confidence, reverse=True)
+    return matches[:5]
 
 
 def _match_characters(session: Session, *, publisher: str, series_name: str, title: str) -> list[MatchedEntityRead]:
@@ -99,6 +208,34 @@ def _match_characters(session: Session, *, publisher: str, series_name: str, tit
             )
     matches.sort(key=lambda row: row.match_confidence, reverse=True)
     return matches[:5]
+
+
+def _match_creators_from_catalog(
+    catalog: IntelligenceMatchCatalog,
+    *,
+    title: str,
+    variant: ReleaseVariant | None,
+) -> list[MatchedEntityRead]:
+    haystack = title
+    if variant and variant.cover_artist:
+        haystack = f"{haystack} {variant.cover_artist}"
+    matches: list[MatchedEntityRead] = []
+    for creator, names in catalog.creators:
+        confidence = 0.0
+        for name in names:
+            if _contains_token(haystack, name):
+                confidence = max(confidence, 0.88 if variant and variant.cover_artist else 0.72)
+        if confidence > 0:
+            matches.append(
+                MatchedEntityRead(
+                    entity_type=ENTITY_CREATOR,
+                    entity_id=int(creator.id or 0),
+                    entity_name=creator.creator_name,
+                    match_confidence=confidence,
+                )
+            )
+    matches.sort(key=lambda row: row.match_confidence, reverse=True)
+    return matches[:3]
 
 
 def _match_creators(session: Session, *, title: str, variant: ReleaseVariant | None) -> list[MatchedEntityRead]:
@@ -133,24 +270,49 @@ def match_release_issue(
     issue: ReleaseIssue,
     series: ReleaseSeries,
     variant: ReleaseVariant | None = None,
+    catalog: IntelligenceMatchCatalog | None = None,
+    popularity_fn: Callable[[str, int], float] | None = None,
 ) -> ReleaseMatchResult:
-    franchises = _match_franchises(session, series_name=series.series_name, title=issue.title)
-    characters = _match_characters(
-        session,
-        publisher=series.publisher,
-        series_name=series.series_name,
-        title=issue.title,
-    )
-    creators = _match_creators(session, title=issue.title, variant=variant)
+    if catalog is None:
+        franchises = _match_franchises(session, series_name=series.series_name, title=issue.title)
+        characters = _match_characters(
+            session,
+            publisher=series.publisher,
+            series_name=series.series_name,
+            title=issue.title,
+        )
+        creators = _match_creators(session, title=issue.title, variant=variant)
+    else:
+        franchises = _match_franchises_from_catalog(
+            catalog, series_name=series.series_name, title=issue.title
+        )
+        characters = _match_characters_from_catalog(
+            catalog,
+            publisher=series.publisher,
+            series_name=series.series_name,
+            title=issue.title,
+        )
+        creators = _match_creators_from_catalog(catalog, title=issue.title, variant=variant)
     matched = franchises + characters + creators
+
+    def _pop(entity_type: str, entity_id: int) -> float:
+        if popularity_fn is not None:
+            return popularity_fn(entity_type, entity_id)
+        if entity_type == ENTITY_CHARACTER:
+            return character_score(session, character_id=entity_id)
+        if entity_type == ENTITY_FRANCHISE:
+            return franchise_score(session, franchise_id=entity_id)
+        if entity_type == ENTITY_CREATOR:
+            return creator_score(session, creator_id=entity_id)
+        return 0.0
 
     top_character = next((row for row in matched if row.entity_type == ENTITY_CHARACTER), None)
     top_franchise = next((row for row in matched if row.entity_type == ENTITY_FRANCHISE), None)
     top_creator = next((row for row in matched if row.entity_type == ENTITY_CREATOR), None)
     combined = combined_popularity_score(
-        character=character_score(session, character_id=top_character.entity_id) if top_character else 0.0,
-        franchise=franchise_score(session, franchise_id=top_franchise.entity_id) if top_franchise else 0.0,
-        creator=creator_score(session, creator_id=top_creator.entity_id) if top_creator else 0.0,
+        character=_pop(ENTITY_CHARACTER, top_character.entity_id) if top_character else 0.0,
+        franchise=_pop(ENTITY_FRANCHISE, top_franchise.entity_id) if top_franchise else 0.0,
+        creator=_pop(ENTITY_CREATOR, top_creator.entity_id) if top_creator else 0.0,
     )
     return ReleaseMatchResult(
         release_issue_id=int(issue.id or 0),

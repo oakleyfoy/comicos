@@ -74,6 +74,7 @@ def re_enrich_draft_import(
     normalized_payload = normalize_parsed_order_response(
         ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
         session=session,
+        owner_user_id=draft_import.user_id,
         raw_text=draft_import.raw_text,
     )
     sync_canonical_creators_for_payload(
@@ -251,6 +252,7 @@ def re_enrich_inventory_copy(
             }
         ),
         session=session,
+        owner_user_id=inventory_copy.user_id,
         raw_text="",
     )
     normalized_item = normalized.items[0]

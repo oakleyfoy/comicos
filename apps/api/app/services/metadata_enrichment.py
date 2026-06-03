@@ -16,6 +16,7 @@ from app.services.order_states import (
     default_order_status,
     default_release_status,
 )
+from app.services.publisher_metadata_autofill import resolve_blank_publisher
 
 LOGGER = logging.getLogger(__name__)
 
@@ -718,12 +719,16 @@ def enrich_order_item_metadata(
     item: AiDraftOrderItem,
     *,
     session: Session | None = None,
+    owner_user_id: int | None = None,
     raw_text: str,
     item_index: int,
 ) -> AiDraftOrderItem:
-    raw_publisher_source = (
-        item.raw_publisher if item.raw_publisher is not None else item.publisher
-    )
+    if item.raw_publisher is not None:
+        raw_publisher_source = item.raw_publisher
+    elif item.metadata_autofill_source is not None:
+        raw_publisher_source = None
+    else:
+        raw_publisher_source = item.publisher
     raw_title_source = item.raw_title if item.raw_title is not None else item.title
     raw_release_date_source = (
         item.raw_release_date
@@ -759,16 +764,25 @@ def enrich_order_item_metadata(
     )
 
     publisher = normalize_publisher_name(raw_publisher_source, session=session)
-    if publisher.canonical_value is None:
-        inferred_publisher = _infer_publisher_from_source_text(title.canonical_value, raw_text)
-        if inferred_publisher is None:
-            inferred_publisher = _infer_publisher_from_title(title.canonical_value)
-        if inferred_publisher is not None:
+    metadata_autofill_source = item.metadata_autofill_source
+    publisher_autofill_confidence = item.publisher_autofill_confidence
+    if publisher.decision == "missing" and session is not None and title.canonical_value:
+        autofill = resolve_blank_publisher(
+            session,
+            owner_user_id=owner_user_id,
+            canonical_series=title.canonical_value,
+            canonical_issue=issue_number.canonical_value,
+            raw_text=raw_text,
+        )
+        if autofill is not None:
             publisher = NormalizedValue(
                 raw_value=publisher.raw_value,
-                canonical_value=inferred_publisher,
-                decision="high_confidence_inference",
+                canonical_value=autofill.publisher,
+                review_required=False,
+                decision=f"autofill_{autofill.source}",
             )
+            metadata_autofill_source = autofill.source
+            publisher_autofill_confidence = autofill.confidence
 
     raw_variant_text = item.raw_variant_text
     if raw_variant_text is None:
@@ -891,6 +905,8 @@ def enrich_order_item_metadata(
             "metadata_identity_components": metadata_identity_components,
             "metadata_review_required": review_required,
             "metadata_review_notes": review_notes,
+            "metadata_autofill_source": metadata_autofill_source,
+            "publisher_autofill_confidence": publisher_autofill_confidence,
         }
     )
 
@@ -899,12 +915,14 @@ def enrich_parse_order_metadata(
     parsed: ParseOrderResponse,
     *,
     session: Session | None = None,
+    owner_user_id: int | None = None,
     raw_text: str,
 ) -> ParseOrderResponse:
     enriched_items = [
         enrich_order_item_metadata(
             item,
             session=session,
+            owner_user_id=owner_user_id,
             raw_text=raw_text,
             item_index=index,
         )

@@ -15,24 +15,24 @@ function statusTone(status: string): string {
   switch (status) {
     case "PASS":
     case "HEALTHY":
-      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
     case "WARNING":
-      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+      return "border-amber-200 bg-amber-50 text-amber-900";
     case "FAIL":
     case "FAILED":
-      return "border-rose-400/30 bg-rose-400/10 text-rose-100";
+      return "border-rose-200 bg-rose-50 text-rose-800";
     case "DISABLED":
-      return "border-slate-500/30 bg-slate-500/10 text-slate-200";
+      return "border-slate-200 bg-slate-100 text-slate-700";
     default:
-      return "border-white/10 bg-white/5 text-slate-200";
+      return "border-slate-200 bg-slate-50 text-slate-700";
   }
 }
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm ring-1 ring-slate-100">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-patriot-navy">{value}</p>
     </div>
   );
 }
@@ -47,8 +47,8 @@ function StatusBadge({ value }: { value: string }): JSX.Element {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-blue-200 bg-white p-5 shadow-sm ring-1 ring-slate-100">
+      <h2 className="text-sm font-semibold text-patriot-navy">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -125,7 +125,7 @@ export function MarketplaceDashboardPage(): JSX.Element {
               <StatusBadge value={summary.validation_status} />
               <StatusBadge value={summary.health_status} />
               {summary.platform_certified ? (
-                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-900">
                   Certified
                 </span>
               ) : null}
@@ -135,10 +135,10 @@ export function MarketplaceDashboardPage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading marketplace dashboard…</p> : null}
+      {loading ? <p className="mt-4 text-sm text-slate-600">Loading marketplace dashboard…</p> : null}
 
       {!loading && summary ? (
-        <div className="space-y-6">
+        <div className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard label="Listings" value={String(cards?.listings ?? 0)} />
             <StatCard label="Publish Jobs" value={String(cards?.publish_jobs ?? 0)} />
@@ -151,12 +151,12 @@ export function MarketplaceDashboardPage(): JSX.Element {
             <Panel title="Health Panels">
               <ul className="space-y-3">
                 {healthPanels.map(({ title, component }) => (
-                  <li key={title} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <li key={title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white">{title}</p>
+                      <p className="text-sm font-medium text-slate-900">{title}</p>
                       <StatusBadge value={component?.health_status ?? "WARNING"} />
                     </div>
-                    <p className="mt-2 text-sm text-slate-400">{component?.summary ?? "No health signal yet."}</p>
+                    <p className="mt-2 text-sm text-slate-600">{component?.summary ?? "No health signal yet."}</p>
                   </li>
                 ))}
               </ul>
@@ -165,12 +165,12 @@ export function MarketplaceDashboardPage(): JSX.Element {
             <Panel title="Validation Panels">
               <ul className="space-y-3">
                 {validationPanels.map(({ title, check }) => (
-                  <li key={title} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <li key={title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white">{title}</p>
+                      <p className="text-sm font-medium text-slate-900">{title}</p>
                       <StatusBadge value={check?.status ?? "WARNING"} />
                     </div>
-                    <p className="mt-2 text-sm text-slate-400">{check?.summary ?? "Validation has not run yet."}</p>
+                    <p className="mt-2 text-sm text-slate-600">{check?.summary ?? "Validation has not run yet."}</p>
                   </li>
                 ))}
               </ul>
