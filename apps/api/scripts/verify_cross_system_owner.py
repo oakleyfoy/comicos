@@ -59,27 +59,50 @@ class _QueryTimer:
         return result
 
 
-def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) -> dict[str, int]:
+def _stage_start(name: str) -> float:
+    print(f"START {name}", file=sys.stderr, flush=True)
+    return time.monotonic()
+
+
+def _stage_end(name: str, started: float) -> float:
+    elapsed_s = time.monotonic() - started
+    print(f"END {name} elapsed={elapsed_s:.2f}s", file=sys.stderr, flush=True)
+    return elapsed_s
+
+
+def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) -> dict[str, int | float]:
     from app.services.cross_system_recommendation_engine import generate_cross_system_recommendations
     from app.services.daily_action_engine import generate_daily_actions
     from app.services.unified_collector_intelligence import generate_unified_collector_recommendations
 
-    cross_created = timer.run(
-        "rebuild.generate_cross_system_recommendations",
-        lambda: generate_cross_system_recommendations(session, owner_user_id=owner_user_id),
-    )
-    daily_created = timer.run(
-        "rebuild.generate_daily_actions",
-        lambda: generate_daily_actions(session, owner_user_id=owner_user_id),
-    )
+    stage_seconds: dict[str, float] = {}
+
+    started = _stage_start("unified_recommendations")
     unified_created = timer.run(
         "rebuild.generate_unified_collector_recommendations",
         lambda: generate_unified_collector_recommendations(session, owner_user_id=owner_user_id),
     )
+    stage_seconds["unified_recommendations"] = _stage_end("unified_recommendations", started)
+
+    started = _stage_start("daily_actions")
+    daily_created = timer.run(
+        "rebuild.generate_daily_actions",
+        lambda: generate_daily_actions(session, owner_user_id=owner_user_id),
+    )
+    stage_seconds["daily_actions"] = _stage_end("daily_actions", started)
+
+    started = _stage_start("cross_system_recommendations")
+    cross_created = timer.run(
+        "rebuild.generate_cross_system_recommendations",
+        lambda: generate_cross_system_recommendations(session, owner_user_id=owner_user_id),
+    )
+    stage_seconds["cross_system_recommendations"] = _stage_end("cross_system_recommendations", started)
+
     return {
         "cross_system_rows_inserted": int(cross_created),
         "daily_actions_rows_inserted": int(daily_created),
         "unified_rows_inserted": int(unified_created),
+        "stage_elapsed_seconds": stage_seconds,
     }
 
 
@@ -154,9 +177,13 @@ def main() -> int:
             return 1
         owner_user_id = int(user.id)
 
-        rebuild_stats: dict[str, int] | None = None
+        rebuild_stats: dict[str, int | float] | None = None
         if args.rebuild:
+            print("START rebuild_pipeline", file=sys.stderr, flush=True)
+            rebuild_started = time.monotonic()
             rebuild_stats = _run_rebuild_pipeline(session, owner_user_id=owner_user_id, timer=timer)
+            rebuild_elapsed = time.monotonic() - rebuild_started
+            print(f"END rebuild_pipeline elapsed={rebuild_elapsed:.2f}s", file=sys.stderr, flush=True)
 
         cross_total = timer.run(
             "count.cross_system_recommendation",
