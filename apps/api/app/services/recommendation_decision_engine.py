@@ -16,6 +16,7 @@ from app.services.foc_dates import days_until_foc, utc_today
 from app.services.recommendation_catalog_quality import build_forward_release_title_index
 from app.services.recommendation_title_index import RecommendationPipelineIndexCache
 from app.services.recommendation_forward_window import _key_signals_by_issue, _latest_spec_by_issue
+from app.services.recommendation_intelligence_enrichment import build_collector_significance_enrichment
 from app.services.recommendation_priority_enrichment import (
     KEY_SIGNAL_TYPES,
     NEW_ONE_SIGNALS,
@@ -300,11 +301,13 @@ def compute_recommendation_decision(
 
     owns_run = False
     enrichment_rationale: tuple[str, ...] = ()
+    priority_enrichment = None
+    collector_intel = None
     if issue is not None and series is not None:
         series_key = (series.publisher or "").strip().lower(), (series.series_name or "").strip().lower()
         owned_in = ctx.owned_stats.copies_by_series.get(series_key, 0) if hasattr(ctx.owned_stats, "copies_by_series") else 0
         owns_run = owned_in > 0
-        enrichment = build_recommendation_priority_enrichment(
+        priority_enrichment = build_recommendation_priority_enrichment(
             session,
             owner_user_id=owner_user_id,
             series_name=series.series_name,
@@ -320,13 +323,30 @@ def compute_recommendation_decision(
             issue=issue,
             series=series,
         )
-        enrichment_rationale = enrichment.rationale_bits
-        owns_run = owns_run or enrichment.continuity_bonus >= 2.0
+        enrichment_rationale = priority_enrichment.rationale_bits
+        owns_run = owns_run or priority_enrichment.continuity_bonus >= 2.0
+        variants = ctx.variants_by_issue.get(issue_id or -1, [])
+        collector_intel = build_collector_significance_enrichment(
+            session,
+            series=series,
+            issue=issue,
+            variants=variants,
+            rationale=rec.rationale,
+            key_signals=signals_list,
+            priority_enrichment=priority_enrichment,
+            owned_stats=ctx.owned_stats if hasattr(ctx.owned_stats, "copies_by_series") else None,
+        )
 
-    action = _action_for(kind=kind, priority=rec.priority_score, confidence=rec.confidence_score)
+    decision_priority = rec.priority_score
+    decision_confidence = rec.confidence_score
+    if collector_intel is not None:
+        decision_priority = min(94.0, rec.priority_score + collector_intel.decision_boost)
+        decision_confidence = min(0.97, rec.confidence_score + collector_intel.confidence_boost)
+
+    action = _action_for(kind=kind, priority=decision_priority, confidence=decision_confidence)
     quantity = _pick_quantity(
-        priority=rec.priority_score,
-        confidence=rec.confidence_score,
+        priority=decision_priority,
+        confidence=decision_confidence,
         action=action,
         release_id=release_id,
         ctx=ctx,
@@ -349,13 +369,17 @@ def compute_recommendation_decision(
         action=action,
     )
     risk = _risk_tier(
-        confidence=rec.confidence_score,
-        priority=rec.priority_score,
+        confidence=decision_confidence,
+        priority=decision_priority,
         has_high_ratio=has_high_ratio,
         action=action,
     )
 
     reason_codes: list[str] = []
+    if collector_intel is not None:
+        for code in collector_intel.reason_codes:
+            if code not in reason_codes:
+                reason_codes.append(code)
     for sig in signals_list:
         code = SIGNAL_REASON_MAP.get(sig.upper())
         if code and code not in reason_codes:
@@ -385,6 +409,10 @@ def compute_recommendation_decision(
         reason_codes.append("RATIO_OPPORTUNITY")
 
     reason_summary: list[str] = []
+    if collector_intel is not None:
+        for line in collector_intel.investment_thesis:
+            if line not in reason_summary:
+                reason_summary.append(line)
     for code in reason_codes:
         label = REASON_CODE_LABELS.get(code, code.replace("_", " ").title())
         if label not in reason_summary:
@@ -407,7 +435,7 @@ def compute_recommendation_decision(
         strategy=strategy,  # type: ignore[arg-type]
         reason_codes=reason_codes,
         reason_summary=reason_summary[:8],
-        expected_roi_range=_roi_range(strategy=strategy, action=action, priority=rec.priority_score),
+        expected_roi_range=_roi_range(strategy=strategy, action=action, priority=decision_priority),
         foc_date=foc_date,
         release_date=release_date,
         decision_headline=_headline(action, quantity if quantity else 1),

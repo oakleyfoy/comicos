@@ -28,6 +28,11 @@ REASON_CODE_LABELS: dict[str, str] = {
     "MARKET_DEMAND": "Market demand",
     "SPEC_HEAT": "Spec/market heat",
     "MULTI_SOURCE": "Multi-system signal",
+    "MILESTONE_ISSUE": "Milestone issue",
+    "CREATOR_SIGNIFICANCE": "Notable creator",
+    "HOMAGE_TRIBUTE": "Homage or tribute cover",
+    "COLLECTOR_AUDIENCE": "Active collector audience",
+    "HISTORICAL_FRANCHISE": "Historical franchise relevance",
 }
 
 
