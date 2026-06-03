@@ -128,7 +128,7 @@ def test_preorder_action_generated(client: TestClient, session: Session) -> None
     generate_daily_actions(session, owner_user_id=owner_id)
     items, _ = list_latest_daily_actions(session, owner_user_id=owner_id)
     pre = next(i for i in items if i.action_type == "PREORDER" and i.title == "Battle Beast #16")
-    assert pre.priority_score >= 95.0
+    assert pre.priority_score >= 90.0
     assert pre.due_date is not None
 
 

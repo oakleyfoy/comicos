@@ -142,7 +142,7 @@ def _seed_stack(client: TestClient, session: Session, email: str) -> int:
 
 def test_multi_system_recommendation_generated(client: TestClient, session: Session) -> None:
     owner_id = _seed_stack(client, session, "csr-multi@example.com")
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id)
     acquire = next(i for i in items if i.recommendation_type == "ACQUIRE" and i.title.endswith("#3"))
     assert len(acquire.source_systems) >= 2
@@ -151,7 +151,7 @@ def test_multi_system_recommendation_generated(client: TestClient, session: Sess
 
 def test_confidence_boost_works(client: TestClient, session: Session) -> None:
     owner_id = _seed_stack(client, session, "csr-conf@example.com")
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id)
     acquire = next(i for i in items if i.title.endswith("#3") and i.recommendation_type == "ACQUIRE")
     assert acquire.confidence_score >= 0.58
@@ -159,7 +159,7 @@ def test_confidence_boost_works(client: TestClient, session: Session) -> None:
 
 def test_conflict_resolution_grade_over_sell(client: TestClient, session: Session) -> None:
     owner_id = _seed_stack(client, session, "csr-conflict@example.com")
-    candidates = build_cross_system_candidates(session, owner_user_id=owner_id)
+    candidates = build_cross_system_candidates(session, owner_user_id=owner_id, refresh_upstream=True)
     beast = [c for c in candidates if c.title == "Battle Beast #1"]
     assert len(beast) == 1
     assert beast[0].recommendation_type == "GRADE"
@@ -168,7 +168,7 @@ def test_conflict_resolution_grade_over_sell(client: TestClient, session: Sessio
 
 def test_ranking_works(client: TestClient, session: Session) -> None:
     owner_id = _seed_stack(client, session, "csr-rank@example.com")
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id)
     ranks = [i.recommendation_rank for i in items]
     assert ranks == sorted(ranks)
@@ -183,7 +183,7 @@ def test_budget_aware_prioritization(client: TestClient, session: Session) -> No
     budget.is_active = True
     session.add(budget)
     session.commit()
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id)
     acquire = next((i for i in items if i.recommendation_type == "ACQUIRE"), None)
     preorder = next((i for i in items if i.recommendation_type == "PREORDER"), None)
@@ -204,8 +204,8 @@ def test_deterministic_ordering(client: TestClient, session: Session) -> None:
 
 def test_idempotency(client: TestClient, session: Session) -> None:
     owner_id = _seed_stack(client, session, "csr-idem@example.com")
-    first = generate_cross_system_recommendations(session, owner_user_id=owner_id)
-    second = generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    first = generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
+    second = generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=False)
     assert first >= 1
     assert second == 0
 
@@ -213,7 +213,7 @@ def test_idempotency(client: TestClient, session: Session) -> None:
 def test_owner_isolation(client: TestClient, session: Session) -> None:
     token_a = register_and_login(client, "csr-a@example.com")
     owner_a = _seed_stack(client, session, "csr-a@example.com")
-    generate_cross_system_recommendations(session, owner_user_id=owner_a)
+    generate_cross_system_recommendations(session, owner_user_id=owner_a, refresh_upstream=True)
     token_b = register_and_login(client, "csr-b@example.com")
     rsp_a = client.get("/api/v1/cross-system-recommendations/latest", headers=auth_headers(token_a))
     rsp_b = client.get("/api/v1/cross-system-recommendations/latest", headers=auth_headers(token_b))

@@ -41,6 +41,7 @@ from app.services.daily_action_engine import (
 from app.services.exit_certification import get_latest_exit_certification
 from app.services.exit_dashboard import get_exit_dashboard
 from app.services.foc_dashboard import get_foc_dashboard
+from app.services.unified_collector_intelligence import generate_unified_collector_recommendations
 from app.services.foc_dates import utc_today
 from app.services.portfolio_certification import build_portfolio_certification_ops_panel
 from app.services.production_readiness import validate_production_readiness
@@ -396,8 +397,9 @@ def _build_system_health(session: Session, *, owner_user_id: int) -> list[Execut
 
 
 def _collect_raw_sections(session: Session, *, owner_user_id: int) -> dict[str, list[ExecutiveDashboardItemRead]]:
-    generate_daily_actions(session, owner_user_id=owner_user_id)
-    generate_cross_system_recommendations(session, owner_user_id=owner_user_id)
+    generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
+    generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False)
+    generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=False)
 
     daily_rows, _ = list_latest_daily_actions(session, owner_user_id=owner_user_id, limit=200, offset=0)
     cross_rows, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_user_id, limit=200, offset=0)

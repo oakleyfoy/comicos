@@ -44,7 +44,9 @@ from app.services.recommendation_priority_enrichment import (
     build_recommendation_priority_enrichment,
 )
 from app.services.recommendation_v2_engine import _latest_scores_by_issue
+from app.services.recommendation_priority_spread import apply_priority_spread_inplace
 from app.services.recommendation_v2_scoring_context import build_recommendation_v2_scoring_context
+from app.services.recommendation_latest_rows import latest_by_key_bounded_scan
 from app.services.sell_candidates import _latest_sell_candidate_rows, _to_read as sell_candidate_to_read
 
 SRC_PULL = "P52_PULL_LIST"
@@ -72,6 +74,12 @@ class _Draft:
     source_systems: set[str] = field(default_factory=set)
     priority_score: float = 0.0
     confidence_score: float = 0.0
+    raw_priority_score: float = 0.0
+    normalized_priority_score: float = 0.0
+
+    @property
+    def title_key(self) -> str:
+        return self.title.strip().lower()
 
     @property
     def merge_key(self) -> str:
@@ -92,8 +100,8 @@ def _combined_confidence(base: float, source_count: int) -> float:
 
 
 def _combined_priority(base: float, source_count: int) -> float:
-    bonus = min(8.0, max(0, source_count - 1) * 3.0)
-    return _clamp_priority(base + bonus)
+    bonus = min(4.0, max(0, source_count - 1) * 2.0)
+    return _clamp_priority(min(94.0, base + bonus))
 
 
 def _display_title(*, series_name: str, issue_number: str) -> str:
@@ -122,6 +130,10 @@ def _merge_draft(store: dict[str, _Draft], draft: _Draft) -> None:
     existing.source_systems.update(draft.source_systems)
     n = len(existing.source_systems)
     existing.priority_score = _combined_priority(max(existing.priority_score, draft.priority_score), n)
+    existing.raw_priority_score = max(
+        existing.raw_priority_score or existing.priority_score,
+        draft.raw_priority_score or draft.priority_score,
+    )
     existing.confidence_score = _combined_confidence(max(existing.confidence_score, draft.confidence_score), n)
     if draft.rationale and draft.rationale not in existing.rationale:
         existing.rationale = f"{existing.rationale} {draft.rationale}".strip()
@@ -474,6 +486,7 @@ def _build_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
         _merge_draft(store, draft)
 
     merged: list[_Draft] = list(store.values())
+    apply_priority_spread_inplace(merged)
     merged.sort(
         key=lambda d: (
             -d.priority_score,
@@ -489,18 +502,16 @@ def _latest_recommendation_rows(
     session: Session,
     *,
     owner_user_id: int,
+    scan_limit: int = 8000,
 ) -> dict[tuple[str, str], UnifiedCollectorRecommendation]:
-    rows = session.exec(
-        select(UnifiedCollectorRecommendation)
-        .where(UnifiedCollectorRecommendation.owner_user_id == owner_user_id)
-        .order_by(UnifiedCollectorRecommendation.created_at.desc(), UnifiedCollectorRecommendation.id.desc())
-    ).all()
-    latest: dict[tuple[str, str], UnifiedCollectorRecommendation] = {}
-    for row in rows:
-        key = (row.recommendation_type, row.title.strip().lower())
-        if key not in latest:
-            latest[key] = row
-    return latest
+    return latest_by_key_bounded_scan(
+        session,
+        model=UnifiedCollectorRecommendation,
+        owner_user_id=owner_user_id,
+        owner_field="owner_user_id",
+        key_fn=lambda row: (row.recommendation_type, row.title.strip().lower()),
+        scan_limit=scan_limit,
+    )
 
 
 def _sources_equal(a: list[str], b: list[str]) -> bool:

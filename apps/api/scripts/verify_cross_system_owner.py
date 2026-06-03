@@ -87,14 +87,22 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
     started = _stage_start("daily_actions")
     daily_created = timer.run(
         "rebuild.generate_daily_actions",
-        lambda: generate_daily_actions(session, owner_user_id=owner_user_id),
+        lambda: generate_daily_actions(
+            session, owner_user_id=owner_user_id, refresh_unified=False
+        ),
     )
     stage_seconds["daily_actions"] = _stage_end("daily_actions", started)
 
     started = _stage_start("cross_system_recommendations")
+    cross_timings: dict[str, float] = {}
     cross_created = timer.run(
         "rebuild.generate_cross_system_recommendations",
-        lambda: generate_cross_system_recommendations(session, owner_user_id=owner_user_id),
+        lambda: generate_cross_system_recommendations(
+            session,
+            owner_user_id=owner_user_id,
+            refresh_upstream=False,
+            persist_timings=cross_timings,
+        ),
     )
     stage_seconds["cross_system_recommendations"] = _stage_end("cross_system_recommendations", started)
 
@@ -103,6 +111,7 @@ def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) ->
         "daily_actions_rows_inserted": int(daily_created),
         "unified_rows_inserted": int(unified_created),
         "stage_elapsed_seconds": stage_seconds,
+        "cross_system_build_timings_ms": cross_timings,
     }
 
 
@@ -259,6 +268,18 @@ def main() -> int:
                 "distinct_score_count": ranking_diag.distinct_score_count,
                 "top_20_score_spread": ranking_diag.top_20_score_spread,
             },
+            "top_20_score_trace": [
+                {
+                    "rank": row.rank,
+                    "title": row.title,
+                    "recommendation_type": row.recommendation_type,
+                    "raw_priority_score": row.raw_priority_score,
+                    "normalized_priority_score": row.normalized_priority_score,
+                    "priority_score": row.priority_score,
+                    "confidence_score": row.confidence_score,
+                }
+                for row in ranking_audit.items[:20]
+            ],
             "top_latest_recommendations": top_rows,
             "query_timings_ms": timer.entries,
             "total_elapsed_ms": total_elapsed_ms,

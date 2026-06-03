@@ -113,7 +113,7 @@ def refresh_and_list_latest_cross_system_recommendations(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[CrossSystemRecommendationRead], int]:
-    generate_cross_system_recommendations(session, owner_user_id=owner_user_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=True)
     return list_latest_cross_system_recommendations(
         session,
         owner_user_id=owner_user_id,

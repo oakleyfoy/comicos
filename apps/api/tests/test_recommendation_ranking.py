@@ -73,7 +73,7 @@ def test_top_recommendations_sorted_by_score_not_title(client: TestClient, sessi
     )
     session.commit()
 
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     dash = get_executive_dashboard(session, owner_user_id=owner_id)
     assert dash.top_recommendations.items
     titles = [i.title for i in dash.top_recommendations.items]
@@ -171,13 +171,19 @@ def test_ranking_audit_score_separation_thresholds(client: TestClient, session: 
             )
     session.commit()
 
-    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
     audit = build_recommendation_ranking_audit(session, owner_user_id=owner_id, limit=100, refresh=False)
     assert audit.distinct_score_count > 10 or audit.listed_count >= len(specs)
     if audit.listed_count >= 4:
         assert audit.distinct_score_count >= min(3, audit.listed_count)
     if audit.listed_count >= 2 and audit.top_20_score_spread is not None:
         assert audit.top_20_score_spread > 5.0
+    top20 = audit.items[:20]
+    if len(top20) >= 20:
+        assert audit.distinct_score_count > 15
+        assert audit.top_20_score_spread is not None and audit.top_20_score_spread > 10.0
+        assert not all(row.priority_score >= 99.9 for row in top20)
+        assert all(row.raw_priority_score is not None for row in top20)
 
 
 def test_cross_system_candidates_have_score_separation(client: TestClient, session: Session) -> None:
@@ -195,7 +201,7 @@ def test_cross_system_candidates_have_score_separation(client: TestClient, sessi
         )
     )
     session.commit()
-    candidates = build_cross_system_candidates(session, owner_user_id=owner_id)
+    candidates = build_cross_system_candidates(session, owner_user_id=owner_id, refresh_upstream=True)
     forward = [c for c in candidates if c.title.startswith("High") or c.title.startswith("Low")]
     assert len(forward) >= 2
     high_c = next(c for c in forward if c.title.startswith("High"))

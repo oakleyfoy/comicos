@@ -9,6 +9,8 @@ class RecommendationRankingAuditRow(BaseModel):
     priority_score: float
     confidence_score: float
     recommendation_type: str
+    raw_priority_score: float | None = None
+    normalized_priority_score: float | None = None
 
 
 class RecommendationRankingDiagnosticsRead(BaseModel):

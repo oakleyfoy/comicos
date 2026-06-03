@@ -631,4 +631,4 @@ def apply_quality_to_priority(base_priority: float, quality: ReleaseCatalogQuali
         adjusted += 2.0
     elif quality.is_single_issue and quality.is_over_price_cap and quality.price_exception_reason:
         adjusted += 0.75
-    return round(max(0.0, min(100.0, adjusted)), 1)
+    return round(max(0.0, min(94.0, adjusted)), 2)

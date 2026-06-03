@@ -15,6 +15,7 @@ from app.services.recommendation_catalog_quality import (
     build_forward_release_title_index,
     title_passes_top_recommendation_quality,
 )
+from app.services.recommendation_latest_rows import latest_by_key_bounded_scan
 from app.services.unified_collector_intelligence import (
     _latest_recommendation_rows,
     generate_unified_collector_recommendations,
@@ -65,23 +66,24 @@ def _parse_title(title: str) -> tuple[str, str]:
     return series, issue
 
 
-def _foc_due_date(session: Session, *, owner_user_id: int, title: str) -> date | None:
-    series_name, issue_number = _parse_title(title)
-    if not issue_number:
+def _foc_due_date_from_index(
+    title: str,
+    release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
+) -> date | None:
+    title_key = title.strip().lower()
+    if title_key.endswith(" (variants)"):
+        title_key = title_key[: -len(" (variants)")]
+    pair = release_index.get(title_key)
+    if pair is None:
         return None
-    rows = session.exec(
-        select(ReleaseIssue, ReleaseSeries)
-        .join(ReleaseSeries, ReleaseSeries.id == ReleaseIssue.series_id)
-        .where(ReleaseIssue.owner_user_id == owner_user_id)
-    ).all()
-    for issue, series in rows:
-        if (
-            series.series_name.strip().lower() == series_name.lower()
-            and issue.issue_number.strip() == issue_number
-            and issue.foc_date is not None
-        ):
-            return issue.foc_date
-    return None
+    issue, _ = pair
+    return issue.foc_date
+
+
+def _foc_due_date(session: Session, *, owner_user_id: int, title: str) -> date | None:
+    """Legacy path — prefer _foc_due_date_from_index when index is already loaded."""
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    return _foc_due_date_from_index(title, release_index)
 
 
 def _priority_with_due(*, action_type: str, base: float, due_date: date | None) -> float:
@@ -89,18 +91,18 @@ def _priority_with_due(*, action_type: str, base: float, due_date: date | None) 
     if action_type == ACTION_PREORDER and due_date is not None:
         days = days_until_foc(due_date, today=utc_today())
         if days is not None and days <= 3:
-            priority = max(priority, 96.0)
+            priority += 6.0
         elif days is not None and days <= 7:
-            priority = max(priority, 90.0)
+            priority += 3.0
     if action_type == ACTION_ACQUIRE and base >= 88.0:
-        priority = max(priority, 90.0)
+        priority += 2.0
     if action_type == ACTION_GRADE and base >= 78.0:
-        priority = max(priority, 80.0)
+        priority += 1.5
     if action_type == ACTION_SELL and base >= 70.0:
-        priority = max(priority, 75.0)
+        priority += 1.0
     if action_type in {ACTION_WATCH, ACTION_REVIEW}:
         priority = min(priority, 60.0)
-    return _clamp_priority(priority)
+    return _clamp_priority(min(94.0, priority))
 
 
 def _confidence_from_sources(base: float, sources: list[str]) -> float:
@@ -108,8 +110,9 @@ def _confidence_from_sources(base: float, sources: list[str]) -> float:
     return _clamp_confidence(base + boost)
 
 
-def _build_drafts(session: Session, *, owner_user_id: int) -> list[_ActionDraft]:
-    generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
+def _build_drafts(session: Session, *, owner_user_id: int, refresh_unified: bool = True) -> list[_ActionDraft]:
+    if refresh_unified:
+        generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
     release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     drafts: list[_ActionDraft] = []
     seen_titles: set[tuple[str, str]] = set()
@@ -124,7 +127,11 @@ def _build_drafts(session: Session, *, owner_user_id: int) -> list[_ActionDraft]
             continue
         action_type = _UNIFIED_TO_ACTION.get(row.recommendation_type, ACTION_WATCH)
         sources = list(row.source_systems or [])
-        due = _foc_due_date(session, owner_user_id=owner_user_id, title=row.title) if action_type == ACTION_PREORDER else None
+        due = (
+            _foc_due_date_from_index(row.title, release_index)
+            if action_type == ACTION_PREORDER
+            else None
+        )
         priority = _priority_with_due(
             action_type=action_type,
             base=float(row.priority_score),
@@ -188,18 +195,16 @@ def _latest_action_rows(
     session: Session,
     *,
     owner_user_id: int,
+    scan_limit: int = 8000,
 ) -> dict[tuple[str, str], DailyCollectorAction]:
-    rows = session.exec(
-        select(DailyCollectorAction)
-        .where(DailyCollectorAction.owner_user_id == owner_user_id)
-        .order_by(DailyCollectorAction.created_at.desc(), DailyCollectorAction.id.desc())
-    ).all()
-    latest: dict[tuple[str, str], DailyCollectorAction] = {}
-    for row in rows:
-        key = (row.action_type, row.title.strip().lower())
-        if key not in latest:
-            latest[key] = row
-    return latest
+    return latest_by_key_bounded_scan(
+        session,
+        model=DailyCollectorAction,
+        owner_user_id=owner_user_id,
+        owner_field="owner_user_id",
+        key_fn=lambda row: (row.action_type, row.title.strip().lower()),
+        scan_limit=scan_limit,
+    )
 
 
 def _matches_idempotency(prior: DailyCollectorAction, draft: _ActionDraft) -> bool:
@@ -215,8 +220,8 @@ def _matches_idempotency(prior: DailyCollectorAction, draft: _ActionDraft) -> bo
     )
 
 
-def generate_daily_actions(session: Session, *, owner_user_id: int) -> int:
-    drafts = _build_drafts(session, owner_user_id=owner_user_id)
+def generate_daily_actions(session: Session, *, owner_user_id: int, refresh_unified: bool = True) -> int:
+    drafts = _build_drafts(session, owner_user_id=owner_user_id, refresh_unified=refresh_unified)
     latest = _latest_action_rows(session, owner_user_id=owner_user_id)
     created = 0
     for draft in drafts:

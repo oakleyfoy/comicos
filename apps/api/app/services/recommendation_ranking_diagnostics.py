@@ -13,7 +13,10 @@ from app.schemas.recommendation_ranking import (
     RecommendationRankingDiagnosticsRead,
 )
 from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
-from app.services.cross_system_recommendation_engine import generate_cross_system_recommendations
+from app.services.cross_system_recommendation_engine import (
+    build_cross_system_candidates,
+    generate_cross_system_recommendations,
+)
 
 
 def _is_strictly_score_ordered(scores: list[float]) -> bool:
@@ -34,6 +37,7 @@ def audit_from_listed_items(
     items: list[CrossSystemRecommendationRead],
     *,
     total_count: int,
+    score_trace: dict[tuple[str, str], tuple[float, float]] | None = None,
 ) -> RecommendationRankingAuditRead:
     scores = [float(i.priority_score) for i in items]
     null_count = sum(1 for i in items if i.priority_score is None)
@@ -42,16 +46,21 @@ def audit_from_listed_items(
     spread = (max(top20) - min(top20)) if len(top20) >= 2 else 0.0
     top_score = scores[0] if scores else None
     tied_top = sum(1 for s in scores if top_score is not None and abs(s - top_score) < 1e-9) if scores else 0
-    rows = [
-        RecommendationRankingAuditRow(
-            rank=int(i.recommendation_rank),
-            title=i.title,
-            priority_score=float(i.priority_score),
-            confidence_score=float(i.confidence_score),
-            recommendation_type=i.recommendation_type,
+    rows = []
+    for i in items:
+        trace_key = (i.recommendation_type.strip().upper(), i.title.strip().lower())
+        raw_norm = score_trace.get(trace_key) if score_trace else None
+        rows.append(
+            RecommendationRankingAuditRow(
+                rank=int(i.recommendation_rank),
+                title=i.title,
+                priority_score=float(i.priority_score),
+                confidence_score=float(i.confidence_score),
+                recommendation_type=i.recommendation_type,
+                raw_priority_score=raw_norm[0] if raw_norm else None,
+                normalized_priority_score=raw_norm[1] if raw_norm else None,
+            )
         )
-        for i in items
-    ]
     titles = [i.title for i in items]
     return RecommendationRankingAuditRead(
         total_count=total_count,
@@ -77,14 +86,27 @@ def build_recommendation_ranking_audit(
     refresh: bool = True,
 ) -> RecommendationRankingAuditRead:
     if refresh:
-        generate_cross_system_recommendations(session, owner_user_id=owner_user_id)
+        from app.services.daily_action_engine import generate_daily_actions
+        from app.services.unified_collector_intelligence import generate_unified_collector_recommendations
+
+        generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
+        generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False)
+        generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=False)
+    trace_candidates = build_cross_system_candidates(session, owner_user_id=owner_user_id, refresh_upstream=False)
+    score_trace = {
+        (c.recommendation_type.strip().upper(), c.title_key): (
+            round(float(c.raw_priority_score or c.priority_score), 2),
+            round(float(c.normalized_priority_score or c.priority_score), 2),
+        )
+        for c in trace_candidates
+    }
     items, total = list_latest_cross_system_recommendations(
         session,
         owner_user_id=owner_user_id,
         limit=min(max(limit, 1), 200),
         offset=0,
     )
-    return audit_from_listed_items(items, total_count=total)
+    return audit_from_listed_items(items, total_count=total, score_trace=score_trace)
 
 
 def diagnostics_from_audit(audit: RecommendationRankingAuditRead) -> RecommendationRankingDiagnosticsRead:

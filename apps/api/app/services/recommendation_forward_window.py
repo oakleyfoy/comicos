@@ -11,6 +11,7 @@ from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, Rele
 from app.models.spec_intelligence import SpecRecommendation
 from app.services.foc_dates import days_until_foc, utc_today
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
+from app.services.recommendation_priority_spread import compress_additive_bonus
 FORWARD_RECOMMENDATION_WINDOW_DAYS = 90
 FOC_ACTIONABLE_OVERDUE_DAYS = 14
 
@@ -231,9 +232,10 @@ def compute_forward_catalog_priority(
 
     issue_id = int(issue.id or 0)
     series_ord = sum(ord(c) for c in (series.series_name or "")[:12])
+    bonus = compress_additive_bonus(bonus)
     bonus += (issue_id % 53) * 0.12 + (series_ord % 37) * 0.09
 
-    priority = min(99.99, base + bonus)
+    priority = min(94.0, base + bonus)
     confidence = enrichment.confidence_score if enrichment is not None else None
     return round(max(0.0, priority), 2), " ".join(dict.fromkeys(rationale_parts)).strip(), confidence
 

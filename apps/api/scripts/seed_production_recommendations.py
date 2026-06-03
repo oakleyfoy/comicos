@@ -506,26 +506,32 @@ def main() -> int:
         )
         report["steps"]["unified_collector_recommendations"] = {"rows_appended": unified_created}
 
-        cross_created = progress.run_step(
+        daily_created = progress.run_step(
             8,
+            "Daily actions",
+            lambda: generate_daily_actions(
+                session, owner_user_id=owner_user_id, refresh_unified=False
+            ),
+        )
+        report["steps"]["daily_actions"] = {"rows_appended": daily_created}
+
+        cross_created = progress.run_step(
+            9,
             "Cross-system recommendations",
-            lambda: generate_cross_system_recommendations(session, owner_user_id=owner_user_id),
+            lambda: generate_cross_system_recommendations(
+                session, owner_user_id=owner_user_id, refresh_upstream=False
+            ),
             rows=release_count_after,
         )
         report["steps"]["cross_system_recommendations"] = {"rows_appended": cross_created}
-
-        daily_created = progress.run_step(
-            8,
-            "Daily actions (after cross-system)",
-            lambda: generate_daily_actions(session, owner_user_id=owner_user_id),
-        )
-        report["steps"]["daily_actions"] = {"rows_appended": daily_created}
 
         def _finalize_reads() -> tuple[int, int]:
             _, snapshot_size = list_latest_cross_system_recommendations(
                 session, owner_user_id=owner_user_id, limit=200, offset=0
             )
-            candidates = build_cross_system_candidates(session, owner_user_id=owner_user_id)
+            candidates = build_cross_system_candidates(
+                session, owner_user_id=owner_user_id, refresh_upstream=False
+            )
             return snapshot_size, len(candidates)
 
         snapshot_size, candidate_count = progress.run_step(
