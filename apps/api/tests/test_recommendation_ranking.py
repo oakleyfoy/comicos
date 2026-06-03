@@ -97,6 +97,89 @@ def test_ranking_audit_lists_scores_and_spread(client: TestClient, session: Sess
     assert all(row.rank >= 1 for row in audit.items)
 
 
+def test_cross_system_read_path_filters_stale_low_quality_snapshot(
+    client: TestClient, session: Session
+) -> None:
+    from app.models.cross_system_recommendation import CrossSystemRecommendation
+
+    register_and_login(client, "stale-cross@example.com")
+    owner_id = _owner_id(session, "stale-cross@example.com")
+    _add_forward_issue(session, owner_id=owner_id, series_name="Good Single", issue_number="4")
+    session.add(
+        CrossSystemRecommendation(
+            owner_user_id=owner_id,
+            recommendation_type="PREORDER",
+            priority_score=99.0,
+            confidence_score=0.9,
+            title="Kick-Ass Compendium TP #TP",
+            recommendation_rank=1,
+            source_systems=["UNIFIED"],
+            rationale="stale row",
+        )
+    )
+    session.add(
+        CrossSystemRecommendation(
+            owner_user_id=owner_id,
+            recommendation_type="PREORDER",
+            priority_score=88.0,
+            confidence_score=0.8,
+            title="Good Single #4",
+            recommendation_rank=2,
+            source_systems=["UNIFIED"],
+            rationale="good row",
+        )
+    )
+    session.commit()
+
+    from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
+
+    items, _ = list_latest_cross_system_recommendations(session, owner_user_id=owner_id, limit=50)
+    titles = [i.title for i in items]
+    assert not any("Compendium" in t for t in titles)
+    assert any("Good Single" in t for t in titles)
+
+
+def test_ranking_audit_score_separation_thresholds(client: TestClient, session: Session) -> None:
+    register_and_login(client, "rank-sep@example.com")
+    owner_id = _owner_id(session, "rank-sep@example.com")
+    specs = [
+        ("Alpha Key", "1", 2, ["FIRST_APPEARANCE"], 82.0, "STRONG_BUY"),
+        ("Beta Launch", "1", 5, ["NEW_NUMBER_ONE"], 70.0, "BUY"),
+        ("Gamma Run", "7", 10, ["KEY_ISSUE"], 65.0, "WATCH"),
+        ("Delta Quiet", "12", 55, [], 52.0, None),
+        ("Epsilon Mid", "3", 21, ["MILESTONE_NUMBERING"], 60.0, None),
+        ("Zeta Far", "9", 70, [], 48.0, None),
+    ]
+    for idx, (series_name, issue_number, foc_days, signals, v2, spec) in enumerate(specs):
+        issue = _add_forward_issue(
+            session,
+            owner_id=owner_id,
+            series_name=series_name,
+            issue_number=issue_number,
+            foc_days=foc_days,
+            cover_price=4.99 if idx % 2 == 0 else 5.99,
+        )
+        for sig in signals:
+            session.add(
+                ReleaseKeySignal(
+                    owner_user_id=owner_id,
+                    issue_id=int(issue.id or 0),
+                    signal_type=sig,
+                    confidence_score=0.85,
+                    signal_payload_json={},
+                )
+            )
+    session.commit()
+
+    generate_cross_system_recommendations(session, owner_user_id=owner_id)
+    audit = build_recommendation_ranking_audit(session, owner_user_id=owner_id, limit=100, refresh=False)
+    assert audit.distinct_score_count > 10 or audit.listed_count >= len(specs)
+    if audit.listed_count >= 4:
+        assert audit.distinct_score_count >= min(4, audit.listed_count)
+    if audit.listed_count >= 2 and audit.top_20_score_spread is not None:
+        assert audit.top_20_score_spread > 5.0
+
+
 def test_cross_system_candidates_have_score_separation(client: TestClient, session: Session) -> None:
     register_and_login(client, "rank-spread@example.com")
     owner_id = _owner_id(session, "rank-spread@example.com")

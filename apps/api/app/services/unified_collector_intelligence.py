@@ -34,9 +34,10 @@ from app.services.recommendation_forward_window import (
 )
 from app.services.recommendation_catalog_quality import (
     apply_quality_to_priority,
-    classify_catalog_text,
+    build_forward_release_title_index,
     classify_forward_release,
     should_include_in_top_recommendations,
+    title_passes_top_recommendation_quality,
 )
 from app.services.recommendation_v2_engine import _latest_scores_by_issue
 from app.services.sell_candidates import _latest_sell_candidate_rows, _to_read as sell_candidate_to_read
@@ -371,6 +372,7 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
             v2_total_score=v2_score,
             spec_type=spec_type,
             has_ratio_variant=has_ratio,
+            has_incentive_variant=has_incentive,
             today=today,
         )
         priority = apply_quality_to_priority(priority, quality)
@@ -419,6 +421,7 @@ def _collect_forward_release_catalog_drafts(session: Session, *, owner_user_id: 
 
 def _build_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
     store: dict[str, _Draft] = {}
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     for draft in (
         _collect_forward_release_catalog_drafts(session, owner_user_id=owner_user_id)
         + _collect_pull_list_drafts(session, owner_user_id=owner_user_id)
@@ -428,6 +431,13 @@ def _build_drafts(session: Session, *, owner_user_id: int) -> list[_Draft]:
         + _collect_portfolio_sell_drafts(session, owner_user_id=owner_user_id)
         + _collect_exit_drafts(session, owner_user_id=owner_user_id)
     ):
+        if not title_passes_top_recommendation_quality(
+            draft.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         _merge_draft(store, draft)
 
     merged: list[_Draft] = list(store.values())
@@ -528,8 +538,16 @@ def list_latest_unified_collector_recommendations(
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     latest = _latest_recommendation_rows(session, owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     items: list[UnifiedCollectorRecommendationRead] = []
     for row in latest.values():
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         if recommendation_type and row.recommendation_type != recommendation_type.strip().upper():
             continue
         if priority_min is not None and float(row.priority_score) < float(priority_min):

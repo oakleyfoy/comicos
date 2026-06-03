@@ -146,64 +146,72 @@ def compute_forward_catalog_priority(
     v2_total_score: float | None,
     spec_type: str | None,
     has_ratio_variant: bool,
+    has_incentive_variant: bool = False,
     today: date | None = None,
 ) -> tuple[float, str]:
-    """Return (priority_score, rationale_snippet) using ComicOS forward ranking tiers."""
+    """Return (priority_score, rationale_snippet) with additive signal separation."""
+    from app.services.recommendation_catalog_quality import publisher_boost_for
+
     ref = today or utc_today()
-    priority = foc_deadline_priority(issue.foc_date, today=ref)
+    base = foc_deadline_priority(issue.foc_date, today=ref)
+    bonus = 0.0
     rationale_parts: list[str] = []
 
-    if issue.foc_date is not None:
-        foc_days = days_until_foc(issue.foc_date, today=ref)
-        if foc_days is not None and foc_days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
-            rationale_parts.append(f"FOC window ({foc_days} days).")
-    elif issue.release_date is not None:
-        release_days = (issue.release_date - ref).days
-        if 0 <= release_days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
-            rationale_parts.append(f"Release in {release_days} days.")
+    bonus += publisher_boost_for(series.publisher) * 0.75
 
     signal_set = {s.upper() for s in key_signals}
+    bonus += min(8.5, len(signal_set) * 1.1)
     if _is_number_one(issue.issue_number) or signal_set.intersection(NEW_ONE_SIGNALS):
-        priority = max(priority, 86.0)
+        bonus += 4.75
         rationale_parts.append("Upcoming #1 or launch issue.")
     elif signal_set.intersection(KEY_SIGNAL_TYPES):
-        priority = max(priority, 82.0)
+        bonus += 3.5
         rationale_parts.append("Key or special issue signal.")
 
+    if spec_type == "STRONG_BUY":
+        bonus += 7.75
+        rationale_parts.append("Spec/market heat (Strong Buy).")
+    elif spec_type == "BUY":
+        bonus += 5.25
+        rationale_parts.append("Spec/market heat (Buy).")
+    elif spec_type == "WATCH":
+        bonus += 1.85
+
     if v2_total_score is not None:
-        profile_boost = min(12.0, max(0.0, (float(v2_total_score) - 50.0) * 0.24))
-        priority = max(priority, min(92.0, 70.0 + profile_boost))
+        bonus += min(11.5, max(0.0, (float(v2_total_score) - 48.0) * 0.34))
         rationale_parts.append("Matches collector profile (V2 scoring).")
 
-    if spec_type in {"STRONG_BUY", "BUY"}:
-        heat = 85.0 if spec_type == "STRONG_BUY" else 80.0
-        priority = max(priority, heat)
-        rationale_parts.append(f"Spec/market heat ({spec_type.replace('_', ' ').title()}).")
-
     if has_ratio_variant:
-        priority = max(priority, 77.0)
+        bonus += 3.35
+    if has_incentive_variant:
+        bonus += 2.85
+    if has_ratio_variant or has_incentive_variant:
         rationale_parts.append("Ratio or incentive variant worth watching.")
 
     if owned:
-        priority = max(priority, 75.0)
+        bonus += 2.35
         rationale_parts.append("Run continuation — already collecting this series.")
     elif spec_type in {"STRONG_BUY", "BUY", "WATCH"}:
         rationale_parts.append("Not in inventory — forward acquisition target.")
 
-    # Sub-point spread so equal FOC tiers do not collapse to title-sort order.
-    if v2_total_score is not None:
-        priority += min(4.95, max(0.0, float(v2_total_score) - 50.0) * 0.0495)
-    priority += min(2.45, len(key_signals) * 0.35)
     if issue.foc_date is not None:
         foc_days = days_until_foc(issue.foc_date, today=ref)
         if foc_days is not None:
-            priority += max(-0.5, min(2.5, (21 - float(foc_days)) * 0.08))
+            bonus += max(-0.25, min(3.75, (21 - float(foc_days)) * 0.13))
+            if foc_days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
+                rationale_parts.append(f"FOC window ({foc_days} days).")
     elif issue.release_date is not None:
         release_days = (issue.release_date - ref).days
         if 0 <= release_days <= FORWARD_RECOMMENDATION_WINDOW_DAYS:
-            priority += max(0.0, min(2.0, (45 - float(release_days)) * 0.04))
+            bonus += max(0.0, min(2.75, (45 - float(release_days)) * 0.05))
+            rationale_parts.append(f"Release in {release_days} days.")
 
-    return round(min(100.0, max(0.0, priority)), 2), " ".join(rationale_parts).strip()
+    issue_id = int(issue.id or 0)
+    series_ord = sum(ord(c) for c in (series.series_name or "")[:12])
+    bonus += (issue_id % 53) * 0.09 + (series_ord % 37) * 0.06
+
+    priority = min(99.99, base + bonus)
+    return round(max(0.0, priority), 2), " ".join(rationale_parts).strip()
 
 
 def iter_forward_release_rows(

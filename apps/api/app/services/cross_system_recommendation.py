@@ -16,6 +16,10 @@ from app.services.cross_system_recommendation_engine import (
     generate_cross_system_recommendations,
     _latest_snapshot_rows,
 )
+from app.services.recommendation_catalog_quality import (
+    build_forward_release_title_index,
+    title_passes_top_recommendation_quality,
+)
 
 
 def _to_read(row: CrossSystemRecommendation) -> CrossSystemRecommendationRead:
@@ -47,6 +51,7 @@ def list_latest_cross_system_recommendations(
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     items: list[CrossSystemRecommendationRead] = []
     for rank in sorted(snapshot.keys()):
         row = snapshot[rank]
@@ -55,6 +60,13 @@ def list_latest_cross_system_recommendations(
         if rank_max is not None and int(row.recommendation_rank) > int(rank_max):
             continue
         if priority_min is not None and float(row.priority_score) < float(priority_min):
+            continue
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
             continue
         items.append(_to_read(row))
     items.sort(

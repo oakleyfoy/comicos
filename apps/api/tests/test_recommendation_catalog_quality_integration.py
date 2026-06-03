@@ -71,3 +71,38 @@ def test_forward_catalog_excludes_trade_paperback(client: TestClient, session: S
     titles = {i.title for i in items}
     assert any("Quality Forward" in t for t in titles)
     assert not any("Dead Head" in t for t in titles)
+
+
+def test_forward_catalog_excludes_kick_ass_compendium_tp(client: TestClient, session: Session) -> None:
+    register_and_login(client, "fwd-kickass@example.com")
+    owner_id = int(session.exec(select(User).where(User.email == "fwd-kickass@example.com")).one().id or 0)
+    today = date.today()
+    series = ReleaseSeries(
+        owner_user_id=owner_id,
+        publisher="Image",
+        series_name="Kick-Ass Compendium TP",
+        series_type="LIMITED",
+        status="ACTIVE",
+    )
+    session.add(series)
+    session.commit()
+    session.refresh(series)
+    session.add(
+        ReleaseIssue(
+            owner_user_id=owner_id,
+            release_uuid="fwd-kickass-tp",
+            series_id=int(series.id or 0),
+            issue_number="TP",
+            title="Kick-Ass Compendium TP",
+            release_status="SCHEDULED",
+            foc_date=today + timedelta(days=21),
+            release_date=today + timedelta(days=45),
+            cover_price=19.99,
+        )
+    )
+    session.commit()
+
+    generate_unified_collector_recommendations(session, owner_user_id=owner_id)
+    items, _ = list_latest_unified_collector_recommendations(session, owner_user_id=owner_id, limit=100)
+    titles = {i.title for i in items}
+    assert not any("Kick-Ass Compendium" in t for t in titles)

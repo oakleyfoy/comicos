@@ -11,6 +11,10 @@ from app.models.unified_collector_intelligence import UnifiedCollectorRecommenda
 from app.schemas.daily_action_engine import DailyActionSummaryRead, DailyCollectorActionRead
 from app.services.foc_dates import days_until_foc, utc_today
 from app.services.grade_before_sell import _latest_rows as _latest_grade_rows
+from app.services.recommendation_catalog_quality import (
+    build_forward_release_title_index,
+    title_passes_top_recommendation_quality,
+)
 from app.services.unified_collector_intelligence import (
     _latest_recommendation_rows,
     generate_unified_collector_recommendations,
@@ -106,10 +110,18 @@ def _confidence_from_sources(base: float, sources: list[str]) -> float:
 
 def _build_drafts(session: Session, *, owner_user_id: int) -> list[_ActionDraft]:
     generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     drafts: list[_ActionDraft] = []
     seen_titles: set[tuple[str, str]] = set()
 
     for row in _latest_recommendation_rows(session, owner_user_id=owner_user_id).values():
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         action_type = _UNIFIED_TO_ACTION.get(row.recommendation_type, ACTION_WATCH)
         sources = list(row.source_systems or [])
         due = _foc_due_date(session, owner_user_id=owner_user_id, title=row.title) if action_type == ACTION_PREORDER else None
@@ -271,8 +283,16 @@ def list_latest_daily_actions(
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     latest = _latest_action_rows(session, owner_user_id=owner_user_id)
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     rows: list[DailyCollectorAction] = []
     for row in latest.values():
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         if action_type and row.action_type != action_type.strip().upper():
             continue
         if priority_min is not None and float(row.priority_score) < float(priority_min):

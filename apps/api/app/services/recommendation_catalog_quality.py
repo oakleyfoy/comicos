@@ -46,7 +46,6 @@ _BOOK_TRADE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     for p in (
         r"\btp\b",
         r"\btpb\b",
-        r"\btp\b",
         r"trade\s+paperback",
         r"trading\s+card",
         r"\bhc\b",
@@ -67,6 +66,11 @@ _BOOK_TRADE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"poster\s+book",
         r"coloring\s+book",
         r"children'?s\s+book",
+        r"sticker\s+book",
+        r"\bstickerbook\b",
+        r"tour\s+book",
+        r"\btour\b",
+        r"\bhorrors\b",
     )
 )
 
@@ -140,8 +144,45 @@ _NON_ISSUE_NUMBERS = frozenset(
         "book",
         "vol",
         "volume",
+        "compendium",
+        "omnibus",
+        "digest",
     }
 )
+
+
+def _hard_excludes_from_top(quality: ReleaseCatalogQuality) -> bool:
+    """Books, collected editions, and non-periodical formats never qualify for top recs."""
+    if quality.is_book_or_trade or quality.is_collected_edition:
+        return True
+    reason = quality.recommendation_exclusion_reason
+    if reason in {
+        "non_comic_merchandise",
+        "prose_or_art_book",
+        "paperback_book",
+        "trade_paperback",
+        "hardcover_book",
+        "collected_edition",
+        "not_single_issue",
+        "over_price_cap_book_or_trade",
+    }:
+        return True
+    return False
+
+
+def _spec_override_allowed(
+    *,
+    exclusion: str | None,
+    is_single_issue: bool,
+    is_book: bool,
+    is_collected: bool,
+    is_merch: bool,
+) -> bool:
+    if is_book or is_collected or is_merch:
+        return False
+    if exclusion == "reprint_non_key" and is_single_issue:
+        return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -391,7 +432,7 @@ def classify_catalog_text(
     hot = _hot_key_override(key_signals, spec_type=spec_type)
 
     is_single = _looks_like_comic_issue_number(issue_number) and not is_book and not is_collected and not is_merch
-    if is_single and not is_reprint:
+    if is_single and not is_reprint and not _matches_any(blob, _COLLECTED_EDITION_PATTERNS):
         return ReleaseCatalogQuality(
             is_single_issue=True,
             is_collected_edition=False,
@@ -413,6 +454,10 @@ def classify_catalog_text(
             exclusion = "hardcover_book"
         if "prose" in blob or "novel" in blob or "pictorial history" in blob or "history of" in blob:
             exclusion = "prose_or_art_book"
+        if "sticker" in blob:
+            exclusion = "sticker_book"
+        if "tour" in blob or "horrors" in blob:
+            exclusion = "tour_book"
         multiplier = 0.0
     elif is_collected:
         exclusion = "collected_edition"
@@ -422,14 +467,17 @@ def classify_catalog_text(
         multiplier = 0.12 if not hot else 0.85
     elif not _looks_like_comic_issue_number(issue_number):
         exclusion = "not_single_issue"
-        multiplier = 0.15
-
-    spec_eligible = hot and (exclusion != "non_comic_merchandise")
-    if exclusion and not hot:
-        spec_eligible = False
         multiplier = 0.0
-    elif exclusion and hot:
-        spec_eligible = True
+
+    spec_eligible = _spec_override_allowed(
+        exclusion=exclusion,
+        is_single_issue=is_single,
+        is_book=is_book,
+        is_collected=is_collected,
+        is_merch=is_merch,
+    ) and hot
+    if exclusion and not spec_eligible:
+        multiplier = 0.0
 
     return ReleaseCatalogQuality(
         is_single_issue=is_single,
@@ -480,7 +528,94 @@ def classify_forward_release(
     )
 
 
+def parse_recommendation_display_title(title: str) -> tuple[str, str | None]:
+    raw = (title or "").strip()
+    if " #" in raw:
+        series, issue = raw.split(" #", 1)
+        return series.strip(), issue.strip() or None
+    if "#" in raw:
+        series, issue = raw.split("#", 1)
+        return series.strip(), issue.strip() or None
+    return raw, None
+
+
+def quality_for_recommendation_title(
+    title: str,
+    *,
+    session: Session | None = None,
+    owner_user_id: int | None = None,
+    release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]] | None = None,
+    key_signals: list[str] | None = None,
+    spec_type: str | None = None,
+    confidence_score: float | None = None,
+    today: date | None = None,
+) -> ReleaseCatalogQuality:
+    """Resolve catalog quality for a unified/cross-system/daily action title."""
+    title_key = title.strip().lower()
+    if title_key.endswith(" (variants)"):
+        title_key = title_key[: -len(" (variants)")]
+    index = release_index
+    if index is None and session is not None and owner_user_id is not None:
+        index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
+    series_name, issue_number = parse_recommendation_display_title(title)
+    display_quality = apply_price_discipline(
+        classify_catalog_text(
+            series_name=series_name,
+            issue_number=issue_number,
+            title=title,
+            key_signals=key_signals,
+            spec_type=spec_type,
+        ),
+        cover_price=None,
+        issue_number=issue_number,
+        title=title,
+        key_signals=key_signals,
+        spec_type=spec_type,
+    )
+    pair = index.get(title_key) if index else None
+    if pair is not None:
+        issue, series = pair
+        issue_id = int(issue.id or 0)
+        signals = key_signals
+        if signals is None and session is not None and issue_id:
+            from app.services.recommendation_forward_window import _key_signals_by_issue
+
+            signals = _key_signals_by_issue(session, issue_ids=[issue_id]).get(issue_id, [])
+        release_quality = classify_forward_release(
+            issue,
+            series,
+            key_signals=signals,
+            spec_type=spec_type,
+            confidence_score=confidence_score,
+            today=today,
+        )
+        if _hard_excludes_from_top(display_quality) or not should_include_in_top_recommendations(display_quality):
+            return display_quality
+        if _hard_excludes_from_top(release_quality) or not should_include_in_top_recommendations(release_quality):
+            return release_quality
+        return release_quality
+    return display_quality
+
+
+def title_passes_top_recommendation_quality(
+    title: str,
+    *,
+    session: Session | None = None,
+    owner_user_id: int | None = None,
+    release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]] | None = None,
+) -> bool:
+    quality = quality_for_recommendation_title(
+        title,
+        session=session,
+        owner_user_id=owner_user_id,
+        release_index=release_index,
+    )
+    return should_include_in_top_recommendations(quality)
+
+
 def should_include_in_top_recommendations(quality: ReleaseCatalogQuality) -> bool:
+    if _hard_excludes_from_top(quality):
+        return False
     if quality.price_discipline_score <= 0.0:
         return False
     if quality.is_over_price_cap and not quality.price_exception_reason:

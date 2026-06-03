@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pytest
+
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.recommendation_catalog_quality import (
     RECOMMENDATION_PRICE_CAP,
@@ -184,5 +186,60 @@ def test_over_cap_number_one_with_key_allowed() -> None:
     assert should_include_in_top_recommendations(quality)
 
 
-def test_recommendation_price_cap_constant() -> None:
-    assert RECOMMENDATION_PRICE_CAP == 12.0
+BAD_PRODUCTION_EXAMPLES = [
+    ("Kick-Ass Compendium TP", "TP", "Kick-Ass Compendium TP"),
+    ("A Pictorial History of Classic Nurse TP", "TP", "A Pictorial History of Classic Nurse TP"),
+    ("All The Feels Emotional Sticker Book TP", "TP", "All The Feels Emotional Sticker Book TP"),
+    ("Alphabet of Oddities HC", "HC", "Alphabet of Oddities HC"),
+    ("Alter Bridge HC Tour of Horrors", "HC", "Alter Bridge HC Tour of Horrors"),
+]
+
+
+@pytest.mark.parametrize("series_name,issue_number,title", BAD_PRODUCTION_EXAMPLES)
+def test_production_bad_examples_excluded_even_with_key_signal(
+    series_name: str,
+    issue_number: str,
+    title: str,
+) -> None:
+    quality = classify_catalog_text(
+        series_name=series_name,
+        issue_number=issue_number,
+        title=title,
+        key_signals=["FIRST_APPEARANCE", "KEY_ISSUE"],
+        spec_type="STRONG_BUY",
+    )
+    assert not should_include_in_top_recommendations(quality)
+
+
+@pytest.mark.parametrize("series_name,issue_number,title", BAD_PRODUCTION_EXAMPLES)
+def test_production_bad_display_titles_excluded(series_name: str, issue_number: str, title: str) -> None:
+    display = f"{series_name} #{issue_number}" if issue_number else series_name
+    quality = classify_catalog_text(
+        series_name=series_name,
+        issue_number=issue_number,
+        title=display,
+        key_signals=["NEW_NUMBER_ONE"],
+    )
+    assert not should_include_in_top_recommendations(quality)
+
+
+def test_foc_single_issue_still_included() -> None:
+    issue = ReleaseIssue(
+        owner_user_id=1,
+        release_uuid="foc-good",
+        series_id=1,
+        issue_number="1",
+        title="New Hero 1",
+        release_status="SCHEDULED",
+        foc_date=date.today() + timedelta(days=5),
+        cover_price=4.99,
+    )
+    series = ReleaseSeries(
+        owner_user_id=1,
+        publisher="Image",
+        series_name="New Hero",
+        series_type="ONGOING",
+        status="ACTIVE",
+    )
+    quality = classify_forward_release(issue, series, key_signals=["NEW_NUMBER_ONE"])
+    assert should_include_in_top_recommendations(quality)

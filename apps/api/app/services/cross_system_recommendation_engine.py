@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from sqlmodel import Session, select
 
 from app.models.cross_system_recommendation import CrossSystemRecommendation
+from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.acquisition_opportunities import latest_acquisition_opportunity_rows
 from app.services.grade_before_sell import _latest_rows as _latest_grade_rows
 from app.services.hold_sell_intelligence import _latest_hold_sell_rows
@@ -14,11 +15,10 @@ from app.services.unified_collector_intelligence import (
     generate_unified_collector_recommendations,
 )
 from app.services.recommendation_catalog_quality import (
-    apply_price_discipline,
     build_forward_release_title_index,
-    classify_catalog_text,
-    classify_forward_release,
+    quality_for_recommendation_title,
     should_include_in_top_recommendations,
+    title_passes_top_recommendation_quality,
 )
 
 SRC_UNIFIED = "P57_UNIFIED"
@@ -80,6 +80,7 @@ def _confidence_boost(base: float, source_count: int, *, consistent: bool) -> fl
 def _list_daily_collector_actions(session: Session, *, owner_user_id: int) -> list[_Candidate]:
     from app.models.daily_action_engine import DailyCollectorAction
 
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     rows = session.exec(
         select(DailyCollectorAction)
         .where(DailyCollectorAction.owner_user_id == owner_user_id)
@@ -92,6 +93,13 @@ def _list_daily_collector_actions(session: Session, *, owner_user_id: int) -> li
             latest[key] = row
     out: list[_Candidate] = []
     for row in latest.values():
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         action_type = row.action_type.strip().upper()
         rec_type = action_type if action_type in _TYPE_RANK else TYPE_WATCH
         systems = {str(s) for s in (row.source_systems or [])}
@@ -111,8 +119,16 @@ def _list_daily_collector_actions(session: Session, *, owner_user_id: int) -> li
 
 
 def _unified_candidates(session: Session, *, owner_user_id: int) -> list[_Candidate]:
+    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
     out: list[_Candidate] = []
     for row in _latest_unified_rows(session, owner_user_id=owner_user_id).values():
+        if not title_passes_top_recommendation_quality(
+            row.title,
+            session=session,
+            owner_user_id=owner_user_id,
+            release_index=release_index,
+        ):
+            continue
         systems = {str(s) for s in (row.source_systems or [])}
         systems.add(SRC_UNIFIED)
         out.append(
@@ -226,38 +242,26 @@ def _apply_budget_awareness(session: Session, *, owner_user_id: int, candidates:
             cand.rationale = f"{cand.rationale} Budget constrained; critical acquisition prioritized.".strip()
 
 
-def _parse_title_for_quality(title: str) -> tuple[str, str | None]:
-    if "#" in title:
-        series, issue = title.split("#", 1)
-        return series.strip(), issue.strip()
-    return title.strip(), None
-
-
 def _candidate_passes_quality_filter(
     cand: _Candidate,
     *,
     release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
     signals_by_issue: dict[int, list[str]],
 ) -> bool:
+    issue_id = None
     title_key = cand.title.strip().lower()
     if title_key.endswith(" (variants)"):
         title_key = title_key[: -len(" (variants)")]
     pair = release_index.get(title_key)
     if pair is not None:
-        issue, series = pair
-        issue_id = int(issue.id or 0)
-        signals = signals_by_issue.get(issue_id, [])
-        quality = classify_forward_release(
-            issue,
-            series,
-            key_signals=signals,
-            confidence_score=cand.confidence_score,
-        )
-        return should_include_in_top_recommendations(quality)
-
-    series, issue = _parse_title_for_quality(cand.title)
-    quality = classify_catalog_text(series_name=series, issue_number=issue, title=cand.title)
-    quality = apply_price_discipline(quality, cover_price=None, issue_number=issue, title=cand.title)
+        issue_id = int(pair[0].id or 0)
+    signals = signals_by_issue.get(issue_id, []) if issue_id else None
+    quality = quality_for_recommendation_title(
+        cand.title,
+        release_index=release_index,
+        key_signals=signals,
+        confidence_score=cand.confidence_score,
+    )
     return should_include_in_top_recommendations(quality)
 
 
@@ -344,9 +348,14 @@ def _merge_raw_candidates(raw: list[_Candidate]) -> list[_Candidate]:
     return resolved
 
 
+# Bump when quality/ranking logic changes so persisted snapshots refresh after deploy.
+RECOMMENDATION_PIPELINE_EPOCH = 4
+
+
 def _candidate_signature(candidates: list[_Candidate]) -> list[tuple]:
     return [
         (
+            RECOMMENDATION_PIPELINE_EPOCH,
             rank,
             c.recommendation_type,
             c.title,
@@ -365,6 +374,7 @@ def _prior_snapshot_signature(session: Session, *, owner_user_id: int) -> list[t
     rows = [snapshot[r] for r in sorted(snapshot.keys())]
     return [
         (
+            RECOMMENDATION_PIPELINE_EPOCH,
             int(row.recommendation_rank),
             row.recommendation_type,
             row.title,
@@ -406,11 +416,28 @@ def _latest_snapshot_rows(
     session: Session,
     *,
     owner_user_id: int,
+    scan_limit: int = 1000,
 ) -> dict[int, CrossSystemRecommendation]:
-    rows = session.exec(
-        select(CrossSystemRecommendation)
+    """Latest consecutive-id snapshot batch (bounded scan — avoids loading full history)."""
+    max_id_row = session.exec(
+        select(CrossSystemRecommendation.id)
         .where(CrossSystemRecommendation.owner_user_id == owner_user_id)
         .order_by(CrossSystemRecommendation.id.desc())
+        .limit(1)
+    ).one_or_none()
+    if max_id_row is None:
+        return {}
+    max_id = int(getattr(max_id_row, "id", max_id_row) or 0)
+    if max_id <= 0:
+        return {}
+    rows = session.exec(
+        select(CrossSystemRecommendation)
+        .where(
+            CrossSystemRecommendation.owner_user_id == owner_user_id,
+            CrossSystemRecommendation.id <= max_id,
+        )
+        .order_by(CrossSystemRecommendation.id.desc())
+        .limit(max(1, int(scan_limit)))
     ).all()
     if not rows:
         return {}
