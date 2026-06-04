@@ -11,3 +11,7 @@ def test_diagnose_signal_bucket_script_exists() -> None:
     assert "--strict-title" in source
     assert "--include-books" in source
     assert "generate_cross_system_recommendations" not in source
+    assert "--perf-audit" in source
+    assert "performance" in source
+    assert "fetch_stored_recommendation_by_title" in source
+    assert "list_latest_cross_system_recommendations" not in source

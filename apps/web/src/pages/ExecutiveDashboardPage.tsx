@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   apiClient,
-  type ExecutiveDashboardItemRead,
   type ExecutiveDashboardRead,
   type ExecutiveDashboardSectionRead,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { ExecutiveRecommendationCard } from "../components/ExecutiveRecommendationCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
@@ -29,43 +29,12 @@ function SectionPanel({ block }: { block: ExecutiveDashboardSectionRead }): JSX.
               key={`${block.section}-${item.item_type}-${item.item_id}`}
               className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white [&_p]:text-white"
             >
-              <ItemRow item={item} />
+              <ExecutiveRecommendationCard item={item} />
             </li>
           ))}
         </ul>
       )}
     </div>
-  );
-}
-
-function ItemMetaLine({ item }: { item: ExecutiveDashboardItemRead }): JSX.Element | null {
-  const parts: string[] = [];
-  if (item.publisher) parts.push(item.publisher);
-  if (item.recommendation_rank != null) parts.push(`Rank ${item.recommendation_rank}`);
-  if (item.priority_score != null) parts.push(`Priority ${item.priority_score.toFixed(1)}`);
-  if (item.confidence_score != null) parts.push(`Conf ${item.confidence_score.toFixed(2)}`);
-  if (item.due_date) parts.push(`Due ${item.due_date}`);
-  if (item.estimated_value != null) parts.push(`Est ${money(item.estimated_value)}`);
-  if (parts.length === 0) return null;
-  return <p className="mt-1 text-xs text-white">{parts.join(" · ")}</p>;
-}
-
-function ItemRow({ item }: { item: ExecutiveDashboardItemRead }): JSX.Element {
-  const badge = item.action_type || item.recommendation_type || item.health_status;
-  return (
-    <>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium text-white">{item.title}</span>
-        {badge ? (
-          <span className="shrink-0 font-medium uppercase tracking-wide text-sky-200">{badge.replace(/_/g, " ")}</span>
-        ) : null}
-      </div>
-      <ItemMetaLine item={item} />
-      {item.source_systems.length > 0 ? (
-        <p className="mt-1 text-xs text-white">Sources: {item.source_systems.join(", ")}</p>
-      ) : null}
-      {item.rationale ? <p className="mt-1 text-xs leading-relaxed text-white">{item.rationale}</p> : null}
-    </>
   );
 }
 

@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.schemas.recommendation_decision import RecommendationDecisionRead
 from app.schemas.recommendation_ranking import RecommendationRankingDiagnosticsRead
 
 SECTION_DAILY_ACTIONS = "DAILY_ACTIONS"
@@ -58,6 +59,7 @@ class ExecutiveDashboardItemRead(BaseModel):
     estimated_value: float | None = None
     rationale: str = ""
     source_systems: list[str] = Field(default_factory=list)
+    decision: RecommendationDecisionRead | None = None
     health_status: str | None = None
     created_at: str = ""
 

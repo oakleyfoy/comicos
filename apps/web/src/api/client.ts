@@ -15531,6 +15531,7 @@ export interface ExecutiveDashboardItemRead {
   estimated_value: number | null;
   rationale: string;
   source_systems: string[];
+  decision: RecommendationDecisionRead | null;
   health_status: string | null;
   created_at: string;
 }

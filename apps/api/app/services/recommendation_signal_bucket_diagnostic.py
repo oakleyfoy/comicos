@@ -29,6 +29,8 @@ from app.services.recommendation_priority_enrichment import (
     build_recommendation_priority_enrichment,
 )
 from app.services.recommendation_catalog_quality import classify_catalog_text
+from app.services.recommendation_signal_bucket_fast import SignalBucketDiagnosticCaches
+from app.services.recommendation_signal_bucket_perf import DiagnosticPerfRecorder
 from app.services.recommendation_title_index import resolve_release_pair
 from app.services.recommendation_title_normalize import (
     display_title_key,
@@ -236,10 +238,20 @@ def _select_catalog_pair(
     return None, candidates, "no_usable_single_issue_in_catalog", None, excluded
 
 
-def _creator_names_in_text(session: Session, blob: str) -> list[dict[str, Any]]:
+def _creator_names_in_text(
+    session: Session,
+    blob: str,
+    *,
+    active_profiles: list[CreatorProfile] | None = None,
+) -> list[dict[str, Any]]:
     lower = blob.lower()
     hits: list[dict[str, Any]] = []
-    for profile in session.exec(select(CreatorProfile).where(CreatorProfile.status == "ACTIVE").limit(400)).all():
+    profiles = active_profiles
+    if profiles is None:
+        profiles = list(
+            session.exec(select(CreatorProfile).where(CreatorProfile.status == "ACTIVE").limit(400)).all()
+        )
+    for profile in profiles:
         name = (profile.creator_name or "").strip()
         if len(name) < 3:
             continue
@@ -386,23 +398,46 @@ def diagnose_title_signal_buckets(
     rationale: str = "",
     include_books: bool = False,
     strict_catalog_title: str | None = None,
+    perf: DiagnosticPerfRecorder | None = None,
+    caches: SignalBucketDiagnosticCaches | None = None,
+    use_title_index_resolve: bool = True,
 ) -> dict[str, Any]:
-    normalized_key = normalize_recommendation_title_key(title_query)
-    index_pair = resolve_release_pair(title_query, release_index)
-    if strict_catalog_title:
-        index_pair = resolve_release_pair(strict_catalog_title, release_index) or index_pair
-    catalog_rows = _search_release_catalog(
-        session,
-        owner_user_id=owner_user_id,
-        title_query=title_query,
-        strict_title=strict_catalog_title,
-    )
-    pair, candidate_catalog_matches, selected_reason, product_format, excluded_by_format = _select_catalog_pair(
-        catalog_rows,
-        include_books=include_books,
-        strict_title=strict_catalog_title,
-        index_pair=index_pair,
-    )
+    def _step(name: str, *, rows: int = 0, notes: str = ""):
+        if perf is None:
+            from contextlib import nullcontext
+
+            return nullcontext()
+        return perf.step(name, rows_scanned=rows, notes=notes)
+
+    active_creators: list[CreatorProfile] | None = None
+    if caches is not None:
+        active_creators = caches.get_active_creators(session)
+
+    with _step("title_index_resolve_pair"):
+        normalized_key = normalize_recommendation_title_key(title_query)
+        index_pair = None
+        if use_title_index_resolve and release_index:
+            index_pair = resolve_release_pair(title_query, release_index)
+            if strict_catalog_title:
+                index_pair = resolve_release_pair(strict_catalog_title, release_index) or index_pair
+
+    with _step("release_catalog_search", notes="DB catalog search by title"):
+        catalog_rows = _search_release_catalog(
+            session,
+            owner_user_id=owner_user_id,
+            title_query=title_query,
+            strict_title=strict_catalog_title,
+        )
+        if caches is not None:
+            caches.catalog_rows_scanned += len(catalog_rows)
+
+    with _step("release_catalog_format_select"):
+        pair, candidate_catalog_matches, selected_reason, product_format, excluded_by_format = _select_catalog_pair(
+            catalog_rows,
+            include_books=include_books,
+            strict_title=strict_catalog_title,
+            index_pair=index_pair,
+        )
 
     issue, series = pair if pair else (None, None)
     issue_id = int(issue.id) if issue and issue.id else None
@@ -424,14 +459,18 @@ def diagnose_title_signal_buckets(
 
     variants: list[ReleaseVariant] = []
     if issue_id:
-        variants = list(session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all())
+        with _step("release_variants_lookup"):
+            variants = list(session.exec(select(ReleaseVariant).where(ReleaseVariant.issue_id == issue_id)).all())
+            if perf is not None and perf.steps:
+                perf.steps[-1].rows_scanned = len(variants)
 
     key_signals: list[str] = []
     if issue_id:
-        key_signals = [
-            str(r.signal_type)
-            for r in session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == issue_id)).all()
-        ]
+        with _step("release_key_signals_lookup"):
+            key_signals = [
+                str(r.signal_type)
+                for r in session.exec(select(ReleaseKeySignal).where(ReleaseKeySignal.issue_id == issue_id)).all()
+            ]
 
     rec_rationale = rationale or (recommendation_row or {}).get("rationale", "")
     blob_full = _text_blob(series=series, issue=issue, variants=variants, rationale=rec_rationale)
@@ -441,53 +480,63 @@ def diagnose_title_signal_buckets(
         for v in variants
     ).lower()
 
-    owned_stats = build_owned_series_inventory_stats(session, owner_user_id=owner_user_id)
+    with _step("market_demand_owned_inventory_stats", notes="inventory group-by for owner"):
+        owned_stats = build_owned_series_inventory_stats(session, owner_user_id=owner_user_id)
     priority_enrichment = None
     market_user_available = False
     if release_matched and issue is not None and series is not None and issue_id:
-        priority_enrichment = build_recommendation_priority_enrichment(
-            session,
-            owner_user_id=owner_user_id,
-            series_name=series.series_name,
-            issue_title=issue.title,
-            publisher=series.publisher,
-            key_signals=key_signals,
-            v2_confidence=float((recommendation_row or {}).get("confidence_score") or 0.58),
-            spec_type=None,
-            owns_series_run=False,
-            owned_stats=owned_stats,
-            scoring_ctx=None,
-            issue_id=issue_id,
-            issue=issue,
-            series=series,
-        )
+        with _step("market_demand_priority_enrichment"):
+            priority_enrichment = build_recommendation_priority_enrichment(
+                session,
+                owner_user_id=owner_user_id,
+                series_name=series.series_name,
+                issue_title=issue.title,
+                publisher=series.publisher,
+                key_signals=key_signals,
+                v2_confidence=float((recommendation_row or {}).get("confidence_score") or 0.58),
+                spec_type=None,
+                owns_series_run=False,
+                owned_stats=owned_stats,
+                scoring_ctx=None,
+                issue_id=issue_id,
+                issue=issue,
+                series=series,
+            )
 
     breakdown = None
     if release_matched and issue is not None and series is not None:
-        _, breakdown = build_collector_significance_with_breakdown(
-            session,
-            series=series,
-            issue=issue,
-            variants=variants,
-            rationale=rec_rationale,
-            key_signals=key_signals,
-            priority_enrichment=priority_enrichment,
-            owned_stats=owned_stats,
-            base_score=float((recommendation_row or {}).get("priority_score") or 0.0),
-        )
+        with _step("collector_significance_scoring", notes="milestone/homage/creator breakdown"):
+            _, breakdown = build_collector_significance_with_breakdown(
+                session,
+                series=series,
+                issue=issue,
+                variants=variants,
+                rationale=rec_rationale,
+                key_signals=key_signals,
+                priority_enrichment=priority_enrichment,
+                owned_stats=owned_stats,
+                base_score=float((recommendation_row or {}).get("priority_score") or 0.0),
+            )
 
     creator_sc = float(breakdown.creator_score if breakdown else 0.0)
     milestone_sc = float(breakdown.milestone_score if breakdown else 0.0)
     homage_sc = float(breakdown.homage_score if breakdown else 0.0)
     market_sc = float(breakdown.historical_demand_score if breakdown else 0.0)
 
-    creator_matches = _creator_names_in_text(session, blob_full) if release_matched else []
-    parsed_ms = parse_issue_number_milestone(issue.issue_number) if issue else None
-    ms_num, _ms_bonus, _ = _milestone_signals(issue.issue_number or "", blob_full) if issue else (None, 0.0, [])
-    anniversary = any(p.search(blob_full) for p in _ANNIVERSARY_PATTERNS)
-    legacy = any(p.search(blob_full) for p in _LEGACY_NUMBERING_PATTERNS)
-    homage_labels = _homage_labels_in_blob(blob_full)
-    homage_variant_labels = _homage_labels_in_blob(blob_variants_only)
+    with _step("creator_lookup", notes="ACTIVE CreatorProfile scan up to 400 + popularity"):
+        creator_matches = (
+            _creator_names_in_text(session, blob_full, active_profiles=active_creators)
+            if release_matched
+            else []
+        )
+    with _step("milestone_lookup", notes="parse issue # + anniversary/legacy regex"):
+        parsed_ms = parse_issue_number_milestone(issue.issue_number) if issue else None
+        ms_num, _ms_bonus, _ = _milestone_signals(issue.issue_number or "", blob_full) if issue else (None, 0.0, [])
+        anniversary = any(p.search(blob_full) for p in _ANNIVERSARY_PATTERNS)
+        legacy = any(p.search(blob_full) for p in _LEGACY_NUMBERING_PATTERNS)
+    with _step("homage_lookup", notes="homage/tribute regex on catalog text"):
+        homage_labels = _homage_labels_in_blob(blob_full)
+        homage_variant_labels = _homage_labels_in_blob(blob_variants_only)
 
     series_key = (
         (series.publisher or "").strip().lower(),
@@ -507,15 +556,22 @@ def diagnose_title_signal_buckets(
         pull_match = pl is not None
 
     market_profiles: list[dict[str, Any]] = []
-    for profile in session.exec(select(MarketDemandProfile)).all():
-        name = (getattr(profile, "entity_name", None) or "").strip().lower()
-        if name and len(name) >= 3 and name in blob_full:
-            market_profiles.append(
-                {
-                    "entity_name": profile.entity_name,
-                    "demand_score": float(profile.demand_score),
-                }
-            )
+    with _step("market_demand_profile_scan", notes="filtered or cached MarketDemandProfile"):
+        if caches is not None:
+            rows = caches.get_market_profiles(session, search_blob=blob_full)
+        else:
+            rows = session.exec(select(MarketDemandProfile)).all()
+        for profile in rows:
+            name = (getattr(profile, "entity_name", None) or "").strip().lower()
+            if name and len(name) >= 3 and name in blob_full:
+                market_profiles.append(
+                    {
+                        "entity_name": profile.entity_name,
+                        "demand_score": float(profile.demand_score),
+                    }
+                )
+        if perf is not None:
+            perf.steps[-1].rows_scanned = len(rows)
 
     enrichment_attempted = release_matched and issue_id is not None
 
@@ -523,8 +579,12 @@ def diagnose_title_signal_buckets(
         release_matched=release_matched,
         enrichment_attempted=enrichment_attempted,
         creator_score_value=creator_sc,
-        names_in_catalog=bool(_creator_names_in_text(session, blob_issue)),
-        names_in_variants=bool(_creator_names_in_text(session, blob_variants_only)),
+        names_in_catalog=bool(_creator_names_in_text(session, blob_issue, active_profiles=active_creators))
+        if release_matched
+        else False,
+        names_in_variants=bool(_creator_names_in_text(session, blob_variants_only, active_profiles=active_creators))
+        if release_matched
+        else False,
         matched_profiles=creator_matches,
     )
     milestone_bucket = _classify_milestone_bucket(
@@ -613,12 +673,22 @@ def diagnose_title_signal_buckets(
             "release_index_key": index_key_from_release,
             "resolve_release_pair_matched": release_index_matched,
             "catalog_fallback_available": catalog_matched and not release_index_matched,
-            "closest_index_keys": _closest_index_keys(title_query, release_index),
+            "closest_index_keys": _closest_index_keys(title_query, release_index)
+            if release_index
+            else [],
         },
         "creator_diagnostic": {
             "creator_score": creator_sc,
-            "creator_names_in_catalog_text": bool(_creator_names_in_text(session, blob_issue)) if release_matched else False,
-            "creator_names_in_variant_text": bool(_creator_names_in_text(session, blob_variants_only)) if release_matched else False,
+            "creator_names_in_catalog_text": bool(
+                _creator_names_in_text(session, blob_issue, active_profiles=active_creators)
+            )
+            if release_matched
+            else False,
+            "creator_names_in_variant_text": bool(
+                _creator_names_in_text(session, blob_variants_only, active_profiles=active_creators)
+            )
+            if release_matched
+            else False,
             "matched_creator_profiles": creator_matches,
             "why_zero_bucket": creator_bucket if creator_sc <= 0 else BUCKET_OK,
         },

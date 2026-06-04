@@ -160,7 +160,7 @@ def _section_read(
     ranking_diagnostics: RecommendationRankingDiagnosticsRead | None = None,
 ) -> ExecutiveDashboardSectionRead:
     title, empty_message = SECTION_META[section]
-    if section == SECTION_TOP_RECOMMENDATIONS:
+    if section in {SECTION_TOP_RECOMMENDATIONS, SECTION_DAILY_ACTIONS}:
         trimmed = _sort_top_recommendations(items)
     else:
         trimmed = _sort_and_trim(items)
@@ -226,6 +226,39 @@ def _filter_items(
     ]
 
 
+def _title_lookup_key(title: str) -> str:
+    return title.strip().lower()
+
+
+def _cross_system_by_title(rows) -> dict[str, object]:
+    best: dict[str, object] = {}
+    for row in rows:
+        key = _title_lookup_key(row.title)
+        prev = best.get(key)
+        if prev is None or float(row.priority_score) > float(prev.priority_score):
+            best[key] = row
+    return best
+
+
+def _enrich_daily_with_cross(
+    item: ExecutiveDashboardItemRead,
+    cross_row,
+) -> ExecutiveDashboardItemRead:
+    """Align daily-action cards with cross-system display (sources, scores, decision)."""
+    return item.model_copy(
+        update={
+            "priority_score": float(cross_row.priority_score),
+            "confidence_score": float(cross_row.confidence_score),
+            "source_systems": list(cross_row.source_systems or []),
+            "rationale": cross_row.rationale or item.rationale,
+            "estimated_value": cross_row.estimated_value,
+            "recommendation_rank": int(cross_row.recommendation_rank),
+            "recommendation_type": cross_row.recommendation_type,
+            "decision": cross_row.decision or item.decision,
+        }
+    )
+
+
 def _from_daily(row: DailyCollectorActionRead) -> ExecutiveDashboardItemRead:
     created = row.created_at.isoformat() if hasattr(row.created_at, "isoformat") else str(row.created_at)
     return ExecutiveDashboardItemRead(
@@ -240,6 +273,7 @@ def _from_daily(row: DailyCollectorActionRead) -> ExecutiveDashboardItemRead:
         due_date=row.due_date,
         rationale=row.rationale,
         source_systems=list(row.source_systems or []),
+        decision=row.decision,
         created_at=created,
     )
 
@@ -252,12 +286,14 @@ def _from_cross(row) -> ExecutiveDashboardItemRead:
         item_id=row.id,
         title=row.title,
         recommendation_type=row.recommendation_type,
+        action_type=row.recommendation_type,
         priority_score=row.priority_score,
         confidence_score=row.confidence_score,
         recommendation_rank=row.recommendation_rank,
         estimated_value=row.estimated_value,
         rationale=row.rationale,
         source_systems=list(row.source_systems or []),
+        decision=row.decision,
         created_at=created,
     )
 
@@ -438,8 +474,17 @@ def _collect_raw_sections(session: Session, *, owner_user_id: int) -> dict[str, 
     for src in foc.watchlist:
         watch_items.append(_from_foc(src))
 
+    cross_by_title = _cross_system_by_title(cross_rows)
+    daily_items: list[ExecutiveDashboardItemRead] = []
+    for r in daily_rows:
+        item = _from_daily(r)
+        cross_match = cross_by_title.get(_title_lookup_key(r.title))
+        if cross_match is not None:
+            item = _enrich_daily_with_cross(item, cross_match)
+        daily_items.append(item)
+
     return {
-        SECTION_DAILY_ACTIONS: [_from_daily(r) for r in daily_rows],
+        SECTION_DAILY_ACTIONS: daily_items,
         SECTION_TOP_RECOMMENDATIONS: [_from_cross(r) for r in cross_rows],
         SECTION_PREORDER_THIS_WEEK: preorder_items,
         SECTION_ACQUIRE_TARGETS: acquire_items,
