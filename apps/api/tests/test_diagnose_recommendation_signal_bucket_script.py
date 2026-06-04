@@ -15,3 +15,10 @@ def test_diagnose_signal_bucket_script_exists() -> None:
     assert "performance" in source
     assert "fetch_stored_recommendation_by_title" in source
     assert "list_latest_cross_system_recommendations" not in source
+
+
+def test_lunar_month_import_check_partial_finished() -> None:
+    path = Path(__file__).resolve().parents[1] / "scripts" / "lunar_production_month_import_check.py"
+    source = path.read_text(encoding="utf-8")
+    assert "finished_runs" in source
+    assert "--force" in source
