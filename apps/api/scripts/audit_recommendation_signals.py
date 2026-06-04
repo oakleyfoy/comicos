@@ -40,7 +40,7 @@ def main() -> int:
     from sqlmodel import Session
 
     from app.db.session import get_engine
-    from app.models import User
+    from owner_lookup import resolve_owner_user_id as _resolve_owner_user_id
     from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
     from app.services.cross_system_recommendation_engine import (
         build_cross_system_candidates,
@@ -55,11 +55,14 @@ def main() -> int:
     limit = min(max(int(args.limit), 1), 500)
 
     with Session(get_engine()) as session:
-        user = session.exec(select(User).where(User.email == args.email)).first()
-        if user is None:
+        try:
+            owner_user_id = _resolve_owner_user_id(session, args.email)
+        except LookupError:
             print(f"error: no user for {args.email}", file=sys.stderr)
             return 1
-        owner_user_id = int(user.id)
+        except (TypeError, ValueError) as exc:
+            print(f"error: could not resolve user id for {args.email}: {exc}", file=sys.stderr)
+            return 1
 
         if args.rebuild:
             generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=True)
