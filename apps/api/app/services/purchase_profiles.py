@@ -45,6 +45,10 @@ def _preference_to_read(row: PurchasePreference) -> PurchasePreferenceRead:
         grading_interest=float(row.grading_interest),
         completionist_score=float(row.completionist_score),
         speculation_score=float(row.speculation_score),
+        ratio_variant_strategy=(getattr(row, "ratio_variant_strategy", None) or "conservative"),  # type: ignore[arg-type]
+        max_ratio_variant_price=float(getattr(row, "max_ratio_variant_price", 25.0)),
+        high_ratio_exception_required=bool(getattr(row, "high_ratio_exception_required", True)),
+        high_ratio_threshold=int(getattr(row, "high_ratio_threshold", 50)),
         created_at=row.created_at.isoformat(),
         updated_at=row.updated_at.isoformat(),
     )
@@ -59,6 +63,10 @@ def _default_preferences(owner_user_id: int) -> PurchasePreference:
         grading_interest=0.50,
         completionist_score=0.50,
         speculation_score=0.50,
+        ratio_variant_strategy="conservative",
+        max_ratio_variant_price=25.0,
+        high_ratio_exception_required=True,
+        high_ratio_threshold=50,
     )
 
 
@@ -168,6 +176,17 @@ def update_purchase_preferences(
         row.completionist_score = _clamp_pref(payload.completionist_score)
     if payload.speculation_score is not None:
         row.speculation_score = _clamp_pref(payload.speculation_score)
+    if payload.ratio_variant_strategy is not None:
+        strategy = payload.ratio_variant_strategy.strip().lower()
+        if strategy not in {"avoid", "conservative", "balanced", "aggressive"}:
+            raise ValueError(f"Invalid ratio_variant_strategy: {payload.ratio_variant_strategy}")
+        row.ratio_variant_strategy = strategy
+    if payload.max_ratio_variant_price is not None:
+        row.max_ratio_variant_price = float(payload.max_ratio_variant_price)
+    if payload.high_ratio_exception_required is not None:
+        row.high_ratio_exception_required = bool(payload.high_ratio_exception_required)
+    if payload.high_ratio_threshold is not None:
+        row.high_ratio_threshold = int(payload.high_ratio_threshold)
 
     row.updated_at = utc_now()
     session.add(row)

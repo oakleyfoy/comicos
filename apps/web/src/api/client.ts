@@ -15422,6 +15422,12 @@ export interface CoverPurchasePlanRow {
   reason_summary: string;
 }
 
+export interface SuppressedVariantRow {
+  cover_label: string;
+  reason_code: string;
+  reason_summary: string;
+}
+
 export interface QuantityAdjustmentRow {
   label: string;
   delta: number;
@@ -15484,6 +15490,7 @@ export interface RecommendationDecisionRead {
   score_breakdown?: ScoreBreakdownRow[];
   top_reasons?: string[];
   strategy_allocation_hint?: string | null;
+  suppressed_variants?: SuppressedVariantRow[];
 }
 
 export interface CrossSystemRecommendationSummaryRead {

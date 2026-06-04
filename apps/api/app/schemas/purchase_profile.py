@@ -33,6 +33,9 @@ class PurchaseProfileUpdate(BaseModel):
     is_active: bool | None = None
 
 
+RatioVariantStrategy = Literal["avoid", "conservative", "balanced", "aggressive"]
+
+
 class PurchasePreferenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,6 +47,10 @@ class PurchasePreferenceRead(BaseModel):
     grading_interest: float
     completionist_score: float
     speculation_score: float
+    ratio_variant_strategy: RatioVariantStrategy = "conservative"
+    max_ratio_variant_price: float = 25.0
+    high_ratio_exception_required: bool = True
+    high_ratio_threshold: int = 50
     created_at: str
     updated_at: str
 
@@ -55,6 +62,10 @@ class PurchasePreferenceUpdate(BaseModel):
     grading_interest: float | None = Field(default=None, ge=0.0, le=1.0)
     completionist_score: float | None = Field(default=None, ge=0.0, le=1.0)
     speculation_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    ratio_variant_strategy: RatioVariantStrategy | None = None
+    max_ratio_variant_price: float | None = Field(default=None, ge=0.0, le=9999.0)
+    high_ratio_exception_required: bool | None = None
+    high_ratio_threshold: int | None = Field(default=None, ge=10, le=500)
 
 
 class PurchaseProfileEngineWeightsRead(BaseModel):

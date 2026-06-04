@@ -47,6 +47,14 @@ REASON_CODE_LABELS: dict[str, str] = {
 }
 
 
+class SuppressedVariantRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cover_label: str
+    reason_code: str
+    reason_summary: str = ""
+
+
 class CoverPurchasePlanRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,3 +142,4 @@ class RecommendationDecisionRead(BaseModel):
     score_breakdown: list[ScoreBreakdownRow] = Field(default_factory=list)
     top_reasons: list[str] = Field(default_factory=list)
     strategy_allocation_hint: str | None = None
+    suppressed_variants: list[SuppressedVariantRow] = Field(default_factory=list)

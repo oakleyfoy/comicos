@@ -14,6 +14,16 @@ from app.schemas.recommendation_decision import (
     ScoreBreakdownRow,
     SignalAbbreviationRead,
     SignalMatrixRead,
+    SuppressedVariantRow,
+)
+from app.services.collector_ratio_strategy import (
+    CollectorRatioStrategySettings,
+    effective_ratio_value,
+    has_exceptional_variant_signal,
+    is_high_ratio,
+    is_moderate_ratio,
+    parse_ratio_from_label,
+    variant_signal_active,
 )
 from app.services.recommendation_intelligence_enrichment import (
     CollectorSignificanceEnrichment,
@@ -162,6 +172,154 @@ def _specialty_allowed(*, signal_set: set[str], reason_codes: list[str]) -> bool
     return "SCARCITY" in codes or "VARIANT_HOT" in signal_set or "RATIO_OPPORTUNITY" in codes
 
 
+def _suppress_high_ratio(
+    candidates: list[_CoverCandidate],
+    *,
+    threshold: int,
+    exceptional: bool,
+    allocated: dict[str, int],
+) -> list[SuppressedVariantRow]:
+    suppressed: list[SuppressedVariantRow] = []
+    for c in candidates:
+        ratio = effective_ratio_value(c.ratio_value, c.cover_label)
+        if not is_high_ratio(ratio, threshold=threshold):
+            continue
+        if allocated.get(c.cover_label, 0) > 0:
+            continue
+        if exceptional and allocated.get(c.cover_label, 0) == 0:
+            continue
+        suppressed.append(
+            SuppressedVariantRow(
+                cover_label=c.cover_label,
+                reason_code="HIGH_RATIO_REQUIRES_EXCEPTION",
+                reason_summary=(
+                    "High-ratio variants are suppressed by conservative collector settings "
+                    "unless exceptional signals are present."
+                ),
+            )
+        )
+    return suppressed
+
+
+def _allocate_conservative_quantity(
+    total_quantity: int,
+    *,
+    primary: _CoverCandidate,
+    non_ratio_alternates: list[_CoverCandidate],
+    moderate_ratios: list[_CoverCandidate],
+    variant_signal_active: bool,
+    exceptional: bool,
+    threshold: int,
+    strategy: str,
+) -> dict[str, int]:
+    allocations: dict[str, int] = {}
+
+    def add(label: str, qty: int) -> None:
+        if qty <= 0:
+            return
+        allocations[label] = allocations.get(label, 0) + qty
+
+    if strategy == "avoid":
+        add(primary.cover_label, total_quantity)
+        return allocations
+
+    best_alt = non_ratio_alternates[0] if non_ratio_alternates else None
+    if total_quantity <= 1:
+        add(primary.cover_label, total_quantity)
+        return allocations
+
+    if total_quantity == 2:
+        add(primary.cover_label, 2)
+        return allocations
+
+    if total_quantity == 3:
+        if best_alt is not None and variant_signal_active:
+            add(primary.cover_label, 2)
+            add(best_alt.cover_label, 1)
+        else:
+            add(primary.cover_label, 3)
+        return allocations
+
+    if total_quantity == 4:
+        if best_alt is not None:
+            add(primary.cover_label, 3)
+            add(best_alt.cover_label, 1)
+        else:
+            add(primary.cover_label, 4)
+        return allocations
+
+    # BUY 5+: mostly Cover A
+    cover_a_qty = max(1, total_quantity - 1)
+    add(primary.cover_label, cover_a_qty)
+    remaining = total_quantity - cover_a_qty
+    if remaining > 0 and best_alt is not None:
+        add(best_alt.cover_label, 1)
+        remaining -= 1
+    if remaining > 0:
+        add(primary.cover_label, remaining)
+
+    primary_qty = allocations.get(primary.cover_label, 0)
+    if variant_signal_active and moderate_ratios:
+        mod = moderate_ratios[0]
+        ratio = effective_ratio_value(mod.ratio_value, mod.cover_label)
+        if is_moderate_ratio(ratio, threshold=threshold):
+            add(mod.cover_label, 1)
+            if allocations.get(mod.cover_label, 0) > primary_qty:
+                allocations[mod.cover_label] = primary_qty
+            if primary_qty >= 2 and allocations.get(primary.cover_label, 0) > 0:
+                allocations[primary.cover_label] = max(1, allocations[primary.cover_label] - 1)
+
+    if exceptional and moderate_ratios:
+        for mod in moderate_ratios:
+            ratio = effective_ratio_value(mod.ratio_value, mod.cover_label)
+            if is_high_ratio(ratio, threshold=threshold):
+                if sum(
+                    allocations.get(c.cover_label, 0)
+                    for c in moderate_ratios
+                    if is_high_ratio(effective_ratio_value(c.ratio_value, c.cover_label), threshold=threshold)
+                ) >= 1:
+                    break
+                add(mod.cover_label, 1)
+                if allocations.get(mod.cover_label, 0) > primary_qty:
+                    allocations[mod.cover_label] = min(1, primary_qty)
+                break
+
+    # Cap: ratio never exceeds Cover A under conservative
+    primary_qty = allocations.get(primary.cover_label, 0)
+    for label, qty in list(allocations.items()):
+        if label == primary.cover_label:
+            continue
+        cand = next((c for c in moderate_ratios + non_ratio_alternates if c.cover_label == label), None)
+        if cand is None:
+            continue
+        ratio = effective_ratio_value(cand.ratio_value, cand.cover_label)
+        if ratio is not None and qty > primary_qty:
+            allocations[label] = min(qty, primary_qty)
+        if is_high_ratio(ratio, threshold=threshold) and qty > 1:
+            allocations[label] = 1
+
+    # Reconcile total
+    current = sum(allocations.values())
+    while current > total_quantity:
+        for label in sorted(allocations.keys(), key=lambda x: (x != primary.cover_label, x)):
+            if allocations[label] > 0 and label != primary.cover_label:
+                allocations[label] -= 1
+                current -= 1
+                if current <= total_quantity:
+                    break
+        if current > total_quantity and allocations.get(primary.cover_label, 0) > 1:
+            allocations[primary.cover_label] -= 1
+            current -= 1
+    while current < total_quantity:
+        allocations[primary.cover_label] = allocations.get(primary.cover_label, 0) + 1
+        current += 1
+
+    if sum(allocations.values()) != total_quantity:
+        allocations = {primary.cover_label: total_quantity}
+
+    return allocations
+
+
 def build_cover_purchase_plan(
     *,
     total_quantity: int,
@@ -169,9 +327,15 @@ def build_cover_purchase_plan(
     candidates: list[_CoverCandidate],
     signal_set: set[str],
     reason_codes: list[str],
-) -> list[CoverPurchasePlanRow]:
+    strategy_settings: CollectorRatioStrategySettings | None = None,
+    exceptional_variant_signal: bool = False,
+) -> tuple[list[CoverPurchasePlanRow], list[SuppressedVariantRow]]:
+    settings = strategy_settings or CollectorRatioStrategySettings()
+    threshold = settings.high_ratio_threshold
+    strategy = settings.ratio_variant_strategy
+
     if action in {"WATCH", "PASS"} or total_quantity <= 0:
-        return [
+        rows = [
             CoverPurchasePlanRow(
                 cover_label=c.cover_label,
                 recommended_quantity=0,
@@ -187,16 +351,15 @@ def build_cover_purchase_plan(
                 reason_summary="Monitor only.",
             )
         ]
+        return rows, []
 
-    ratio_ok = _ratio_allowed(signal_set=signal_set, reason_codes=reason_codes)
     incentive_ok = _incentive_allowed(signal_set=signal_set, reason_codes=reason_codes)
     specialty_ok = _specialty_allowed(signal_set=signal_set, reason_codes=reason_codes)
+    var_active = variant_signal_active(signal_set=signal_set, reason_codes=reason_codes)
 
     usable: list[_CoverCandidate] = []
     for c in candidates:
         if c.is_incentive and not incentive_ok:
-            continue
-        if c.ratio_value and not ratio_ok:
             continue
         if c.is_specialty and not specialty_ok:
             continue
@@ -205,62 +368,87 @@ def build_cover_purchase_plan(
         usable = [_primary_candidate(candidates)]
 
     primary = _primary_candidate(usable)
-    alternates = [c for c in usable if c.cover_label != primary.cover_label]
-    alternates.sort(key=lambda c: (-(c.ratio_value or 0), -c.strength))
+    non_ratio = [
+        c
+        for c in usable
+        if c.cover_label != primary.cover_label
+        and effective_ratio_value(c.ratio_value, c.cover_label) is None
+        and not c.is_incentive
+    ]
+    non_ratio.sort(key=lambda c: -c.strength)
+    ratio_candidates = [
+        c for c in usable if c.cover_label != primary.cover_label and effective_ratio_value(c.ratio_value, c.cover_label)
+    ]
+    ratio_candidates.sort(key=lambda c: effective_ratio_value(c.ratio_value, c.cover_label) or 999)
 
-    allocations: dict[str, int] = {}
+    exceptional = exceptional_variant_signal
+    if settings.high_ratio_exception_required and not exceptional:
+        ratio_candidates = [
+            c
+            for c in ratio_candidates
+            if not is_high_ratio(effective_ratio_value(c.ratio_value, c.cover_label), threshold=threshold)
+        ]
 
-    def add(label: str, qty: int) -> None:
-        if qty <= 0:
-            return
-        allocations[label] = allocations.get(label, 0) + qty
+    moderate_ratios = [
+        c
+        for c in ratio_candidates
+        if is_moderate_ratio(effective_ratio_value(c.ratio_value, c.cover_label), threshold=threshold)
+    ]
 
-    remaining = total_quantity
-    if total_quantity == 1:
-        add(primary.cover_label, 1)
-        remaining = 0
-    elif total_quantity == 2:
-        strong_ratio = next((c for c in alternates if c.ratio_value and ratio_ok), None)
-        if strong_ratio:
-            add(primary.cover_label, 1)
-            add(strong_ratio.cover_label, 1)
-        else:
-            add(primary.cover_label, 2)
-        remaining = 0
-    else:
-        add(primary.cover_label, min(2, remaining))
-        remaining -= min(2, remaining)
-        if remaining > 0 and alternates:
-            alt = alternates[0]
-            add(alt.cover_label, 1)
-            remaining -= 1
-        ratio_alt = next((c for c in alternates if c.ratio_value and ratio_ok), None)
-        while remaining > 0 and ratio_alt:
-            add(ratio_alt.cover_label, min(2, remaining))
-            remaining -= min(2, remaining)
-        while remaining > 0:
-            add(primary.cover_label, 1)
-            remaining -= 1
+    allocations = _allocate_conservative_quantity(
+        total_quantity,
+        primary=primary,
+        non_ratio_alternates=non_ratio,
+        moderate_ratios=moderate_ratios if var_active else [],
+        variant_signal_active=var_active,
+        exceptional=exceptional,
+        threshold=threshold,
+        strategy=strategy,
+    )
+
+    suppressed = _suppress_high_ratio(
+        candidates,
+        threshold=threshold,
+        exceptional=exceptional,
+        allocated=allocations,
+    )
+    for c in candidates:
+        ratio = effective_ratio_value(c.ratio_value, c.cover_label)
+        if ratio is None:
+            continue
+        if allocations.get(c.cover_label, 0) > 0:
+            continue
+        if is_high_ratio(ratio, threshold=threshold):
+            if not any(s.cover_label == c.cover_label for s in suppressed):
+                suppressed.append(
+                    SuppressedVariantRow(
+                        cover_label=c.cover_label,
+                        reason_code="HIGH_RATIO_REQUIRES_EXCEPTION",
+                        reason_summary=(
+                            "High-ratio variants are suppressed by conservative collector settings "
+                            "unless exceptional signals are present."
+                        ),
+                    )
+                )
 
     rows: list[CoverPurchasePlanRow] = []
-    for c in usable:
-        qty = allocations.get(c.cover_label, 0)
+    for label, qty in sorted(allocations.items(), key=lambda item: (-item[1], item[0])):
         if qty <= 0:
             continue
-        codes: list[str] = []
-        summary = ""
-        if c.cover_label == primary.cover_label:
-            codes.extend(["BASE_HOLD_COPY", "PRIMARY_COVER_LIQUIDITY"])
+        cand = next((c for c in usable if c.cover_label == label), primary)
+        ratio = effective_ratio_value(cand.ratio_value, cand.cover_label)
+        if label == primary.cover_label:
+            codes = ["BASE_HOLD_COPY", "PRIMARY_COVER_LIQUIDITY"]
             summary = "Primary cover is usually the safest liquidity copy."
-        elif c.ratio_value:
-            codes.extend(["RATIO_OPPORTUNITY", "SCARCITY_PREMIUM"])
-            summary = "Ratio variant flagged because scarcity signal is active."
+        elif ratio is not None:
+            codes = ["RATIO_OPPORTUNITY", "SCARCITY_PREMIUM"]
+            summary = "Ratio variant included with conservative cap."
         else:
-            codes.append("VARIANT_DIVERSIFICATION")
+            codes = ["VARIANT_DIVERSIFICATION"]
             summary = "Secondary cover adds collector optionality without overexposure."
         rows.append(
             CoverPurchasePlanRow(
-                cover_label=c.cover_label,
+                cover_label=label,
                 recommended_quantity=qty,
                 reason_codes=codes,
                 reason_summary=summary,
@@ -275,7 +463,7 @@ def build_cover_purchase_plan(
                 reason_summary="Allocated to primary cover for liquidity.",
             )
         )
-    return rows
+    return rows, suppressed
 
 
 def build_quantity_reasoning(
@@ -286,6 +474,7 @@ def build_quantity_reasoning(
     confidence: float,
     reason_codes: list[str],
     signal_set: set[str],
+    cover_plan: list[CoverPurchasePlanRow] | None = None,
 ) -> QuantityReasoningRead | None:
     if action in {"WATCH", "PASS"} or final_quantity <= 0:
         return QuantityReasoningRead(base_quantity=0, adjustments=[], final_quantity=0)
@@ -319,8 +508,24 @@ def build_quantity_reasoning(
             )
             running += delta
 
-    if _ratio_allowed(signal_set=signal_set, reason_codes=reason_codes) and running < final_quantity:
-        delta = min(1, final_quantity - running)
+    plan = cover_plan or []
+
+    def _row_is_variant(row: CoverPurchasePlanRow) -> bool:
+        if row.recommended_quantity <= 0:
+            return False
+        if parse_ratio_from_label(row.cover_label) is not None:
+            return True
+        codes = {c.upper() for c in row.reason_codes}
+        return bool(codes.intersection({"RATIO_OPPORTUNITY", "SCARCITY_PREMIUM"}))
+
+    variant_copies = sum(row.recommended_quantity for row in plan if _row_is_variant(row))
+    non_primary_variant = sum(
+        row.recommended_quantity
+        for row in plan
+        if row.recommended_quantity > 0 and "PRIMARY_COVER_LIQUIDITY" not in row.reason_codes
+    )
+    if variant_copies > 0 and running < final_quantity:
+        delta = min(variant_copies, final_quantity - running)
         if delta:
             adjustments.append(
                 QuantityAdjustmentRow(
@@ -333,9 +538,14 @@ def build_quantity_reasoning(
 
     while running < final_quantity:
         delta = min(1, final_quantity - running)
+        label = (
+            "Priority band supports additional Cover A liquidity copy"
+            if non_primary_variant == 0
+            else "Priority band supports additional copy"
+        )
         adjustments.append(
             QuantityAdjustmentRow(
-                label="Priority band supports additional copy",
+                label=label,
                 delta=delta,
                 reason_code="HIGH_CONFIDENCE",
             )

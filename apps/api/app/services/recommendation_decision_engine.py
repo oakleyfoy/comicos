@@ -16,6 +16,10 @@ from app.services.foc_dates import days_until_foc, utc_today
 from app.services.recommendation_catalog_quality import build_forward_release_title_index
 from app.services.recommendation_title_index import RecommendationPipelineIndexCache
 from app.services.recommendation_forward_window import _key_signals_by_issue, _latest_spec_by_issue
+from app.services.collector_ratio_strategy import (
+    has_exceptional_variant_signal,
+    load_collector_ratio_strategy,
+)
 from app.services.recommendation_decision_explainability import (
     SIGNAL_ABBREVIATIONS,
     build_cover_purchase_plan,
@@ -453,29 +457,6 @@ def compute_recommendation_decision(
         variant_recs=variant_recs,
         release_variants=release_variants,
     )
-    cover_plan = build_cover_purchase_plan(
-        total_quantity=quantity,
-        action=action,
-        candidates=cover_candidates,
-        signal_set=signal_set,
-        reason_codes=reason_codes,
-    )
-    plan_total = sum(row.recommended_quantity for row in cover_plan)
-    if action in {"BUY", "BUY_AGGRESSIVE"} and quantity > 0 and plan_total != quantity:
-        cover_plan = build_cover_purchase_plan(
-            total_quantity=quantity,
-            action=action,
-            candidates=cover_candidates,
-            signal_set=signal_set,
-            reason_codes=reason_codes,
-        )
-
-    top_reasons = normalize_top_reasons(
-        reason_codes=reason_codes,
-        reason_summary=reason_summary,
-        collector_intel=collector_intel,
-        rationale=rec.rationale,
-    )
     signal_matrix = build_signal_matrix(
         signal_set=signal_set,
         reason_codes=reason_codes,
@@ -484,6 +465,43 @@ def compute_recommendation_decision(
         source_systems=rec.source_systems,
         owns_run=owns_run,
         foc_active=foc_active,
+    )
+    ratio_settings = load_collector_ratio_strategy(session, owner_user_id=owner_user_id)
+    exceptional = has_exceptional_variant_signal(
+        signal_matrix=signal_matrix,
+        score_breakdown=score_breakdown_src,
+        collector_intel=collector_intel,
+        confidence=decision_confidence,
+        rationale=rec.rationale,
+        owns_run=owns_run,
+        pull_list_relevance=signal_matrix.pull_list_relevance,
+    )
+    cover_plan, suppressed_variants = build_cover_purchase_plan(
+        total_quantity=quantity,
+        action=action,
+        candidates=cover_candidates,
+        signal_set=signal_set,
+        reason_codes=reason_codes,
+        strategy_settings=ratio_settings,
+        exceptional_variant_signal=exceptional,
+    )
+    plan_total = sum(row.recommended_quantity for row in cover_plan)
+    if action in {"BUY", "BUY_AGGRESSIVE"} and quantity > 0 and plan_total != quantity:
+        cover_plan, suppressed_variants = build_cover_purchase_plan(
+            total_quantity=quantity,
+            action=action,
+            candidates=cover_candidates,
+            signal_set=signal_set,
+            reason_codes=reason_codes,
+            strategy_settings=ratio_settings,
+            exceptional_variant_signal=exceptional,
+        )
+
+    top_reasons = normalize_top_reasons(
+        reason_codes=reason_codes,
+        reason_summary=reason_summary,
+        collector_intel=collector_intel,
+        rationale=rec.rationale,
     )
 
     return RecommendationDecisionRead(
@@ -506,7 +524,9 @@ def compute_recommendation_decision(
             confidence=decision_confidence,
             reason_codes=reason_codes,
             signal_set=signal_set,
+            cover_plan=cover_plan,
         ),
+        suppressed_variants=suppressed_variants,
         signal_matrix=signal_matrix,
         signal_abbreviations=list(SIGNAL_ABBREVIATIONS),
         score_breakdown=build_score_breakdown(score_breakdown_src, priority=decision_priority),

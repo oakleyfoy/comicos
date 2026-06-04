@@ -52,8 +52,10 @@ def test_compute_decision_includes_reason_codes_without_release() -> None:
         spec_by_issue={},
     )
 
-    class _Session:
-        pass
+    from unittest.mock import MagicMock
+
+    session = MagicMock()
+    session.exec.return_value.first.return_value = None
 
     decision = compute_recommendation_decision(
         _RecommendationInput(
@@ -65,7 +67,7 @@ def test_compute_decision_includes_reason_codes_without_release() -> None:
             source_systems=["P57_UNIFIED", "P57_DAILY"],
         ),
         ctx=ctx,
-        session=_Session(),  # type: ignore[arg-type]
+        session=session,
         owner_user_id=1,
     )
     assert decision.action in {"BUY", "BUY_AGGRESSIVE"}

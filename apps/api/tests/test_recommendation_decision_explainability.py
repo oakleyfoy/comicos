@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.services.collector_ratio_strategy import parse_ratio_from_label
 from app.services.recommendation_decision_explainability import (
     _build_cover_candidates,
     build_cover_purchase_plan,
@@ -42,7 +43,7 @@ def test_buy_five_cover_plan_sums_to_five() -> None:
             ),
         ],
     )
-    plan = build_cover_purchase_plan(
+    plan, suppressed = build_cover_purchase_plan(
         total_quantity=5,
         action="BUY",
         candidates=candidates,
@@ -56,7 +57,7 @@ def test_buy_five_cover_plan_sums_to_five() -> None:
 
 def test_watch_zero_quantities() -> None:
     candidates = _build_cover_candidates(variant_recs=[], release_variants=[])
-    plan = build_cover_purchase_plan(
+    plan, _sup = build_cover_purchase_plan(
         total_quantity=0,
         action="WATCH",
         candidates=candidates,
@@ -84,7 +85,7 @@ def test_ratio_not_allocated_without_signal() -> None:
             ),
         ],
     )
-    plan = build_cover_purchase_plan(
+    plan, suppressed = build_cover_purchase_plan(
         total_quantity=2,
         action="BUY",
         candidates=candidates,
@@ -92,8 +93,14 @@ def test_ratio_not_allocated_without_signal() -> None:
         reason_codes=["FRANCHISE_STRENGTH"],
     )
     labels = {row.cover_label: row.recommended_quantity for row in plan}
-    assert labels.get("1:25", 0) == 0
     assert sum(labels.values()) == 2
+    assert labels.get("Cover A", 0) == 2
+    assert not any(
+        parse_ratio_from_label(row.cover_label) is not None
+        and (parse_ratio_from_label(row.cover_label) or 0) >= 50
+        and row.recommended_quantity > 0
+        for row in plan
+    )
 
 
 def test_duplicate_reasons_removed() -> None:
@@ -157,25 +164,28 @@ def test_compute_decision_has_cover_plan_and_breakdown() -> None:
         spec_by_issue={},
     )
 
-    class _Session:
-        pass
+    from unittest.mock import MagicMock
+
+    session = MagicMock()
+    session.exec.return_value.first.return_value = None
 
     decision = compute_recommendation_decision(
         _RecommendationInput(
             kind="PREORDER",
             title="Chronicle Prime #100",
             priority_score=91.0,
-            confidence_score=0.86,
+            confidence_score=0.88,
             rationale="Franchise strength. FOC window. Spec heat.",
             source_systems=["P57_UNIFIED", "P52_PULL_LIST"],
         ),
         ctx=ctx,
-        session=_Session(),  # type: ignore[arg-type]
+        session=session,
         owner_user_id=1,
     )
     if decision.action in {"BUY", "BUY_AGGRESSIVE"} and decision.quantity > 0:
         assert decision.cover_purchase_plan
-        assert sum(r.recommended_quantity for r in decision.cover_purchase_plan) == decision.quantity
+        plan_total = sum(r.recommended_quantity for r in decision.cover_purchase_plan)
+        assert plan_total == decision.quantity
         assert "TOTAL" in decision.decision_headline
     assert decision.signal_matrix is not None
     assert decision.signal_abbreviations
