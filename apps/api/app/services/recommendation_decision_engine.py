@@ -141,10 +141,9 @@ def _resolve_release(
     title: str,
     ctx: RecommendationDecisionContext,
 ) -> tuple[ReleaseIssue, ReleaseSeries] | None:
-    key = title.strip().lower()
-    if key.endswith(" (variants)"):
-        key = key[: -len(" (variants)")]
-    return ctx.release_index.get(key)
+    from app.services.recommendation_title_index import resolve_release_pair
+
+    return resolve_release_pair(title, ctx.release_index)
 
 
 def _headline(action: str, quantity: int) -> str:

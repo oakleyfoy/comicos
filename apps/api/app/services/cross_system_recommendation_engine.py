@@ -75,7 +75,9 @@ class _Candidate:
 
     @property
     def title_key(self) -> str:
-        return self.title.strip().lower()
+        from app.services.recommendation_title_normalize import normalize_recommendation_title_key
+
+        return normalize_recommendation_title_key(self.title)
 
 
 def _clamp_priority(value: float) -> float:
@@ -294,11 +296,10 @@ def _candidate_passes_quality_filter(
     release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
     signals_by_issue: dict[int, list[str]],
 ) -> bool:
+    from app.services.recommendation_title_index import resolve_release_pair
+
     issue_id = None
-    title_key = cand.title.strip().lower()
-    if title_key.endswith(" (variants)"):
-        title_key = title_key[: -len(" (variants)")]
-    pair = release_index.get(title_key)
+    pair = resolve_release_pair(cand.title, release_index)
     if pair is not None:
         issue_id = int(pair[0].id or 0)
     signals = signals_by_issue.get(issue_id, []) if issue_id else None
@@ -405,12 +406,11 @@ def build_cross_system_candidates(
     resolved = timer.run("merge_candidates", lambda: _merge_raw_candidates(raw))
 
     def _issue_ids_for_resolved() -> list[int]:
+        from app.services.recommendation_title_index import resolve_release_pair
+
         ids: list[int] = []
         for cand in resolved:
-            title_key = cand.title_key
-            if title_key.endswith(" (variants)"):
-                title_key = title_key[: -len(" (variants)")]
-            pair = release_index.get(title_key)
+            pair = resolve_release_pair(cand.title, release_index)
             if pair is None or pair[0].id is None:
                 continue
             ids.append(int(pair[0].id))

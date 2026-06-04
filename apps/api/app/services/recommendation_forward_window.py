@@ -189,11 +189,6 @@ def compute_forward_catalog_priority(
         bonus += enrichment.historical_demand_bonus
         bonus += enrichment.continuity_bonus
         rationale_parts.extend(enrichment.rationale_bits)
-    else:
-        from app.services.recommendation_catalog_quality import publisher_boost_for
-
-        bonus += publisher_boost_for(series.publisher) * 0.75
-
     signal_set = {s.upper() for s in key_signals}
     bonus += min(8.5, len(signal_set) * 1.1)
 

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from sqlmodel import Session, func, select
 
 from app.models import ComicIssue, ComicTitle, InventoryCopy, Publisher, Variant
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
+from app.services.recommendation_data_driven_signals import (
+    franchise_demand_bonus,
+    publisher_engagement_bonus,
+)
 from app.services.recommendation_v2_scoring_context import RecommendationV2ScoringContext
 
 KEY_SIGNAL_TYPES = frozenset(
@@ -34,46 +37,6 @@ NEW_ONE_SIGNALS = frozenset({"NEW_NUMBER_ONE", "UNIVERSE_LAUNCH", "RELAUNCH"})
 def _is_number_one(issue_number: str) -> bool:
     raw = normalize_lunar_issue_number((issue_number or "").strip().lstrip("#").lower())
     return raw in {"1", "1.0"} or raw.startswith("1/")
-
-# (regex pattern, priority bonus) — first match wins highest tier via max accumulation cap
-_FRANCHISE_PATTERNS: tuple[tuple[re.Pattern[str], float, str], ...] = tuple(
-    (
-        re.compile(p, re.IGNORECASE),
-        bonus,
-        label,
-    )
-    for p, bonus, label in (
-        (r"\bbatman\b", 14.0, "Batman"),
-        (r"\bspider-?man\b", 13.5, "Spider-Man"),
-        (r"\bx-?men\b", 12.5, "X-Men"),
-        (r"\btransformers\b", 12.0, "Transformers"),
-        (r"\bgi\s*joe\b|\bg\.?\s*i\.?\s*joe\b", 11.5, "GI Joe"),
-        (r"\btmnt\b|teenage\s+mutant\s+ninja", 11.5, "TMNT"),
-        (r"\bbattle\s+beast\b", 11.0, "Battle Beast"),
-        (r"\bsuperman\b", 11.0, "Superman"),
-        (r"\bwolverine\b", 10.5, "Wolverine"),
-        (r"\bavengers\b", 10.0, "Avengers"),
-        (r"\bstar\s+wars\b", 10.0, "Star Wars"),
-        (r"\babsolute\b", 9.5, "Absolute edition"),
-        (r"\bskybound\b", 7.5, "Skybound franchise"),
-        (r"\binvincible\b", 8.5, "Invincible"),
-        (r"\bwalking\s+dead\b", 8.0, "Walking Dead"),
-    )
-)
-
-_PUBLISHER_TOKENS: tuple[tuple[tuple[str, ...], float], ...] = (
-    (("marvel", "marvel comics"), 9.0),
-    (("dc comics", "dc"), 8.5),
-    (("image comics", "image"), 7.5),
-    (("skybound", "sky bound"), 7.0),
-    (("boom studios", "boom! studios", "boom"), 6.5),
-    (("dark horse", "dark horse comics"), 6.25),
-    (("idw", "idw publishing"), 5.75),
-    (("dynamite", "dynamite entertainment"), 5.25),
-    (("oni press", "oni"), 4.75),
-    (("mad cave", "mad cave studios"), 4.5),
-)
-
 
 @dataclass(frozen=True)
 class OwnedSeriesInventoryStats:
@@ -102,27 +65,37 @@ def _normalize_series(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
-def franchise_strength_bonus(*, series_name: str, issue_title: str | None = None) -> tuple[float, tuple[str, ...]]:
-    blob = f"{series_name} {issue_title or ''}"
-    hits: list[str] = []
-    bonus = 0.0
-    for pattern, tier_bonus, label in _FRANCHISE_PATTERNS:
-        if pattern.search(blob):
-            hits.append(label)
-            bonus = max(bonus, tier_bonus)
-    return bonus, tuple(hits)
+def franchise_strength_bonus(
+    session: Session,
+    *,
+    series_name: str,
+    issue_title: str | None = None,
+    issue: object | None = None,
+    series: object | None = None,
+    key_signals: list[str] | None = None,
+    scoring_ctx: RecommendationV2ScoringContext | None = None,
+) -> tuple[float, tuple[str, ...]]:
+    from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+
+    rel_issue = issue if isinstance(issue, ReleaseIssue) else None
+    rel_series = series if isinstance(series, ReleaseSeries) else None
+    return franchise_demand_bonus(
+        session,
+        series_name=series_name,
+        issue_title=issue_title,
+        issue=rel_issue,
+        series=rel_series,
+        key_signals=key_signals,
+        scoring_ctx=scoring_ctx,
+    )
 
 
-def publisher_strength_bonus(publisher: str | None) -> float:
-    pub = _normalize_publisher(publisher)
-    if not pub:
-        return 0.0
-    best = 0.0
-    for tokens, score in _PUBLISHER_TOKENS:
-        for token in tokens:
-            if token in pub or pub in token:
-                best = max(best, score)
-    return best
+def publisher_strength_bonus(
+    publisher: str | None,
+    *,
+    owned_stats: OwnedSeriesInventoryStats | None = None,
+) -> float:
+    return publisher_engagement_bonus(publisher=publisher, owned_stats=owned_stats)
 
 
 def build_owned_series_inventory_stats(session: Session, *, owner_user_id: int) -> OwnedSeriesInventoryStats:
@@ -238,8 +211,16 @@ def build_recommendation_priority_enrichment(
     issue: object | None = None,
     series: object | None = None,
 ) -> RecommendationPriorityEnrichment:
-    franchise_bonus, hits = franchise_strength_bonus(series_name=series_name, issue_title=issue_title)
-    publisher_bonus = publisher_strength_bonus(publisher)
+    franchise_bonus, hits = franchise_strength_bonus(
+        session,
+        series_name=series_name,
+        issue_title=issue_title,
+        issue=issue,
+        series=series,
+        key_signals=key_signals,
+        scoring_ctx=scoring_ctx,
+    )
+    publisher_bonus = publisher_strength_bonus(publisher, owned_stats=owned_stats)
     series_key = (_normalize_publisher(publisher), _normalize_series(series_name))
     owned_in_series = owned_stats.copies_by_series.get(series_key, 0) if owned_stats else 0
 
@@ -270,9 +251,9 @@ def build_recommendation_priority_enrichment(
 
     rationale: list[str] = []
     if hits:
-        rationale.append(f"Franchise strength ({', '.join(hits)}).")
-    if publisher_bonus >= 5.0:
-        rationale.append("Core publisher catalog.")
+        rationale.append(f"Collector demand signal ({', '.join(hits)}).")
+    if publisher_bonus >= 2.0:
+        rationale.append("Active publisher engagement in your collection.")
     if historical_bonus >= 3.0:
         rationale.append("Historical series/market demand.")
     if continuity_bonus >= 2.0:
@@ -303,6 +284,8 @@ def generic_number_one_bonus(
         return 3.25
     if signal_set.intersection(KEY_SIGNAL_TYPES):
         return 2.0
-    if franchise_bonus >= 8.0:
+    if franchise_bonus >= 6.0:
         return 2.5
+    if signal_set.intersection(KEY_SIGNAL_TYPES):
+        return 2.0
     return 1.0

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from unittest.mock import MagicMock
 
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.recommendation_forward_window import compute_forward_catalog_priority
 from app.services.recommendation_priority_enrichment import (
+    OwnedSeriesInventoryStats,
     RecommendationPriorityEnrichment,
-    franchise_strength_bonus,
     generic_number_one_bonus,
     publisher_strength_bonus,
 )
@@ -15,7 +16,7 @@ from app.services.recommendation_priority_enrichment import (
 def _issue_series(
     *,
     series_name: str,
-    publisher: str = "Marvel",
+    publisher: str = "Independent Press",
     issue_number: str = "1",
     foc_days: int = 14,
 ) -> tuple[ReleaseIssue, ReleaseSeries]:
@@ -42,69 +43,61 @@ def _issue_series(
     return issue, series
 
 
-def test_franchise_strength_batman_beats_generic_indie() -> None:
-    batman_bonus, batman_hits = franchise_strength_bonus(series_name="Batman", issue_title="")
-    indie_bonus, _ = franchise_strength_bonus(series_name="Random Indie Launch", issue_title="")
-    assert batman_bonus > indie_bonus
-    assert "Batman" in batman_hits
+def test_franchise_strength_without_registry_match_is_signal_driven() -> None:
+    session = MagicMock()
+    session.exec.return_value.all.return_value = []
+    from app.services.recommendation_priority_enrichment import franchise_strength_bonus
 
-    bat_issue, bat_series = _issue_series(series_name="Batman", publisher="DC", issue_number="1", foc_days=75)
+    bonus, hits = franchise_strength_bonus(
+        session,
+        series_name="Obscure Indie",
+        issue_title="Obscure Indie #1",
+        key_signals=["FIRST_APPEARANCE"],
+    )
+    assert bonus >= 4.0
+    assert "Batman" not in hits
+
+
+def test_forward_priority_not_dominated_by_publisher_brand() -> None:
+    session = MagicMock()
+    session.exec.return_value.all.return_value = []
     indie_issue, indie_series = _issue_series(
-        series_name="Obscure Indie", publisher="Small Press", issue_number="1", foc_days=75
+        series_name="Obscure Indie",
+        publisher="Small Press",
+        issue_number="50",
+        foc_days=75,
     )
-
-    bat_enrichment = RecommendationPriorityEnrichment(
-        franchise_bonus=batman_bonus,
-        publisher_bonus=publisher_strength_bonus("DC"),
-        historical_demand_bonus=2.0,
-        continuity_bonus=0.0,
-        confidence_score=0.72,
+    enrichment = RecommendationPriorityEnrichment(
+        franchise_bonus=0.0,
+        publisher_bonus=0.0,
+        historical_demand_bonus=6.0,
+        continuity_bonus=4.0,
+        confidence_score=0.82,
+        rationale_bits=("Historical series/market demand.", "Active run in your collection."),
     )
-    indie_enrichment = RecommendationPriorityEnrichment(
-        franchise_bonus=indie_bonus,
-        publisher_bonus=publisher_strength_bonus("Small Press"),
-        historical_demand_bonus=0.0,
-        continuity_bonus=0.0,
-        confidence_score=0.55,
-    )
-
-    bat_score, _, _ = compute_forward_catalog_priority(
-        issue=bat_issue,
-        series=bat_series,
-        owned=False,
-        key_signals=[],
-        v2_total_score=None,
-        spec_type=None,
-        has_ratio_variant=False,
-        enrichment=bat_enrichment,
-    )
-    indie_score, _, _ = compute_forward_catalog_priority(
+    score, _, _ = compute_forward_catalog_priority(
         issue=indie_issue,
         series=indie_series,
         owned=False,
-        key_signals=[],
-        v2_total_score=None,
-        spec_type=None,
-        has_ratio_variant=False,
-        enrichment=indie_enrichment,
+        key_signals=["FIRST_APPEARANCE", "MILESTONE_NUMBERING"],
+        v2_total_score=78.0,
+        spec_type="BUY",
+        has_ratio_variant=True,
+        enrichment=enrichment,
     )
-    assert bat_score - indie_score >= 12.0
-
-
-def test_battle_beast_and_transformers_tier_high() -> None:
-    bb, hits = franchise_strength_bonus(series_name="Battle Beast", issue_title="")
-    tf, _ = franchise_strength_bonus(series_name="Transformers", issue_title="")
-    assert bb >= 10.0
-    assert tf >= 11.0
-    assert "Battle Beast" in hits
+    assert score >= 70.0
 
 
 def test_generic_number_one_bonus_reduced_without_franchise() -> None:
     assert generic_number_one_bonus(issue_number="1", key_signals=[], franchise_bonus=0.0) == 1.0
     assert generic_number_one_bonus(issue_number="1", key_signals=["NEW_NUMBER_ONE"], franchise_bonus=0.0) == 3.25
-    assert generic_number_one_bonus(issue_number="1", key_signals=[], franchise_bonus=12.0) == 2.5
+    assert generic_number_one_bonus(issue_number="1", key_signals=["KEY_ISSUE"], franchise_bonus=0.0) == 2.0
 
 
-def test_publisher_strength_marvel_dc_image() -> None:
-    assert publisher_strength_bonus("Marvel") >= publisher_strength_bonus("Boom Studios")
-    assert publisher_strength_bonus("DC Comics") >= publisher_strength_bonus("Image Comics") - 1.0
+def test_publisher_strength_requires_owner_engagement() -> None:
+    assert publisher_strength_bonus("Marvel") == 0.0
+    stats = OwnedSeriesInventoryStats(
+        copies_by_series={("marvel", "x series"): 5},
+        avg_fmv_by_series={},
+    )
+    assert publisher_strength_bonus("Marvel", owned_stats=stats) > 0.0

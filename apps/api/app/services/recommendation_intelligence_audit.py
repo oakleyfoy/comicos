@@ -120,7 +120,9 @@ def attach_intelligence_scores_to_audit_rows(
         for c in candidates
     }
     for row in audit.items:
-        key = (row.recommendation_type.strip().upper(), row.title.strip().lower())
+        from app.services.recommendation_title_normalize import normalize_recommendation_title_key
+
+        key = (row.recommendation_type.strip().upper(), normalize_recommendation_title_key(row.title))
         cand = by_key.get(key)
         if cand is None:
             continue

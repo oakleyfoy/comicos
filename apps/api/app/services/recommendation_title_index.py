@@ -17,21 +17,39 @@ from app.services.recommendation_catalog_quality import parse_recommendation_dis
 from app.services.recommendation_forward_window import iter_forward_release_rows
 from app.services.recommendation_latest_rows import latest_by_key_bounded_scan
 from app.services.recommendation_pipeline_diagnostics import process_rss_mb
+from app.services.recommendation_title_normalize import (
+    display_title_key,
+    normalize_issue_number_for_match,
+    normalize_recommendation_title_key,
+    normalize_series_name_for_match,
+    parse_normalized_display_title,
+    title_key_aliases,
+)
 
 
 def display_title(*, series_name: str, issue_number: str) -> str:
-    return f"{series_name.strip()} #{issue_number.strip()}"
+    return display_title_key(series_name=series_name, issue_number=issue_number)
 
 
 def _normalize_title_key(title: str) -> str:
-    key = title.strip().lower()
-    if key.endswith(" (variants)"):
-        key = key[: -len(" (variants)")]
-    return key
+    return normalize_recommendation_title_key(title)
 
 
 def _index_key_for_pair(issue: ReleaseIssue, series: ReleaseSeries) -> str:
-    return display_title(series_name=series.series_name, issue_number=issue.issue_number).strip().lower()
+    return display_title_key(series_name=series.series_name, issue_number=issue.issue_number)
+
+
+def register_release_in_index(
+    index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
+    issue: ReleaseIssue,
+    series: ReleaseSeries,
+) -> None:
+    pair = (issue, series)
+    primary = _index_key_for_pair(issue, series)
+    index[primary] = pair
+    raw_display = f"{series.series_name.strip()} #{issue.issue_number.strip()}"
+    for alias in title_key_aliases(raw_display):
+        index.setdefault(alias, pair)
 
 
 @dataclass(frozen=True)
@@ -145,23 +163,40 @@ def _lookup_pairs_for_title_keys(
     found: list[tuple[ReleaseIssue, ReleaseSeries]] = []
     lookups = 0
     for key in missing[:400]:
-        series_name, issue_number = parse_recommendation_display_title(key)
+        series_name, issue_number = parse_normalized_display_title(key)
+        if not series_name:
+            series_name, issue_number = parse_recommendation_display_title(key)
         if not series_name:
             continue
-        stmt = (
-            select(ReleaseIssue, ReleaseSeries)
-            .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
-            .where(ReleaseIssue.owner_user_id == owner_user_id)
-            .where(func.lower(ReleaseSeries.series_name) == series_name.strip().lower())
-        )
-        if issue_number:
-            stmt = stmt.where(ReleaseIssue.issue_number == issue_number.strip())
-        row = session.exec(stmt.limit(1)).first()
-        lookups += 1
-        if row is None:
+        series_norm = normalize_series_name_for_match(series_name)
+        issue_norm = normalize_issue_number_for_match(issue_number)
+        series_filters = {series_name.strip().lower(), series_norm}
+        matched: tuple[ReleaseIssue, ReleaseSeries] | None = None
+        for series_eq in series_filters:
+            if not series_eq:
+                continue
+            stmt = (
+                select(ReleaseIssue, ReleaseSeries)
+                .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
+                .where(ReleaseIssue.owner_user_id == owner_user_id)
+                .where(func.lower(ReleaseSeries.series_name) == series_eq)
+            )
+            rows = session.exec(stmt).all()
+            lookups += 1
+            for issue, series in rows:
+                if normalize_series_name_for_match(series.series_name) != series_norm:
+                    continue
+                if issue_norm is not None:
+                    row_issue = normalize_issue_number_for_match(issue.issue_number)
+                    if row_issue != issue_norm:
+                        continue
+                matched = (issue, series)
+                break
+            if matched is not None:
+                break
+        if matched is None:
             continue
-        issue, series = row
-        found.append((issue, series))
+        found.append(matched)
     return found, lookups
 
 
@@ -179,7 +214,7 @@ def build_scoped_forward_release_title_index(
     forward_rows = iter_forward_release_rows(session, owner_user_id=owner_user_id)
     sources.append("forward_window")
     for issue, series in forward_rows:
-        index[_index_key_for_pair(issue, series)] = (issue, series)
+        register_release_in_index(index, issue, series)
 
     rec_keys = _collect_recommendation_title_keys(session, owner_user_id=owner_user_id)
     if rec_keys:
@@ -198,7 +233,7 @@ def build_scoped_forward_release_title_index(
     if lookup_count:
         sources.append(f"title_lookup({lookup_count})")
     for issue, series in lookup_pairs:
-        index[_index_key_for_pair(issue, series)] = (issue, series)
+        register_release_in_index(index, issue, series)
 
     elapsed_ms = round((time.monotonic() - started) * 1000.0, 2)
     mem_after = process_rss_mb()
@@ -238,7 +273,7 @@ def _extend_scoped_index(
         index=index,
     )
     for issue, series in lookup_pairs:
-        index[_index_key_for_pair(issue, series)] = (issue, series)
+        register_release_in_index(index, issue, series)
     elapsed_ms = round((time.monotonic() - started) * 1000.0, 2)
     mem_after = process_rss_mb()
     source = f"{base.title_index_source}+extend({lookup_count})"
@@ -264,5 +299,22 @@ def build_full_release_title_index(
     ).all()
     index: dict[str, tuple[ReleaseIssue, ReleaseSeries]] = {}
     for issue, series in rows:
-        index[_index_key_for_pair(issue, series)] = (issue, series)
+        register_release_in_index(index, issue, series)
     return index
+
+
+def resolve_release_pair(
+    title: str,
+    index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
+) -> tuple[ReleaseIssue, ReleaseSeries] | None:
+    key = normalize_recommendation_title_key(title)
+    if not key:
+        return None
+    pair = index.get(key)
+    if pair is not None:
+        return pair
+    for alias in title_key_aliases(title):
+        pair = index.get(alias)
+        if pair is not None:
+            return pair
+    return None

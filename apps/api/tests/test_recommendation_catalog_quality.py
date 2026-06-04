@@ -61,7 +61,7 @@ def test_marvel_single_issue_eligible() -> None:
     assert quality.spec_eligible
     assert quality.recommendation_exclusion_reason is None
     assert should_include_in_top_recommendations(quality)
-    assert quality.publisher_boost >= 3.0
+    assert quality.publisher_boost == 0.0
 
 
 def test_omnibus_excluded_without_key_override() -> None:
@@ -182,7 +182,7 @@ def test_over_cap_number_one_with_key_allowed() -> None:
         key_signals=["NEW_NUMBER_ONE", "FIRST_APPEARANCE"],
     )
     assert quality.is_over_price_cap
-    assert quality.price_exception_reason in {"number_one_franchise", "major_key_issue", "ratio_incentive_variant"}
+    assert quality.price_exception_reason in {"number_one_launch", "major_key_issue", "ratio_incentive_variant"}
     assert should_include_in_top_recommendations(quality)
 
 

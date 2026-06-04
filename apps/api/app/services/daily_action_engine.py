@@ -74,10 +74,9 @@ def _foc_due_date_from_index(
     title: str,
     release_index: dict[str, tuple[ReleaseIssue, ReleaseSeries]],
 ) -> date | None:
-    title_key = title.strip().lower()
-    if title_key.endswith(" (variants)"):
-        title_key = title_key[: -len(" (variants)")]
-    pair = release_index.get(title_key)
+    from app.services.recommendation_title_index import resolve_release_pair
+
+    pair = resolve_release_pair(title, release_index)
     if pair is None:
         return None
     issue, _ = pair

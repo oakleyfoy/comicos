@@ -79,11 +79,13 @@ class _Draft:
 
     @property
     def title_key(self) -> str:
-        return self.title.strip().lower()
+        from app.services.recommendation_title_normalize import normalize_recommendation_title_key
+
+        return normalize_recommendation_title_key(self.title)
 
     @property
     def merge_key(self) -> str:
-        return f"{self.recommendation_type}|{self.title.strip().lower()}"
+        return f"{self.recommendation_type}|{self.title_key}"
 
 
 def _clamp_priority(value: float) -> float:

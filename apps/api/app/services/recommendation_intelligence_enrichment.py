@@ -54,6 +54,21 @@ _LEGACY_NUMBERING_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
+_SIGNAL_AUDIENCE_TAGS: dict[str, str] = {
+    "FIRST_APPEARANCE": "key-issue collectors",
+    "FIRST_FULL_APPEARANCE": "key-issue collectors",
+    "FIRST_CAMEO": "key-issue collectors",
+    "ORIGIN": "key-issue collectors",
+    "KEY_ISSUE": "key-issue collectors",
+    "MILESTONE_NUMBERING": "milestone collectors",
+    "VARIANT_HOT": "variant collectors",
+    "RATIO_VARIANT": "variant collectors",
+    "INCENTIVE_VARIANT": "variant collectors",
+    "NEW_NUMBER_ONE": "launch collectors",
+    "UNIVERSE_LAUNCH": "launch collectors",
+    "RELAUNCH": "launch collectors",
+}
+
 _HOMAGE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(p, re.IGNORECASE), label)
     for p, label in (
@@ -64,17 +79,6 @@ _HOMAGE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"\banniversary\s+cover\b", "anniversary cover"),
         (r"\bclassic\s+cover\s+homage\b", "classic cover homage"),
         (r"\bartist\s+homage\b", "artist homage"),
-    )
-)
-
-_AUDIENCE_RULES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
-    (re.compile(p, re.IGNORECASE), tag)
-    for p, tag in (
-        (r"\b(horror|vampire|zombie|werewolf|terror)\b", "horror collectors"),
-        (r"\b(transformers|gi\s*joe|tmnt|teenage\s+mutant|he-?man|star\s+wars)\b", "toy/IP collectors"),
-        (r"\b(marvel|dc\s+comics|avengers|x-?men|batman|superman|spider-?man)\b", "superhero collectors"),
-        (r"\b(image\s+comics|skybound|boom!?\s*studios|oni\s+press|vault)\b", "indie spec collectors"),
-        (r"\b(marvel|dc|image|dark\s+horse|idw|boom)\b", "publisher-line collectors"),
     )
 )
 
@@ -219,10 +223,17 @@ def _match_notable_creators(session: Session, blob: str, *, min_popularity: floa
     return round(bonus, 2), thesis, ["CREATOR_SIGNIFICANCE"]
 
 
-def _audience_tags(blob: str, *, milestone_num: int | None, creator_bonus: float) -> tuple[tuple[str, ...], list[str]]:
+def _audience_tags(
+    blob: str,
+    *,
+    milestone_num: int | None,
+    creator_bonus: float,
+    key_signals: list[str] | None = None,
+) -> tuple[tuple[str, ...], list[str]]:
     tags: list[str] = []
-    for pattern, tag in _AUDIENCE_RULES:
-        if pattern.search(blob) and tag not in tags:
+    for signal in key_signals or []:
+        tag = _SIGNAL_AUDIENCE_TAGS.get(signal.upper())
+        if tag and tag not in tags:
             tags.append(tag)
     if milestone_num is not None and milestone_num >= 100:
         if "nostalgia collectors" not in tags:
@@ -233,6 +244,7 @@ def _audience_tags(blob: str, *, milestone_num: int | None, creator_bonus: float
 
 
 def _franchise_historical_bonus(
+    session: Session,
     *,
     series: ReleaseSeries,
     issue: ReleaseIssue,
@@ -241,8 +253,12 @@ def _franchise_historical_bonus(
     key_signals: list[str],
 ) -> tuple[float, list[str]]:
     franchise_bonus, hits = franchise_strength_bonus(
+        session,
         series_name=series.series_name,
         issue_title=issue.title,
+        issue=issue,
+        series=series,
+        key_signals=key_signals,
     )
     bonus = franchise_bonus * 0.35
     thesis: list[str] = []
@@ -381,13 +397,19 @@ def build_collector_significance_with_breakdown(
     homage_bonus, homage_thesis, homage_codes = _homage_signals(blob)
     creator_bonus, creator_thesis, creator_codes = _match_notable_creators(session, blob)
     franchise_bonus, franchise_thesis = _franchise_historical_bonus(
+        session,
         series=series,
         issue=issue,
         priority_enrichment=priority_enrichment,
         owned_stats=owned_stats,
         key_signals=key_signals,
     )
-    audience_tags, _ = _audience_tags(blob, milestone_num=milestone_num, creator_bonus=creator_bonus)
+    audience_tags, _ = _audience_tags(
+        blob,
+        milestone_num=milestone_num,
+        creator_bonus=creator_bonus,
+        key_signals=key_signals,
+    )
 
     if priority_enrichment is not None:
         franchise_score = round(float(priority_enrichment.franchise_bonus), 2)
@@ -396,11 +418,18 @@ def build_collector_significance_with_breakdown(
         continuity_score = round(float(priority_enrichment.continuity_bonus), 2)
     else:
         franchise_score, _ = franchise_strength_bonus(
+            session,
             series_name=series.series_name,
             issue_title=issue.title,
+            issue=issue,
+            series=series,
+            key_signals=key_signals,
         )
         franchise_score = round(franchise_score, 2)
-        publisher_score = round(publisher_strength_bonus(series.publisher), 2)
+        publisher_score = round(
+            publisher_strength_bonus(series.publisher, owned_stats=owned_stats),
+            2,
+        )
         historical_demand_score = 0.0
         continuity_score = 0.0
 

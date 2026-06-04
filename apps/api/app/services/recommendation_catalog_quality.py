@@ -213,14 +213,8 @@ def _normalize_publisher(value: str | None) -> str:
 
 
 def publisher_boost_for(publisher: str | None) -> float:
-    pub = _normalize_publisher(publisher)
-    if not pub:
-        return 0.0
-    if pub in CORE_COMIC_PUBLISHER_TOKENS:
-        return 4.0
-    for token in CORE_COMIC_PUBLISHER_TOKENS:
-        if token in pub or pub in token:
-            return 3.0
+    """No automatic publisher-tier priority; use key signals and owner context elsewhere."""
+    _ = publisher
     return 0.0
 
 
@@ -276,9 +270,9 @@ def _resolve_price_exception(
     if _has_foil_or_special_format(title) and _strong_spec_signal(spec_type=spec_type, v2_total_score=v2_total_score):
         return "special_format_spec"
     if _is_number_one(issue_number) and (
-        quality.publisher_boost >= 3.0 or signal_set.intersection(NEW_ONE_SIGNALS) or "NEW_NUMBER_ONE" in signal_set
+        signal_set.intersection(NEW_ONE_SIGNALS) or "NEW_NUMBER_ONE" in signal_set
     ):
-        return "number_one_franchise"
+        return "number_one_launch"
     if signal_set.intersection(KEY_SIGNAL_TYPES):
         return "major_key_issue"
     if user_owns_series_run and quality.is_single_issue:
@@ -552,9 +546,9 @@ def quality_for_recommendation_title(
     today: date | None = None,
 ) -> ReleaseCatalogQuality:
     """Resolve catalog quality for a unified/cross-system/daily action title."""
-    title_key = title.strip().lower()
-    if title_key.endswith(" (variants)"):
-        title_key = title_key[: -len(" (variants)")]
+    from app.services.recommendation_title_normalize import normalize_recommendation_title_key
+
+    title_key = normalize_recommendation_title_key(title)
     index = release_index
     if index is None and session is not None and owner_user_id is not None:
         index = build_forward_release_title_index(
@@ -576,7 +570,9 @@ def quality_for_recommendation_title(
         key_signals=key_signals,
         spec_type=spec_type,
     )
-    pair = index.get(title_key) if index else None
+    from app.services.recommendation_title_index import resolve_release_pair
+
+    pair = resolve_release_pair(title, index) if index else None
     if pair is not None:
         issue, series = pair
         issue_id = int(issue.id or 0)

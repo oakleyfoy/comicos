@@ -15,6 +15,8 @@ from app.services.recommendation_priority_enrichment import (
     build_owned_series_inventory_stats,
     build_recommendation_priority_enrichment,
 )
+from app.services.recommendation_title_index import resolve_release_pair
+from app.services.recommendation_title_normalize import normalize_recommendation_title_key
 
 
 class _RankingCandidate(Protocol):
@@ -30,10 +32,7 @@ class _RankingCandidate(Protocol):
 
 
 def _resolve_title_key(title: str) -> str:
-    key = title.strip().lower()
-    if key.endswith(" (variants)"):
-        return key[: -len(" (variants)")]
-    return key
+    return normalize_recommendation_title_key(title)
 
 
 def apply_collector_significance_priority_boost(
@@ -51,8 +50,7 @@ def apply_collector_significance_priority_boost(
     variants_by_issue = variants_by_issue or {}
 
     for cand in candidates:
-        title_key = _resolve_title_key(cand.title)
-        pair = release_index.get(title_key)
+        pair = resolve_release_pair(cand.title, release_index)
         if pair is None:
             continue
         issue, series = pair

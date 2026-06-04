@@ -2,7 +2,7 @@
 P51-04 Recommendation Engine V2 — score component engine.
 
 V1 audit (spec_scoring_agent / spec_recommendation_agent):
-- Overweights: NEW_NUMBER_ONE (+18), variant/ratio signals, publisher_strength (Marvel/DC/Image),
+- Overweights: NEW_NUMBER_ONE (+18), variant/ratio signals without P51 demand/user support.
   series_history_count, ReleaseKeySignal heuristics without P51 intelligence layers.
 - Underweights: character/franchise/creator popularity (P51-01), KeyIssueProfile importance (P51-02),
   market demand & user preferences (P51-03), investment vs random #1 distinction, run-start collection value.
@@ -47,25 +47,6 @@ COMPONENT_NAMES = (
     "HORIZON_TIMING_SCORE",
     "CONTINUITY_SCORE",
     "RISK_SCORE",
-)
-
-INVESTMENT_FRANCHISE_TOKENS = (
-    "batman",
-    "spider-man",
-    "spiderman",
-    "tmnt",
-    "teenage mutant ninja turtles",
-    "invincible",
-    "transformers",
-    "g.i. joe",
-    "gi joe",
-    "gargoyles",
-    "spawn",
-    "x-men",
-    "star wars",
-    "venom",
-    "wolverine",
-    "deadpool",
 )
 
 KEY_ISSUE_BOOST_TYPES = {
@@ -169,9 +150,7 @@ def _has_investment_franchise_signal(
             )
             if score >= 65.0:
                 return True
-    series_blob = _text_blob(series.series_name, series.publisher)
-    if any(token in series_blob for token in INVESTMENT_FRANCHISE_TOKENS):
-        return True
+    series_blob = _text_blob(series.series_name, series.publisher, issue.title)
     profiles = ctx.market_demand_profiles if ctx is not None else session.exec(select(MarketDemandProfile)).all()
     for profile in profiles:
         name = profile.entity_name.lower()
@@ -180,9 +159,21 @@ def _has_investment_franchise_signal(
     return False
 
 
-def _creator_owned_image_launch(series: ReleaseSeries, issue: ReleaseIssue) -> bool:
-    pub = series.publisher.lower()
-    return "image" in pub and _is_number_one(issue)
+def _creator_owned_number_one_launch(
+    session: Session,
+    *,
+    issue: ReleaseIssue,
+    series: ReleaseSeries,
+    ctx: RecommendationV2ScoringContext | None = None,
+) -> bool:
+    """#1 with a matched creator entity (registry), not a named publisher shortcut."""
+    if not _is_number_one(issue):
+        return False
+    if ctx is not None:
+        match = ctx.match_release(session, issue=issue, series=series)
+    else:
+        match = match_release_issue(session, issue=issue, series=series)
+    return any(entity.entity_type == "CREATOR" for entity in match.matched_entities)
 
 
 def _affordable_ratio_variant(
@@ -255,8 +246,8 @@ def is_investment_number_one(
     reasons: list[str] = []
     if _has_investment_franchise_signal(session, issue=issue, series=series, ctx=ctx):
         reasons.append("major franchise or character demand")
-    if _creator_owned_image_launch(series, issue):
-        reasons.append("creator-owned Image launch")
+    if _creator_owned_number_one_launch(session, issue=issue, series=series, ctx=ctx):
+        reasons.append("creator-attached #1 launch")
     profiles = _key_issue_rows(session, issue_id=int(issue.id or 0), ctx=ctx)
     for profile in profiles:
         if profile.key_issue_type in {"UNIVERSE_LAUNCH", "RELAUNCH", "FIRST_APPEARANCE", "ORIGIN"}:
