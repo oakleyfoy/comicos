@@ -33,6 +33,15 @@ class CrossSystemRecommendationSummaryRead(BaseModel):
     top_grading_opportunities: int
     top_sell_opportunities: int
     top_rebalance_opportunities: int
+    readiness_status: str = "READY"
+    readiness_reason: str = ""
+
+
+class CrossSystemRecommendationRebuildRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rows_persisted: int
+    readiness_status: str = "READY"
 
 
 class CrossSystemRecommendationListResponse(BaseModel):

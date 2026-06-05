@@ -212,6 +212,60 @@ def test_idempotency(client: TestClient, session: Session) -> None:
     assert second == 0
 
 
+def test_get_summary_is_read_only_no_generate(client: TestClient, session: Session, monkeypatch) -> None:
+    owner_id = _seed_stack(client, session, "csr-readonly-summary@example.com")
+    generate_cross_system_recommendations(session, owner_user_id=owner_id, refresh_upstream=True)
+    token = register_and_login(client, "csr-readonly-summary@example.com")
+    calls: list[int] = []
+
+    def _boom(*_args, **_kwargs) -> int:
+        calls.append(1)
+        raise AssertionError("generate_cross_system_recommendations must not run on GET summary")
+
+    monkeypatch.setattr(
+        "app.services.cross_system_recommendation.generate_cross_system_recommendations",
+        _boom,
+    )
+    monkeypatch.setattr(
+        "app.services.cross_system_recommendation_engine.generate_cross_system_recommendations",
+        _boom,
+    )
+
+    rsp = client.get("/api/v1/cross-system-recommendations/summary", headers=auth_headers(token))
+    assert rsp.status_code == 200
+    assert calls == []
+    data = rsp.json()["data"]
+    assert data["readiness_status"] == "READY"
+    assert data["total_recommendations"] >= 1
+
+
+def test_get_summary_not_ready_when_no_snapshot(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "csr-empty-summary@example.com")
+    rsp = client.get("/api/v1/cross-system-recommendations/summary", headers=auth_headers(token))
+    assert rsp.status_code == 200
+    data = rsp.json()["data"]
+    assert data["readiness_status"] == "NOT_READY"
+    assert data["total_recommendations"] == 0
+    assert "rebuild" in data["readiness_reason"].lower()
+
+
+def test_post_rebuild_persists_snapshot(client: TestClient, session: Session) -> None:
+    owner_id = _seed_stack(client, session, "csr-rebuild@example.com")
+    token = register_and_login(client, "csr-rebuild@example.com")
+    rsp = client.post("/api/v1/cross-system-recommendations/rebuild", headers=auth_headers(token))
+    assert rsp.status_code == 200
+    body = rsp.json()["data"]
+    assert body["readiness_status"] == "READY"
+    assert int(body["rows_persisted"]) >= 0
+    listed = client.get("/api/v1/cross-system-recommendations/latest", headers=auth_headers(token))
+    assert listed.status_code == 200
+    assert listed.json()["data"]["pagination"]["total_count"] >= 1
+    count = session.exec(
+        select(CrossSystemRecommendation).where(CrossSystemRecommendation.owner_user_id == owner_id)
+    ).all()
+    assert len(count) >= 1
+
+
 def test_owner_isolation(client: TestClient, session: Session) -> None:
     token_a = register_and_login(client, "csr-a@example.com")
     owner_a = _seed_stack(client, session, "csr-a@example.com")

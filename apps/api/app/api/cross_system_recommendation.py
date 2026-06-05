@@ -6,14 +6,16 @@ from sqlmodel import Session
 from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models import User
-from app.schemas.cross_system_recommendation import CrossSystemRecommendationListResponse
+from app.schemas.cross_system_recommendation import (
+    CrossSystemRecommendationListResponse,
+    CrossSystemRecommendationRebuildRead,
+)
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
 from app.services.cross_system_recommendation import (
     get_cross_system_recommendation_summary,
     list_latest_cross_system_recommendations,
-    refresh_and_list_latest_cross_system_recommendations,
+    rebuild_cross_system_recommendations,
 )
-from app.services.p62_feature_flags import p62_read_only_get_enabled
 
 cross_system_recommendation_v1_router = APIRouter(
     prefix="/api/v1",
@@ -36,26 +38,15 @@ def v1_cross_system_recommendations(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    if p62_read_only_get_enabled():
-        items, total = list_latest_cross_system_recommendations(
-            session,
-            owner_user_id=int(current_user.id),
-            recommendation_type=recommendation_type,
-            rank_max=rank_max,
-            priority_min=priority_min,
-            limit=limit,
-            offset=offset,
-        )
-    else:
-        items, total = refresh_and_list_latest_cross_system_recommendations(
-            session,
-            owner_user_id=int(current_user.id),
-            recommendation_type=recommendation_type,
-            rank_max=rank_max,
-            priority_min=priority_min,
-            limit=limit,
-            offset=offset,
-        )
+    items, total = list_latest_cross_system_recommendations(
+        session,
+        owner_user_id=int(current_user.id),
+        recommendation_type=recommendation_type,
+        rank_max=rank_max,
+        priority_min=priority_min,
+        limit=limit,
+        offset=offset,
+    )
     body = CrossSystemRecommendationListResponse(items=items, total_items=total, limit=limit, offset=offset)
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
@@ -90,8 +81,16 @@ def v1_cross_system_recommendations_summary(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    from app.services.cross_system_recommendation_engine import generate_cross_system_recommendations
-
-    generate_cross_system_recommendations(session, owner_user_id=int(current_user.id))
     body = get_cross_system_recommendation_summary(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@cross_system_recommendation_v1_router.post("/cross-system-recommendations/rebuild", response_model=ScanApiV1Envelope)
+def v1_cross_system_recommendations_rebuild(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    rows = rebuild_cross_system_recommendations(session, owner_user_id=int(current_user.id), refresh_upstream=True)
+    body = CrossSystemRecommendationRebuildRead(rows_persisted=int(rows), readiness_status="READY")
     return wrap_object(body, owner_user_id=int(current_user.id))

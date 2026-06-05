@@ -22,33 +22,64 @@ export function CrossSystemRecommendationPage(): JSX.Element {
   const [items, setItems] = useState<CrossSystemRecommendationRead[]>([]);
   const [summary, setSummary] = useState<CrossSystemRecommendationSummaryRead | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [rebuildError, setRebuildError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [rankMax, setRankMax] = useState("");
   const [priorityMin, setPriorityMin] = useState("");
 
+  const buildParams = useCallback(() => {
+    const params: { recommendation_type?: string; rank_max?: number; priority_min?: number } = {};
+    if (typeFilter.trim()) params.recommendation_type = typeFilter.trim();
+    const rmax = Number(rankMax);
+    if (!Number.isNaN(rmax) && rankMax.trim()) params.rank_max = rmax;
+    const pmin = Number(priorityMin);
+    if (!Number.isNaN(pmin) && priorityMin.trim()) params.priority_min = pmin;
+    return params;
+  }, [priorityMin, rankMax, typeFilter]);
+
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setListError(null);
+    setSummaryError(null);
+    const params = buildParams();
+
+    const listPromise = apiClient.getCrossSystemRecommendations(params);
+    const summaryPromise = apiClient.getCrossSystemRecommendationsSummary();
+
     try {
-      const params: { recommendation_type?: string; rank_max?: number; priority_min?: number } = {};
-      if (typeFilter.trim()) params.recommendation_type = typeFilter.trim();
-      const rmax = Number(rankMax);
-      if (!Number.isNaN(rmax) && rankMax.trim()) params.rank_max = rmax;
-      const pmin = Number(priorityMin);
-      if (!Number.isNaN(pmin) && priorityMin.trim()) params.priority_min = pmin;
-      const [list, sum] = await Promise.all([
-        apiClient.getCrossSystemRecommendations(params),
-        apiClient.getCrossSystemRecommendationsSummary(),
-      ]);
+      const list = await listPromise;
       setItems(list.items);
+    } catch (err) {
+      setItems([]);
+      setListError(err instanceof ApiError ? err.message : "Unable to load cross-system recommendations.");
+    }
+
+    try {
+      const sum = await summaryPromise;
       setSummary(sum);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Unable to load cross-system recommendations.");
-    } finally {
-      setLoading(false);
+      setSummary(null);
+      setSummaryError(err instanceof ApiError ? err.message : "Unable to load recommendation summary.");
     }
-  }, [priorityMin, rankMax, typeFilter]);
+
+    setLoading(false);
+  }, [buildParams]);
+
+  const rebuild = useCallback(async () => {
+    setRebuilding(true);
+    setRebuildError(null);
+    try {
+      await apiClient.rebuildCrossSystemRecommendations();
+      await load();
+    } catch (err) {
+      setRebuildError(err instanceof ApiError ? err.message : "Rebuild failed.");
+    } finally {
+      setRebuilding(false);
+    }
+  }, [load]);
 
   useEffect(() => {
     void load();
@@ -61,8 +92,15 @@ export function CrossSystemRecommendationPage(): JSX.Element {
         title="Top Recommendations"
         description="Ranked cross-system picks with purchase decisions — quantity, cover, risk, strategy, and FOC timing."
       />
-      {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {summary ? (
+      {listError ? <StatusBanner tone="error">{listError}</StatusBanner> : null}
+      {summaryError ? (
+        <StatusBanner tone="warning">Summary unavailable: {summaryError}</StatusBanner>
+      ) : null}
+      {rebuildError ? <StatusBanner tone="error">{rebuildError}</StatusBanner> : null}
+      {summary?.readiness_status === "NOT_READY" && summary.readiness_reason ? (
+        <StatusBanner tone="warning">{summary.readiness_reason}</StatusBanner>
+      ) : null}
+      {summary && summary.readiness_status !== "NOT_READY" ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Total</p>
@@ -121,15 +159,28 @@ export function CrossSystemRecommendationPage(): JSX.Element {
             onChange={(e) => setPriorityMin(e.target.value)}
           />
         </label>
-        <button type="button" className="rounded-lg bg-cyan-700 px-3 py-1 text-sm text-white" onClick={() => void load()}>
-          Refresh
+        <button
+          type="button"
+          className="rounded-lg border border-slate-600 px-3 py-1 text-sm text-white"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Reload
+        </button>
+        <button
+          type="button"
+          className="rounded-lg bg-cyan-700 px-3 py-1 text-sm text-white disabled:opacity-60"
+          disabled={rebuilding || loading}
+          onClick={() => void rebuild()}
+        >
+          {rebuilding ? "Rebuilding…" : "Refresh rankings"}
         </button>
       </div>
       {loading ? (
         <p className="text-sm text-slate-500">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500">No cross-system recommendations yet.</p>
-      ) : (
+      ) : !listError && items.length === 0 ? (
+        <p className="text-sm text-slate-500">No cross-system recommendations yet. Use Refresh rankings to rebuild.</p>
+      ) : items.length === 0 ? null : (
         <ul className="space-y-4">
           {items.map((row) => (
             <li

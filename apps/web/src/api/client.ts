@@ -15500,6 +15500,13 @@ export interface CrossSystemRecommendationSummaryRead {
   top_grading_opportunities: number;
   top_sell_opportunities: number;
   top_rebalance_opportunities: number;
+  readiness_status?: string;
+  readiness_reason?: string;
+}
+
+export interface CrossSystemRecommendationRebuildRead {
+  rows_persisted: number;
+  readiness_status: string;
 }
 
 export interface ExecutiveDashboardSummaryRead {
@@ -27123,6 +27130,12 @@ export const apiClient = {
 
   getCrossSystemRecommendationsSummary(): Promise<CrossSystemRecommendationSummaryRead> {
     return requestScanV1<CrossSystemRecommendationSummaryRead>("/cross-system-recommendations/summary");
+  },
+
+  rebuildCrossSystemRecommendations(): Promise<CrossSystemRecommendationRebuildRead> {
+    return requestScanV1<CrossSystemRecommendationRebuildRead>("/cross-system-recommendations/rebuild", {
+      method: "POST",
+    });
   },
 
   getExecutiveDashboard(params?: {
