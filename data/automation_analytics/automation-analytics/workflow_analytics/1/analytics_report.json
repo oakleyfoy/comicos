@@ -1,0 +1,12 @@
+{
+  "metadata":{
+    "source":"pytest"
+  },
+  "summary":{
+    "analytics_status":"DEGRADED",
+    "analytics_type":"WORKFLOW_ANALYTICS",
+    "id":1,
+    "snapshot_checksum":"067616e1d498441d0201d0a3990899ed1d31c0fb4a7fbcbb7b00d27728380fdd",
+    "snapshot_key":"1:WORKFLOW_ANALYTICS:analytics-owner-a"
+  }
+}

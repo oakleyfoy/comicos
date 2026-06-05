@@ -1,0 +1,26 @@
+{
+  "target_date": "2026-07-15",
+  "final_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/15",
+  "page_title": "Encontros Clássicos DC e Marvel: Superman e Homem-Aranha Preview",
+  "comic_list_block": {
+    "data-list": "releases",
+    "data-date-type": "week",
+    "data-date": "2026-07-15",
+    "data-date-end": "",
+    "data-view": "text",
+    "data-extend-now": "0",
+    "data-list-offset": "166"
+  },
+  "discovery_audit_summary": {
+    "total_li_issue_rows": 512,
+    "parent_issue_rows": 148,
+    "variant_rows": 364,
+    "other_release_rows": 0,
+    "pagination": {
+      "mechanism": "hidden_api_get_comics_detected_no_extend",
+      "extend_calls": 0,
+      "final_offset": "166",
+      "extend_now": "0"
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/29",
+  "discovery_timestamp": "2026-06-05T01:13:25.904913+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 317,
+  "total_cards_found_on_page": 317,
+  "parent_issue_rows": 98,
+  "variant_rows": 219,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 317,
+  "unique_parent_issue_urls": 98,
+  "unique_variant_urls": 219,
+  "final_parent_issue_queue_count": 98,
+  "final_variant_queue_count": 219,
+  "total_issue_links_found": 317,
+  "unique_issue_urls": 317,
+  "unique_raw_hrefs": 317,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 98,
+  "variant_child_rows": 219,
+  "release_type_counts": {
+    "parent_issue_row": 98,
+    "variant_row": 208,
+    "variant_child_row": 11,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "0",
+    "extend_now": null
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/8534965/detective-comics-2026-annual-1",
+    "https://leagueofcomicgeeks.com/comic/8534965/detective-comics-2026-annual-1?variant=3776585",
+    "https://leagueofcomicgeeks.com/comic/8534965/detective-comics-2026-annual-1?variant=9777221",
+    "https://leagueofcomicgeeks.com/comic/5629404/superman-2026-annual-year-one-thousand-1",
+    "https://leagueofcomicgeeks.com/comic/5629404/superman-2026-annual-year-one-thousand-1?variant=5164328",
+    "https://leagueofcomicgeeks.com/comic/5629404/superman-2026-annual-year-one-thousand-1?variant=8828250",
+    "https://leagueofcomicgeeks.com/comic/5629404/superman-2026-annual-year-one-thousand-1?variant=2468248",
+    "https://leagueofcomicgeeks.com/comic/5629404/superman-2026-annual-year-one-thousand-1?variant=3804742",
+    "https://leagueofcomicgeeks.com/comic/8134066/batman-superman-worlds-finest-2026-annual-1",
+    "https://leagueofcomicgeeks.com/comic/8134066/batman-superman-worlds-finest-2026-annual-1?variant=2953818",
+    "https://leagueofcomicgeeks.com/comic/8134066/batman-superman-worlds-finest-2026-annual-1?variant=7972205",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34?variant=6902053",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34?variant=8428146",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34?variant=8725913",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34?variant=2165608",
+    "https://leagueofcomicgeeks.com/comic/8176738/x-men-34?variant=7766509",
+    "https://leagueofcomicgeeks.com/comic/2771135/alias-red-band-5",
+    "https://leagueofcomicgeeks.com/comic/2771135/alias-red-band-5?variant=6849277",
+    "https://leagueofcomicgeeks.com/comic/9831492/doomquest-3"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/8300185/smugglers-stitch-1",
+    "https://leagueofcomicgeeks.com/comic/6503925/im-the-queen-in-this-life-196",
+    "https://leagueofcomicgeeks.com/comic/6003954/buffy-the-vampire-slayer-1?variant=3182897",
+    "https://leagueofcomicgeeks.com/comic/9278955/horde-dark-contract-saga-44",
+    "https://leagueofcomicgeeks.com/comic/6477851/upheaval-1",
+    "https://leagueofcomicgeeks.com/comic/6003954/buffy-the-vampire-slayer-1?variant=1492262",
+    "https://leagueofcomicgeeks.com/comic/6003954/buffy-the-vampire-slayer-1?variant=5230495",
+    "https://leagueofcomicgeeks.com/comic/3974584/upheaval-2",
+    "https://leagueofcomicgeeks.com/comic/1069529/the-world-after-the-fall-230",
+    "https://leagueofcomicgeeks.com/comic/6003954/buffy-the-vampire-slayer-1?variant=8530680",
+    "https://leagueofcomicgeeks.com/comic/6003954/buffy-the-vampire-slayer-1?variant=7601658",
+    "https://leagueofcomicgeeks.com/comic/5010780/death-goddess-vs-the-dark-veil-1?variant=2227571",
+    "https://leagueofcomicgeeks.com/comic/8166444/eleceed-396",
+    "https://leagueofcomicgeeks.com/comic/9467884/hardcore-leveling-warrior-earth-game-139",
+    "https://leagueofcomicgeeks.com/comic/9899373/the-patron-of-villains-32",
+    "https://leagueofcomicgeeks.com/comic/8732886/wangui-himeuro-hoegwihanda-145",
+    "https://leagueofcomicgeeks.com/comic/5537798/for-your-perfect-ending-28",
+    "https://leagueofcomicgeeks.com/comic/9612423/before-the-grapes-ripen-27",
+    "https://leagueofcomicgeeks.com/comic/3232127/study-group-season-3-12",
+    "https://leagueofcomicgeeks.com/comic/1928633/whos-that-girl-55"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 317,
+      "data_list_offset": "317",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 317,
+      "data_list_offset": "0",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 317,
+      "data_list_offset": "0",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 317,
+      "data_list_offset": "0",
+      "data_extend_now": null
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 317,
+      "data_list_offset": "0",
+      "data_extend_now": null
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 317,
+      "http_status": 403,
+      "li_issue_rows_before": 317,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 317,
+      "data_list_offset": "0",
+      "data_extend_now": null
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 2,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 317
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "actions":[
+    {
+      "action_checksum":"efb060e9c4416aaa68a4bc767b8f507504ab11609ae6079f816fd73ee6d49f72",
+      "action_rank":10,
+      "action_status":"EXECUTED",
+      "action_type":"REPLAY_VERIFY",
+      "target_scope":"scan-replay"
+    }
+  ],
+  "evaluation_id":1
+}

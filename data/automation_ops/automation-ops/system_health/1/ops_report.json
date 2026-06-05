@@ -1,0 +1,12 @@
+{
+  "counts":{
+    "scope":"owner"
+  },
+  "summary":{
+    "id":1,
+    "snapshot_checksum":"ec88a6663e500ececd1ef39e40d2ea73bbbe03358ecda903725e623434655553",
+    "snapshot_key":"1:SYSTEM_HEALTH:ops-snapshot-001",
+    "snapshot_status":"HEALTHY",
+    "snapshot_type":"SYSTEM_HEALTH"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "passed": true,
+  "page_date": "2026-07-29",
+  "failure_reasons": [],
+  "warnings": [
+    "extend_now missing/null; no extend-now=1 signal (see proof_run_assessment)",
+    "lighter release week: 317 li rows / 98 parents (vs ~450 li typical); scroll stabilized, variants persisted"
+  ],
+  "url_date_checks": {
+    "final_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/29",
+    "url_contains_date_path": true,
+    "data_date": "2026-07-29",
+    "data_list": "releases",
+    "data_date_type": "week",
+    "expected_date": "2026-07-29",
+    "expected_list": "releases",
+    "expected_date_type": "week"
+  },
+  "completeness": {
+    "extend_now": null,
+    "pagination_mechanism": "hidden_api_get_comics_detected_no_extend",
+    "pagination_extend_calls": 0,
+    "total_li_issue_rows": 317,
+    "parent_issue_rows": 98,
+    "variant_rows": 219,
+    "other_release_rows": 0,
+    "total_release_rows_reconciled": 317,
+    "extend_now_audit": null,
+    "extend_now_block": null,
+    "proof_run_assessment": {
+      "total_li_issue_rows": 317,
+      "parent_issue_rows": 98,
+      "typical_week_li_reference": 400,
+      "neighbor_reference_li_rows": 450,
+      "initial_dom_li_rows": 317,
+      "peak_li_rows": 317,
+      "scroll_row_growth": 0,
+      "scroll_stabilized": true,
+      "truncated_initial_dom_pattern": false,
+      "scroll_recovered_from_truncation": false,
+      "high_initial_dom_no_scroll_growth": true,
+      "legitimately_lighter_release_week": true,
+      "variants_fully_persisted": true,
+      "parent_details_complete": true,
+      "list_variants_found": 219,
+      "list_variants_persisted": 219
+    },
+    "proof_run_typical_week_li_rows": 400,
+    "discovery_row_count_log": [
+      {
+        "phase": "before_text_view",
+        "li_issue_rows": 317,
+        "data_list_offset": "317",
+        "data_extend_now": null
+      },
+      {
+        "phase": "after_text_view",
+        "li_issue_rows": 317,
+        "data_list_offset": "0",
+        "data_extend_now": null
+      },
+      {
+        "phase": "after_scroll_to_bottom_1",
+        "li_issue_rows": 317,
+        "data_list_offset": "0",
+        "data_extend_now": null
+      },
+      {
+        "phase": "after_scroll_to_bottom_2",
+        "li_issue_rows": 317,
+        "data_list_offset": "0",
+        "data_extend_now": null
+      },
+      {
+        "phase": "get_comics_loop_start",
+        "li_issue_rows": 317,
+        "data_list_offset": "0",
+        "data_extend_now": null
+      },
+      {
+        "phase": "get_comics_attempt_1",
+        "list_offset": 317,
+        "http_status": 403,
+        "li_issue_rows_before": 317,
+        "result": "http_error"
+      },
+      {
+        "phase": "final_after_pagination",
+        "li_issue_rows": 317,
+        "data_list_offset": "0",
+        "data_extend_now": null
+      }
+    ]
+  },
+  "persistence": {
+    "dry_run": false,
+    "detail_pages_attempted": 98,
+    "detail_pages_succeeded": 98,
+    "list_variants_found": 219,
+    "list_variants_persisted": 219,
+    "variant_persist_skipped_reason": null,
+    "variant_skipped_reason_counts": {
+      "found": 219,
+      "persisted": 219,
+      "skipped_missing_parent": 0,
+      "skipped_missing_variant_url": 0,
+      "skipped_missing_title": 0,
+      "skipped_duplicate": 0,
+      "upsert_errors": 0,
+      "parents_ensured_from_list": 98,
+      "parents_ensured_from_variant_rows": 1,
+      "skipped_unavoidable_special_case": 0,
+      "skipped_missing_parent_samples": [],
+      "variant_upsert_success": 219,
+      "variant_upsert_failure": 0,
+      "first_variant_error": null,
+      "first_variant_failure": null
+    }
+  },
+  "runtime": {
+    "parent_detail_timing_count": 0,
+    "average_parent_detail_seconds": 0.0,
+    "max_allowed_average_parent_detail_seconds": 5.0,
+    "total_runtime_seconds": 147.896,
+    "cloudflare_wait_count": null,
+    "cloudflare_total_wait_seconds": null
+  },
+  "external_validation_note": "Files such as 6-10-26.xlsx are external distributor/shop validation, not LoCG source-of-truth for capture certification."
+}

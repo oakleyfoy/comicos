@@ -1,0 +1,136 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/01",
+  "discovery_timestamp": "2026-06-05T00:44:56.430013+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 495,
+  "total_cards_found_on_page": 495,
+  "parent_issue_rows": 159,
+  "variant_rows": 336,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 495,
+  "unique_parent_issue_urls": 159,
+  "unique_variant_urls": 336,
+  "final_parent_issue_queue_count": 159,
+  "final_variant_queue_count": 336,
+  "total_issue_links_found": 495,
+  "unique_issue_urls": 495,
+  "unique_raw_hrefs": 495,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 159,
+  "variant_child_rows": 336,
+  "release_type_counts": {
+    "parent_issue_row": 159,
+    "variant_row": 307,
+    "variant_child_row": 29,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "165",
+    "extend_now": "0"
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=9704040",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=3910285",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=8264571",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=7157160",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=4372855",
+    "https://leagueofcomicgeeks.com/comic/3180776/batman-11?variant=1010627",
+    "https://leagueofcomicgeeks.com/comic/9713919/absolute-superman-21",
+    "https://leagueofcomicgeeks.com/comic/9713919/absolute-superman-21?variant=9759337",
+    "https://leagueofcomicgeeks.com/comic/9713919/absolute-superman-21?variant=4367005",
+    "https://leagueofcomicgeeks.com/comic/9713919/absolute-superman-21?variant=1560007",
+    "https://leagueofcomicgeeks.com/comic/7124600/absolute-martian-manhunter-12",
+    "https://leagueofcomicgeeks.com/comic/7124600/absolute-martian-manhunter-12?variant=9089486",
+    "https://leagueofcomicgeeks.com/comic/7124600/absolute-martian-manhunter-12?variant=5317728",
+    "https://leagueofcomicgeeks.com/comic/7124600/absolute-martian-manhunter-12?variant=3033123",
+    "https://leagueofcomicgeeks.com/comic/2724250/absolute-green-lantern-16",
+    "https://leagueofcomicgeeks.com/comic/2724250/absolute-green-lantern-16?variant=3197441",
+    "https://leagueofcomicgeeks.com/comic/2724250/absolute-green-lantern-16?variant=7786280",
+    "https://leagueofcomicgeeks.com/comic/2724250/absolute-green-lantern-16?variant=2561258",
+    "https://leagueofcomicgeeks.com/comic/8579101/the-amazing-spider-man-32"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/4214657/sq-jump-sq-2026-8",
+    "https://leagueofcomicgeeks.com/comic/4873709/the-bold-and-the-brave-56",
+    "https://leagueofcomicgeeks.com/comic/1234989/malditos-x-force-1",
+    "https://leagueofcomicgeeks.com/comic/2999408/shovel-up-45",
+    "https://leagueofcomicgeeks.com/comic/1528833/skinbreaker-treasury-edition-8?variant=2713930",
+    "https://leagueofcomicgeeks.com/comic/4590953/smity-and-majesty-186",
+    "https://leagueofcomicgeeks.com/comic/5906709/your-throne-248",
+    "https://leagueofcomicgeeks.com/comic/8711090/mumumu-8",
+    "https://leagueofcomicgeeks.com/comic/2297543/infinite-leveling-murim-season-3-10",
+    "https://leagueofcomicgeeks.com/comic/1353824/manga-issho-6",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=1977887",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=3767072",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=8866176",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=3778866",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=2622335",
+    "https://leagueofcomicgeeks.com/comic/8901285/saffrons-dark-tales-1?variant=6329593",
+    "https://leagueofcomicgeeks.com/comic/2488214/game-master-65",
+    "https://leagueofcomicgeeks.com/comic/5031719/akdangdeurui-huwonjaga-doeeotda-37",
+    "https://leagueofcomicgeeks.com/comic/9457214/choehu-ui-moheomga-120",
+    "https://leagueofcomicgeeks.com/comic/7958586/podoga-ikgi-jeone-41"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 495,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 495,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 495,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 495,
+      "http_status": 403,
+      "li_issue_rows_before": 495,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 495,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 2,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 495
+  }
+}

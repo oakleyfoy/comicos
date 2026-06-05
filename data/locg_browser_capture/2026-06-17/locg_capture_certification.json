@@ -1,0 +1,56 @@
+{
+  "passed": true,
+  "page_date": "2026-06-17",
+  "failure_reasons": [],
+  "url_date_checks": {
+    "final_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/06/17",
+    "url_contains_date_path": true,
+    "data_date": "2026-06-17",
+    "data_list": "releases",
+    "data_date_type": "week",
+    "expected_date": "2026-06-17",
+    "expected_list": "releases",
+    "expected_date_type": "week"
+  },
+  "completeness": {
+    "extend_now": "0",
+    "pagination_mechanism": "hidden_api_get_comics_detected_no_extend",
+    "pagination_extend_calls": 0,
+    "total_li_issue_rows": 505,
+    "parent_issue_rows": 85,
+    "variant_rows": 420,
+    "other_release_rows": 0,
+    "total_release_rows_reconciled": 505
+  },
+  "persistence": {
+    "dry_run": false,
+    "detail_pages_attempted": 50,
+    "detail_pages_succeeded": 47,
+    "list_variants_found": 285,
+    "list_variants_persisted": 285,
+    "variant_persist_skipped_reason": null,
+    "variant_skipped_reason_counts": {
+      "found": 285,
+      "persisted": 285,
+      "skipped_missing_parent": 0,
+      "skipped_missing_variant_url": 0,
+      "skipped_missing_title": 0,
+      "skipped_duplicate": 0,
+      "upsert_errors": 0,
+      "parents_ensured_from_list": 50,
+      "variant_upsert_success": 285,
+      "variant_upsert_failure": 0,
+      "first_variant_error": null,
+      "first_variant_failure": null
+    }
+  },
+  "runtime": {
+    "parent_detail_timing_count": 47,
+    "average_parent_detail_seconds": 4.1,
+    "max_allowed_average_parent_detail_seconds": 5.0,
+    "total_runtime_seconds": 395.133,
+    "cloudflare_wait_count": 0,
+    "cloudflare_total_wait_seconds": 0.0
+  },
+  "external_validation_note": "Files such as 6-10-26.xlsx are external distributor/shop validation, not LoCG source-of-truth for capture certification."
+}

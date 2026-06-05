@@ -1,0 +1,12 @@
+{
+  "metadata":{
+    "source":"pytest"
+  },
+  "summary":{
+    "analytics_status":"DEGRADED",
+    "analytics_type":"QUEUE_ANALYTICS",
+    "id":2,
+    "snapshot_checksum":"e21cec75d1baec11129b9d0c17547d0fda1b1253f609133cafe406f0919577de",
+    "snapshot_key":"1:QUEUE_ANALYTICS:analytics-snapshot-b"
+  }
+}

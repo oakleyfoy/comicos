@@ -14,6 +14,10 @@ def test_proof_run_fails_june24_sized_incomplete_list() -> None:
         other_release_rows=0,
         pagination_extend_now=None,
         pagination_mechanism="hidden_api_get_comics_detected_no_extend",
+        discovery_row_count_log=[
+            {"phase": "before_text_view", "li_issue_rows": 165},
+            {"phase": "after_scroll_to_bottom_1", "li_issue_rows": 165},
+        ],
     )
     cert = certify_locg_capture(
         page_date=date(2026, 6, 24),

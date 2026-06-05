@@ -1,0 +1,136 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/15",
+  "discovery_timestamp": "2026-06-05T01:06:16.033729+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 512,
+  "total_cards_found_on_page": 512,
+  "parent_issue_rows": 148,
+  "variant_rows": 364,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 512,
+  "unique_parent_issue_urls": 148,
+  "unique_variant_urls": 364,
+  "final_parent_issue_queue_count": 148,
+  "final_variant_queue_count": 364,
+  "total_issue_links_found": 512,
+  "unique_issue_urls": 512,
+  "unique_raw_hrefs": 512,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 148,
+  "variant_child_rows": 364,
+  "release_type_counts": {
+    "parent_issue_row": 148,
+    "variant_row": 350,
+    "variant_child_row": 14,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "166",
+    "extend_now": "0"
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/3057246/absolute-flash-17",
+    "https://leagueofcomicgeeks.com/comic/3057246/absolute-flash-17?variant=3947130",
+    "https://leagueofcomicgeeks.com/comic/3057246/absolute-flash-17?variant=3566150",
+    "https://leagueofcomicgeeks.com/comic/3057246/absolute-flash-17?variant=6241488",
+    "https://leagueofcomicgeeks.com/comic/4578031/absolute-green-arrow-3",
+    "https://leagueofcomicgeeks.com/comic/4578031/absolute-green-arrow-3?variant=5866703",
+    "https://leagueofcomicgeeks.com/comic/4578031/absolute-green-arrow-3?variant=1885319",
+    "https://leagueofcomicgeeks.com/comic/4578031/absolute-green-arrow-3?variant=2889413",
+    "https://leagueofcomicgeeks.com/comic/4578031/absolute-green-arrow-3?variant=6978816",
+    "https://leagueofcomicgeeks.com/comic/3320571/nightwing-140",
+    "https://leagueofcomicgeeks.com/comic/3320571/nightwing-140?variant=5913704",
+    "https://leagueofcomicgeeks.com/comic/3320571/nightwing-140?variant=8720678",
+    "https://leagueofcomicgeeks.com/comic/3320571/nightwing-140?variant=2076581",
+    "https://leagueofcomicgeeks.com/comic/4998569/batman-superman-worlds-finest-53",
+    "https://leagueofcomicgeeks.com/comic/4998569/batman-superman-worlds-finest-53?variant=1764834",
+    "https://leagueofcomicgeeks.com/comic/4998569/batman-superman-worlds-finest-53?variant=7398049",
+    "https://leagueofcomicgeeks.com/comic/1794912/invincible-universe-battle-beast-11",
+    "https://leagueofcomicgeeks.com/comic/1794912/invincible-universe-battle-beast-11?variant=4837652",
+    "https://leagueofcomicgeeks.com/comic/1794912/invincible-universe-battle-beast-11?variant=9437247",
+    "https://leagueofcomicgeeks.com/comic/1794912/invincible-universe-battle-beast-11?variant=8798263"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/1444127/dc-fac-simile-action-comics-252",
+    "https://leagueofcomicgeeks.com/comic/6076431/eleceed-394",
+    "https://leagueofcomicgeeks.com/comic/5082237/hardcore-leveling-warrior-earth-game-137",
+    "https://leagueofcomicgeeks.com/comic/5947522/the-patron-of-villains-30",
+    "https://leagueofcomicgeeks.com/comic/8946203/lanterna-verde-11",
+    "https://leagueofcomicgeeks.com/comic/5143928/red-sonja-noir-the-plunder-the-princess-1?variant=3452293",
+    "https://leagueofcomicgeeks.com/comic/8408882/wangui-himeuro-hoegwihanda-143",
+    "https://leagueofcomicgeeks.com/comic/3824325/urek-mazino-67",
+    "https://leagueofcomicgeeks.com/comic/4803943/altered-states-warlords-2?variant=5526533",
+    "https://leagueofcomicgeeks.com/comic/5474456/mighty-morphin-power-rangers-1?variant=7666367",
+    "https://leagueofcomicgeeks.com/comic/5257701/vampirella-summer-special-2026-1?variant=3651325",
+    "https://leagueofcomicgeeks.com/comic/7479859/before-the-grapes-ripen-25",
+    "https://leagueofcomicgeeks.com/comic/1865439/for-your-perfect-ending-26",
+    "https://leagueofcomicgeeks.com/comic/7822562/study-group-season-3-10",
+    "https://leagueofcomicgeeks.com/comic/7285095/batman-o-longo-dia-das-bruxas-o-ultimo-dia-das-bruxas-10",
+    "https://leagueofcomicgeeks.com/comic/4477416/batman-silencio-2-3",
+    "https://leagueofcomicgeeks.com/comic/1213739/shovel-up-47",
+    "https://leagueofcomicgeeks.com/comic/1831733/whos-that-girl-53",
+    "https://leagueofcomicgeeks.com/comic/6363175/your-throne-250",
+    "https://leagueofcomicgeeks.com/comic/3072612/encontros-classicos-dc-e-marvel-superman-e-homem-aranha"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 166,
+      "data_list_offset": "166",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 166,
+      "data_list_offset": "166",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 512,
+      "data_list_offset": "166",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 512,
+      "data_list_offset": "166",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 512,
+      "data_list_offset": "166",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 512,
+      "http_status": 403,
+      "li_issue_rows_before": 512,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 512,
+      "data_list_offset": "166",
+      "data_extend_now": "0"
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 2,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 512
+  }
+}

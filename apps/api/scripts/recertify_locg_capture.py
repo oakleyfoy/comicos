@@ -33,6 +33,7 @@ def main() -> int:
         return 1
     disc = json.loads(discovery_path.read_text(encoding="utf-8"))
     pag = disc.get("pagination") or {}
+    scroll = disc.get("scroll_discovery") or {}
     audit = ListDiscoveryAudit(
         page_url=disc.get("page_url", ""),
         page_title=disc.get("page_title", ""),
@@ -43,6 +44,10 @@ def main() -> int:
         pagination_mechanism=pag.get("mechanism") or "",
         pagination_extend_calls=int(pag.get("extend_calls") or 0),
         pagination_extend_now=pag.get("extend_now"),
+        discovery_row_count_log=list(disc.get("discovery_row_count_log") or []),
+        scroll_attempts=int(scroll.get("attempts") or 0),
+        scroll_row_count_stabilized=bool(scroll.get("row_count_stabilized")),
+        scroll_final_li_issue_rows=int(scroll.get("final_li_issue_rows") or 0),
     )
     html = list_path.read_text(encoding="utf-8")
     old_cert = {}

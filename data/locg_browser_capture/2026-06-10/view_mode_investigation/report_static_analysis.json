@@ -1,0 +1,97 @@
+{
+  "date": "2026-06-10",
+  "spreadsheet_target": 234,
+  "environment": {
+    "automated_browser": "blocked (#comic-list-block missing / Cloudflare)",
+    "get_comics_http": "403 Cloudflare from script",
+    "sources_used": [
+      "saved list_page.html (thumbnail DOM, partial pagination)",
+      "public page fetch markdown (LoCG week page layout)"
+    ]
+  },
+  "view_modes_in_dom": {
+    "thumbnail": { "data_view": "thumbs", "ul_class": "comic-list-thumbs" },
+    "detailed": { "data_view": "list", "expected_ul_class": "comic-list-list (via ComicList.loadList)" },
+    "text_list": { "data_view": "text", "toolbar_label": "Text List View" },
+    "covers_only": { "status": "locked_pro", "data_view_empty": true }
+  },
+  "measured_thumbnail_partial_dom": {
+    "label": "Thumbnail View (saved capture, extend_calls=0, data-extend-now=1)",
+    "total_li_issue_rows": 168,
+    "parent_issue_rows": 15,
+    "variant_rows": 153,
+    "visible_li_rows_not_hidden": 15,
+    "hidden_variant_collapsed_rows": 153,
+    "note": "Variants exist in DOM but are class variant-collapsed hidden; UI shows +N toggles."
+  },
+  "projected_after_full_pagination": {
+    "total_li_issue_rows": "~235 (168 first chunk + ~67 via get_comics)",
+    "parent_issue_rows": "~15-50 (depends on filter; 15 in first chunk only)",
+    "variant_rows": "remainder of li.issue rows",
+    "closest_to_spreadsheet_234": "full paginated total_li_issue_rows (all li.issue including variants)"
+  },
+  "text_list_view_hypothesis": {
+    "user_observation": "Text List View appears to show all releases",
+    "public_page_fetch": "Flat publisher/title lines list every variant inline (matches expanded text UX)",
+    "loads_all_immediately": false,
+    "uses_same_pagination": true,
+    "mechanism": "ComicList.loadList() + GET /comic/get_comics with view=text (same as thumbs/list, different view param)",
+    "likely_difference": "Text view renders variant rows without hidden/collapsed styling so counts visible to user match total_li_issue_rows"
+  },
+  "api_behavior": {
+    "endpoint": "/comic/get_comics",
+    "pagination": "list_offset on #comic-list-block",
+    "view_param": "view=thumbs | list | text (from data-view on block + toolbar)",
+    "infinite_scroll": false,
+    "load_more_button": false,
+    "separate_api_per_view": "same endpoint, view query param differs"
+  },
+  "separate_variants_toggle": {
+    "found_in_saved_html": false,
+    "note": "No 'Separate Variants' label in anonymous capture; may be logged-in preference (.filter-options-preference). Format filter 'Variants & Reprints' (data-id=2) controls inclusion in list query."
+  },
+  "comparison_table": {
+    "thumbnail_view_count": {
+      "total_li_issue_rows_partial": 168,
+      "visible_to_user_without_expand": 15,
+      "total_li_after_full_pagination_estimated": 235
+    },
+    "detailed_view_count": {
+      "status": "not_measured_live",
+      "expected": "same API row set as thumbnail; different markup (list vs thumbs)"
+    },
+    "text_list_view_count": {
+      "status": "not_measured_live",
+      "user_reported": "shows all releases",
+      "expected_total_li_after_pagination": "~235",
+      "expected_visible_lines": "~235"
+    },
+    "covers_only_view_count": {
+      "status": "pro_locked_unavailable"
+    },
+    "separate_variants_off": {
+      "status": "control_not_in_capture",
+      "proxy_test": "deselect Format > Variants & Reprints in filters (changes list query, not measured)"
+    },
+    "separate_variants_on": {
+      "status": "control_not_in_capture",
+      "current_capture": "variants in DOM as separate li rows (153) but hidden in thumbnail UI"
+    }
+  },
+  "closest_to_spreadsheet_234": {
+    "winner": "Full paginated release list counting every li.issue row (parents + variants), regardless of view, after get_comics extend completes",
+    "estimated_total": 235,
+    "delta": 1,
+    "not_a_match": [
+      "Thumbnail visible rows only (15)",
+      "Parent queue only (15)",
+      "Partial DOM without pagination (168)"
+    ]
+  },
+  "recommended_capture_settings": {
+    "view": "text",
+    "reason": "Aligns with user-visible full release list; variants not collapsed/hidden in UI",
+    "still_required": "Run full get_comics pagination before counting or persisting"
+  },
+  "run_locally": "python scripts/investigate_locg_view_modes.py --headful"
+}

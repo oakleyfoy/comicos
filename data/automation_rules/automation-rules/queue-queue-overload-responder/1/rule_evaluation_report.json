@@ -1,0 +1,11 @@
+{
+  "evaluation_id":1,
+  "result":{
+    "condition_expression":"queue_depth > 100 and dead_letter_count >= 1",
+    "input_keys":[
+      "dead_letter_count",
+      "queue_depth"
+    ],
+    "matched":true
+  }
+}

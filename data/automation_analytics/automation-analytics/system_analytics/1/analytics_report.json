@@ -1,0 +1,12 @@
+{
+  "metadata":{
+    "source":"pytest"
+  },
+  "summary":{
+    "analytics_status":"DEGRADED",
+    "analytics_type":"SYSTEM_ANALYTICS",
+    "id":1,
+    "snapshot_checksum":"8acaa101baf6706bf5d1cc5c0bdc7c486bc6aab36fce91cd4c3e288191bd5608",
+    "snapshot_key":"1:SYSTEM_ANALYTICS:analytics-snapshot-001"
+  }
+}

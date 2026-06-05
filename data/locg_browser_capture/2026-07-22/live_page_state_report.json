@@ -1,0 +1,26 @@
+{
+  "target_date": "2026-07-22",
+  "final_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/22",
+  "page_title": "Who's That Girl? #54 Preview",
+  "comic_list_block": {
+    "data-list": "releases",
+    "data-date-type": "week",
+    "data-date": "2026-07-22",
+    "data-date-end": "",
+    "data-view": "text",
+    "data-extend-now": "0",
+    "data-list-offset": "167"
+  },
+  "discovery_audit_summary": {
+    "total_li_issue_rows": 447,
+    "parent_issue_rows": 123,
+    "variant_rows": 324,
+    "other_release_rows": 0,
+    "pagination": {
+      "mechanism": "hidden_api_get_comics_detected_no_extend",
+      "extend_calls": 0,
+      "final_offset": "167",
+      "extend_now": "0"
+    }
+  }
+}

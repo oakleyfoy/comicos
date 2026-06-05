@@ -1,0 +1,136 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/08",
+  "discovery_timestamp": "2026-06-05T01:02:50.304694+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 419,
+  "total_cards_found_on_page": 419,
+  "parent_issue_rows": 130,
+  "variant_rows": 289,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 419,
+  "unique_parent_issue_urls": 130,
+  "unique_variant_urls": 289,
+  "final_parent_issue_queue_count": 130,
+  "final_variant_queue_count": 289,
+  "total_issue_links_found": 419,
+  "unique_issue_urls": 419,
+  "unique_raw_hrefs": 419,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 130,
+  "variant_child_rows": 289,
+  "release_type_counts": {
+    "parent_issue_row": 130,
+    "variant_row": 270,
+    "variant_child_row": 19,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "165",
+    "extend_now": "0"
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22",
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22?variant=2304369",
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22?variant=6427051",
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22?variant=6841276",
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22?variant=4371747",
+    "https://leagueofcomicgeeks.com/comic/6863939/absolute-batman-22?variant=7143559",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=1607897",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=8366537",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=5864541",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=8182086",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=3987457",
+    "https://leagueofcomicgeeks.com/comic/3634542/daredevil-4?variant=3791638",
+    "https://leagueofcomicgeeks.com/comic/2140784/absolute-catwoman-2",
+    "https://leagueofcomicgeeks.com/comic/2140784/absolute-catwoman-2?variant=8429191",
+    "https://leagueofcomicgeeks.com/comic/2140784/absolute-catwoman-2?variant=9917990",
+    "https://leagueofcomicgeeks.com/comic/2140784/absolute-catwoman-2?variant=4630314",
+    "https://leagueofcomicgeeks.com/comic/2140784/absolute-catwoman-2?variant=7907066",
+    "https://leagueofcomicgeeks.com/comic/1953899/transformers-34",
+    "https://leagueofcomicgeeks.com/comic/1953899/transformers-34?variant=3709692"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/3432556/urek-mazino-66",
+    "https://leagueofcomicgeeks.com/comic/6905011/capitan-america-3",
+    "https://leagueofcomicgeeks.com/comic/6825821/fence-19",
+    "https://leagueofcomicgeeks.com/comic/4548942/los-4-fantasticos-9",
+    "https://leagueofcomicgeeks.com/comic/5594644/a-mans-man-season-2-48",
+    "https://leagueofcomicgeeks.com/comic/6374706/villain-to-kill-234",
+    "https://leagueofcomicgeeks.com/comic/6145047/wynd-27",
+    "https://leagueofcomicgeeks.com/comic/8284836/chamgyoyuk-249",
+    "https://leagueofcomicgeeks.com/comic/1292155/before-the-grapes-ripen-24",
+    "https://leagueofcomicgeeks.com/comic/2451455/for-your-perfect-ending-25",
+    "https://leagueofcomicgeeks.com/comic/8768962/study-group-season-3-9",
+    "https://leagueofcomicgeeks.com/comic/2323089/dingoliath-1?variant=9673407",
+    "https://leagueofcomicgeeks.com/comic/2566356/shovel-up-46",
+    "https://leagueofcomicgeeks.com/comic/3808894/smity-and-majesty-187",
+    "https://leagueofcomicgeeks.com/comic/4324426/whos-that-girl-52",
+    "https://leagueofcomicgeeks.com/comic/5479565/your-throne-249",
+    "https://leagueofcomicgeeks.com/comic/8773614/mumumu-9",
+    "https://leagueofcomicgeeks.com/comic/8900562/infinite-leveling-murim-season-3-11",
+    "https://leagueofcomicgeeks.com/comic/3682723/game-master-66",
+    "https://leagueofcomicgeeks.com/comic/3400052/podoga-ikgi-jeone-42"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 419,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 419,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 419,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 419,
+      "http_status": 403,
+      "li_issue_rows_before": 419,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 419,
+      "data_list_offset": "165",
+      "data_extend_now": "0"
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 2,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 419
+  }
+}

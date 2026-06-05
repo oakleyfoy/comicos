@@ -1,0 +1,136 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/22",
+  "discovery_timestamp": "2026-06-05T01:10:08.965306+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 447,
+  "total_cards_found_on_page": 447,
+  "parent_issue_rows": 123,
+  "variant_rows": 324,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 447,
+  "unique_parent_issue_urls": 123,
+  "unique_variant_urls": 324,
+  "final_parent_issue_queue_count": 123,
+  "final_variant_queue_count": 324,
+  "total_issue_links_found": 447,
+  "unique_issue_urls": 447,
+  "unique_raw_hrefs": 447,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 123,
+  "variant_child_rows": 324,
+  "release_type_counts": {
+    "parent_issue_row": 123,
+    "variant_row": 305,
+    "variant_child_row": 19,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "167",
+    "extend_now": "0"
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/5118714/absolute-wonder-woman-22",
+    "https://leagueofcomicgeeks.com/comic/5118714/absolute-wonder-woman-22?variant=3840523",
+    "https://leagueofcomicgeeks.com/comic/5118714/absolute-wonder-woman-22?variant=4723766",
+    "https://leagueofcomicgeeks.com/comic/5118714/absolute-wonder-woman-22?variant=3768229",
+    "https://leagueofcomicgeeks.com/comic/4010674/detective-comics-1111",
+    "https://leagueofcomicgeeks.com/comic/4010674/detective-comics-1111?variant=9751022",
+    "https://leagueofcomicgeeks.com/comic/4010674/detective-comics-1111?variant=1926342",
+    "https://leagueofcomicgeeks.com/comic/6084586/superman-40",
+    "https://leagueofcomicgeeks.com/comic/6084586/superman-40?variant=3956704",
+    "https://leagueofcomicgeeks.com/comic/6084586/superman-40?variant=6314522",
+    "https://leagueofcomicgeeks.com/comic/6084586/superman-40?variant=4808112",
+    "https://leagueofcomicgeeks.com/comic/6084586/superman-40?variant=5005267",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=3069556",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=7875057",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=8864593",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=6003045",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=3390374",
+    "https://leagueofcomicgeeks.com/comic/5624040/the-amazing-spider-man-33?variant=8767241",
+    "https://leagueofcomicgeeks.com/comic/6579097/action-comics-1100"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/3081693/fullmetal-alchemist-134",
+    "https://leagueofcomicgeeks.com/comic/1972577/little-archie-1?variant=2400849",
+    "https://leagueofcomicgeeks.com/comic/9496204/im-the-queen-in-this-life-195",
+    "https://leagueofcomicgeeks.com/comic/9228728/horde-dark-contract-saga-43",
+    "https://leagueofcomicgeeks.com/comic/6062397/the-world-after-the-fall-229",
+    "https://leagueofcomicgeeks.com/comic/1448351/fire-and-ice-darkwolf-1?variant=6763611",
+    "https://leagueofcomicgeeks.com/comic/1972577/little-archie-1?variant=4362003",
+    "https://leagueofcomicgeeks.com/comic/3044997/eleceed-395",
+    "https://leagueofcomicgeeks.com/comic/2886344/gun-honey-doubles-down-1?variant=6779258",
+    "https://leagueofcomicgeeks.com/comic/1504269/hardcore-leveling-warrior-earth-game-138",
+    "https://leagueofcomicgeeks.com/comic/1972577/little-archie-1?variant=4221761",
+    "https://leagueofcomicgeeks.com/comic/4113238/the-patron-of-villains-31",
+    "https://leagueofcomicgeeks.com/comic/1570879/star-trek-starfleet-academy-lost-contact-1?variant=9519345",
+    "https://leagueofcomicgeeks.com/comic/2991009/wangui-himeuro-hoegwihanda-144",
+    "https://leagueofcomicgeeks.com/comic/3943596/for-your-perfect-ending-27",
+    "https://leagueofcomicgeeks.com/comic/1972577/little-archie-1?variant=8730363",
+    "https://leagueofcomicgeeks.com/comic/8458583/before-the-grapes-ripen-26",
+    "https://leagueofcomicgeeks.com/comic/7238473/study-group-season-3-11",
+    "https://leagueofcomicgeeks.com/comic/1972577/little-archie-1?variant=5189103",
+    "https://leagueofcomicgeeks.com/comic/3511799/whos-that-girl-54"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 167,
+      "data_list_offset": "167",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 167,
+      "data_list_offset": "167",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 447,
+      "data_list_offset": "167",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 447,
+      "data_list_offset": "167",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 447,
+      "data_list_offset": "167",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 447,
+      "http_status": 403,
+      "li_issue_rows_before": 447,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 447,
+      "data_list_offset": "167",
+      "data_extend_now": "0"
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 2,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 447
+  }
+}

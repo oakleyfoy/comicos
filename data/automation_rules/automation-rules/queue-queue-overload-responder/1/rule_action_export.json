@@ -1,0 +1,26 @@
+{
+  "actions":[
+    {
+      "action_checksum":"72bb343b428c6f733875805a58dcad3d6331d21d3e3e2b027e11af8533981170",
+      "action_rank":10,
+      "action_status":"EXECUTED",
+      "action_type":"PAUSE_QUEUE",
+      "target_scope":"rules-primary"
+    },
+    {
+      "action_checksum":"4a4992bed358e35968e6d0f0894ca039c53b62fa4af9f3bc4d2f5a9535265166",
+      "action_rank":20,
+      "action_status":"EXECUTED",
+      "action_type":"EXECUTE_WORKFLOW",
+      "target_scope":"rules-review-workflow"
+    },
+    {
+      "action_checksum":"c7772907ea0c1548c879c863979e847f4eeb97c09f9ea22b538456484e2c6ecc",
+      "action_rank":30,
+      "action_status":"EXECUTED",
+      "action_type":"CREATE_NOTIFICATION",
+      "target_scope":"ops"
+    }
+  ],
+  "evaluation_id":1
+}

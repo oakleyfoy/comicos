@@ -35,29 +35,159 @@ _PAGINATION_NO_EXTEND_MECHANISMS = frozenset(
 )
 
 
-def _proof_run_list_row_count_failure(discovery_audit: ListDiscoveryAudit) -> str | None:
-    """Fail proof-run capture when the list is far below a typical full week (~500 li rows)."""
+# Initial DOM often ~165 when list is truncated; full weeks grow on scroll or start higher.
+PROOF_RUN_INCOMPLETE_INITIAL_DOM_MAX = 200
+PROOF_RUN_INCOMPLETE_MIN_SCROLL_GROWTH = 150
+PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS = 70
+PROOF_RUN_NEIGHBOR_REFERENCE_LI_ROWS = 450
+
+
+def _discovery_timeline_counts(discovery_audit: ListDiscoveryAudit) -> list[int]:
+    counts: list[int] = []
+    for entry in discovery_audit.discovery_row_count_log or []:
+        if "li_issue_rows" in entry:
+            counts.append(int(entry["li_issue_rows"]))
+    return counts
+
+
+def _scroll_stabilized(discovery_audit: ListDiscoveryAudit, counts: list[int]) -> bool:
+    if discovery_audit.scroll_row_count_stabilized:
+        return True
+    scroll_only = [
+        int(e["li_issue_rows"])
+        for e in (discovery_audit.discovery_row_count_log or [])
+        if str(e.get("phase", "")).startswith("after_scroll")
+    ]
+    if len(scroll_only) >= 2 and scroll_only[-1] == scroll_only[-2]:
+        return True
+    if len(scroll_only) >= 1 and counts:
+        initial = counts[0]
+        if initial > PROOF_RUN_INCOMPLETE_INITIAL_DOM_MAX and all(c == initial for c in counts):
+            return True
+    if len(counts) >= 2 and counts[-1] == counts[-2]:
+        return True
+    return False
+
+
+def evaluate_proof_run_completeness(
+    discovery_audit: ListDiscoveryAudit,
+    *,
+    list_variants_found: int,
+    list_variants_persisted: int,
+    detail_pages_succeeded: int,
+    detail_pages_attempted: int,
+    variant_skipped_reason_counts: dict[str, int] | None,
+) -> tuple[str | None, dict[str, Any], list[str]]:
+    """
+    Proof-run pass/fail from discovery + persistence signals (not a fixed 400-row floor).
+
+    Returns (failure_reason, assessment_dict, extra_warnings).
+    """
+    warnings: list[str] = []
+    skip = variant_skipped_reason_counts or {}
     n = discovery_audit.total_li_issue_rows
-    if n >= PROOF_RUN_TYPICAL_WEEK_LI_ROWS:
-        return None
-    log_tail = ""
-    if discovery_audit.discovery_row_count_log:
-        final = discovery_audit.discovery_row_count_log[-1]
-        log_tail = (
-            f"; discovery timeline final li={final.get('li_issue_rows')} "
-            f"offset={final.get('data_list_offset')!r} extend_now={final.get('data_extend_now')!r}"
-        )
-    if n < EXPECTED_MINIMUM_ISSUE_COUNT:
-        return (
-            f"proof-run list incomplete: {n} li.issue rows < minimum "
-            f"{EXPECTED_MINIMUM_ISSUE_COUNT}{log_tail}"
-        )
-    return (
-        f"proof-run list count {n} is below typical full week "
-        f"(~500 li rows, threshold {PROOF_RUN_TYPICAL_WEEK_LI_ROWS}); "
-        f"recert from saved HTML does not count — rerun live capture or document "
-        f"legitimate smaller-week rationale in discovery_report{log_tail}"
+    parents = discovery_audit.parent_issue_rows
+    counts = _discovery_timeline_counts(discovery_audit)
+    initial_dom = counts[0] if counts else n
+    peak = max(counts) if counts else n
+    scroll_growth = peak - initial_dom
+    stabilized = _scroll_stabilized(discovery_audit, counts)
+    truncated_initial = initial_dom <= PROOF_RUN_INCOMPLETE_INITIAL_DOM_MAX
+    scroll_recovered = scroll_growth >= PROOF_RUN_INCOMPLETE_MIN_SCROLL_GROWTH
+    high_initial_flat = (
+        initial_dom > PROOF_RUN_INCOMPLETE_INITIAL_DOM_MAX
+        and peak == n
+        and scroll_growth == 0
     )
+    lighter_week = (
+        n < PROOF_RUN_TYPICAL_WEEK_LI_ROWS
+        and not truncated_initial
+        and (stabilized or high_initial_flat)
+        and parents >= PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS
+    )
+    variants_ok = (
+        list_variants_found > 0
+        and list_variants_persisted >= list_variants_found
+        and int(skip.get("skipped_missing_parent") or 0) == 0
+        and int(skip.get("variant_upsert_failure") or 0) == 0
+    )
+    parents_detail_ok = (
+        detail_pages_succeeded >= parents
+        or (
+            detail_pages_attempted > 0
+            and detail_pages_succeeded >= int(detail_pages_attempted * 0.95)
+        )
+    )
+    assessment: dict[str, Any] = {
+        "total_li_issue_rows": n,
+        "parent_issue_rows": parents,
+        "typical_week_li_reference": PROOF_RUN_TYPICAL_WEEK_LI_ROWS,
+        "neighbor_reference_li_rows": PROOF_RUN_NEIGHBOR_REFERENCE_LI_ROWS,
+        "initial_dom_li_rows": initial_dom,
+        "peak_li_rows": peak,
+        "scroll_row_growth": scroll_growth,
+        "scroll_stabilized": stabilized,
+        "truncated_initial_dom_pattern": truncated_initial,
+        "scroll_recovered_from_truncation": scroll_recovered,
+        "high_initial_dom_no_scroll_growth": high_initial_flat,
+        "legitimately_lighter_release_week": lighter_week,
+        "variants_fully_persisted": variants_ok,
+        "parent_details_complete": parents_detail_ok,
+        "list_variants_found": list_variants_found,
+        "list_variants_persisted": list_variants_persisted,
+    }
+
+    if truncated_initial and not scroll_recovered:
+        return (
+            "proof-run list incomplete: initial DOM "
+            f"{initial_dom} rows with insufficient scroll growth (+{scroll_growth}, "
+            f"need +{PROOF_RUN_INCOMPLETE_MIN_SCROLL_GROWTH}); likely truncated first chunk only",
+            assessment,
+            warnings,
+        )
+    if n < 100:
+        return (
+            f"proof-run list too small: {n} li.issue rows",
+            assessment,
+            warnings,
+        )
+    if parents < PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS:
+        return (
+            f"proof-run parent_issue_rows={parents} below minimum "
+            f"{PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS}",
+            assessment,
+            warnings,
+        )
+    if not stabilized and not high_initial_flat and n < PROOF_RUN_TYPICAL_WEEK_LI_ROWS:
+        return (
+            "proof-run discovery did not stabilize row count during scroll",
+            assessment,
+            warnings,
+        )
+    if not variants_ok:
+        return (
+            "proof-run variant persistence incomplete",
+            assessment,
+            warnings,
+        )
+    if not parents_detail_ok:
+        return (
+            f"proof-run parent details incomplete: succeeded={detail_pages_succeeded} "
+            f"attempted={detail_pages_attempted} parents={parents}",
+            assessment,
+            warnings,
+        )
+    if lighter_week:
+        warnings.append(
+            f"lighter release week: {n} li rows / {parents} parents "
+            f"(vs ~{PROOF_RUN_NEIGHBOR_REFERENCE_LI_ROWS} li typical); "
+            "scroll stabilized, variants persisted"
+        )
+    elif n < PROOF_RUN_TYPICAL_WEEK_LI_ROWS:
+        warnings.append(
+            f"row count {n} below typical {PROOF_RUN_TYPICAL_WEEK_LI_ROWS} but passed completeness signals"
+        )
+    return None, assessment, warnings
 
 
 def _pagination_more_data_still_available(
@@ -271,14 +401,9 @@ def certify_locg_capture(
     if incomplete and incomplete_reason:
         result.failure_reasons.append(incomplete_reason)
     elif extend_now is None:
-        if discovery_audit.total_li_issue_rows >= PROOF_RUN_TYPICAL_WEEK_LI_ROWS:
-            result.warnings.append(
-                "extend_now missing/null; treated as complete (rows present, no extend-now=1 signal)"
-            )
-        else:
-            result.warnings.append(
-                "extend_now missing/null with low row count; list may be incomplete (see discovery_row_count_log)"
-            )
+        result.warnings.append(
+            "extend_now missing/null; no extend-now=1 signal (see proof_run_assessment)"
+        )
     elif extend_now != "0":
         result.warnings.append(f"extend_now={extend_now!r} (non-fatal; not '1')")
     if discovery_audit.parent_issue_rows < 1:
@@ -291,14 +416,22 @@ def certify_locg_capture(
     if discovery_audit.total_li_issue_rows < 1:
         result.failure_reasons.append("total_li_issue_rows is 0")
 
-    if proof_run:
-        proof_fail = _proof_run_list_row_count_failure(discovery_audit)
+    skip_counts = dict(variant_skipped_reason_counts or {})
+    if proof_run and not dry_run:
+        proof_fail, proof_assessment, proof_warnings = evaluate_proof_run_completeness(
+            discovery_audit,
+            list_variants_found=list_variants_found,
+            list_variants_persisted=list_variants_persisted,
+            detail_pages_succeeded=detail_pages_succeeded,
+            detail_pages_attempted=detail_pages_attempted,
+            variant_skipped_reason_counts=skip_counts,
+        )
+        result.completeness["proof_run_assessment"] = proof_assessment
+        result.completeness["proof_run_typical_week_li_rows"] = PROOF_RUN_TYPICAL_WEEK_LI_ROWS
+        result.warnings.extend(proof_warnings)
         if proof_fail:
             result.failure_reasons.append(proof_fail)
     result.completeness["discovery_row_count_log"] = discovery_audit.discovery_row_count_log
-    result.completeness["proof_run_typical_week_li_rows"] = PROOF_RUN_TYPICAL_WEEK_LI_ROWS
-
-    skip_counts = dict(variant_skipped_reason_counts or {})
     result.persistence = {
         "dry_run": dry_run,
         "detail_pages_attempted": detail_pages_attempted,

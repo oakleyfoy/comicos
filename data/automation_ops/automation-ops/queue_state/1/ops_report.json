@@ -1,0 +1,10 @@
+{
+  "counts":{},
+  "summary":{
+    "id":1,
+    "snapshot_checksum":"f1ba53e26ce7828bc0c335bf881c5277834ab3a2c1efdf56142e2101d6ef22d5",
+    "snapshot_key":"0:QUEUE_STATE:ops-audit-001",
+    "snapshot_status":"HEALTHY",
+    "snapshot_type":"QUEUE_STATE"
+  }
+}

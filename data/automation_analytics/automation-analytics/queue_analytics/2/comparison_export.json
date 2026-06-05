@@ -1,0 +1,34 @@
+{
+  "comparison_lineage":[
+    {
+      "comparison_checksum":"a6ae338dc5277c3ddf95fef1b6ad8e92612aa1c68d7660af670805bd79860a91",
+      "comparison_key":"day_over_day:2",
+      "comparison_type":"DAY_OVER_DAY"
+    },
+    {
+      "comparison_checksum":"5f30925bc058952d5ef757c1eee4958ddd84bc4b207ee13a5c1ae21c9bb84fc8",
+      "comparison_key":"failure_compare:2",
+      "comparison_type":"FAILURE_COMPARE"
+    },
+    {
+      "comparison_checksum":"cff89d7044cf84c06040db0842fddd269e14e58c4cf700f4dd5abe4d54ab37c3",
+      "comparison_key":"replay_compare:2",
+      "comparison_type":"REPLAY_COMPARE"
+    },
+    {
+      "comparison_checksum":"c6f57b29f58c026991127ca752382a4490c222aef661c34e8917150d7e77c371",
+      "comparison_key":"snapshot_compare:2",
+      "comparison_type":"SNAPSHOT_COMPARE"
+    },
+    {
+      "comparison_checksum":"ffd87a016a6bd7160cfc08b2dd6165ad8b7270a690659bb9332b9999d2472d74",
+      "comparison_key":"utilization_compare:2",
+      "comparison_type":"UTILIZATION_COMPARE"
+    },
+    {
+      "comparison_checksum":"55657dacb3043adce353e00ea12260d16ad59961c3b0c707bc2019905feb9cae",
+      "comparison_key":"week_over_week:2",
+      "comparison_type":"WEEK_OVER_WEEK"
+    }
+  ]
+}

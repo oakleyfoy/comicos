@@ -1,0 +1,108 @@
+{
+  "passed": true,
+  "page_date": "2026-07-22",
+  "failure_reasons": [],
+  "warnings": [],
+  "url_date_checks": {
+    "final_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/07/22",
+    "url_contains_date_path": true,
+    "data_date": "2026-07-22",
+    "data_list": "releases",
+    "data_date_type": "week",
+    "expected_date": "2026-07-22",
+    "expected_list": "releases",
+    "expected_date_type": "week"
+  },
+  "completeness": {
+    "extend_now": "0",
+    "pagination_mechanism": "hidden_api_get_comics_detected_no_extend",
+    "pagination_extend_calls": 0,
+    "total_li_issue_rows": 447,
+    "parent_issue_rows": 123,
+    "variant_rows": 324,
+    "other_release_rows": 0,
+    "total_release_rows_reconciled": 447,
+    "extend_now_audit": "0",
+    "extend_now_block": "0",
+    "discovery_row_count_log": [
+      {
+        "phase": "before_text_view",
+        "li_issue_rows": 167,
+        "data_list_offset": "167",
+        "data_extend_now": null
+      },
+      {
+        "phase": "after_text_view",
+        "li_issue_rows": 167,
+        "data_list_offset": "167",
+        "data_extend_now": null
+      },
+      {
+        "phase": "after_scroll_to_bottom_1",
+        "li_issue_rows": 447,
+        "data_list_offset": "167",
+        "data_extend_now": "0"
+      },
+      {
+        "phase": "after_scroll_to_bottom_2",
+        "li_issue_rows": 447,
+        "data_list_offset": "167",
+        "data_extend_now": "0"
+      },
+      {
+        "phase": "get_comics_loop_start",
+        "li_issue_rows": 447,
+        "data_list_offset": "167",
+        "data_extend_now": "0"
+      },
+      {
+        "phase": "get_comics_attempt_1",
+        "list_offset": 447,
+        "http_status": 403,
+        "li_issue_rows_before": 447,
+        "result": "http_error"
+      },
+      {
+        "phase": "final_after_pagination",
+        "li_issue_rows": 447,
+        "data_list_offset": "167",
+        "data_extend_now": "0"
+      }
+    ],
+    "proof_run_typical_week_li_rows": 400
+  },
+  "persistence": {
+    "dry_run": false,
+    "detail_pages_attempted": 123,
+    "detail_pages_succeeded": 123,
+    "list_variants_found": 324,
+    "list_variants_persisted": 324,
+    "variant_persist_skipped_reason": null,
+    "variant_skipped_reason_counts": {
+      "found": 324,
+      "persisted": 324,
+      "skipped_missing_parent": 0,
+      "skipped_missing_variant_url": 0,
+      "skipped_missing_title": 0,
+      "skipped_duplicate": 0,
+      "upsert_errors": 0,
+      "parents_ensured_from_list": 123,
+      "parents_ensured_from_variant_rows": 5,
+      "skipped_unavoidable_special_case": 0,
+      "skipped_missing_parent_samples": [],
+      "variant_upsert_success": 324,
+      "variant_upsert_failure": 0,
+      "first_variant_error": null,
+      "first_variant_failure": null
+    }
+  },
+  "runtime": {
+    "parent_detail_timing_count": 123,
+    "average_parent_detail_seconds": 1.688,
+    "max_allowed_average_parent_detail_seconds": 5.0,
+    "total_runtime_seconds": 185.953,
+    "cloudflare_wait_count": 0,
+    "cloudflare_total_wait_seconds": 0.0
+  },
+  "external_validation_note": "Files such as 6-10-26.xlsx are external distributor/shop validation, not LoCG source-of-truth for capture certification."
+}

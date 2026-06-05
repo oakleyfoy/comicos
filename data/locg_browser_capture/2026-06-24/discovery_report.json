@@ -1,0 +1,142 @@
+{
+  "page_title": "New Comics this Week",
+  "page_url": "https://leagueofcomicgeeks.com/comics/new-comics/2026/06/24",
+  "discovery_timestamp": "2026-06-05T00:34:40.822902+00:00",
+  "expected_approximate_issue_count": 234,
+  "expected_minimum_issue_count": 230,
+  "total_li_issue_rows": 589,
+  "total_cards_found_on_page": 589,
+  "parent_issue_rows": 185,
+  "variant_rows": 404,
+  "other_release_rows": 0,
+  "total_release_rows_reconciled": 589,
+  "unique_parent_issue_urls": 185,
+  "unique_variant_urls": 404,
+  "final_parent_issue_queue_count": 185,
+  "final_variant_queue_count": 404,
+  "total_issue_links_found": 589,
+  "unique_issue_urls": 589,
+  "unique_raw_hrefs": 589,
+  "filtered_out_urls": 0,
+  "duplicate_urls_removed": 0,
+  "final_issue_queue_count": 185,
+  "variant_child_rows": 404,
+  "release_type_counts": {
+    "parent_issue_row": 185,
+    "variant_row": 368,
+    "variant_child_row": 36,
+    "capture_list_view": 1,
+    "capture_view_mode": "text"
+  },
+  "pagination": {
+    "mechanism": "hidden_api_get_comics_detected_no_extend",
+    "extend_calls": 0,
+    "final_offset": "331",
+    "extend_now": "0"
+  },
+  "cloudflare_wait_count": 0,
+  "cloudflare_total_wait_seconds": 0.0,
+  "first_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=8866355",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=4258980",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=3163634",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=8546091",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=3831482",
+    "https://leagueofcomicgeeks.com/comic/3376567/absolute-wonder-woman-21?variant=4830115",
+    "https://leagueofcomicgeeks.com/comic/8637080/absolute-superman-20",
+    "https://leagueofcomicgeeks.com/comic/8637080/absolute-superman-20?variant=2857681",
+    "https://leagueofcomicgeeks.com/comic/8637080/absolute-superman-20?variant=3546701",
+    "https://leagueofcomicgeeks.com/comic/8637080/absolute-superman-20?variant=4446272",
+    "https://leagueofcomicgeeks.com/comic/6509370/detective-comics-1110",
+    "https://leagueofcomicgeeks.com/comic/6509370/detective-comics-1110?variant=3170982",
+    "https://leagueofcomicgeeks.com/comic/6509370/detective-comics-1110?variant=7264901",
+    "https://leagueofcomicgeeks.com/comic/6509370/detective-comics-1110?variant=8346542",
+    "https://leagueofcomicgeeks.com/comic/3555252/superman-39",
+    "https://leagueofcomicgeeks.com/comic/3555252/superman-39?variant=9920527",
+    "https://leagueofcomicgeeks.com/comic/3555252/superman-39?variant=5844531",
+    "https://leagueofcomicgeeks.com/comic/3555252/superman-39?variant=5740430",
+    "https://leagueofcomicgeeks.com/comic/3555252/superman-39?variant=1349509"
+  ],
+  "last_20_urls": [
+    "https://leagueofcomicgeeks.com/comic/6793998/chamgyoyuk-247",
+    "https://leagueofcomicgeeks.com/comic/5412126/before-the-grapes-ripen-22",
+    "https://leagueofcomicgeeks.com/comic/7445151/preppity-56",
+    "https://leagueofcomicgeeks.com/comic/3207081/preppity-57",
+    "https://leagueofcomicgeeks.com/comic/5805370/study-group-season-3-7",
+    "https://leagueofcomicgeeks.com/comic/6195217/destination-kill-1?variant=7222274",
+    "https://leagueofcomicgeeks.com/comic/3807957/shovel-up-44",
+    "https://leagueofcomicgeeks.com/comic/4248942/smity-and-majesty-185",
+    "https://leagueofcomicgeeks.com/comic/2770266/ultimate-x-men-7",
+    "https://leagueofcomicgeeks.com/comic/1647947/whos-that-girl-50",
+    "https://leagueofcomicgeeks.com/comic/9558247/your-throne-247",
+    "https://leagueofcomicgeeks.com/comic/5849721/mumumu-7",
+    "https://leagueofcomicgeeks.com/comic/7829752/sashimi-han-jaruro-academy-reul-ssipeomeokeum-80",
+    "https://leagueofcomicgeeks.com/comic/2009556/haruman-nega-doego-sipeo-254",
+    "https://leagueofcomicgeeks.com/comic/3532957/infinite-leveling-murim-season-3-9",
+    "https://leagueofcomicgeeks.com/comic/5239399/joker-monthly-gangan-joker-2026-7",
+    "https://leagueofcomicgeeks.com/comic/4536880/game-master-64",
+    "https://leagueofcomicgeeks.com/comic/4863059/akdangdeurui-huwonjaga-doeeotda-36",
+    "https://leagueofcomicgeeks.com/comic/2751408/choehu-ui-moheomga-119",
+    "https://leagueofcomicgeeks.com/comic/2041915/podoga-ikgi-jeone-40"
+  ],
+  "root_cause_hints": [],
+  "filtered_out_samples": [],
+  "duplicate_samples": [],
+  "discovery_row_count_log": [
+    {
+      "phase": "before_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_text_view",
+      "li_issue_rows": 165,
+      "data_list_offset": "165",
+      "data_extend_now": null
+    },
+    {
+      "phase": "after_scroll_to_bottom_1",
+      "li_issue_rows": 331,
+      "data_list_offset": "331",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_2",
+      "li_issue_rows": 589,
+      "data_list_offset": "331",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "after_scroll_to_bottom_3",
+      "li_issue_rows": 589,
+      "data_list_offset": "331",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_loop_start",
+      "li_issue_rows": 589,
+      "data_list_offset": "331",
+      "data_extend_now": "0"
+    },
+    {
+      "phase": "get_comics_attempt_1",
+      "list_offset": 589,
+      "http_status": 403,
+      "li_issue_rows_before": 589,
+      "result": "http_error"
+    },
+    {
+      "phase": "final_after_pagination",
+      "li_issue_rows": 589,
+      "data_list_offset": "331",
+      "data_extend_now": "0"
+    }
+  ],
+  "scroll_discovery": {
+    "attempts": 3,
+    "row_count_stabilized": true,
+    "final_li_issue_rows": 589
+  }
+}
