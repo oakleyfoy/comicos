@@ -132,6 +132,11 @@ class Settings(BaseSettings):
     p65_automation_enabled: bool = Field(default=True, alias="P65_AUTOMATION_ENABLED")
     p65_notification_center_enabled: bool = Field(default=True, alias="P65_NOTIFICATION_CENTER_ENABLED")
 
+    p66_variant_intelligence_enabled: bool = Field(default=True, alias="P66_VARIANT_INTELLIGENCE_ENABLED")
+    p66_quantity_intelligence_enabled: bool = Field(default=True, alias="P66_QUANTITY_INTELLIGENCE_ENABLED")
+    p66_market_pricing_enabled: bool = Field(default=True, alias="P66_MARKET_PRICING_ENABLED")
+    p66_variant_decision_enabled: bool = Field(default=True, alias="P66_VARIANT_DECISION_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",

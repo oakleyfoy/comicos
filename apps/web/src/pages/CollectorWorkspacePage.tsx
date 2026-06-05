@@ -7,6 +7,8 @@ import {
   type CollectorTaskItemRead,
   type CollectorTaskSnapshotRead,
   type NotificationSnapshotRead,
+  type P66IntegrationRead,
+  type VariantIntelligenceSnapshotRead,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
@@ -23,6 +25,8 @@ export function CollectorWorkspacePage(): JSX.Element {
   const [tasks, setTasks] = useState<CollectorTaskSnapshotRead | null>(null);
   const [narratives, setNarratives] = useState<CollectorNarrativeSnapshotRead | null>(null);
   const [notifications, setNotifications] = useState<NotificationSnapshotRead | null>(null);
+  const [p66, setP66] = useState<P66IntegrationRead | null>(null);
+  const [variants, setVariants] = useState<VariantIntelligenceSnapshotRead | null>(null);
   const [section, setSection] = useState<(typeof TASK_SECTIONS)[number]>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,14 +36,18 @@ export function CollectorWorkspacePage(): JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const [t, n, notif] = await Promise.all([
+      const [t, n, notif, integration, variantSnap] = await Promise.all([
         apiClient.getCollectorWorkspaceTasksLatest(),
         apiClient.getCollectorNarrativesLatest(),
         apiClient.getNotificationsLatest(),
+        apiClient.getP66IntegrationLatest().catch(() => null),
+        apiClient.getVariantIntelligenceLatest().catch(() => null),
       ]);
       setTasks(t);
       setNarratives(n);
       setNotifications(notif);
+      setP66(integration);
+      setVariants(variantSnap);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load collector workspace.");
     } finally {
@@ -71,6 +79,7 @@ export function CollectorWorkspacePage(): JSX.Element {
       await apiClient.buildCollectorWorkspaceTasks();
       await apiClient.buildCollectorNarratives();
       await apiClient.buildNotifications();
+      await apiClient.buildP66Platform();
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Refresh failed.");
@@ -215,6 +224,52 @@ export function CollectorWorkspacePage(): JSX.Element {
           ))}
         </ul>
       </section>
+
+      {p66?.readiness_status === "SUCCESS" ? (
+        <div className="mt-8 grid gap-8 lg:grid-cols-2">
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-white">Cover comparison</h2>
+            {(p66.decisions[0]?.cover_ranking_json ?? []).map((c, idx) => (
+              <div key={`rank-${idx}`} className="mb-2 rounded-lg border border-white/10 bg-slate-900/40 p-2 text-sm">
+                <span className="text-white">
+                  Cover {String(c.cover_label)} — score {String(c.variant_score)}
+                </span>
+                <p className="text-slate-400">{String(c.variant_reason ?? "")}</p>
+              </div>
+            ))}
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-white">Why this cover? / Why this quantity?</h2>
+            <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-900/50 p-3 text-sm text-slate-200">
+              {p66.decisions[0]?.recommendation_summary ?? "Build P66 platform to see cover guidance."}
+            </pre>
+            {(p66.quantity_items[0] ? (
+              <p className="mt-2 text-sm text-slate-400">
+                Collection {p66.quantity_items[0].collection_quantity} · Spec {p66.quantity_items[0].spec_quantity} · Flip{" "}
+                {p66.quantity_items[0].flip_quantity} — {p66.quantity_items[0].reason}
+              </p>
+            ) : null)}
+          </section>
+        </div>
+      ) : null}
+
+      {variants && variants.total_items > 0 ? (
+        <section className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold text-white">Variant Intelligence</h2>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {variants.items.slice(0, 8).map((v) => (
+              <li key={v.id} className="rounded-lg border border-white/10 bg-slate-900/40 p-2 text-sm">
+                <span className="font-medium text-white">
+                  {v.cover_label} {v.variant_name}
+                </span>
+                <span className="ml-2 text-indigo-300">
+                  {v.variant_tier} · {v.variant_score.toFixed(0)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold text-white">Opportunity Feed</h2>

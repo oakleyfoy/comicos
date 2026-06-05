@@ -295,6 +295,16 @@ from app.models.collector_experience import (
     NotificationItem,
     NotificationSnapshot,
 )
+from app.models.variant_market_intelligence import (
+    MarketPriceObservation,
+    MarketPriceSnapshot,
+    QuantityRecommendationItem,
+    QuantityRecommendationSnapshot,
+    VariantDecisionItem,
+    VariantDecisionSnapshot,
+    VariantIntelligenceItem,
+    VariantIntelligenceSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1173,6 +1183,14 @@ __all__ = [
     "AutomationRun",
     "NotificationSnapshot",
     "NotificationItem",
+    "VariantIntelligenceSnapshot",
+    "VariantIntelligenceItem",
+    "QuantityRecommendationSnapshot",
+    "QuantityRecommendationItem",
+    "MarketPriceSnapshot",
+    "MarketPriceObservation",
+    "VariantDecisionSnapshot",
+    "VariantDecisionItem",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",

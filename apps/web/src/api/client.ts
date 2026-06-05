@@ -15891,6 +15891,53 @@ export interface NotificationSnapshotRead {
   items: NotificationItemRead[];
 }
 
+export interface VariantIntelligenceItemRead {
+  id: number;
+  cover_label: string;
+  variant_name: string;
+  variant_score: number;
+  variant_tier: string;
+  variant_reason: string;
+  external_catalog_issue_id: number | null;
+  factors_json: Record<string, unknown>;
+}
+
+export interface VariantIntelligenceSnapshotRead {
+  snapshot_id: number | null;
+  readiness_status: string;
+  total_items: number;
+  items: VariantIntelligenceItemRead[];
+}
+
+export interface QuantityRecommendationItemRead {
+  id: number;
+  title: string;
+  collection_quantity: number;
+  spec_quantity: number;
+  flip_quantity: number;
+  total_quantity: number;
+  confidence: string;
+  reason: string;
+  buy_queue_item_id: number | null;
+}
+
+export interface VariantDecisionItemRead {
+  id: number;
+  title: string;
+  issue_number: string;
+  recommendation_summary: string;
+  cover_ranking_json: Array<Record<string, unknown>>;
+  buy_plan_json: Array<Record<string, unknown>>;
+  skip_covers_json: Array<Record<string, unknown>>;
+  quantity_plan_json: Record<string, unknown>;
+}
+
+export interface P66IntegrationRead {
+  readiness_status: string;
+  decisions: VariantDecisionItemRead[];
+  quantity_items: QuantityRecommendationItemRead[];
+}
+
 export interface ReleaseSeriesRead {
   id: number;
   publisher: string;
@@ -26276,6 +26323,21 @@ export const apiClient = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
+  },
+
+  buildP66Platform(): Promise<{ status: string; snapshot_ids: Record<string, number> }> {
+    return requestScanV1<{ status: string; snapshot_ids: Record<string, number> }>(
+      "/variant-decision/platform/build",
+      { method: "POST" },
+    );
+  },
+
+  getP66IntegrationLatest(): Promise<P66IntegrationRead> {
+    return requestScanV1<P66IntegrationRead>("/variant-decision/integration/latest");
+  },
+
+  getVariantIntelligenceLatest(): Promise<VariantIntelligenceSnapshotRead> {
+    return requestScanV1<VariantIntelligenceSnapshotRead>("/variant-intelligence/latest");
   },
 
   getPullLists(params?: { status?: string; publisher?: string; search?: string; limit?: number; offset?: number }): Promise<PullListListResponse> {
