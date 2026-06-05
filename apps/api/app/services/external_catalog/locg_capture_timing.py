@@ -74,7 +74,7 @@ class CaptureTimingAudit:
     def _sum_issues(self, attr: str) -> float:
         return sum(getattr(row, attr, 0.0) for row in self.issue_timings if not row.skipped)
 
-    def build_summary(self) -> dict[str, Any]:
+    def build_summary(self, *, include_per_issue_timings: bool = False) -> dict[str, Any]:
         issues = [row for row in self.issue_timings if not row.skipped]
         for row in issues:
             row.finalize()
@@ -147,7 +147,7 @@ class CaptureTimingAudit:
             for name, sec in sorted(sub_ops, key=lambda x: x[1], reverse=True)[:10]
         ]
 
-        return {
+        summary: dict[str, Any] = {
             "issues_processed": issue_count,
             "total_runtime_seconds": round(self.total_runtime_seconds, 3),
             "issue_count": issue_count,
@@ -158,7 +158,6 @@ class CaptureTimingAudit:
             "timing_breakdown_percentages": breakdown_lines,
             "top_runtime_consumers": top_consumers[:10],
             "slowest_10_operations": slowest_ops,
-            "per_issue_timings": [row.to_dict() for row in self.issue_timings],
             "total_browser_wait_seconds": round(
                 waiting + self.list_page_wait_seconds, 3
             ),
@@ -168,6 +167,11 @@ class CaptureTimingAudit:
             "cloudflare_total_wait_seconds": round(self.cloudflare_total_wait_seconds, 3),
             "adaptive_throttle": self.adaptive_throttle,
         }
+        if include_per_issue_timings:
+            summary["per_issue_timings"] = [row.to_dict() for row in self.issue_timings]
+        else:
+            summary["per_issue_timings_count"] = len(self.issue_timings)
+        return summary
 
 
 def _format_breakdown_pct(buckets: list[tuple[str, float]], denom: float) -> list[str]:

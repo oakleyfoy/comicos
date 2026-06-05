@@ -52,6 +52,15 @@ class PilotSummary:
     performance_audit: dict[str, object] = field(default_factory=dict)
 
 
+def _pilot_summary_for_stdout(summary: PilotSummary) -> dict[str, object]:
+    """Avoid dumping hundreds of per-issue timing rows on the default (concise) path."""
+    data = dict(summary.__dict__)
+    audit = dict(data.get("performance_audit") or {})
+    audit.pop("per_issue_timings", None)
+    data["performance_audit"] = audit
+    return data
+
+
 def _init_validation_sqlite_schema() -> None:
     from sqlmodel import SQLModel
 
@@ -428,7 +437,9 @@ def main() -> int:
         else:
             summary.status = "DRY_RUN" if args.dry_run else summary.status
 
-        summary.performance_audit = timing_audit.build_summary()
+        summary.performance_audit = timing_audit.build_summary(
+            include_per_issue_timings=args.timing_table
+        )
         if args.timing_table:
             print("\n--- Per-issue timing table ---")
             for row in timing_audit.issue_timings:
@@ -501,7 +512,10 @@ def main() -> int:
         print(json.dumps(summary.__dict__, indent=2, default=str))
         raise
 
-    print(json.dumps(summary.__dict__, indent=2, default=str))
+    print(
+        json.dumps(_pilot_summary_for_stdout(summary), indent=2, default=str),
+        flush=True,
+    )
     return 0 if summary.errors_count == 0 and summary.list_page_loaded else 1
 
 

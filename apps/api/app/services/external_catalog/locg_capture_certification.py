@@ -540,6 +540,19 @@ def save_capture_certification_artifacts(
 
 
 def print_capture_certification_summary(cert: LocgCaptureCertificationResult) -> None:
+    comp = cert.completeness
+    pers = cert.persistence
+    pra = comp.get("proof_run_assessment") or {}
+    parent_q = (
+        comp.get("final_parent_issue_queue_count")
+        or pra.get("parent_issue_queue_count")
+        or pers.get("detail_pages_attempted")
+    )
+    variant_q = (
+        comp.get("final_variant_queue_count")
+        or pra.get("variant_queue_count")
+        or pers.get("list_variants_found")
+    )
     print("\n--- LoCG internal capture certification ---", flush=True)
     print(f"Page date: {cert.page_date}", flush=True)
     print(f"PASS: {cert.passed}", flush=True)
@@ -548,7 +561,20 @@ def print_capture_certification_summary(cert: LocgCaptureCertificationResult) ->
         print("Failure reasons:", flush=True)
         for reason in cert.failure_reasons:
             print(f"  - {reason}", flush=True)
-    print(f"URL/date checks: {cert.url_date_checks}", flush=True)
-    print(f"Completeness: {cert.completeness}", flush=True)
-    print(f"Persistence: {cert.persistence}", flush=True)
+    if cert.warnings:
+        print("Warnings:", flush=True)
+        for warning in cert.warnings:
+            print(f"  - {warning}", flush=True)
+    print(
+        f"Queue coverage: parents {pers.get('detail_pages_succeeded')}/{parent_q} "
+        f"variants {pers.get('list_variants_persisted')}/{variant_q}",
+        flush=True,
+    )
+    print(
+        f"List DOM rows: total_li={comp.get('total_li_issue_rows')} "
+        f"dup_parent={comp.get('duplicate_parent_li_rows') or pra.get('duplicate_parent_li_rows') or 0} "
+        f"dup_variant={comp.get('duplicate_variant_li_rows') or pra.get('duplicate_variant_li_rows') or 0}",
+        flush=True,
+    )
     print(f"Runtime: {cert.runtime}", flush=True)
+    print(f"Cert artifact: data/locg_browser_capture/{cert.page_date}/locg_capture_certification.json", flush=True)
