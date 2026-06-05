@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Primary",
     links: [
       { label: "Executive Dashboard", to: "/executive-dashboard", prominent: true },
+      { label: "ComicOS Intelligence", to: "/comicos-intelligence", prominent: true },
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Unified Intelligence", to: "/unified-intelligence" },
       { label: "Top Recommendations", to: "/cross-system-recommendations" },

@@ -51,44 +51,86 @@ from app.services.future_pull_forecast_service import (
 from app.services.p62_feature_flags import p62_auto_watchlist_enabled, p62_foc_enabled, p62_pull_forecast_enabled
 
 
+def _foc_alert_list_read(session: Session, *, owner_user_id: int) -> FOCAlertListRead:
+    snap = get_latest_foc_snapshot(session, owner_user_id=owner_user_id)
+    if snap is None:
+        return FOCAlertListRead()
+    items, total = list_foc_items(session, snapshot_id=int(snap.id or 0))
+    return FOCAlertListRead(
+        snapshot_id=int(snap.id or 0),
+        total_items=total,
+        items=[
+            FOCAlertItemRead(
+                id=int(i.id or 0),
+                owner_id=int(i.owner_user_id),
+                release_issue_id=int(i.release_issue_id),
+                title=i.title,
+                publisher=i.publisher,
+                foc_date=i.foc_date,
+                release_date=i.release_date,
+                recommendation_score=i.recommendation_score,
+                demand_score=i.demand_score,
+                velocity_score=i.velocity_score,
+                spec_score=i.spec_score,
+                urgency_score=i.urgency_score,
+                alert_reason=i.alert_reason,
+                suggested_quantity=i.suggested_quantity,
+                status=i.status,
+            )
+            for i in items
+        ],
+    )
+
+
+def _auto_watchlist_bundle_read(session: Session, *, owner_user_id: int) -> AutoWatchlistBundleRead:
+    latest = get_latest_watchlists(session, owner_user_id=owner_user_id)
+    wls = []
+    for wl in latest:
+        items = list_watchlist_items(session, watchlist_id=int(wl.id or 0))
+        wls.append(
+            AutoWatchlistRead(
+                id=int(wl.id or 0),
+                watchlist_type=wl.watchlist_type,
+                generated_at=wl.generated_at,
+                item_count=wl.item_count,
+                items=[
+                    AutoWatchlistItemRead(
+                        id=int(i.id or 0),
+                        title=i.title,
+                        release_issue_id=i.release_issue_id,
+                        inclusion_reason=i.inclusion_reason,
+                    )
+                    for i in items
+                ],
+            )
+        )
+    return AutoWatchlistBundleRead(watchlists=wls)
+
+
 def register_collector_intelligence_routes(router: APIRouter) -> None:
+    def _foc_latest_response(
+        session: Session,
+        current_user: User,
+    ) -> ScanApiV1Envelope:
+        assert current_user.id is not None
+        if not p62_foc_enabled():
+            raise HTTPException(status_code=403, detail="P62_FOC_DISABLED")
+        body = _foc_alert_list_read(session, owner_user_id=int(current_user.id))
+        return wrap_object(body, owner_user_id=int(current_user.id))
+
     @router.get("/foc/alerts", response_model=ScanApiV1Envelope)
     def v1_foc_alerts(
         session: Session = Depends(get_session),
         current_user: User = Depends(get_current_user),
     ) -> ScanApiV1Envelope:
-        assert current_user.id is not None
-        if not p62_foc_enabled():
-            raise HTTPException(status_code=403, detail="P62_FOC_DISABLED")
-        snap = get_latest_foc_snapshot(session, owner_user_id=int(current_user.id))
-        if snap is None:
-            return wrap_object(FOCAlertListRead(), owner_user_id=int(current_user.id))
-        items, total = list_foc_items(session, snapshot_id=int(snap.id or 0))
-        body = FOCAlertListRead(
-            snapshot_id=int(snap.id or 0),
-            total_items=total,
-            items=[
-                FOCAlertItemRead(
-                    id=int(i.id or 0),
-                    owner_id=int(i.owner_user_id),
-                    release_issue_id=int(i.release_issue_id),
-                    title=i.title,
-                    publisher=i.publisher,
-                    foc_date=i.foc_date,
-                    release_date=i.release_date,
-                    recommendation_score=i.recommendation_score,
-                    demand_score=i.demand_score,
-                    velocity_score=i.velocity_score,
-                    spec_score=i.spec_score,
-                    urgency_score=i.urgency_score,
-                    alert_reason=i.alert_reason,
-                    suggested_quantity=i.suggested_quantity,
-                    status=i.status,
-                )
-                for i in items
-            ],
-        )
-        return wrap_object(body, owner_user_id=int(current_user.id))
+        return _foc_latest_response(session, current_user)
+
+    @router.get("/foc/latest", response_model=ScanApiV1Envelope)
+    def v1_foc_latest(
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user),
+    ) -> ScanApiV1Envelope:
+        return _foc_latest_response(session, current_user)
 
     @router.post("/foc/build", response_model=ScanApiV1Envelope)
     def v1_foc_build(
@@ -158,36 +200,29 @@ def register_collector_intelligence_routes(router: APIRouter) -> None:
         cert = certify_pull_forecast(session, owner_user_id=int(current_user.id))
         return wrap_object(CollectorComponentCertificationRead(**cert), owner_user_id=int(current_user.id))
 
+    def _watchlists_latest_response(
+        session: Session,
+        current_user: User,
+    ) -> ScanApiV1Envelope:
+        assert current_user.id is not None
+        if not p62_auto_watchlist_enabled():
+            raise HTTPException(status_code=403, detail="P62_AUTO_WATCHLIST_DISABLED")
+        body = _auto_watchlist_bundle_read(session, owner_user_id=int(current_user.id))
+        return wrap_object(body, owner_user_id=int(current_user.id))
+
     @router.get("/watchlists/auto", response_model=ScanApiV1Envelope)
     def v1_auto_watchlists(
         session: Session = Depends(get_session),
         current_user: User = Depends(get_current_user),
     ) -> ScanApiV1Envelope:
-        assert current_user.id is not None
-        if not p62_auto_watchlist_enabled():
-            raise HTTPException(status_code=403, detail="P62_AUTO_WATCHLIST_DISABLED")
-        latest = get_latest_watchlists(session, owner_user_id=int(current_user.id))
-        wls = []
-        for wl in latest:
-            items = list_watchlist_items(session, watchlist_id=int(wl.id or 0))
-            wls.append(
-                AutoWatchlistRead(
-                    id=int(wl.id or 0),
-                    watchlist_type=wl.watchlist_type,
-                    generated_at=wl.generated_at,
-                    item_count=wl.item_count,
-                    items=[
-                        AutoWatchlistItemRead(
-                            id=int(i.id or 0),
-                            title=i.title,
-                            release_issue_id=i.release_issue_id,
-                            inclusion_reason=i.inclusion_reason,
-                        )
-                        for i in items
-                    ],
-                )
-            )
-        return wrap_object(AutoWatchlistBundleRead(watchlists=wls), owner_user_id=int(current_user.id))
+        return _watchlists_latest_response(session, current_user)
+
+    @router.get("/watchlists/latest", response_model=ScanApiV1Envelope)
+    def v1_watchlists_latest(
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user),
+    ) -> ScanApiV1Envelope:
+        return _watchlists_latest_response(session, current_user)
 
     @router.post("/watchlists/auto/build", response_model=ScanApiV1Envelope)
     def v1_auto_watchlists_build(

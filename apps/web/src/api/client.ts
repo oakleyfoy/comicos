@@ -15659,6 +15659,172 @@ export interface RecommendationIntelligenceCertificationRead {
   certification_notes: string[];
 }
 
+export interface BuyQueueSnapshotRead {
+  id: number;
+  owner_id: number;
+  snapshot_date: string;
+  generated_at: string;
+  total_items: number;
+  metadata_json: Record<string, unknown>;
+}
+
+export interface BuyQueueItemRead {
+  id: number;
+  snapshot_id: number;
+  owner_id: number;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  priority_score: number;
+  quantity_recommended: number;
+  estimated_cost: number;
+  buy_reason: string;
+  status: string;
+}
+
+export interface BuyQueueListRead {
+  snapshot: BuyQueueSnapshotRead | null;
+  items: BuyQueueItemRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface FOCAlertItemRead {
+  id: number;
+  title: string;
+  publisher: string;
+  alert_reason: string;
+  suggested_quantity: number;
+  urgency_score: number;
+  status: string;
+}
+
+export interface FOCAlertListRead {
+  snapshot_id: number | null;
+  items: FOCAlertItemRead[];
+  total_items: number;
+}
+
+export interface PullForecastItemRead {
+  id: number;
+  series_name: string;
+  title: string;
+  confidence: string;
+  explanation: string;
+}
+
+export interface PullForecastListRead {
+  forecast_id: number | null;
+  items: PullForecastItemRead[];
+  total_items: number;
+}
+
+export interface AutoWatchlistItemRead {
+  id: number;
+  title: string;
+  inclusion_reason: string;
+}
+
+export interface AutoWatchlistRead {
+  id: number;
+  watchlist_type: string;
+  generated_at: string;
+  item_count: number;
+  items: AutoWatchlistItemRead[];
+}
+
+export interface AutoWatchlistBundleRead {
+  watchlists: AutoWatchlistRead[];
+}
+
+export interface PortfolioPerformanceSnapshotRead {
+  snapshot_id: number;
+  snapshot_date: string;
+  generated_at: string;
+  total_items: number;
+  total_cost_basis: number;
+  total_current_value: number;
+  total_unrealized_gain: number;
+  total_unrealized_gain_pct: number;
+  top_gainers_count: number;
+  top_losers_count: number;
+  items: Array<{
+    id: number;
+    title: string;
+    unrealized_gain_pct: number;
+    performance_tier: string;
+  }>;
+}
+
+export interface SellSignalListRead {
+  snapshot_id: number | null;
+  total_items: number;
+  items: Array<{ id: number; title: string; recommended_action: string; sell_score: number }>;
+}
+
+export interface AcquisitionListRead {
+  snapshot_id: number | null;
+  total_items: number;
+  items: Array<{ id: number; title: string; opportunity_score: number; action: string }>;
+}
+
+export interface MarketSignalListRead {
+  snapshot_id: number | null;
+  total_items: number;
+  items: Array<{ id: number; title: string; signal_type: string; market_score: number }>;
+}
+
+export interface CollectorRecommendationItemRead {
+  id: number;
+  lane: string;
+  priority_score: number;
+  confidence: string;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  recommended_action: string;
+  explanation: string;
+}
+
+export interface CollectorRecommendationsRead {
+  run_id: number | null;
+  readiness_status: string;
+  lanes: Record<string, CollectorRecommendationItemRead[]>;
+  total_items: number;
+}
+
+export interface CollectorBriefingRead {
+  snapshot_id: number | null;
+  readiness_status: string;
+  headline: string;
+  briefing_markdown: string;
+  briefing_json: Record<string, unknown>;
+}
+
+export interface CollectorHealthRead {
+  readiness_status: string;
+  health_score: number;
+  health_band: string;
+}
+
+export interface CollectorAlertRead {
+  id: number;
+  severity: string;
+  title: string;
+  message: string;
+}
+
+export interface CollectorAlertsRead {
+  alerts: CollectorAlertRead[];
+}
+
+export interface CollectorDashboardRead {
+  readiness_status: string;
+  platform_ready: boolean;
+  dashboard_json: Record<string, unknown>;
+}
+
 export interface ReleaseSeriesRead {
   id: number;
   publisher: string;
@@ -25946,6 +26112,58 @@ export const apiClient = {
 
   getRecommendationIntelligenceCertification(): Promise<RecommendationIntelligenceCertificationRead> {
     return requestScanV1<RecommendationIntelligenceCertificationRead>("/recommendation-intelligence/certification");
+  },
+
+  getRecommendationIntelligenceBuyQueueLatest(): Promise<BuyQueueListRead> {
+    return requestScanV1<BuyQueueListRead>("/recommendation-intelligence/buy-queue/latest");
+  },
+
+  getRecommendationIntelligenceFocLatest(): Promise<FOCAlertListRead> {
+    return requestScanV1<FOCAlertListRead>("/recommendation-intelligence/foc/latest");
+  },
+
+  getRecommendationIntelligencePullForecastLatest(): Promise<PullForecastListRead> {
+    return requestScanV1<PullForecastListRead>("/recommendation-intelligence/pull-forecast/latest");
+  },
+
+  getRecommendationIntelligenceWatchlistsLatest(): Promise<AutoWatchlistBundleRead> {
+    return requestScanV1<AutoWatchlistBundleRead>("/recommendation-intelligence/watchlists/latest");
+  },
+
+  getMarketIntelligencePortfolioLatest(): Promise<PortfolioPerformanceSnapshotRead> {
+    return requestScanV1<PortfolioPerformanceSnapshotRead>("/market-intelligence/portfolio/latest");
+  },
+
+  getMarketIntelligenceSellSignalsLatest(): Promise<SellSignalListRead> {
+    return requestScanV1<SellSignalListRead>("/market-intelligence/sell-signals/latest");
+  },
+
+  getMarketIntelligenceAcquisitionLatest(): Promise<AcquisitionListRead> {
+    return requestScanV1<AcquisitionListRead>("/market-intelligence/acquisition/latest");
+  },
+
+  getMarketIntelligenceSignalsLatest(): Promise<MarketSignalListRead> {
+    return requestScanV1<MarketSignalListRead>("/market-intelligence/signals/latest");
+  },
+
+  getCollectorAssistantBriefingLatest(): Promise<CollectorBriefingRead> {
+    return requestScanV1<CollectorBriefingRead>("/collector-assistant/briefing/latest");
+  },
+
+  getCollectorAssistantRecommendationsLatest(): Promise<CollectorRecommendationsRead> {
+    return requestScanV1<CollectorRecommendationsRead>("/collector-assistant/recommendations/latest");
+  },
+
+  getCollectorAssistantDashboardLatest(): Promise<CollectorDashboardRead> {
+    return requestScanV1<CollectorDashboardRead>("/collector-assistant/dashboard/latest");
+  },
+
+  getCollectorAssistantHealthLatest(): Promise<CollectorHealthRead> {
+    return requestScanV1<CollectorHealthRead>("/collector-assistant/health/latest");
+  },
+
+  getCollectorAssistantAlertsLatest(): Promise<CollectorAlertsRead> {
+    return requestScanV1<CollectorAlertsRead>("/collector-assistant/alerts/latest");
   },
 
   getPullLists(params?: { status?: string; publisher?: string; search?: string; limit?: number; offset?: number }): Promise<PullListListResponse> {

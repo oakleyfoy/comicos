@@ -126,6 +126,7 @@ import { PullListPage } from "./pages/PullListPage";
 import { RecommendationsV2Page } from "./pages/RecommendationsV2Page";
 import { RecommendationIntelligenceCertificationPage } from "./pages/RecommendationIntelligenceCertificationPage";
 import { IntelligencePage } from "./pages/IntelligencePage";
+import { ComicOSIntelligenceDashboardPage } from "./pages/ComicOSIntelligenceDashboardPage";
 import { ReleaseImportsPage } from "./pages/ReleaseImportsPage";
 import { LunarFeedPage } from "./pages/LunarFeedPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
@@ -164,6 +165,7 @@ export default function App() {
         <Route path="/dashboard/grading" element={<DashboardPage loadProfile="grading" />} />
         <Route path="/dashboard/dealer" element={<DashboardPage loadProfile="dealer" />} />
         <Route path="/dashboard/full" element={<DashboardPage loadProfile="full" />} />
+        <Route path="/comicos-intelligence" element={<ComicOSIntelligenceDashboardPage />} />
         <Route path="/executive-dashboard" element={<ExecutiveDashboardPage />} />
         <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
         <Route path="/marketplace-dashboard" element={<MarketplaceDashboardPage />} />
