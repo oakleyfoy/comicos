@@ -256,6 +256,7 @@ from app.models.external_catalog import (
     ExternalCatalogSyncRun,
     ExternalCatalogVariant,
 )
+from app.models.buy_queue_intelligence import BuyQueueItem, BuyQueueSnapshot
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1102,6 +1103,8 @@ __all__ = [
     "ExternalCatalogCreator",
     "ExternalCatalogSyncRun",
     "ExternalCatalogMatch",
+    "BuyQueueSnapshot",
+    "BuyQueueItem",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",

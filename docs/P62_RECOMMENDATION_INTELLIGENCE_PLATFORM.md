@@ -1,8 +1,9 @@
 # P62 — Recommendation Intelligence Platform (architecture)
 
-**Status:** Phase 1 implemented (V3 preview foundation). Phases 2+ (buy queue, FOC, forecast, watchlists, V3 persist) remain spec-only until built.
+**Status:** Phase 1 (V3 preview) and **Phase 2 (Buy Queue)** implemented. FOC, pull forecast, watchlists, V3 persist remain future phases.
 
-**Phase 1 doc:** [P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md](P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md)
+**Phase 1 doc:** [P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md](P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md)  
+**Phase 2 doc:** [P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md](P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md)
 
 **Context:** LoCG ingestion is **closed** (catalog supply via certified capture + refresh only). P61 Demand Intelligence is **certified** and committed at **`4ac6045`**. P62 is the consumer layer: ranking, queues, FOC ops, pull forecasting, and watchlists powered by persisted P61 signals.
 
@@ -487,7 +488,7 @@ Prefix: **`/api/v1/recommendation-intelligence`** (tag: P62). All GETs read **pe
 | `P62_READ_ONLY_GET` | Global | **1** — cross-system GET read-only | **Shipped** |
 | `P62_V3_ENABLED` | Owner/global | **A** — scoring context load + breakdown only (no priority change) | Alias of preview path |
 | `P62_V3_PRIORITY_DELTA` | Owner | **B** — apply demand/velocity/spec adjustments |
-| `P62_BUY_QUEUE_PERSIST` | Owner | **C** — snapshot tables + API |
+| `P62_BUY_QUEUE_PERSIST` | Owner | **C** — snapshot tables + API | **Shipped (Phase 2)** |
 | `P62_FOC_ALERTS` | Owner | **D** — FOC snapshot + reminders read snapshot |
 | `P62_PULL_FORECAST` | Global | **E** — forecast compute job |
 | `P62_AUTO_WATCHLISTS_V2` | Owner | **F** — signal-driven auto lists |
