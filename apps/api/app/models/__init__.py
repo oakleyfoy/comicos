@@ -305,6 +305,16 @@ from app.models.variant_market_intelligence import (
     VariantIntelligenceItem,
     VariantIntelligenceSnapshot,
 )
+from app.models.portfolio_analytics_platform import (
+    P67CollectionAnalyticsSnapshot,
+    P67GradingOpportunityItem,
+    P67GradingOpportunitySnapshot,
+    P67InvestorDashboardSnapshot,
+    P67PortfolioPerformanceItem,
+    P67PortfolioPerformanceSnapshot,
+    P67RecommendationPerformanceItem,
+    P67RecommendationPerformanceSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,

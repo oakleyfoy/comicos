@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     p66_market_pricing_enabled: bool = Field(default=True, alias="P66_MARKET_PRICING_ENABLED")
     p66_variant_decision_enabled: bool = Field(default=True, alias="P66_VARIANT_DECISION_ENABLED")
 
+    p67_portfolio_analytics_enabled: bool = Field(default=True, alias="P67_PORTFOLIO_ANALYTICS_ENABLED")
+    p67_collection_analytics_enabled: bool = Field(default=True, alias="P67_COLLECTION_ANALYTICS_ENABLED")
+    p67_recommendation_performance_enabled: bool = Field(default=True, alias="P67_RECOMMENDATION_PERFORMANCE_ENABLED")
+    p67_grading_analytics_enabled: bool = Field(default=True, alias="P67_GRADING_ANALYTICS_ENABLED")
+    p67_investor_dashboard_enabled: bool = Field(default=True, alias="P67_INVESTOR_DASHBOARD_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",
