@@ -125,6 +125,11 @@ def main() -> int:
         action="store_true",
         help="Print each variant upsert to console (default: trace file + summary only).",
     )
+    parser.add_argument(
+        "--timing-table",
+        action="store_true",
+        help="Print full per-issue timing table and performance JSON after capture (default: concise).",
+    )
     parser.add_argument("--save-raw", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--refresh-existing", action="store_true")
@@ -424,29 +429,43 @@ def main() -> int:
             summary.status = "DRY_RUN" if args.dry_run else summary.status
 
         summary.performance_audit = timing_audit.build_summary()
-        print("\n--- Per-issue timing table ---")
-        for row in timing_audit.issue_timings:
-            if row.skipped:
-                continue
-            row.finalize()
+        if args.timing_table:
+            print("\n--- Per-issue timing table ---")
+            for row in timing_audit.issue_timings:
+                if row.skipped:
+                    continue
+                row.finalize()
+                print(
+                    f"{row.issue_title[:50]:<50} "
+                    f"goto={row.page_goto_seconds:5.1f}s "
+                    f"wait={row.additional_wait_seconds:5.1f}s "
+                    f"(pre={row.pre_goto_sleep_seconds:.1f} post={row.post_load_wait_timeout_seconds:.1f} "
+                    f"sel={row.selector_wait_seconds:.1f}) "
+                    f"html={row.html_extraction_seconds:4.1f}s "
+                    f"parse={row.parser_seconds:4.1f}s "
+                    f"db={row.db_upsert_seconds:4.1f}s "
+                    f"ready={row.ready_detected} "
+                    f"method={row.readiness_method} "
+                    f"total={row.total_issue_seconds:5.1f}s"
+                )
+            print("\n--- Timing breakdown ---")
+            for line in summary.performance_audit.get("timing_breakdown_percentages", []):
+                print(line)
+            print("\n--- Timing summary JSON ---")
+            print(json.dumps(summary.performance_audit, indent=2, default=str))
+        else:
+            pa = summary.performance_audit
             print(
-                f"{row.issue_title[:50]:<50} "
-                f"goto={row.page_goto_seconds:5.1f}s "
-                f"wait={row.additional_wait_seconds:5.1f}s "
-                f"(pre={row.pre_goto_sleep_seconds:.1f} post={row.post_load_wait_timeout_seconds:.1f} "
-                f"sel={row.selector_wait_seconds:.1f}) "
-                f"html={row.html_extraction_seconds:4.1f}s "
-                f"parse={row.parser_seconds:4.1f}s "
-                f"db={row.db_upsert_seconds:4.1f}s "
-                f"ready={row.ready_detected} "
-                f"method={row.readiness_method} "
-                f"total={row.total_issue_seconds:5.1f}s"
+                "\n--- Capture timing (concise; use --timing-table for per-issue rows) ---",
+                flush=True,
             )
-        print("\n--- Timing breakdown ---")
-        for line in summary.performance_audit.get("timing_breakdown_percentages", []):
-            print(line)
-        print("\n--- Timing summary JSON ---")
-        print(json.dumps(summary.performance_audit, indent=2, default=str))
+            print(
+                f"issues_timed={pa.get('issues_processed', len(timing_audit.issue_timings))} "
+                f"avg_issue_s={pa.get('avg_issue_seconds')} "
+                f"total_runtime_s={pa.get('total_runtime_seconds')} "
+                f"cloudflare_waits={pa.get('cloudflare_wait_count')}",
+                flush=True,
+            )
 
     except RuntimeError as exc:
         if "locg capture certification failed" in str(exc).lower():

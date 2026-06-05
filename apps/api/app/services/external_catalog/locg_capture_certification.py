@@ -86,7 +86,10 @@ def evaluate_proof_run_completeness(
     warnings: list[str] = []
     skip = variant_skipped_reason_counts or {}
     n = discovery_audit.total_li_issue_rows
-    parents = discovery_audit.parent_issue_rows
+    parents_dom = discovery_audit.parent_issue_rows
+    parents = discovery_audit.final_parent_issue_queue_count or parents_dom
+    variants_dom = discovery_audit.variant_rows
+    variants_expected = discovery_audit.final_variant_queue_count or variants_dom
     counts = _discovery_timeline_counts(discovery_audit)
     initial_dom = counts[0] if counts else n
     peak = max(counts) if counts else n
@@ -103,24 +106,31 @@ def evaluate_proof_run_completeness(
         n < PROOF_RUN_TYPICAL_WEEK_LI_ROWS
         and not truncated_initial
         and (stabilized or high_initial_flat)
-        and parents >= PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS
+        and parents_dom >= PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS
     )
     variants_ok = (
-        list_variants_found > 0
-        and list_variants_persisted >= list_variants_found
+        list_variants_found == variants_expected
+        and list_variants_persisted == list_variants_found
         and int(skip.get("skipped_missing_parent") or 0) == 0
         and int(skip.get("variant_upsert_failure") or 0) == 0
     )
     parents_detail_ok = (
-        detail_pages_succeeded >= parents
-        or (
-            detail_pages_attempted > 0
-            and detail_pages_succeeded >= int(detail_pages_attempted * 0.95)
-        )
+        detail_pages_attempted == parents
+        and detail_pages_succeeded == parents
+        and detail_pages_succeeded == detail_pages_attempted
     )
+    parent_queue_coverage_passed = parents_detail_ok
+    variant_queue_coverage_passed = variants_ok
     assessment: dict[str, Any] = {
         "total_li_issue_rows": n,
-        "parent_issue_rows": parents,
+        "parent_issue_rows": parents_dom,
+        "variant_rows": variants_dom,
+        "parent_issue_queue_count": parents,
+        "variant_queue_count": variants_expected,
+        "duplicate_parent_li_rows": discovery_audit.duplicate_parent_li_rows,
+        "duplicate_variant_li_rows": discovery_audit.duplicate_variant_li_rows,
+        "parent_queue_coverage_passed": parent_queue_coverage_passed,
+        "variant_queue_coverage_passed": variant_queue_coverage_passed,
         "typical_week_li_reference": PROOF_RUN_TYPICAL_WEEK_LI_ROWS,
         "neighbor_reference_li_rows": PROOF_RUN_NEIGHBOR_REFERENCE_LI_ROWS,
         "initial_dom_li_rows": initial_dom,
@@ -151,9 +161,9 @@ def evaluate_proof_run_completeness(
             assessment,
             warnings,
         )
-    if parents < PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS:
+    if parents_dom < PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS:
         return (
-            f"proof-run parent_issue_rows={parents} below minimum "
+            f"proof-run parent_issue_rows={parents_dom} below minimum "
             f"{PROOF_RUN_LIGHT_WEEK_MIN_PARENT_ROWS}",
             assessment,
             warnings,
@@ -166,20 +176,30 @@ def evaluate_proof_run_completeness(
         )
     if not variants_ok:
         return (
-            "proof-run variant persistence incomplete",
+            "proof-run variant coverage incomplete: "
+            f"found={list_variants_found} persisted={list_variants_persisted} "
+            f"expected_queue={variants_expected} dom_variant_rows={variants_dom}",
             assessment,
             warnings,
         )
     if not parents_detail_ok:
         return (
-            f"proof-run parent details incomplete: succeeded={detail_pages_succeeded} "
-            f"attempted={detail_pages_attempted} parents={parents}",
+            "proof-run parent detail coverage incomplete: "
+            f"succeeded={detail_pages_succeeded} attempted={detail_pages_attempted} "
+            f"expected_queue={parents} dom_parent_rows={parents_dom}",
             assessment,
             warnings,
         )
+    if discovery_audit.duplicate_parent_li_rows > 0 or discovery_audit.duplicate_variant_li_rows > 0:
+        warnings.append(
+            "duplicate DOM li rows (not missing coverage): "
+            f"parent_dup={discovery_audit.duplicate_parent_li_rows} "
+            f"variant_dup={discovery_audit.duplicate_variant_li_rows}; "
+            f"queue parents={parents} variants={variants_expected}"
+        )
     if lighter_week:
         warnings.append(
-            f"lighter release week: {n} li rows / {parents} parents "
+            f"lighter release week: {n} li rows / {parents_dom} parents "
             f"(vs ~{PROOF_RUN_NEIGHBOR_REFERENCE_LI_ROWS} li typical); "
             "scroll stabilized, variants persisted"
         )
@@ -391,6 +411,10 @@ def certify_locg_capture(
         "variant_rows": discovery_audit.variant_rows,
         "other_release_rows": discovery_audit.other_release_rows,
         "total_release_rows_reconciled": reconciled,
+        "final_parent_issue_queue_count": discovery_audit.final_parent_issue_queue_count,
+        "final_variant_queue_count": discovery_audit.final_variant_queue_count,
+        "duplicate_parent_li_rows": discovery_audit.duplicate_parent_li_rows,
+        "duplicate_variant_li_rows": discovery_audit.duplicate_variant_li_rows,
         "extend_now_audit": extend_now_audit,
         "extend_now_block": extend_now_block,
     }

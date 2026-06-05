@@ -264,13 +264,31 @@ def run_playwright_capture(
                     detail_response = None
                     detail_html = ""
                     detail_status: int | None = None
+                    last_goto_error: Exception | None = None
                     for attempt in range(6):
                         t_goto = time.perf_counter()
-                        detail_response = page.goto(
-                            detail_url,
-                            wait_until="domcontentloaded",
-                            timeout=NAVIGATION_TIMEOUT_MS,
-                        )
+                        try:
+                            detail_response = page.goto(
+                                detail_url,
+                                wait_until="domcontentloaded",
+                                timeout=NAVIGATION_TIMEOUT_MS,
+                            )
+                            last_goto_error = None
+                        except Exception as goto_exc:  # noqa: BLE001
+                            last_goto_error = goto_exc
+                            detail_response = None
+                            detail_status = None
+                            issue_timing.page_goto_seconds = round(
+                                time.perf_counter() - t_goto, 3
+                            )
+                            backoff = min(120.0, 5.0 * (2**attempt))
+                            print(
+                                f"detail goto failed ({detail_url}); "
+                                f"attempt {attempt + 1}/6; sleeping {backoff:.0f}s: {goto_exc}",
+                                flush=True,
+                            )
+                            time.sleep(backoff)
+                            continue
                         issue_timing.page_goto_seconds = round(time.perf_counter() - t_goto, 3)
                         detail_status = detail_response.status if detail_response else None
                         if detail_status != 429:
@@ -282,6 +300,8 @@ def run_playwright_capture(
                             flush=True,
                         )
                         time.sleep(backoff)
+                    if last_goto_error is not None:
+                        raise last_goto_error
                     if detail_status == 429:
                         raise LocgBrowserBlockedError(
                             f"detail page blocked: HTTP 429 ({detail_url})"

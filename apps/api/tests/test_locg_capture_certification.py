@@ -93,6 +93,8 @@ def test_extend_now_none_no_extend_mechanism_passes_with_warning() -> None:
         parent_issue_rows=75,
         variant_rows=429,
         other_release_rows=0,
+        final_parent_issue_queue_count=45,
+        final_variant_queue_count=291,
         pagination_extend_now=None,
         pagination_extend_calls=0,
         pagination_mechanism="hidden_api_get_comics_detected_no_extend",

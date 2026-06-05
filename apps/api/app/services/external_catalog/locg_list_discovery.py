@@ -36,6 +36,8 @@ class ListDiscoveryAudit:
     final_parent_issue_queue_count: int = 0
     final_variant_queue_count: int = 0
     final_issue_queue_count: int = 0
+    duplicate_parent_li_rows: int = 0
+    duplicate_variant_li_rows: int = 0
     parent_issue_rows: int = 0
     variant_rows: int = 0
     variant_child_rows: int = 0
@@ -75,6 +77,8 @@ class ListDiscoveryAudit:
             "unique_variant_urls": self.unique_variant_urls,
             "final_parent_issue_queue_count": self.final_parent_issue_queue_count,
             "final_variant_queue_count": self.final_variant_queue_count,
+            "duplicate_parent_li_rows": self.duplicate_parent_li_rows,
+            "duplicate_variant_li_rows": self.duplicate_variant_li_rows,
             "total_issue_links_found": self.total_issue_links_found,
             "unique_issue_urls": self.unique_issue_urls,
             "unique_raw_hrefs": self.unique_raw_hrefs,
@@ -203,6 +207,8 @@ def audit_list_html(html: str, *, page_url: str, page_title: str = "") -> ListDi
     audit.final_parent_issue_queue_count = len(parse_list_page_html(html, page_date=None))
     audit.final_variant_queue_count = len(parse_release_date_variant_rows(html, page_date=None))
     audit.final_issue_queue_count = audit.final_parent_issue_queue_count
+    audit.duplicate_parent_li_rows = max(0, audit.parent_issue_rows - audit.final_parent_issue_queue_count)
+    audit.duplicate_variant_li_rows = max(0, audit.variant_rows - audit.final_variant_queue_count)
 
     _classify_release_types_from_titles(html, audit)
     return audit
