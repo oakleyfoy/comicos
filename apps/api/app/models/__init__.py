@@ -265,6 +265,16 @@ from app.models.collector_intelligence import (
     FuturePullForecast,
     FuturePullForecastItem,
 )
+from app.models.market_intelligence_platform import (
+    AcquisitionOpportunityItem,
+    AcquisitionOpportunitySnapshot,
+    MarketSignalItem,
+    MarketSignalSnapshot,
+    PortfolioPerformanceItem,
+    PortfolioPerformanceSnapshot,
+    SellSignalItem,
+    SellSignalSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1119,6 +1129,14 @@ __all__ = [
     "FuturePullForecastItem",
     "AutoWatchlist",
     "AutoWatchlistItem",
+    "PortfolioPerformanceSnapshot",
+    "PortfolioPerformanceItem",
+    "SellSignalSnapshot",
+    "SellSignalItem",
+    "AcquisitionOpportunitySnapshot",
+    "AcquisitionOpportunityItem",
+    "MarketSignalSnapshot",
+    "MarketSignalItem",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",

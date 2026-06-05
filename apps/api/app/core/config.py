@@ -118,6 +118,12 @@ class Settings(BaseSettings):
     p62_pull_forecast_enabled: bool = Field(default=True, alias="P62_PULL_FORECAST_ENABLED")
     p62_auto_watchlist_enabled: bool = Field(default=True, alias="P62_AUTO_WATCHLIST_ENABLED")
 
+    p63_market_intelligence_enabled: bool = Field(default=True, alias="P63_MARKET_INTELLIGENCE_ENABLED")
+    p63_portfolio_performance_enabled: bool = Field(default=True, alias="P63_PORTFOLIO_PERFORMANCE_ENABLED")
+    p63_sell_signals_enabled: bool = Field(default=True, alias="P63_SELL_SIGNALS_ENABLED")
+    p63_acquisition_opportunities_enabled: bool = Field(default=True, alias="P63_ACQUISITION_OPPORTUNITIES_ENABLED")
+    p63_market_signals_enabled: bool = Field(default=True, alias="P63_MARKET_SIGNALS_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",

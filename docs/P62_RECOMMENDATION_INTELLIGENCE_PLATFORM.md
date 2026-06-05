@@ -1,6 +1,6 @@
 # P62 — Recommendation Intelligence Platform (architecture)
 
-**Status:** Phases **1–5** implemented (V3 preview, Buy Queue, FOC, Pull Forecast, Auto Watchlists). **V3 production persistence** and P63 remain out of scope.
+**Status:** Phases **1–5** implemented (V3 preview, Buy Queue, FOC, Pull Forecast, Auto Watchlists). **V3 production persistence** remains out of scope. Downstream **P63 Market Intelligence** is implemented separately — see [P63_MARKET_INTELLIGENCE_PLATFORM.md](P63_MARKET_INTELLIGENCE_PLATFORM.md).
 
 **Phase docs:**
 
