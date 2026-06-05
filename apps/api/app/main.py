@@ -1200,6 +1200,7 @@ from app.api.future_release_dashboard import attach_future_release_dashboard_lay
 from app.api.future_release_certification import attach_future_release_certification_layer
 from app.api.external_catalog import attach_external_catalog_layer
 from app.api.demand_intelligence_platform import attach_demand_intelligence_platform_layer
+from app.api.recommendation_intelligence_platform import attach_recommendation_intelligence_platform_layer
 from app.api.industry_publishers import attach_industry_publishers_layer
 from app.api.industry_release_scan import attach_industry_release_scan_layer
 from app.api.industry_release_signals import attach_industry_release_signal_layer
@@ -1348,6 +1349,7 @@ attach_future_release_dashboard_layer(app)
 attach_future_release_certification_layer(app)
 attach_external_catalog_layer(app)
 attach_demand_intelligence_platform_layer(app)
+attach_recommendation_intelligence_platform_layer(app)
 attach_industry_publishers_layer(app)
 attach_industry_release_scan_layer(app)
 attach_industry_release_signal_layer(app)
