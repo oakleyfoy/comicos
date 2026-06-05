@@ -15,6 +15,7 @@ from app.models.collector_intelligence import (
 )
 from app.models.demand_intelligence import TREND_RISING
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+from app.services.collector_display_identity import format_from_release
 from app.services.collector_intelligence_scoring import issue_intelligence_scores
 from app.services.recommendation_v3_scoring_context import build_recommendation_v3_scoring_context
 
@@ -99,7 +100,7 @@ def generate_foc_alerts(
                 snapshot_id=sid,
                 owner_user_id=owner_user_id,
                 release_issue_id=int(issue.id or 0),
-                title=issue.title or f"{series.series_name} #{issue.issue_number}",
+                title=format_from_release(series=series, issue=issue),
                 publisher=series.publisher or "",
                 foc_date=issue.foc_date,
                 release_date=issue.release_date,

@@ -11,6 +11,7 @@ from app.models.collector_intelligence import AUTO_WL_TYPES, AutoWatchlist, Auto
 from app.models.demand_intelligence import TREND_RISING
 from app.models.pull_list import PullList
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+from app.services.collector_display_identity import format_from_release
 from app.services.recommendation_v3_scoring_context import build_recommendation_v3_scoring_context
 from app.services.spec_opportunity_service import get_latest_spec_snapshot, list_spec_opportunity_rows
 
@@ -96,7 +97,7 @@ def build_auto_watchlists(session: Session, *, owner_user_id: int) -> list[AutoW
 
     for issue, series in rows:
         iid = int(issue.id or 0)
-        title = issue.title or f"{series.series_name} #{issue.issue_number}"
+        title = format_from_release(series=series, issue=issue)
         blob = f"{series.series_name} {issue.title}".lower()
         vel = v3_ctx.velocity_for_issue(iid)
         foc_days = (issue.foc_date - today).days if issue.foc_date else None

@@ -32,15 +32,22 @@ GET_SNAPSHOT_SCAN_LIMIT = 200
 def _to_read(
     row: CrossSystemRecommendation,
     *,
+    session: Session | None = None,
+    owner_user_id: int | None = None,
     decision=None,
 ) -> CrossSystemRecommendationRead:
+    from app.services.collector_display_identity import resolve_collector_display_title
+
+    display_title = row.title
+    if session is not None and owner_user_id is not None:
+        display_title = resolve_collector_display_title(session, title=row.title)
     return CrossSystemRecommendationRead(
         id=int(row.id or 0),
         owner_id=int(row.owner_user_id),
         recommendation_type=row.recommendation_type,
         priority_score=float(row.priority_score),
         confidence_score=float(row.confidence_score),
-        title=row.title,
+        title=display_title,
         estimated_value=float(row.estimated_value) if row.estimated_value is not None else None,
         recommendation_rank=int(row.recommendation_rank),
         source_systems=list(row.source_systems or []),
@@ -126,7 +133,7 @@ def list_latest_cross_system_recommendations(
     page_rows = filtered[offset : offset + limit]
 
     if not include_decisions or not page_rows:
-        return [_to_read(row) for row in page_rows], total
+        return [_to_read(row, session=session, owner_user_id=owner_user_id) for row in page_rows], total
 
     decision_ctx = build_recommendation_decision_context(session, owner_user_id=owner_user_id)
     items: list[CrossSystemRecommendationRead] = []
@@ -143,7 +150,7 @@ def list_latest_cross_system_recommendations(
             owner_user_id=owner_user_id,
             ctx=decision_ctx,
         )
-        items.append(_to_read(row, decision=decision))
+        items.append(_to_read(row, session=session, owner_user_id=owner_user_id, decision=decision))
     return items, total
 
 

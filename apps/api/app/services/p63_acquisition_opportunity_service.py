@@ -19,6 +19,7 @@ from app.models.market_intelligence_platform import (
 )
 from app.models.want_list import WantListItem
 from app.services.acquisition_opportunity_engine import WANT_LIST_ACTIVE_STATUSES, _estimate_fmv, _build_fmv_index
+from app.services.collector_display_identity import format_collector_issue_display, format_from_release
 from app.services.collector_intelligence_scoring import issue_intelligence_scores
 from app.services.release_horizon_engine import list_issues_in_horizon_window
 from app.services.market_intelligence_inventory import load_owner_inventory_rows
@@ -117,7 +118,11 @@ def build_acquisition_opportunities(session: Session, *, owner_user_id: int) -> 
                 AcquisitionOpportunityItem(
                     snapshot_id=int(snap.id or 0),
                     owner_user_id=owner_user_id,
-                    title=f"{want.series_name} #{want.issue_number}",
+                    title=format_collector_issue_display(
+                        series_name=want.series_name,
+                        issue_number=want.issue_number or "",
+                        title=want.series_name,
+                    ),
                     publisher=want.publisher or "",
                     issue_number=want.issue_number or "",
                     opportunity_score=score,
@@ -165,7 +170,7 @@ def build_acquisition_opportunities(session: Session, *, owner_user_id: int) -> 
                     snapshot_id=int(snap.id or 0),
                     owner_user_id=owner_user_id,
                     release_issue_id=iid,
-                    title=issue.title or f"{series.series_name} #{issue.issue_number}",
+                    title=format_from_release(series=series, issue=issue),
                     publisher=series.publisher,
                     issue_number=issue.issue_number or "",
                     opportunity_score=opp,

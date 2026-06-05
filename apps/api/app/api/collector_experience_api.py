@@ -97,13 +97,36 @@ def _notif_guard() -> None:
         raise HTTPException(status_code=403, detail="P65_NOTIFICATION_CENTER_DISABLED")
 
 
-def _task_read(row) -> CollectorTaskItemRead:
+def _task_read(session: Session, row) -> CollectorTaskItemRead:
+    from app.services.collector_display_identity import resolve_collector_display_title
+
+    ref = row.source_ref_json or {}
+    display_title = resolve_collector_display_title(
+        session,
+        title=row.title,
+        issue_number=row.issue_number,
+        publisher=row.publisher,
+    )
+    if ref.get("buy_queue_item_id"):
+        from app.models.buy_queue_intelligence import BuyQueueItem
+
+        bq = session.get(BuyQueueItem, int(ref["buy_queue_item_id"]))
+        if bq:
+            display_title = resolve_collector_display_title(
+                session,
+                release_issue_id=bq.release_issue_id,
+                external_catalog_issue_id=bq.external_catalog_issue_id,
+                title=bq.title,
+                issue_number=bq.issue_number,
+                publisher=bq.publisher,
+                release_date=bq.release_date,
+            )
     return CollectorTaskItemRead(
         id=int(row.id or 0),
         snapshot_id=int(row.snapshot_id),
         task_type=row.task_type,
         status=row.status,
-        title=row.title,
+        title=display_title,
         publisher=row.publisher,
         issue_number=row.issue_number,
         priority_score=row.priority_score,
@@ -135,7 +158,7 @@ def tasks_latest(
         readiness_status=READINESS_SUCCESS,
         generated_at=snap.generated_at,
         total_items=snap.total_items,
-        items=[_task_read(i) for i in items],
+        items=[_task_read(session, i) for i in items],
         by_type=by_type,
     )
     return wrap_object(body, owner_user_id=int(current_user.id))
@@ -208,7 +231,7 @@ def tasks_patch(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="TASK_NOT_FOUND")
-    return wrap_object(_task_read(row), owner_user_id=int(current_user.id))
+    return wrap_object(_task_read(session, row), owner_user_id=int(current_user.id))
 
 
 @workspace_router.get("/platform/certification", response_model=ScanApiV1Envelope)

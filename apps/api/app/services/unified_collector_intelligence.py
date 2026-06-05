@@ -106,12 +106,15 @@ def _combined_priority(base: float, source_count: int) -> float:
     return _clamp_priority(min(94.0, base + bonus))
 
 
-def _display_title(*, series_name: str, issue_number: str) -> str:
-    series = (series_name or "Unknown").strip()
-    issue = (issue_number or "").strip()
-    if issue:
-        return f"{series} #{issue}"
-    return series
+def _display_title(*, series_name: str, issue_number: str, title: str | None = None, release_date=None) -> str:
+    from app.services.collector_display_identity import format_collector_issue_display
+
+    return format_collector_issue_display(
+        series_name=series_name or "Unknown",
+        issue_number=issue_number or "",
+        title=title,
+        release_date=release_date,
+    )
 
 
 def _acquire_key(*, publisher: str, series_name: str, issue_number: str) -> str:

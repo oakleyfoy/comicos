@@ -51,6 +51,18 @@ from app.services.future_pull_forecast_service import (
 from app.services.p62_feature_flags import p62_auto_watchlist_enabled, p62_foc_enabled, p62_pull_forecast_enabled
 
 
+def _display_title(session: Session, *, release_issue_id: int | None, title: str, issue_number: str, publisher: str) -> str:
+    from app.services.collector_display_identity import resolve_collector_display_title
+
+    return resolve_collector_display_title(
+        session,
+        release_issue_id=release_issue_id,
+        title=title,
+        issue_number=issue_number,
+        publisher=publisher,
+    )
+
+
 def _foc_alert_list_read(session: Session, *, owner_user_id: int) -> FOCAlertListRead:
     snap = get_latest_foc_snapshot(session, owner_user_id=owner_user_id)
     if snap is None:
@@ -64,7 +76,13 @@ def _foc_alert_list_read(session: Session, *, owner_user_id: int) -> FOCAlertLis
                 id=int(i.id or 0),
                 owner_id=int(i.owner_user_id),
                 release_issue_id=int(i.release_issue_id),
-                title=i.title,
+                title=_display_title(
+                    session,
+                    release_issue_id=int(i.release_issue_id),
+                    title=i.title,
+                    issue_number="",
+                    publisher=i.publisher,
+                ),
                 publisher=i.publisher,
                 foc_date=i.foc_date,
                 release_date=i.release_date,
@@ -96,7 +114,13 @@ def _auto_watchlist_bundle_read(session: Session, *, owner_user_id: int) -> Auto
                 items=[
                     AutoWatchlistItemRead(
                         id=int(i.id or 0),
-                        title=i.title,
+                        title=_display_title(
+                            session,
+                            release_issue_id=int(i.release_issue_id) if i.release_issue_id else None,
+                            title=i.title,
+                            issue_number="",
+                            publisher="",
+                        ),
                         release_issue_id=i.release_issue_id,
                         inclusion_reason=i.inclusion_reason,
                     )

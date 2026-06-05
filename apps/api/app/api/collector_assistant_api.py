@@ -49,14 +49,24 @@ def _guard() -> None:
         raise HTTPException(status_code=403, detail="P64_COLLECTOR_ASSISTANT_DISABLED")
 
 
-def _item_read(row) -> CollectorRecommendationItemRead:
+def _item_read(session: Session, row) -> CollectorRecommendationItemRead:
+    from app.services.collector_display_identity import resolve_collector_display_title
+
+    display_title = resolve_collector_display_title(
+        session,
+        release_issue_id=row.release_issue_id,
+        external_catalog_issue_id=row.external_catalog_issue_id,
+        title=row.title,
+        issue_number=row.issue_number,
+        publisher=row.publisher,
+    )
     return CollectorRecommendationItemRead(
         id=int(row.id or 0),
         owner_id=int(row.owner_user_id),
         lane=row.lane,
         priority_score=row.priority_score,
         confidence=row.confidence,
-        title=row.title,
+        title=display_title,
         publisher=row.publisher,
         issue_number=row.issue_number,
         recommended_action=row.recommended_action,
@@ -118,7 +128,7 @@ def v1_recommendations_latest(
         body = CollectorRecommendationsRead(readiness_status=RUN_STATUS_NOT_READY)
         return wrap_object(body, owner_user_id=int(current_user.id))
     lanes_raw = list_all_recommendations_for_run(session, run_id=int(run.id or 0))
-    lanes = {lane: [_item_read(i) for i in items] for lane, items in lanes_raw.items()}
+    lanes = {lane: [_item_read(session, i) for i in items] for lane, items in lanes_raw.items()}
     total = sum(len(v) for v in lanes.values())
     body = CollectorRecommendationsRead(
         run_id=int(run.id or 0),

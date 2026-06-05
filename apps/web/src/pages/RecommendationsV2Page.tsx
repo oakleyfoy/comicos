@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ApiError, apiClient, type RecommendationV2DashboardRead, type RecommendationV2DetailRead } from "../api/client";
+import { formatCollectorIssueDisplay } from "../utils/collectorDisplayIdentity";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -30,7 +31,8 @@ function TierList({
         <li key={row.id}>
           <button type="button" className="flex w-full justify-between gap-2 text-left hover:text-white" onClick={() => onSelect(row.id)}>
             <span>
-              {row.series_name} #{row.issue_number} · {row.recommendation_type}
+              {formatCollectorIssueDisplay(row.series_name, row.issue_number, { title: row.title })} ·{" "}
+              {row.recommendation_type}
             </span>
             <span className="text-slate-400">{row.total_score.toFixed(1)}</span>
           </button>

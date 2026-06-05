@@ -25,6 +25,7 @@ from app.services.recommendation_title_index import resolve_release_pair
 from app.services.recommendation_v2_scoring_context import build_recommendation_v2_scoring_context
 from app.services.recommendation_v3_components import score_v3_demand_components
 from app.services.recommendation_v3_scoring_context import build_recommendation_v3_scoring_context
+from app.services.collector_display_identity import format_from_release
 from app.services.release_horizon_engine import list_issues_in_horizon_window
 
 
@@ -252,7 +253,7 @@ def build_buy_queue(
                 recommendation_id=None,
                 release_issue_id=int(issue.id or 0),
                 external_catalog_issue_id=row.external_catalog_issue_id,
-                title=issue.title or f"{series.series_name} #{issue.issue_number}",
+                title=format_from_release(series=series, issue=issue),
                 issue_number=str(issue.issue_number or ""),
                 publisher=str(series.publisher or ""),
                 priority_score=row.priority_score,

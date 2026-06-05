@@ -30,6 +30,26 @@ from app.schemas.market_intelligence_platform import (
     SellSignalStatusUpdate,
 )
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
+from app.services.collector_display_identity import resolve_collector_display_title
+
+
+def _item_display_title(
+    session: Session,
+    *,
+    release_issue_id: int | None = None,
+    external_catalog_issue_id: int | None = None,
+    title: str,
+    issue_number: str,
+    publisher: str,
+) -> str:
+    return resolve_collector_display_title(
+        session,
+        release_issue_id=release_issue_id,
+        external_catalog_issue_id=external_catalog_issue_id,
+        title=title,
+        issue_number=issue_number,
+        publisher=publisher,
+    )
 from app.services.market_intelligence_automation import run_market_intelligence_platform_build
 from app.services.market_intelligence_certification import (
     certify_acquisition_opportunities,
@@ -179,7 +199,13 @@ def register_market_intelligence_platform_routes(router: APIRouter) -> None:
                     id=int(i.id or 0),
                     owner_id=int(i.owner_user_id),
                     inventory_copy_id=int(i.inventory_copy_id),
-                    title=i.title,
+                    title=_item_display_title(
+                        session,
+                        external_catalog_issue_id=i.external_catalog_issue_id,
+                        title=i.title,
+                        issue_number=i.issue_number,
+                        publisher=i.publisher,
+                    ),
                     publisher=i.publisher,
                     issue_number=i.issue_number,
                     sell_score=i.sell_score,
@@ -231,7 +257,13 @@ def register_market_intelligence_platform_routes(router: APIRouter) -> None:
                 id=int(row.id or 0),
                 owner_id=int(row.owner_user_id),
                 inventory_copy_id=int(row.inventory_copy_id),
-                title=row.title,
+                title=_item_display_title(
+                    session,
+                    external_catalog_issue_id=row.external_catalog_issue_id,
+                    title=row.title,
+                    issue_number=row.issue_number,
+                    publisher=row.publisher,
+                ),
                 publisher=row.publisher,
                 issue_number=row.issue_number,
                 sell_score=row.sell_score,
@@ -275,7 +307,13 @@ def register_market_intelligence_platform_routes(router: APIRouter) -> None:
                 AcquisitionItemRead(
                     id=int(i.id or 0),
                     owner_id=int(i.owner_user_id),
-                    title=i.title,
+                    title=_item_display_title(
+                        session,
+                        release_issue_id=i.release_issue_id,
+                        title=i.title,
+                        issue_number=i.issue_number,
+                        publisher=i.publisher,
+                    ),
                     publisher=i.publisher,
                     issue_number=i.issue_number,
                     opportunity_score=i.opportunity_score,
@@ -329,7 +367,13 @@ def register_market_intelligence_platform_routes(router: APIRouter) -> None:
             AcquisitionItemRead(
                 id=int(row.id or 0),
                 owner_id=int(row.owner_user_id),
-                title=row.title,
+                title=_item_display_title(
+                    session,
+                    release_issue_id=row.release_issue_id,
+                    title=row.title,
+                    issue_number=row.issue_number,
+                    publisher=row.publisher,
+                ),
                 publisher=row.publisher,
                 issue_number=row.issue_number,
                 opportunity_score=row.opportunity_score,

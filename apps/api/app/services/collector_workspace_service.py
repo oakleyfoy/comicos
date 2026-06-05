@@ -32,6 +32,9 @@ from app.models.collector_experience import (
 )
 from app.services.collector_assistant_context_service import load_collector_assistant_context
 from app.services.collector_assistant_orchestrator import get_latest_run, list_all_recommendations_for_run
+from app.services.p66_feature_flags import p66_variant_decision_enabled
+from app.services.collector_display_identity import resolve_collector_display_title
+from app.services.p66_platform_service import get_integration_enrichment
 
 _LANE_TO_TASK = {
     LANE_BUY: TASK_TYPE_BUY,
@@ -110,16 +113,37 @@ def _build_drafts(session: Session, *, owner_user_id: int) -> tuple[list[_TaskDr
         drafts.append(d)
 
     for row in ctx.buy_queue_items:
+        expl = str(getattr(row, "explanation", "") or getattr(row, "reason", "") or getattr(row, "buy_reason", "") or "Buy Queue opportunity.")
+        if p66_variant_decision_enabled():
+            enrich = get_integration_enrichment(
+                session,
+                owner_user_id=owner_user_id,
+                external_catalog_issue_id=int(row.external_catalog_issue_id) if getattr(row, "external_catalog_issue_id", None) else None,
+                buy_queue_item_id=int(getattr(row, "id", 0) or 0),
+            )
+            if enrich and enrich.get("recommendation_summary"):
+                expl = f"{expl} | P66: {enrich['recommendation_summary'].split(chr(10))[0]}"
+        buy_title = resolve_collector_display_title(
+            session,
+            release_issue_id=int(row.release_issue_id) if getattr(row, "release_issue_id", None) else None,
+            external_catalog_issue_id=int(row.external_catalog_issue_id)
+            if getattr(row, "external_catalog_issue_id", None)
+            else None,
+            title=str(getattr(row, "title", "") or ""),
+            issue_number=str(getattr(row, "issue_number", "") or ""),
+            publisher=str(getattr(row, "publisher", "") or ""),
+            release_date=getattr(row, "release_date", None),
+        )
         add(
             _TaskDraft(
                 task_type=TASK_TYPE_BUY,
-                title=str(getattr(row, "title", "") or ""),
+                title=buy_title,
                 publisher=str(getattr(row, "publisher", "") or ""),
                 issue_number=str(getattr(row, "issue_number", "") or ""),
                 priority_score=float(getattr(row, "priority_score", 0) or 0),
                 source_system="BUY_QUEUE",
                 source_ref_json={"buy_queue_item_id": int(getattr(row, "id", 0) or 0)},
-                explanation=str(getattr(row, "explanation", "") or getattr(row, "reason", "") or "Buy Queue opportunity."),
+                explanation=expl,
                 action_hint="REVIEW_BUY",
             )
         )

@@ -116,7 +116,18 @@ def _snapshot_read(row) -> BuyQueueSnapshotRead:
     )
 
 
-def _item_read(row) -> BuyQueueItemRead:
+def _item_read(session: Session, row) -> BuyQueueItemRead:
+    from app.services.collector_display_identity import resolve_collector_display_title
+
+    display_title = resolve_collector_display_title(
+        session,
+        release_issue_id=row.release_issue_id,
+        external_catalog_issue_id=row.external_catalog_issue_id,
+        title=row.title,
+        issue_number=row.issue_number,
+        publisher=row.publisher,
+        release_date=row.release_date,
+    )
     return BuyQueueItemRead(
         id=int(row.id or 0),
         snapshot_id=int(row.snapshot_id),
@@ -124,7 +135,7 @@ def _item_read(row) -> BuyQueueItemRead:
         recommendation_id=row.recommendation_id,
         release_issue_id=row.release_issue_id,
         external_catalog_issue_id=row.external_catalog_issue_id,
-        title=row.title,
+        title=display_title,
         issue_number=row.issue_number,
         publisher=row.publisher,
         priority_score=row.priority_score,
@@ -154,7 +165,7 @@ def _buy_queue_list(
     items, total = list_buy_queue_items(session, snapshot_id=int(snap.id), limit=limit, offset=offset)
     return BuyQueueListRead(
         snapshot=_snapshot_read(snap),
-        items=[_item_read(i) for i in items],
+        items=[_item_read(session, i) for i in items],
         total_items=total,
         limit=limit,
         offset=offset,
@@ -213,7 +224,7 @@ def v1_buy_queue_item_patch(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return wrap_object(_item_read(item), owner_user_id=int(current_user.id))
+    return wrap_object(_item_read(session, item), owner_user_id=int(current_user.id))
 
 
 @recommendation_intelligence_v1_router.get("/buy-queue/certification", response_model=ScanApiV1Envelope)
