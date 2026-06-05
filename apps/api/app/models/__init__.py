@@ -275,6 +275,16 @@ from app.models.market_intelligence_platform import (
     SellSignalItem,
     SellSignalSnapshot,
 )
+from app.models.collector_assistant import (
+    CollectorAssistantRun,
+    CollectorBriefingSnapshot,
+    CollectorExecutiveBundle,
+    CollectorHealthSnapshot,
+    CollectorOpportunityAlert,
+    CollectorOpportunityAlertSnapshot,
+    CollectorRecommendationItem,
+    CollectorRecommendationSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1137,6 +1147,14 @@ __all__ = [
     "AcquisitionOpportunityItem",
     "MarketSignalSnapshot",
     "MarketSignalItem",
+    "CollectorAssistantRun",
+    "CollectorBriefingSnapshot",
+    "CollectorRecommendationSnapshot",
+    "CollectorRecommendationItem",
+    "CollectorHealthSnapshot",
+    "CollectorOpportunityAlertSnapshot",
+    "CollectorOpportunityAlert",
+    "CollectorExecutiveBundle",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",

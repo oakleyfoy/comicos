@@ -1157,6 +1157,7 @@ from app.api.marketplace_ops_dashboard import attach_marketplace_ops_dashboard_l
 from app.api.marketplace_analytics import attach_marketplace_analytics_layer
 from app.api.market_intelligence import attach_market_intelligence_layer
 from app.api.market_intelligence_platform import attach_market_intelligence_platform_layer
+from app.api.collector_assistant_api import attach_collector_assistant_layer
 from app.api.market_forecast import attach_market_forecast_layer
 from app.api.forecast_dashboard import attach_forecast_dashboard_layer
 from app.api.forecast_validation import attach_forecast_validation_layer
@@ -1308,6 +1309,7 @@ attach_marketplace_ops_dashboard_layer(app)
 attach_marketplace_analytics_layer(app)
 attach_market_intelligence_layer(app)
 attach_market_intelligence_platform_layer(app)
+attach_collector_assistant_layer(app)
 attach_market_forecast_layer(app)
 attach_forecast_dashboard_layer(app)
 attach_forecast_validation_layer(app)

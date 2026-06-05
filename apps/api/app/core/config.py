@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     p63_acquisition_opportunities_enabled: bool = Field(default=True, alias="P63_ACQUISITION_OPPORTUNITIES_ENABLED")
     p63_market_signals_enabled: bool = Field(default=True, alias="P63_MARKET_SIGNALS_ENABLED")
 
+    p64_collector_assistant_enabled: bool = Field(default=True, alias="P64_COLLECTOR_ASSISTANT_ENABLED")
+    p64_llm_narration_enabled: bool = Field(default=False, alias="P64_LLM_NARRATION_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",
