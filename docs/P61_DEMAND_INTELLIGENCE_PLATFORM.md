@@ -1,6 +1,8 @@
 # P61 — Demand Intelligence Platform (architecture)
 
-**Status:** Design only — no implementation, migrations, or code changes in this phase.
+**Status:** Implemented (P61-01–P61-04). Recommendation V3 consumption is a follow-on phase.
+
+**Implementation:** `apps/api/app/models/demand_intelligence.py`, services `demand_*_service.py`, `weekly_demand_automation_service.py`, API `apps/api/app/api/demand_intelligence_platform.py`, migrations `20260605_0219_add_p61_demand_intelligence.py` and merge `20260605_0220_merge_p61_and_collector_ratio_heads.py`.
 
 **Scope:** Four platform components that turn external community demand, entity-level market priors, liquidity movement, and spec posture into durable signals for ranking, decisioning, and operations. Builds on P51-03 (`market_demand_*`, `collector_demand_score`), P50 release/spec lanes, P36 liquidity velocity, and LoCG external catalog (`external_catalog_*`, `decision_signals_json`).
 
@@ -91,19 +93,20 @@ Recompute **current-state** demand intelligence on a schedule or on demand: enti
 
 No change to Lunar or inventory tables in this phase.
 
-### API endpoints (proposed)
+### API endpoints (implemented)
 
-Prefix: `/api/v1/demand-intelligence` (P61 tag). All list/detail GETs read **persisted** snapshots only.
+Prefix: `/api/v1/demand`. List GETs read **persisted** snapshots only; `POST /refresh` writes.
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/dashboard` | Summary: last refresh run, top entities by demand, upcoming FOC window issue demand highlights |
-| `GET` | `/market-demand` | Paginated entity profiles (may mirror or delegate to P51 `/market-user-intelligence/market-demand` with unified envelope) |
-| `GET` | `/issues` | Issue-level snapshots; filters: `release_issue_id`, `release_date_from/to`, `min_combined_score` |
-| `GET` | `/issues/{release_issue_id}` | Single issue demand + linked `decision_signals_json` preview (via external catalog link) |
-| `GET` | `/runs/latest` | Latest `demand_refresh_run` |
-| `POST` | `/refresh` | Trigger full or scoped refresh (`scope`: `ENTITY`, `ISSUE_UPCOMING`, `ALL`; `days_forward` default 90) |
-| `POST` | `/refresh/issues` | Batch refresh by `release_issue_ids[]` or `external_issue_ids[]` |
+| `GET` | `/dashboard` | Last refresh run, snapshot counts, top issue demand rows |
+| `GET` | `/issues` | Paginated `IssueDemandSnapshot`; filters: `release_issue_id`, `min_combined_score` |
+| `GET` | `/runs/latest` | Latest `DemandRefreshRun` |
+| `POST` | `/refresh` | Scoped refresh (`scope`: `ENTITY`, `ISSUE_UPCOMING`, `ALL`; `days_forward` default 90). `refresh_locg` defaults false on API (no LoCG HTTP on GET path). |
+| `GET` | `/certification` | Refresh engine certification |
+| `GET` | `/platform/certification` | Bundle: refresh + velocity + spec + automation |
+
+Entity profiles remain on P51 `/market-user-intelligence/*`. Batch `/refresh/issues` is a follow-on.
 
 Auth: same as P51 — authenticated owner; global entity refresh may be operator-role in production.
 
@@ -165,18 +168,17 @@ Measure **change over time** in demand signals: week-over-week (or capture-to-ca
 
 Retention policy (design): keep observations 52 weeks; aggregate older into monthly buckets (future phase).
 
-### API endpoints (proposed)
+### API endpoints (implemented)
 
-Prefix: `/api/v1/demand-intelligence/velocity`
+Prefix: `/api/v1/velocity`
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/issues` | Paginated velocity rows; sort by `velocity_score` or `pull_delta` |
-| `GET` | `/issues/{release_issue_id}` | Detail + last N observations |
-| `GET` | `/entities` | Entity velocity leaderboard |
-| `GET` | `/movers` | `direction=gainers\|losers`, `window_days=7\|14\|28` |
-| `GET` | `/runs/latest` | Latest velocity run |
-| `POST` | `/compute` | Recompute velocity from observations (idempotent for same `computed_at` bucket) |
+| `GET` | `/issues` | Paginated `DemandVelocitySnapshot` for `window_days` (default 7) |
+| `POST` | `/compute` | Recompute windows (default 7/14/28) from `IssueDemandObservation` history |
+| `GET` | `/certification` | Velocity engine certification |
+
+Entity velocity, movers, and per-issue detail endpoints are follow-ons for V3 transparency.
 
 ### Scheduled jobs
 
@@ -233,17 +235,15 @@ Rank **owner-scoped** spec and preorder opportunities by combining release-horiz
 
 Existing `spec_baseline_score` and P50 tables remain source of truth for spec math; this engine **reads** them, does not redefine baseline formulas.
 
-### API endpoints (proposed)
+### API endpoints (implemented)
 
-Prefix: `/api/v1/demand-intelligence/spec-opportunities`
+Prefix: `/api/v1/spec`
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/latest` | Latest persisted snapshot for current owner |
-| `GET` | `/latest/rows` | Paginated rows with full `rationale_json` |
-| `GET` | `/issues/{release_issue_id}` | Opportunity detail if present in latest snapshot |
-| `GET` | `/runs/latest` | Last build run |
-| `POST` | `/build` | Rebuild snapshot for owner (async-capable; returns run id) |
+| `GET` | `/latest` | Latest owner `SpecOpportunitySnapshot` with embedded paginated rows |
+| `POST` | `/build` | Rebuild snapshot (`SpecOpportunityRow` ranked list) |
+| `GET` | `/certification` | Spec engine certification (owner-scoped) |
 
 Empty catalog: structured `NOT_READY` envelope (aligned with V3 § below), not silent `[]`.
 
@@ -300,16 +300,16 @@ Operations **orchestration** for the Wednesday LoCG release cycle: discover new 
 
 Reuses existing `external_catalog_sync_run`; no schema change required for minimal implementation.
 
-### API endpoints (proposed)
+### API endpoints (implemented)
 
-Prefix: `/api/v1/demand-intelligence/capture` (operator-facing)
+Prefix: `/api/v1/automation` (operator-facing)
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/schedule` | Upcoming and recent Wednesdays with status |
-| `GET` | `/schedule/{release_date}` | Certification summary pointers (not raw HTML) |
-| `POST` | `/schedule/{release_date}/run` | Enqueue capture job (idempotent if already `CERTIFIED`) |
-| `POST` | `/discover` | Run new-week discovery only |
+| `GET` | `/schedule` | `WeeklyDemandCaptureSchedule` rows |
+| `POST` | `/discover` | Discover upcoming Wednesdays + sync from catalog |
+| `POST` | `/schedule/{release_date}/run` | Post-capture pipeline: demand refresh + velocity (browser capture remains script-driven) |
+| `GET` | `/certification` | Weekly automation certification |
 
 Owner-facing UI may remain script-first in early phase; API mirrors runbook for automation.
 
@@ -368,7 +368,7 @@ flowchart LR
 | **Signal buckets** | Map level + velocity into `market_demand` bucket (A/B/C) in `recommendation_signal_bucket_*`: e.g. rising community demand + high entity rollup → upgrade bucket; `INSUFFICIENT_HISTORY` → neutral. |
 | **Cross-system candidates** | `build_cross_system_candidates` may ingest top spec opportunity rows as typed candidates (`PREORDER` / spec) with explicit `source=P61_SPEC_OPPORTUNITY`. |
 | **RDE / decision layer** | Merge LoCG `decision_signals_json` with P61 issue snapshot at decision time (`compute_recommendation_decision`): `demand_score` uses combined level; `preorder_urgency` uses velocity acceleration for FOC-window issues. |
-| **Read vs refresh** | V3 GET endpoints use persisted cross-system + demand snapshots only; POST `/demand-intelligence/refresh` and `/spec-opportunities/build` do not run on GET. |
+| **Read vs refresh** | V3 GET endpoints use persisted cross-system + demand snapshots only; POST `/api/v1/demand/refresh` and `/api/v1/spec/build` do not run on GET. |
 | **NOT_READY** | If owner lacks `ReleaseIssue` rows or demand snapshots older than SLA, V3 returns structured `NOT_READY` with `reason_codes` (`NO_RELEASE_CATALOG`, `STALE_DEMAND`, `CAPTURE_FAILED`). |
 | **Transparency API** | V3 breakdown JSON includes `demand_intelligence` section: level scores, velocity deltas, observation timestamps, `signal_sources`, link to `external_catalog_issue.id`. |
 | **Certification** | Spread verification gates include optional check: top 20 contains ≥ N issues with non-null `demand_velocity_score` once P61 is enabled. |
@@ -399,13 +399,11 @@ flowchart LR
 
 ---
 
-## Phase rollout (recommended)
+## Phase rollout
 
-1. **P61-A** — Weekly Automated Capture schedule table + post-capture refresh hook (scripts acceptable before API).
-2. **P61-B** — Issue demand snapshots + Demand Refresh API (`POST /refresh` only writes).
-3. **P61-C** — Observations + Demand Velocity compute + movers API.
-4. **P61-D** — Spec Opportunity snapshot build + V3 scoring context behind feature flag.
-5. **P61-E** — Certification + dashboards; deprecate duplicate GET refresh on recommendation routes.
+**Delivered (integrated P61-01–04):** models, four services, `/demand`, `/velocity`, `/spec`, `/automation` APIs, per-component + platform certification, tests `test_demand_intelligence_platform.py`.
+
+**Follow-on:** Recommendation V3 scoring context + feature flag; movers/entity velocity APIs; optional `POST /demand/refresh/issues`; UI navigation.
 
 ---
 

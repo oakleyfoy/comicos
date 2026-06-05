@@ -256,6 +256,16 @@ from app.models.external_catalog import (
     ExternalCatalogSyncRun,
     ExternalCatalogVariant,
 )
+from app.models.demand_intelligence import (
+    DemandRefreshRun,
+    DemandVelocitySnapshot,
+    IssueDemandObservation,
+    IssueDemandSnapshot,
+    SpecOpportunityRow,
+    SpecOpportunitySnapshot,
+    WeeklyDemandCaptureEvent,
+    WeeklyDemandCaptureSchedule,
+)
 from app.models.lunar_feed import LunarFeedError, LunarFeedRawRow, LunarFeedRun, LunarFocAlert
 from app.models.lunar_scheduler import LunarScheduleConfig, LunarScheduledRun, LunarScheduledRunError
 from app.models.release_intelligence import (
@@ -1092,6 +1102,14 @@ __all__ = [
     "ExternalCatalogCreator",
     "ExternalCatalogSyncRun",
     "ExternalCatalogMatch",
+    "DemandRefreshRun",
+    "IssueDemandSnapshot",
+    "IssueDemandObservation",
+    "DemandVelocitySnapshot",
+    "SpecOpportunitySnapshot",
+    "SpecOpportunityRow",
+    "WeeklyDemandCaptureSchedule",
+    "WeeklyDemandCaptureEvent",
     "LunarFeedRun",
     "LunarFeedRawRow",
     "LunarFeedError",
