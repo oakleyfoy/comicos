@@ -376,13 +376,30 @@ class LocgVariantPersistStats:
         }
 
 
+_CONSOLE_ALWAYS_PHASES = frozenset(
+    {
+        "start",
+        "complete",
+        "parent_stub_upsert_failed",
+        "parent_stub_from_variant_failed",
+        "parent_stub_on_demand_failed",
+        "skipped_missing_parent",
+        "skipped_unavoidable_special_case",
+        "variant_upsert_failed",
+    }
+)
+
+
 def _variant_persist_trace(
     event: dict[str, Any],
     *,
     trace_path: Path | None,
+    verbose_console: bool = False,
 ) -> None:
     line = json.dumps(event, default=str, ensure_ascii=False)
-    print(f"[variant-persist] {json.dumps(event, default=str, ensure_ascii=True)}", flush=True)
+    phase = event.get("phase")
+    if verbose_console or phase in _CONSOLE_ALWAYS_PHASES:
+        print(f"[variant-persist] {json.dumps(event, default=str, ensure_ascii=True)}", flush=True)
     if trace_path is not None:
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         with trace_path.open("a", encoding="utf-8") as handle:
@@ -396,6 +413,7 @@ def upsert_locg_list_variant_rows(
     list_html: str | None = None,
     page_date: date | None = None,
     debug_trace_path: Path | None = None,
+    verbose_console: bool = False,
 ) -> LocgVariantPersistStats:
     """Persist variant rows parsed from release calendar list HTML."""
     from app.services.external_catalog.league_of_comic_geeks import (
@@ -419,6 +437,7 @@ def upsert_locg_list_variant_rows(
             "page_date": page_date.isoformat() if page_date else None,
         },
         trace_path=debug_trace_path,
+        verbose_console=verbose_console,
     )
 
     if list_html and page_date is not None:
@@ -449,7 +468,9 @@ def upsert_locg_list_variant_rows(
                     **format_db_exception(exc),
                 }
                 stats._record_first_failure(payload)
-                _variant_persist_trace(payload, trace_path=debug_trace_path)
+                _variant_persist_trace(
+                    payload, trace_path=debug_trace_path, verbose_console=verbose_console
+                )
 
     from app.services.external_catalog.locg_parent_stub import (
         comic_id_from_locg_url,
@@ -484,6 +505,7 @@ def upsert_locg_list_variant_rows(
                     "title": stub_payload.get("title"),
                 },
                 trace_path=debug_trace_path,
+                verbose_console=verbose_console,
             )
         except Exception as exc:
             _safe_session_rollback(session)
@@ -494,7 +516,9 @@ def upsert_locg_list_variant_rows(
                 **format_db_exception(exc),
             }
             stats._record_first_failure(payload)
-            _variant_persist_trace(payload, trace_path=debug_trace_path)
+            _variant_persist_trace(
+                payload, trace_path=debug_trace_path, verbose_console=verbose_console
+            )
 
     total = len(variant_rows)
     for idx, row in enumerate(variant_rows, start=1):
@@ -531,6 +555,7 @@ def upsert_locg_list_variant_rows(
                             **format_db_exception(exc),
                         },
                         trace_path=debug_trace_path,
+                        verbose_console=verbose_console,
                     )
                     parent = None
         if parent is None:
@@ -563,6 +588,7 @@ def upsert_locg_list_variant_rows(
                     **sample,
                 },
                 trace_path=debug_trace_path,
+                verbose_console=verbose_console,
             )
             continue
 
@@ -579,6 +605,7 @@ def upsert_locg_list_variant_rows(
                 "parent_issue_id": int(parent.id or 0),
             },
             trace_path=debug_trace_path,
+            verbose_console=verbose_console,
         )
         try:
             created, updated = upsert_variants(
@@ -599,6 +626,7 @@ def upsert_locg_list_variant_rows(
                     "updated": updated,
                 },
                 trace_path=debug_trace_path,
+                verbose_console=verbose_console,
             )
         except Exception as exc:
             _safe_session_rollback(session)
@@ -615,7 +643,9 @@ def upsert_locg_list_variant_rows(
                 **format_db_exception(exc),
             }
             stats._record_first_failure(payload)
-            _variant_persist_trace(payload, trace_path=debug_trace_path)
+            _variant_persist_trace(
+                payload, trace_path=debug_trace_path, verbose_console=verbose_console
+            )
 
     _variant_persist_trace(
         {
@@ -623,8 +653,11 @@ def upsert_locg_list_variant_rows(
             "variant_upsert_success": stats.variant_upsert_success,
             "variant_upsert_failure": stats.variant_upsert_failure,
             "first_variant_failure": stats.first_variant_failure,
+            "persisted": stats.persisted,
+            "skipped_missing_parent": stats.skipped_missing_parent,
         },
         trace_path=debug_trace_path,
+        verbose_console=True,
     )
     if debug_trace_path is not None:
         summary_path = debug_trace_path.with_name("variant_persist_summary.json")

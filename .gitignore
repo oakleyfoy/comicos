@@ -19,8 +19,15 @@ dist/
 # Local debug artifacts
 .tmp_cover_debug/
 .tmp_replay_debug.db
+*.db
 apps/api/_*.db
 apps/api/test_creator_migration.db
+
+# LoCG browser capture artifacts (local certification runs)
+data/locg_browser_capture/
+
+# Cursor local settings
+.cursor/
 
 # IDE / OS
 .DS_Store

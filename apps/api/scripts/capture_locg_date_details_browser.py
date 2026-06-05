@@ -120,6 +120,11 @@ def main() -> int:
         help="Adaptive delay ceiling (default 1.5).",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--verbose-variant-persist",
+        action="store_true",
+        help="Print each variant upsert to console (default: trace file + summary only).",
+    )
     parser.add_argument("--save-raw", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--refresh-existing", action="store_true")
@@ -315,6 +320,7 @@ def main() -> int:
             list_html=list_html,
             page_date=page_date,
             debug_trace_path=trace_path,
+            verbose_console=args.verbose_variant_persist,
         )
         if stats.first_variant_failure:
             print(
