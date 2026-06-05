@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     p62_v3_preview_enabled: bool = Field(default=True, alias="P62_V3_PREVIEW_ENABLED")
     p62_v3_persist_enabled: bool = Field(default=False, alias="P62_V3_PERSIST_ENABLED")
     p62_read_only_get_enabled: bool = Field(default=True, alias="P62_READ_ONLY_GET")
+    p62_foc_enabled: bool = Field(default=True, alias="P62_FOC_ENABLED")
+    p62_pull_forecast_enabled: bool = Field(default=True, alias="P62_PULL_FORECAST_ENABLED")
+    p62_auto_watchlist_enabled: bool = Field(default=True, alias="P62_AUTO_WATCHLIST_ENABLED")
 
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),

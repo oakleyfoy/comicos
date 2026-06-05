@@ -34,6 +34,7 @@ from app.services.buy_queue_service import (
     update_buy_queue_item_status,
 )
 from app.services.recommendation_v3_preview_service import build_recommendation_v3_preview
+from app.api.collector_intelligence_api import register_collector_intelligence_routes
 
 recommendation_intelligence_v1_router = APIRouter(
     prefix="/api/v1/recommendation-intelligence",
@@ -42,6 +43,7 @@ recommendation_intelligence_v1_router = APIRouter(
 
 
 def attach_recommendation_intelligence_platform_layer(app: FastAPI) -> None:
+    register_collector_intelligence_routes(recommendation_intelligence_v1_router)
     app.include_router(recommendation_intelligence_v1_router)
 
 

@@ -91,6 +91,12 @@ def run_post_capture_pipeline(
         _log_event(session, schedule_id=sid, step="demand_velocity", status="START", message="compute velocity")
         for window in (7, 14, 28):
             compute_demand_velocity(session, window_days=window)
+        if owner_user_id is not None:
+            from app.services.collector_intelligence_automation import run_collector_intelligence_pipeline
+
+            _log_event(session, schedule_id=sid, step="collector_intelligence", status="START", message="P62 suite")
+            run_collector_intelligence_pipeline(session, owner_user_id=int(owner_user_id))
+            _log_event(session, schedule_id=sid, step="collector_intelligence", status="SUCCESS", message="P62 suite done")
         schedule.status = CAPTURE_STATUS_CERTIFIED
         schedule.details_json = {
             **(schedule.details_json or {}),

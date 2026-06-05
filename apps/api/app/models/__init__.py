@@ -257,6 +257,14 @@ from app.models.external_catalog import (
     ExternalCatalogVariant,
 )
 from app.models.buy_queue_intelligence import BuyQueueItem, BuyQueueSnapshot
+from app.models.collector_intelligence import (
+    AutoWatchlist,
+    AutoWatchlistItem,
+    FOCAlertItem,
+    FOCAlertSnapshot,
+    FuturePullForecast,
+    FuturePullForecastItem,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1105,6 +1113,12 @@ __all__ = [
     "ExternalCatalogMatch",
     "BuyQueueSnapshot",
     "BuyQueueItem",
+    "FOCAlertSnapshot",
+    "FOCAlertItem",
+    "FuturePullForecast",
+    "FuturePullForecastItem",
+    "AutoWatchlist",
+    "AutoWatchlistItem",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",

@@ -1,9 +1,16 @@
 # P62 — Recommendation Intelligence Platform (architecture)
 
-**Status:** Phase 1 (V3 preview) and **Phase 2 (Buy Queue)** implemented. FOC, pull forecast, watchlists, V3 persist remain future phases.
+**Status:** Phases **1–5** implemented (V3 preview, Buy Queue, FOC, Pull Forecast, Auto Watchlists). **V3 production persistence** and P63 remain out of scope.
 
-**Phase 1 doc:** [P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md](P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md)  
-**Phase 2 doc:** [P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md](P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md)
+**Phase docs:**
+
+- [P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md](P62_PHASE_1_RECOMMENDATION_V3_PREVIEW.md)
+- [P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md](P62_PHASE_2_BUY_QUEUE_INTELLIGENCE.md)
+- [P62_PHASE_3_FOC_INTELLIGENCE.md](P62_PHASE_3_FOC_INTELLIGENCE.md)
+- [P62_PHASE_4_FUTURE_PULL_FORECASTING.md](P62_PHASE_4_FUTURE_PULL_FORECASTING.md)
+- [P62_PHASE_5_AUTO_WATCHLISTS.md](P62_PHASE_5_AUTO_WATCHLISTS.md)
+
+**Certification:** [P62_COLLECTOR_INTELLIGENCE_CERTIFICATION_REPORT.md](P62_COLLECTOR_INTELLIGENCE_CERTIFICATION_REPORT.md)
 
 **Context:** LoCG ingestion is **closed** (catalog supply via certified capture + refresh only). P61 Demand Intelligence is **certified** and committed at **`4ac6045`**. P62 is the consumer layer: ranking, queues, FOC ops, pull forecasting, and watchlists powered by persisted P61 signals.
 
