@@ -65,6 +65,26 @@ export type P67InvestorLatest = {
   cards_json: Record<string, unknown>;
 };
 
+export type P68SnapshotRow = {
+  title: string;
+  blended_fmv: number | null;
+  confidence: number;
+  sales_count: number;
+  liquidity_score: number;
+  low_sale: number | null;
+  median_sale: number | null;
+  high_sale: number | null;
+  primary_provider: string;
+  price_trend_30d: string;
+  metadata_json: Record<string, unknown>;
+};
+
+export const p68Api = {
+  buildSnapshots: () =>
+    requestP67<{ built: number; items: P68SnapshotRow[] }>("/api/v1/market-pricing/snapshots/build", { method: "POST" }),
+  latestSnapshots: () => requestP67<{ items: P68SnapshotRow[]; total: number }>("/api/v1/market-pricing/snapshots/latest"),
+};
+
 export const p67Api = {
   buildPlatform: () => requestP67<{ steps: unknown[]; certification: { certified: boolean } }>("/api/v1/portfolio-analytics/platform/build", { method: "POST" }),
   portfolioLatest: () => requestP67<P67PortfolioLatest>("/api/v1/portfolio-analytics/latest"),

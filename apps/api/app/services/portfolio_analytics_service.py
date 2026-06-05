@@ -12,7 +12,12 @@ from app.models.portfolio_analytics_platform import (
     P67PortfolioPerformanceSnapshot,
     utc_now,
 )
-from app.services.p67_inventory_bridge import enrich_row_value, fmv_lookup_by_title, load_p67_inventory_context
+from app.services.p67_inventory_bridge import (
+    enrich_row_value,
+    fmv_lookup_by_title,
+    load_p67_inventory_context,
+    p68_computed_fmv_for_copy,
+)
 
 
 def get_latest_portfolio_analytics_snapshot(session: Session, *, owner_user_id: int) -> P67PortfolioPerformanceSnapshot | None:
@@ -57,7 +62,8 @@ def build_portfolio_analytics_snapshot(session: Session, *, owner_user_id: int) 
     largest = ("", -1.0)
 
     for row in rows:
-        est = enrich_row_value(row, fmv_map)
+        p68 = p68_computed_fmv_for_copy(session, owner_user_id=owner_user_id, copy_id=row.copy_id)
+        est = enrich_row_value(row, fmv_map, p68_computed=p68)
         cost = row.cost_basis
         unreal = est - cost if est > 0 else 0.0
         unreal_pct = (unreal / cost * 100.0) if cost > 0 and est > 0 else 0.0

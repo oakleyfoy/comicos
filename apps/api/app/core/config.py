@@ -143,6 +143,11 @@ class Settings(BaseSettings):
     p67_grading_analytics_enabled: bool = Field(default=True, alias="P67_GRADING_ANALYTICS_ENABLED")
     p67_investor_dashboard_enabled: bool = Field(default=True, alias="P67_INVESTOR_DASHBOARD_ENABLED")
 
+    p68_market_pricing_enabled: bool = Field(default=True, alias="P68_MARKET_PRICING_ENABLED")
+    p68_ebay_provider_enabled: bool = Field(default=False, alias="P68_EBAY_PROVIDER_ENABLED")
+    p68_manual_fmv_enabled: bool = Field(default=True, alias="P68_MANUAL_FMV_ENABLED")
+    p68_auto_overwrite_inventory_fmv: bool = Field(default=False, alias="P68_AUTO_OVERWRITE_INVENTORY_FMV")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",

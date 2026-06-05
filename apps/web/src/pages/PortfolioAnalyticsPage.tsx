@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   p67Api,
+  p68Api,
+  type P68SnapshotRow,
   type P67CollectionLatest,
   type P67GradingLatest,
   type P67InvestorLatest,
@@ -34,24 +36,28 @@ export function PortfolioAnalyticsPage(): JSX.Element {
   const [recommendation, setRecommendation] = useState<P67RecommendationLatest | null>(null);
   const [grading, setGrading] = useState<P67GradingLatest | null>(null);
   const [investor, setInvestor] = useState<P67InvestorLatest | null>(null);
+  const [pricing, setPricing] = useState<P68SnapshotRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      await p68Api.buildSnapshots();
       await p67Api.buildPlatform();
-      const [p, c, r, g, i] = await Promise.all([
+      const [p, c, r, g, i, pr] = await Promise.all([
         p67Api.portfolioLatest(),
         p67Api.collectionLatest(),
         p67Api.recommendationLatest(),
         p67Api.gradingLatest(),
         p67Api.investorLatest(),
+        p68Api.latestSnapshots(),
       ]);
       setPortfolio(p);
       setCollection(c);
       setRecommendation(r);
       setGrading(g);
       setInvestor(i);
+      setPricing(pr.items ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load portfolio analytics");
     } finally {
@@ -143,6 +149,29 @@ export function PortfolioAnalyticsPage(): JSX.Element {
               </p>
             ) : (
               <p className="text-slate-500">No recommendation scorecard yet.</p>
+            )}
+          </Section>
+
+          <Section title="Market Pricing (P68)">
+            {pricing.length ? (
+              <ul className="space-y-2 text-sm text-white">
+                {pricing.slice(0, 8).map((row) => (
+                  <li key={`${row.title}-${row.primary_provider}`} className="rounded-lg border border-white/5 bg-slate-950/50 p-2">
+                    <div className="font-medium">{row.title}</div>
+                    <div className="text-xs text-slate-400">
+                      Computed FMV {money(row.blended_fmv)} · conf {(row.confidence * 100).toFixed(0)}% · sales {row.sales_count} ·{" "}
+                      {row.primary_provider || "—"}
+                      {row.primary_provider === "STUB" || row.metadata_json?.label_stub ? " (stub/manual — not live market)" : ""}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Low {money(row.low_sale)} / Median {money(row.median_sale)} / High {money(row.high_sale)} · liquidity{" "}
+                      {row.liquidity_score.toFixed(0)} · trend {row.price_trend_30d}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">No computed FMV snapshots yet. Internal sales and manual observations feed P68.</p>
             )}
           </Section>
 

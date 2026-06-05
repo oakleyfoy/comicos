@@ -6,6 +6,8 @@ from sqlmodel import Session
 
 from app.services.market_intelligence_inventory import InventoryIntelRow, load_owner_inventory_rows
 from app.services.market_pricing_service import get_latest_market_price_snapshot, list_market_observations
+from sqlmodel import select
+from app.models.market_pricing_engine import P68InventoryComputedFmv
 
 
 def load_p67_inventory_context(session: Session, *, owner_user_id: int) -> list[InventoryIntelRow]:
@@ -26,8 +28,27 @@ def fmv_lookup_by_title(session: Session, *, owner_user_id: int) -> dict[str, fl
     return out
 
 
-def enrich_row_value(row: InventoryIntelRow, fmv_by_title: dict[str, float]) -> float:
+def p68_computed_fmv_for_copy(session: Session, *, owner_user_id: int, copy_id: int) -> tuple[float, str, float] | None:
+    row = session.exec(
+        select(P68InventoryComputedFmv)
+        .where(P68InventoryComputedFmv.owner_user_id == owner_user_id)
+        .where(P68InventoryComputedFmv.inventory_copy_id == copy_id)
+        .order_by(P68InventoryComputedFmv.generated_at.desc(), P68InventoryComputedFmv.id.desc())
+    ).first()
+    if row is None:
+        return None
+    return float(row.computed_fmv), row.computed_fmv_source, float(row.confidence)
+
+
+def enrich_row_value(
+    row: InventoryIntelRow,
+    fmv_by_title: dict[str, float],
+    *,
+    p68_computed: tuple[float, str, float] | None = None,
+) -> float:
     if row.current_value > 0:
         return row.current_value
+    if p68_computed and p68_computed[0] > 0:
+        return p68_computed[0]
     alt = fmv_by_title.get(row.title.strip().lower(), 0.0)
     return alt

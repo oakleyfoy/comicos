@@ -315,6 +315,13 @@ from app.models.portfolio_analytics_platform import (
     P67RecommendationPerformanceItem,
     P67RecommendationPerformanceSnapshot,
 )
+from app.models.market_pricing_engine import (
+    P68InventoryComputedFmv,
+    P68MarketPriceMatchResult,
+    P68MarketPriceObservation,
+    P68MarketPriceSnapshot,
+    P68MarketPricingProvider,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
