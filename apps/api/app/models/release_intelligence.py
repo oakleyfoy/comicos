@@ -55,6 +55,8 @@ class ReleaseIssue(SQLModel, table=True):
     title: str = Field(default="", sa_column=Column(Text, nullable=False))
     foc_date: date | None = Field(default=None, nullable=True, index=True)
     release_date: date | None = Field(default=None, nullable=True, index=True)
+    original_foc_date: date | None = Field(default=None, nullable=True, index=True)
+    original_release_date: date | None = Field(default=None, nullable=True, index=True)
     cover_price: float = Field(default=0.0, nullable=False)
     release_status: str = Field(max_length=32, nullable=False, index=True)
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
@@ -78,6 +80,10 @@ class ReleaseVariant(SQLModel, table=True):
     variant_type: str = Field(max_length=48, nullable=False, index=True)
     cover_artist: str | None = Field(default=None, max_length=160, nullable=True)
     source_item_code: str = Field(default="", max_length=64, nullable=False, index=True)
+    printing_number: int | None = Field(default=None, nullable=True, index=True)
+    printing_kind: str = Field(default="FIRST_PRINT", max_length=32, nullable=False, index=True)
+    printing_foc_date: date | None = Field(default=None, nullable=True, index=True)
+    printing_release_date: date | None = Field(default=None, nullable=True, index=True)
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
 
 

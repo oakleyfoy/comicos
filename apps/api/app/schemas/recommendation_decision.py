@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.printing_intelligence import PrintingBadgeRead
+
 PurchaseAction = Literal["BUY", "BUY_AGGRESSIVE", "WATCH", "PASS"]
 DecisionRisk = Literal["LOW", "MEDIUM", "HIGH"]
 DecisionStrategy = Literal[
@@ -132,6 +134,11 @@ class RecommendationDecisionRead(BaseModel):
     expected_roi_range: str
     foc_date: date | None = None
     release_date: date | None = None
+    original_foc_date: date | None = None
+    original_release_date: date | None = None
+    printing_foc_date: date | None = None
+    printing_release_date: date | None = None
+    printing_badge: PrintingBadgeRead | None = None
     decision_headline: str = Field(
         description="Primary UI line, e.g. BUY 5 TOTAL or WATCH",
     )

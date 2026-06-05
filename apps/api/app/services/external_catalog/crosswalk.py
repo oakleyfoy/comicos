@@ -10,6 +10,7 @@ from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.external_catalog.league_of_comic_geeks import LOCG_SOURCE_NAME
 from app.services.external_catalog.normalization import build_normalized_title_key
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
+from app.services.printing_intelligence import stamp_original_release_from_external
 
 MATCH_MATCHED = "MATCHED_RELEASE_ISSUE"
 MATCH_MISSING = "MISSING_FROM_LUNAR"
@@ -191,6 +192,15 @@ def rebuild_external_catalog_crosswalk(
 
             row.updated_at = utc_now()
             session.add(row)
+        if status == MATCH_MATCHED and release_id is not None:
+            release_row = session.get(ReleaseIssue, release_id)
+            if release_row is not None:
+                stamp_original_release_from_external(
+                    release_row,
+                    release_date=ext.release_date,
+                    title=ext.title or ext.series_name,
+                )
+                session.add(release_row)
         counts[status] = counts.get(status, 0) + 1
 
     session.commit()

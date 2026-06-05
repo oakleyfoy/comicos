@@ -26,6 +26,8 @@ class ReleaseIssueRead(BaseModel):
     title: str
     foc_date: date | None
     release_date: date | None
+    original_foc_date: date | None = None
+    original_release_date: date | None = None
     cover_price: float
     release_status: str
     created_at: datetime
@@ -44,6 +46,10 @@ class ReleaseVariantRead(BaseModel):
     variant_type: str
     cover_artist: str | None
     source_item_code: str
+    printing_number: int | None = None
+    printing_kind: str = "FIRST_PRINT"
+    printing_foc_date: date | None = None
+    printing_release_date: date | None = None
     created_at: datetime
 
 
@@ -82,6 +88,10 @@ class ReleaseVariantImport(BaseModel):
     variant_type: str
     cover_artist: str | None = None
     source_item_code: str = ""
+    printing_number: int | None = None
+    printing_kind: str = "FIRST_PRINT"
+    printing_foc_date: date | None = None
+    printing_release_date: date | None = None
 
 
 class ReleaseIssueImport(BaseModel):

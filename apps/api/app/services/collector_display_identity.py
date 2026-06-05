@@ -95,11 +95,12 @@ def format_collector_issue_display(
 
 
 def format_from_release(*, series: ReleaseSeries, issue: ReleaseIssue) -> str:
+    retail_date = issue.original_release_date or issue.release_date
     return format_collector_issue_display(
         series_name=series.series_name,
         issue_number=issue.issue_number,
         title=issue.title,
-        release_date=issue.release_date,
+        release_date=retail_date,
     )
 
 

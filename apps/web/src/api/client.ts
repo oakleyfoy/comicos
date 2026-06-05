@@ -15482,6 +15482,11 @@ export interface RecommendationDecisionRead {
   expected_roi_range: string;
   foc_date: string | null;
   release_date: string | null;
+  original_foc_date?: string | null;
+  original_release_date?: string | null;
+  printing_foc_date?: string | null;
+  printing_release_date?: string | null;
+  printing_badge?: { label: string; kind: string; printing_number?: number | null } | null;
   decision_headline: string;
   cover_purchase_plan?: CoverPurchasePlanRow[];
   quantity_reasoning?: QuantityReasoningRead | null;

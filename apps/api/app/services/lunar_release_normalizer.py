@@ -17,6 +17,7 @@ from app.services.lunar_variant_identity import (
     build_issue_release_uuid,
     build_variant_uuid,
 )
+from app.services.printing_intelligence import parse_printing_from_lunar_row
 
 DATE_FORMATS = ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y")
 
@@ -100,6 +101,7 @@ def normalize_lunar_rows(rows: list[dict[str, str]]) -> tuple[ReleaseImportFeedR
                 variant_desc = _pick(row, "VariantDesc", "VARIANT_DESC", "VariantDescription", "Variant Name", "VariantName")
                 upc = _pick(row, "UPC", "UPC_NO", "UPCNo", "ISBN", "EAN")
                 source_code = row_product_code(row) or upc
+                printing = parse_printing_from_lunar_row(row)
                 classification = classify_lunar_variant(
                     title=title,
                     variant_desc=variant_desc,
@@ -113,6 +115,21 @@ def normalize_lunar_rows(rows: list[dict[str, str]]) -> tuple[ReleaseImportFeedR
                 if variant_uuid in seen_variant_uuids:
                     continue
                 seen_variant_uuids.add(variant_uuid)
+                row_foc = _parse_date(_pick(row, "FOCDate", "FOC Date", "foc_date"))
+                row_release = _parse_date(_pick(row, "InStoreDate", "In-Store Date", "In Store Date", "release_date"))
+                row_price = _parse_float(_pick(row, "CoverPrice", "Cover Price", "Retail", "cover_price"))
+                variant_foc = row_foc
+                variant_release = row_release
+                if printing.is_reprint_line:
+                    variant_foc = row_foc
+                    variant_release = row_release
+                else:
+                    if row_foc is not None:
+                        foc_date = row_foc if foc_date is None else min(foc_date, row_foc)
+                    if row_release is not None:
+                        release_date = row_release if release_date is None else min(release_date, row_release)
+                if row_price > 0:
+                    cover_price = row_price
                 variants.append(
                     ReleaseVariantImport(
                         variant_uuid=variant_uuid,
@@ -123,17 +140,12 @@ def normalize_lunar_rows(rows: list[dict[str, str]]) -> tuple[ReleaseImportFeedR
                         variant_type=classification.variant_type,
                         cover_artist=classification.cover_artist,
                         source_item_code=source_code,
+                        printing_number=printing.printing_number,
+                        printing_kind=printing.printing_kind,
+                        printing_foc_date=variant_foc if printing.is_reprint_line else None,
+                        printing_release_date=variant_release if printing.is_reprint_line else None,
                     )
                 )
-                row_foc = _parse_date(_pick(row, "FOCDate", "FOC Date", "foc_date"))
-                row_release = _parse_date(_pick(row, "InStoreDate", "In-Store Date", "In Store Date", "release_date"))
-                row_price = _parse_float(_pick(row, "CoverPrice", "Cover Price", "Retail", "cover_price"))
-                if row_foc is not None:
-                    foc_date = row_foc
-                if row_release is not None:
-                    release_date = row_release
-                if row_price > 0:
-                    cover_price = row_price
 
             if not variants:
                 errors.append((release_uuid, "MISSING_VARIANT", "No variants extracted for issue group"))

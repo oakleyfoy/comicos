@@ -414,8 +414,16 @@ def compute_recommendation_decision(
             reason_codes.append("MARKET_DEMAND")
     if len(rec.source_systems) >= 2:
         reason_codes.append("MULTI_SOURCE")
-    if issue and issue.foc_date is not None:
-        foc_days = days_until_foc(issue.foc_date, today=utc_today())
+    from app.schemas.printing_intelligence import PrintingBadgeRead
+    from app.services.printing_intelligence import resolve_printing_schedule
+
+    release_variants_for_printing = ctx.variants_by_issue.get(issue_id or -1, [])
+    printing_ctx = resolve_printing_schedule(issue, release_variants_for_printing)
+    effective_foc = (
+        printing_ctx.printing_foc_date or printing_ctx.original_foc_date if issue else None
+    )
+    if effective_foc is not None:
+        foc_days = days_until_foc(effective_foc, today=utc_today())
         if foc_days is not None and foc_days <= 14:
             reason_codes.append("FOC_URGENCY")
     rationale_lower = rec.rationale.lower()
@@ -443,11 +451,18 @@ def compute_recommendation_decision(
     if not reason_summary and rec.rationale:
         reason_summary.append(rec.rationale[:160])
 
-    foc_date = issue.foc_date if issue else None
-    release_date = issue.release_date if issue else None
+    foc_date = printing_ctx.original_foc_date if issue else None
+    release_date = printing_ctx.original_release_date if issue else None
+    printing_badge = None
+    if printing_ctx.printing_badge:
+        printing_badge = PrintingBadgeRead(
+            label=printing_ctx.printing_badge,
+            kind=printing_ctx.printing_kind,
+            printing_number=printing_ctx.printing_number,
+        )
     foc_active = False
-    if issue and issue.foc_date is not None:
-        foc_days = days_until_foc(issue.foc_date, today=utc_today())
+    if effective_foc is not None:
+        foc_days = days_until_foc(effective_foc, today=utc_today())
         foc_active = foc_days is not None and foc_days <= 21
 
     variant_recs = ctx.variant_recs_by_release.get(release_id or -1, [])
@@ -514,6 +529,11 @@ def compute_recommendation_decision(
         expected_roi_range=_roi_range(strategy=strategy, action=action, priority=decision_priority),
         foc_date=foc_date,
         release_date=release_date,
+        original_foc_date=printing_ctx.original_foc_date,
+        original_release_date=printing_ctx.original_release_date,
+        printing_foc_date=printing_ctx.printing_foc_date,
+        printing_release_date=printing_ctx.printing_release_date,
+        printing_badge=printing_badge,
         decision_headline=_headline(action, quantity if quantity else 1),
         cover_purchase_plan=cover_plan,
         quantity_reasoning=build_quantity_reasoning(

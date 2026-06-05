@@ -1,11 +1,6 @@
 import type { RecommendationDecisionRead, SignalMatrixRead } from "../api/client";
-
-function formatDate(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-}
+import { PrintingBadge } from "./PrintingBadge";
+import { formatCalendarDate } from "../utils/formatCalendarDate";
 
 function strategyLabel(strategy: string): string {
   return strategy.replace(/_/g, " ");
@@ -59,8 +54,10 @@ function SignalChart({
 }
 
 export function RecommendationDecisionPanel({ decision, compact = false }: Props): JSX.Element {
-  const foc = formatDate(decision.foc_date);
-  const release = formatDate(decision.release_date);
+  const foc = formatCalendarDate(decision.foc_date);
+  const release = formatCalendarDate(decision.release_date);
+  const printFoc = formatCalendarDate(decision.printing_foc_date);
+  const printRelease = formatCalendarDate(decision.printing_release_date);
   const isPurchase = decision.action === "BUY" || decision.action === "BUY_AGGRESSIVE";
   const filteredPlan = decision.cover_purchase_plan?.filter((row) => row.recommended_quantity > 0) ?? [];
   const plan =
@@ -103,16 +100,27 @@ export function RecommendationDecisionPanel({ decision, compact = false }: Props
           </p>
         </div>
       ) : null}
-      {(foc || release) && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/80">
+      {(foc || release || printFoc || printRelease || decision.printing_badge) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/80">
+          <PrintingBadge badge={decision.printing_badge} />
           {foc ? (
             <span>
-              FOC: <span className="text-white">{foc}</span>
+              Original FOC: <span className="text-white">{foc}</span>
             </span>
           ) : null}
           {release ? (
             <span>
-              Release: <span className="text-white">{release}</span>
+              Original release: <span className="text-white">{release}</span>
+            </span>
+          ) : null}
+          {printFoc ? (
+            <span>
+              Printing FOC: <span className="text-white">{printFoc}</span>
+            </span>
+          ) : null}
+          {printRelease ? (
+            <span>
+              Printing release: <span className="text-white">{printRelease}</span>
             </span>
           ) : null}
         </div>

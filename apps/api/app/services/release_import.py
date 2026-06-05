@@ -19,6 +19,7 @@ from app.services.lunar_issue_resolution import (
     maybe_promote_canonical_uuid,
     resolve_canonical_issue_for_import,
 )
+from app.services.printing_intelligence import apply_reprint_issue_guard, issue_import_is_reprint_only
 
 
 def import_series(session: Session, *, owner_user_id: int, payload: ReleaseSeriesImport) -> tuple[ReleaseSeries, bool]:
@@ -69,6 +70,8 @@ def import_issues(
                 payload=payload,
             )
             _apply_issue_import(existing, payload)
+            if issue_import_is_reprint_only(variants=payload.variants):
+                apply_reprint_issue_guard(existing)
             session.add(existing)
             session.commit()
             session.refresh(existing)
@@ -84,6 +87,8 @@ def import_issues(
             title=payload.title,
             foc_date=payload.foc_date,
             release_date=payload.release_date,
+            original_foc_date=payload.foc_date,
+            original_release_date=payload.release_date,
             cover_price=payload.cover_price,
             release_status=payload.release_status,
         )
@@ -140,6 +145,10 @@ def import_variants(
                 variant_type=payload.variant_type,
                 cover_artist=payload.cover_artist,
                 source_item_code=payload.source_item_code,
+                printing_number=payload.printing_number,
+                printing_kind=payload.printing_kind,
+                printing_foc_date=payload.printing_foc_date,
+                printing_release_date=payload.printing_release_date,
             )
             session.add(row)
             session.commit()
@@ -151,6 +160,12 @@ def import_variants(
             row.is_incentive_variant = payload.is_incentive_variant
             row.cover_artist = payload.cover_artist
             row.source_item_code = payload.source_item_code or row.source_item_code
+            row.printing_number = payload.printing_number
+            row.printing_kind = payload.printing_kind
+            if payload.printing_foc_date is not None:
+                row.printing_foc_date = payload.printing_foc_date
+            if payload.printing_release_date is not None:
+                row.printing_release_date = payload.printing_release_date
             if payload.variant_uuid and not row.variant_uuid:
                 row.variant_uuid = payload.variant_uuid
             session.add(row)

@@ -8,12 +8,15 @@ from app.services.lunar_issue_identity import is_canonical_lunar_issue_uuid
 
 
 def _apply_issue_import(row: ReleaseIssue, payload: ReleaseIssueImport) -> None:
+    from app.services.printing_intelligence import merge_first_print_issue_dates
+
     row.issue_number = payload.issue_number
     row.title = payload.title
-    if payload.foc_date is not None:
-        row.foc_date = payload.foc_date
-    if payload.release_date is not None:
-        row.release_date = payload.release_date
+    merge_first_print_issue_dates(
+        row,
+        foc_date=payload.foc_date,
+        release_date=payload.release_date,
+    )
     if payload.cover_price > 0:
         row.cover_price = payload.cover_price
     row.release_status = payload.release_status

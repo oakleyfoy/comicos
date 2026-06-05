@@ -10,6 +10,7 @@ Turns **buy this book** into **buy this cover**, **this many copies**, with cite
 | P66-02 Quantity Intelligence | `quantity_intelligence_service` | `/api/v1/quantity-intelligence` |
 | P66-03 Market Pricing (stub) | `market_pricing_service` | `/api/v1/market-pricing` |
 | P66-04 Variant Decision | `variant_decision_engine` | `/api/v1/variant-decision` |
+| P66-06 Printing Intelligence | `printing_intelligence` | Lunar import + decision/cross-system UI |
 
 Orchestration: `POST /api/v1/variant-decision/platform/build`  
 Integration for P65 workspace: `GET /api/v1/variant-decision/integration/latest`
