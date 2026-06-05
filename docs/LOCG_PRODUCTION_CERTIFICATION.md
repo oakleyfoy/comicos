@@ -33,8 +33,10 @@ cd apps/api
 export DATABASE_URL=postgresql+pg8000://postgres:postgres@localhost:5433/comic_os
 python scripts/capture_locg_date_details_browser.py \
   --production --email ofoy@att.net \
-  --date YYYY-MM-DD --headful --save-raw --adaptive-delay
+  --date YYYY-MM-DD --headful --save-raw --adaptive-delay --skip-crosswalk
 ```
+
+Crosswalk is **skipped by default**. Use `--run-crosswalk` only when you need a full owner-wide `rebuild_external_catalog_crosswalk` in the same session (slow on large catalogs).
 
 ## Historical backfill
 

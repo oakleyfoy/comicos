@@ -23,7 +23,7 @@
 ```bash
 python scripts/capture_locg_date_details_browser.py \
   --production --email ofoy@att.net \
-  --date YYYY-MM-DD --headful --save-raw --adaptive-delay
+  --date YYYY-MM-DD --headful --save-raw --adaptive-delay --skip-crosswalk
 ```
 
 ## Operational estimates

@@ -61,6 +61,7 @@ def main() -> int:
                 "--headful",
                 "--save-raw",
                 "--adaptive-delay",
+                "--skip-crosswalk",
             ],
             cwd=str(ROOT),
             env=env,

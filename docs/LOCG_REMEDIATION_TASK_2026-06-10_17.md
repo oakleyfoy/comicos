@@ -17,7 +17,7 @@ Recapture these Wednesday release weeks with **current queue-v1** certification 
 From `apps/api`, with production DB and headful browser as usual:
 
 ```bash
-python scripts/capture_locg_date_details_browser.py --production --email ofoy@att.net --date <YYYY-MM-DD> --headful --save-raw --adaptive-delay
+python scripts/capture_locg_date_details_browser.py --production --email ofoy@att.net --date <YYYY-MM-DD> --headful --save-raw --adaptive-delay --skip-crosswalk
 ```
 
 Run **2026-06-10** first, then **2026-06-17**. Do not batch other weeks in the same session unless explicitly requested.
@@ -31,7 +31,7 @@ Read `data/locg_browser_capture/<date>/locg_capture_certification.json` and conf
 3. **Variant queue coverage:** `list_variants_persisted == final_variant_queue_count` (and found matches queue).
 4. **No duplicate-inflated pass:** if `duplicate_parent_li_rows` or `duplicate_variant_li_rows` > 0, cert must still require queue equality (warnings OK; DOM row counts must not substitute for queue counts).
 5. **`skipped_missing_parent` == 0** and **`variant_upsert_failure` == 0** unless documented unavoidable cases.
-6. **Shell:** prefer clean **exit 0**; if post-cert stall occurs, artifact PASS still governs.
+6. **Shell:** prefer clean **exit 0**; summary JSON should show `crosswalk_skipped: true` (use `--skip-crosswalk` in docs; default is skip unless `--run-crosswalk`).
 
 **Stop** on cert fail, persist gaps, 429/Cloudflare escalation, or parent succeeded &lt; queue count.
 

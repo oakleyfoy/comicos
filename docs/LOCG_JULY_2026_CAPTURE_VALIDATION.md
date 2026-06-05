@@ -7,7 +7,7 @@ cd apps/api
 export DATABASE_URL=postgresql+pg8000://postgres:postgres@localhost:5433/comic_os
 python scripts/capture_locg_date_details_browser.py \
   --production --email ofoy@att.net \
-  --date YYYY-MM-DD --headful --save-raw --adaptive-delay
+  --date YYYY-MM-DD --headful --save-raw --adaptive-delay --skip-crosswalk
 ```
 
 Baseline proof (pre-forward): **2026-06-24**, **2026-07-01** — PASS.

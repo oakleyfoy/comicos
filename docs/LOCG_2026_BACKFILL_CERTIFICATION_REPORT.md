@@ -90,5 +90,6 @@ Shell exit `4294967295` (force-stop) or missing JSON footer after certification;
 ## Operational follow-ups
 
 1. **Remediation (open):** [LOCG_REMEDIATION_TASK_2026-06-10_17.md](LOCG_REMEDIATION_TASK_2026-06-10_17.md) — recapture **2026-06-10** and **2026-06-17** under queue-v1 before permanent platform sign-off.
-2. Post-cert CLI hang mitigated: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.
-3. Regenerate this file after remediation (or any cert change): `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.
+2. Post-cert crosswalk: capture script skips `rebuild_external_catalog_crosswalk` by default; use `--run-crosswalk` only when needed (`--skip-crosswalk` in backfill docs).
+3. Post-cert CLI hang mitigated: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.
+4. Regenerate this file after remediation (or any cert change): `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.

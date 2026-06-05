@@ -49,7 +49,16 @@ class PilotSummary:
     sync_run_id: int | None = None
     status: str = "FAILED"
     dry_run: bool = False
+    crosswalk_skipped: bool = True
+    crosswalk_seconds: float | None = None
     performance_audit: dict[str, object] = field(default_factory=dict)
+
+
+def resolve_run_crosswalk(*, run_crosswalk: bool, skip_crosswalk: bool) -> bool:
+    """Crosswalk is off by default; only --run-crosswalk enables it."""
+    if run_crosswalk and skip_crosswalk:
+        raise ValueError("cannot use both --run-crosswalk and --skip-crosswalk")
+    return run_crosswalk
 
 
 def _pilot_summary_for_stdout(summary: PilotSummary) -> dict[str, object]:
@@ -142,6 +151,16 @@ def main() -> int:
     parser.add_argument("--save-raw", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--refresh-existing", action="store_true")
+    parser.add_argument(
+        "--skip-crosswalk",
+        action="store_true",
+        help="Skip owner-wide crosswalk rebuild after capture (default when --run-crosswalk is not set).",
+    )
+    parser.add_argument(
+        "--run-crosswalk",
+        action="store_true",
+        help="Rebuild external catalog crosswalk after capture (slow; scans full LoCG catalog).",
+    )
     args = parser.parse_args()
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -154,6 +173,14 @@ def main() -> int:
         return 1
     if args.min_delay_seconds > args.max_delay_seconds:
         print("error: --min-delay-seconds must be <= --max-delay-seconds", file=sys.stderr)
+        return 1
+    try:
+        run_crosswalk = resolve_run_crosswalk(
+            run_crosswalk=args.run_crosswalk,
+            skip_crosswalk=args.skip_crosswalk,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
 
     page_date = date.fromisoformat(args.date)
@@ -384,12 +411,18 @@ def main() -> int:
             summary.sync_run_id = run.id
             summary.status = status
 
-            t_xw = time.perf_counter()
-            crosswalk_counts = rebuild_external_catalog_crosswalk(
-                session, owner_user_id=owner_user_id
-            )
-            timing_audit.crosswalk_end_seconds = round(time.perf_counter() - t_xw, 3)
-            summary.missing_from_lunar_count = int(crosswalk_counts.get("missing_from_lunar", 0))
+            summary.crosswalk_skipped = not run_crosswalk
+            summary.crosswalk_seconds = None
+            if run_crosswalk:
+                t_xw = time.perf_counter()
+                crosswalk_counts = rebuild_external_catalog_crosswalk(
+                    session, owner_user_id=owner_user_id
+                )
+                summary.crosswalk_seconds = round(time.perf_counter() - t_xw, 3)
+                timing_audit.crosswalk_end_seconds = summary.crosswalk_seconds
+                summary.missing_from_lunar_count = int(
+                    crosswalk_counts.get("missing_from_lunar", 0)
+                )
 
             from sqlmodel import select
 
