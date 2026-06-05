@@ -189,11 +189,27 @@ def main() -> None:
 
     body += "\n## Per-week detail\n\n"
     body += markdown_table(rows)
+    june_remediation_done = all(
+        r["passed"] and r["has_queue_cert"]
+        for r in rows
+        if r["week"] in ("2026-06-10", "2026-06-17")
+    )
     body += "\n\n## Operational follow-ups\n\n"
+    if june_remediation_done and not incomplete:
+        body += (
+            "1. **June 2026 remediation:** complete — **2026-06-10** and **2026-06-17** queue-v1 PASS "
+            "(see [LOCG_REMEDIATION_TASK_2026-06-10_17.md](LOCG_REMEDIATION_TASK_2026-06-10_17.md)).\n"
+        )
+    else:
+        body += (
+            "1. **Remediation (open):** [LOCG_REMEDIATION_TASK_2026-06-10_17.md](LOCG_REMEDIATION_TASK_2026-06-10_17.md) "
+            "until incomplete weeks are recaptured.\n"
+        )
     body += (
-        "1. **Recapture** weeks listed under incomplete legacy captures before treating Jan–Aug as fully production-certified.\n"
-        "2. Post-cert CLI hang mitigated: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.\n"
-        "3. Regenerate this file: `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.\n"
+        "2. Post-cert crosswalk: capture script skips `rebuild_external_catalog_crosswalk` by default; "
+        "use `--run-crosswalk` only when needed (`--skip-crosswalk` in backfill docs).\n"
+        "3. Post-cert CLI: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.\n"
+        "4. Regenerate this file: `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.\n"
     )
 
     OUT_PATH.write_text(body, encoding="utf-8")

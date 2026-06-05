@@ -1,16 +1,14 @@
 # LoCG remediation task — partial June 2026 weeks
 
-**Status:** Open (not urgent)  
-**Blocks:** Declaring the LoCG ingestion platform permanently complete for Jan–Aug 2026.
+**Status:** Complete (2026-06-05)  
+**Outcome:** Both weeks recaptured with queue-v1 PASS artifacts.
 
-## Scope
+## Scope (resolved)
 
-Recapture these Wednesday release weeks with **current queue-v1** certification (`LoCG-Certified-v1` / deduped queue counts):
-
-| Week | Why |
-|------|-----|
-| **2026-06-10** | Legacy artifact `passed: true` but only **45** parent details vs **75** DOM parents. |
-| **2026-06-17** | Legacy artifact `passed: true` but only **47** parent details vs **85** DOM parents. |
+| Week | Prior issue | Current artifact |
+|------|-------------|------------------|
+| **2026-06-10** | Legacy partial capture (45 parents) | queue-v1 **218/218** parents, **476/476** variants |
+| **2026-06-17** | Legacy partial capture (47 parents) | queue-v1 **147/147** parents, **331/331** variants (dup DOM warning only) |
 
 ## Command (one date per run)
 
@@ -20,31 +18,12 @@ From `apps/api`, with production DB and headful browser as usual:
 python scripts/capture_locg_date_details_browser.py --production --email ofoy@att.net --date <YYYY-MM-DD> --headful --save-raw --adaptive-delay --skip-crosswalk
 ```
 
-Run **2026-06-10** first, then **2026-06-17**. Do not batch other weeks in the same session unless explicitly requested.
+## Verification checklist (both weeks satisfied)
 
-## Verification (each week)
+- `passed: true` with queue v1 fields and `parent_queue_coverage_passed` / `variant_queue_coverage_passed`
+- Parent and variant queue equality with persistence counts
+- `skipped_missing_parent` == 0, `variant_upsert_failure` == 0
 
-Read `data/locg_browser_capture/<date>/locg_capture_certification.json` and confirm:
+Artifacts: `data/locg_browser_capture/2026-06-10/` and `.../2026-06-17/locg_capture_certification.json`.
 
-1. **`passed: true`** with **queue v1 fields** present (`final_parent_issue_queue_count`, `final_variant_queue_count`, `proof_run_assessment.parent_queue_coverage_passed` / `variant_queue_coverage_passed`).
-2. **Parent queue coverage:** `detail_pages_succeeded == final_parent_issue_queue_count` (and attempted matches queue).
-3. **Variant queue coverage:** `list_variants_persisted == final_variant_queue_count` (and found matches queue).
-4. **No duplicate-inflated pass:** if `duplicate_parent_li_rows` or `duplicate_variant_li_rows` > 0, cert must still require queue equality (warnings OK; DOM row counts must not substitute for queue counts).
-5. **`skipped_missing_parent` == 0** and **`variant_upsert_failure` == 0** unless documented unavoidable cases.
-6. **Shell:** prefer clean **exit 0**; summary JSON should show `crosswalk_skipped: true` (use `--skip-crosswalk` in docs; default is skip unless `--run-crosswalk`).
-
-**Stop** on cert fail, persist gaps, 429/Cloudflare escalation, or parent succeeded &lt; queue count.
-
-## After both weeks pass
-
-1. Regenerate cumulative report:  
-   `python scripts/generate_locg_2026_backfill_certification_report.py`
-2. Confirm the report no longer lists **2026-06-10** / **2026-06-17** under *Legacy / incomplete captures*.
-3. Reconcile executive totals (parent/variant sums, queue-v1 week count) if numbers changed.
-4. Optionally append one line per week to `docs/LOCG_BACKFILL_PROGRESS.md`.
-
-## Done when
-
-- Both dates have queue-v1 PASS artifacts with full parent/variant queue coverage.
-- Cumulative certification report reflects the new artifacts.
-- Platform sign-off can proceed for Jan–Aug 2026 (subject to any separate legacy-schema review for May–Aug weeks without queue fields).
+Cumulative report: `docs/LOCG_2026_BACKFILL_CERTIFICATION_REPORT.md` (regenerate via `generate_locg_2026_backfill_certification_report.py`).

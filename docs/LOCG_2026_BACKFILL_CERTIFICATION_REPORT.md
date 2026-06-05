@@ -11,15 +11,15 @@
 | Weeks with certification artifact | 34 |
 | Weeks `passed: true` | 34 |
 | Weeks `passed: false` | 0 |
-| Weeks with queue-based cert fields | 19 |
-| Total parent issues (queue or persisted succeeded) | 7831 |
-| Total variants (queue or persisted) | 12640 |
+| Weeks with queue-based cert fields | 21 |
+| Total parent issues (queue or persisted succeeded) | 8104 |
+| Total variants (queue or persisted) | 12871 |
 | `skipped_missing_parent` (sum) | 0 |
 | `variant_upsert_failure` (sum) | 0 |
 | Cloudflare wait events (sum) | 0 |
 | HTTP 429 count in cert artifacts | *not stored* (operational logs: 0 across backfill) |
-| Total certified runtime (sum of `total_runtime_seconds`) | 12189.3 s (~3.39 h) |
-| Average runtime per week | 358.5 s (~6.0 min) |
+| Total certified runtime (sum of `total_runtime_seconds`) | 12302.3 s (~3.42 h) |
+| Average runtime per week | 361.8 s (~6.0 min) |
 
 ## Data quality notes
 
@@ -27,6 +27,7 @@
 
 - **2026-04-15:** duplicate parent `35`, variant `130` (queue parents `212`, variants `386`).
 - **2026-05-13:** duplicate parent `33`, variant `132` (queue parents `239`, variants `415`).
+- **2026-06-17:** duplicate parent `35`, variant `135` (queue parents `147`, variants `331`).
 
 ### Lighter release weeks (assessment flag)
 
@@ -45,8 +46,7 @@ Shell exit `4294967295` (force-stop) or missing JSON footer after certification;
 
 ### Legacy / incomplete captures (artifact `passed` but parent gap)
 
-- **2026-06-10:** DOM parents `75`, detail succeeded `45` — **recapture recommended** under queue v1.
-- **2026-06-17:** DOM parents `85`, detail succeeded `47` — **recapture recommended** under queue v1.
+- None detected (excluding duplicate-DOM weeks where queue cert passed).
 
 ## Per-week detail
 
@@ -74,8 +74,8 @@ Shell exit `4294967295` (force-stop) or missing JSON footer after certification;
 | 2026-05-20 | PASS | legacy | 666 | 268 | 398 | 403.7 | 0 | legacy cert JSON |
 | 2026-05-27 | PASS | legacy | 634 | 267 | 367 | 401.2 | 0 | legacy cert JSON |
 | 2026-06-03 | PASS | legacy | 522 | 256 | 266 | 375.9 | 0 | legacy cert JSON |
-| 2026-06-10 | PASS | legacy | 504 | 45 | 291 | 64.6 | 0 | legacy cert JSON; INCOMPLETE dom_parents=75 ok=45 |
-| 2026-06-17 | PASS | legacy | 505 | 47 | 285 | 395.1 | 0 | legacy cert JSON; INCOMPLETE dom_parents=85 ok=47 |
+| 2026-06-10 | PASS | queue v1 | 694 | 218 | 476 | 321.0 | 0 | — |
+| 2026-06-17 | PASS | queue v1 | 648 | 147 | 331 | 251.7 | 0 | dup DOM +35/+135; warning |
 | 2026-06-24 | PASS | legacy | 589 | 185 | 404 | 275.3 | 0 | legacy cert JSON |
 | 2026-07-01 | PASS | legacy | 495 | 159 | 336 | 230.6 | 0 | legacy cert JSON |
 | 2026-07-08 | PASS | legacy | 419 | 130 | 289 | 197.0 | 0 | legacy cert JSON |
@@ -89,7 +89,7 @@ Shell exit `4294967295` (force-stop) or missing JSON footer after certification;
 
 ## Operational follow-ups
 
-1. **Remediation (open):** [LOCG_REMEDIATION_TASK_2026-06-10_17.md](LOCG_REMEDIATION_TASK_2026-06-10_17.md) — recapture **2026-06-10** and **2026-06-17** under queue-v1 before permanent platform sign-off.
+1. **June 2026 remediation:** complete — **2026-06-10** and **2026-06-17** queue-v1 PASS (see [LOCG_REMEDIATION_TASK_2026-06-10_17.md](LOCG_REMEDIATION_TASK_2026-06-10_17.md)).
 2. Post-cert crosswalk: capture script skips `rebuild_external_catalog_crosswalk` by default; use `--run-crosswalk` only when needed (`--skip-crosswalk` in backfill docs).
-3. Post-cert CLI hang mitigated: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.
-4. Regenerate this file after remediation (or any cert change): `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.
+3. Post-cert CLI: default path omits `per_issue_timings` from stdout JSON; use `--timing-table` for full dumps.
+4. Regenerate this file: `python scripts/generate_locg_2026_backfill_certification_report.py` from `apps/api`.
