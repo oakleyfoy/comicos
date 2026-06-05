@@ -11,7 +11,16 @@ Internal certification uses `locg_capture_certification.json` (not distributor s
 
 ## July 2026 forward validation
 
-See `LOCG_JULY_2026_CAPTURE_VALIDATION.md` (filled after 2026-07-08 … 2026-07-29 runs).
+See `LOCG_JULY_2026_CAPTURE_VALIDATION.md`.
+
+**Status (2026-06-05):** 2026-07-08, 07-15, 07-22 **PASS**; **2026-07-29 FAIL** (317 rows, below proof threshold 400). Production certified for pipeline use; full July forward gate **open** until 07-29 resolved.
+
+## Production certified (browser capture)
+
+Certified when internal `locg_capture_certification.json` passes with scroll discovery, variant persistence, and proof row count ≥400 (or documented exception).
+
+- 2026-06-24, 2026-07-01, 2026-07-08, 2026-07-15, 2026-07-22
+- Pending: 2026-07-29
 
 ## Command (production)
 
