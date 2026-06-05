@@ -248,6 +248,14 @@ from app.models.grading_validation import (
     GradingValidationExecution,
 )
 from app.models.release_imports import ReleaseImportError, ReleaseImportFile, ReleaseImportRun
+from app.models.external_catalog import (
+    ExternalCatalogCreator,
+    ExternalCatalogIssue,
+    ExternalCatalogMatch,
+    ExternalCatalogSource,
+    ExternalCatalogSyncRun,
+    ExternalCatalogVariant,
+)
 from app.models.lunar_feed import LunarFeedError, LunarFeedRawRow, LunarFeedRun, LunarFocAlert
 from app.models.lunar_scheduler import LunarScheduleConfig, LunarScheduledRun, LunarScheduledRunError
 from app.models.release_intelligence import (
@@ -1078,6 +1086,12 @@ __all__ = [
     "ReleaseImportRun",
     "ReleaseImportFile",
     "ReleaseImportError",
+    "ExternalCatalogSource",
+    "ExternalCatalogIssue",
+    "ExternalCatalogVariant",
+    "ExternalCatalogCreator",
+    "ExternalCatalogSyncRun",
+    "ExternalCatalogMatch",
     "LunarFeedRun",
     "LunarFeedRawRow",
     "LunarFeedError",

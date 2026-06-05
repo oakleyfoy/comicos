@@ -33,6 +33,9 @@ dev = [
   "pytest>=8.3,<9.0",
   "ruff>=0.6,<1.0"
 ]
+browser = [
+  "playwright>=1.49,<2.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
