@@ -15,6 +15,7 @@ from app.services.printing_intelligence import (
     parse_printing_profile,
     resolve_printing_schedule,
 )
+from app.services.printing_backfill import build_proposal, classify_confidence, load_lunar_reprint_index, run_backfill
 from app.services.release_import import import_release_feed
 from sqlmodel import Session, select
 
@@ -174,3 +175,68 @@ def test_reprint_import_does_not_overwrite_first_print_dates(client) -> None:
         assert ctx.printing_badge == "4th Printing"
         assert ctx.printing_release_date == date(2026, 6, 17)
         assert ctx.original_release_date == date(2026, 3, 11)
+
+
+def test_tigress_backfill_high_confidence(client) -> None:
+    from app.db.session import get_engine
+    from app.models import User
+    from app.models.lunar_feed import LunarFeedRawRow
+
+    email = "printing-backfill-tigress@example.com"
+    register_and_login(client, email)
+    with Session(get_engine()) as session:
+        owner = session.exec(select(User).where(User.email == email)).one()
+        owner_id = int(owner.id or 0)
+        polluted = ReleaseImportFeedRequest.model_validate(
+            {
+                "series": [
+                    {
+                        "publisher": "Image Comics",
+                        "series_name": "Tigress Island",
+                        "series_type": "ONGOING",
+                        "status": "ACTIVE",
+                        "issues": [
+                            {
+                                "release_uuid": "ti-polluted-1",
+                                "issue_number": "1",
+                                "title": "Tigress Island #1",
+                                "foc_date": "2026-05-25",
+                                "release_date": "2026-06-17",
+                                "cover_price": 3.99,
+                                "release_status": "SCHEDULED",
+                                "variants": [
+                                    {
+                                        "variant_name": "Standard Cover",
+                                        "variant_type": "OPEN_ORDER",
+                                        "source_item_code": "0426IM8399",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        import_release_feed(session, owner_user_id=owner_id, payload=polluted)
+        session.add(
+            LunarFeedRawRow(
+                feed_run_id=1,
+                row_index=1,
+                product_code="0426IM8399",
+                row_payload_json={
+                    "Code": "0426IM8399",
+                    "Title": "TIGRESS ISLAND #1 (OF 5) 4TH PTG (MR)",
+                    "Printing": "4",
+                    "FOCDate": "5/25/2026",
+                    "InStoreDate": "6/17/2026",
+                },
+            )
+        )
+        session.commit()
+
+        report = run_backfill(session, owner_user_id=owner_id, apply=False)
+        tigress = report.get("tigress_island_1")
+        assert tigress is not None
+        assert tigress["confidence"] == "HIGH"
+        assert tigress["known_first_print_release"] == "2026-03-11"
+        assert tigress["proposed_ui_badge_after_backfill"] == "4th Printing"
