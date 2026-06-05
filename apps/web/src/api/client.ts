@@ -17009,7 +17009,22 @@ export const apiClient = {
   },
 
   getGmailImports(): Promise<GmailImportedDraft[]> {
-    return request<GmailImportedDraft[]>("/gmail/imports");
+    const timeoutMs = 30_000;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    return request<GmailImportedDraft[]>("/gmail/imports", { signal: controller.signal })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new ApiError(
+            "Loading Gmail imports timed out. Try again, or open a draft from Imports for full detail.",
+            408,
+          );
+        }
+        throw error;
+      });
   },
 
   getOpsDashboard(): Promise<OpsDashboardResponse> {

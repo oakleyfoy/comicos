@@ -2420,8 +2420,13 @@ def gmail_sync_settings(
 def gmail_imports(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[GmailImportedDraftRead]:
-    return serialize_gmail_import_drafts(session=session, current_user=current_user)
+    return serialize_gmail_import_drafts(
+        session=session,
+        current_user=current_user,
+        limit=limit,
+    )
 
 
 @app.post(

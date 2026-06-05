@@ -653,6 +653,93 @@ def test_scheduled_runner_prevents_duplicate_active_syncs(
     }
 
 
+def seed_gmail_import_record(
+    session: Session,
+    *,
+    account: GmailAccount,
+    owner: User,
+    external_message_id: str,
+    imported_at: datetime,
+    status: str = "draft",
+) -> GmailImportRecord:
+    draft_import = DraftImport(
+        user_id=owner.id,
+        raw_text=f"Receipt body for {external_message_id}",
+        parsed_payload_json=build_mock_draft().model_dump(mode="json"),
+        confidence_score=Decimal("0.66"),
+        status=status,
+        created_at=imported_at,
+        updated_at=imported_at,
+    )
+    session.add(draft_import)
+    session.commit()
+    session.refresh(draft_import)
+    record = GmailImportRecord(
+        gmail_account_id=account.id,
+        external_message_id=external_message_id,
+        draft_import_id=draft_import.id,
+        imported_at=imported_at,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def test_gmail_imports_list_is_lightweight_and_respects_limit(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    configure_gmail(monkeypatch)
+    token = register_and_login(client)
+    owner = session.exec(select(User).where(User.email == "gmail@example.com")).one()
+    account = GmailAccount(
+        user_id=owner.id,
+        gmail_email="owner@gmail.com",
+        google_subject_id="google-subject-123",
+        access_token_encrypted=encrypt_secret_value("access-token"),
+        refresh_token_encrypted=encrypt_secret_value("refresh-token"),
+        token_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+
+    base_time = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    for index in range(3):
+        seed_gmail_import_record(
+            session,
+            account=account,
+            owner=owner,
+            external_message_id=f"msg-{index}",
+            imported_at=base_time + timedelta(hours=index),
+        )
+
+    def fail_if_cover_prefetch(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("list_cover_reads_for_draft should not run for GET /gmail/imports")
+
+    monkeypatch.setattr(
+        "app.services.imports.list_cover_reads_for_draft",
+        fail_if_cover_prefetch,
+    )
+
+    default_response = client.get("/gmail/imports", headers=auth_headers(token))
+    assert default_response.status_code == 200
+    default_payload = default_response.json()
+    assert len(default_payload) == 3
+    assert default_payload[0]["external_message_id"] == "msg-2"
+    assert default_payload[0]["draft_import"]["cover_images"] == []
+    assert default_payload[0]["draft_import"]["cover_image_count"] == 0
+
+    limited_response = client.get("/gmail/imports?limit=2", headers=auth_headers(token))
+    assert limited_response.status_code == 200
+    limited_payload = limited_response.json()
+    assert len(limited_payload) == 2
+    assert [row["external_message_id"] for row in limited_payload] == ["msg-2", "msg-1"]
+
+
 def test_failed_gmail_sync_updates_status_and_safe_error(
     client: TestClient,
     session: Session,

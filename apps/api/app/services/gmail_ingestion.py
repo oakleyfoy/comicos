@@ -26,7 +26,7 @@ from app.schemas.gmail import (
     GmailSyncStatusResponse,
 )
 from app.services.ai_order_parser import AiOrderParserError, parse_order_draft_from_text
-from app.services.imports import serialize_import, utc_now
+from app.services.imports import draft_import_cover_image_counts, serialize_import, utc_now
 from app.services.ops_events import classify_failure_message, record_ops_event
 
 LOGGER = logging.getLogger(__name__)
@@ -723,18 +723,41 @@ def sync_gmail_receipts_for_user(session: Session, current_user: User) -> dict[s
 def serialize_gmail_import_drafts(
     session: Session,
     current_user: User,
+    *,
+    limit: int = 50,
 ) -> list[GmailImportedDraftRead]:
     records = session.exec(
         select(GmailImportRecord, DraftImport)
         .join(DraftImport, DraftImport.id == GmailImportRecord.draft_import_id)
         .where(DraftImport.user_id == current_user.id)
-        .order_by(GmailImportRecord.imported_at.desc())
+        .order_by(
+            GmailImportRecord.imported_at.desc(),
+            DraftImport.created_at.desc(),
+            GmailImportRecord.id.desc(),
+        )
+        .limit(limit)
     ).all()
+    draft_ids = [
+        draft_import.id for _, draft_import in records if draft_import.id is not None
+    ]
+    cover_counts = draft_import_cover_image_counts(session, draft_ids)
+
+    def cover_count_for(draft_import: DraftImport) -> int:
+        if draft_import.id is None:
+            return 0
+        return cover_counts.get(draft_import.id, 0)
+
     return [
         GmailImportedDraftRead(
             external_message_id=record.external_message_id,
             imported_at=record.imported_at,
-            draft_import=serialize_import(session, draft_import),
+            draft_import=serialize_import(
+                session,
+                draft_import,
+                prefetch_cover_images=False,
+                cover_image_count=cover_count_for(draft_import),
+                enrich_metadata=False,
+            ),
         )
         for record, draft_import in records
     ]

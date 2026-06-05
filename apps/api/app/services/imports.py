@@ -120,13 +120,18 @@ def serialize_import(
     *,
     prefetch_cover_images: bool = True,
     cover_image_count: int | None = None,
+    enrich_metadata: bool = True,
 ) -> DraftImportRead:
-    normalized_payload = normalize_parsed_order_response(
-        ParseOrderResponse.model_validate(draft_import.parsed_payload_json),
-        session=session,
-        owner_user_id=draft_import.user_id,
-        raw_text=draft_import.raw_text,
-    )
+    parsed_payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
+    if enrich_metadata:
+        normalized_payload = normalize_parsed_order_response(
+            parsed_payload,
+            session=session,
+            owner_user_id=draft_import.user_id,
+            raw_text=draft_import.raw_text,
+        )
+    else:
+        normalized_payload = parsed_payload
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required
     )

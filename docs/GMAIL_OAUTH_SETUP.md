@@ -108,6 +108,10 @@ Before starting a real local OAuth test:
 
 The `/debug/runtime` endpoint is intentionally unavailable unless `DEBUG_RUNTIME=true`.
 
+## Gmail imports list API
+
+`GET /gmail/imports` is a **lightweight list** for the Email Imports page: it returns up to `limit` rows (default `50`, newest `imported_at` / `created_at` first) with embedded draft basics only. It does **not** prefetch full cover payloads (OCR, barcodes, fingerprints). Use `GET /imports/{id}` or the main Imports workspace when you need full import detail.
+
 ## Behavior Reminder
 
 Even after Gmail is connected successfully:

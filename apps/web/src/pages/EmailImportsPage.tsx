@@ -49,7 +49,13 @@ export function EmailImportsPage() {
       })
       .catch((loadError) => {
         if (!ignore) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load email imports.");
+          if (loadError instanceof ApiError) {
+            setError(loadError.message);
+          } else {
+            setError(
+              loadError instanceof Error ? loadError.message : "Unable to load email imports.",
+            );
+          }
         }
       })
       .finally(() => {
