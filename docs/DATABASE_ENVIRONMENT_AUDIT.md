@@ -112,7 +112,52 @@ LIMIT 20;
 
 ---
 
-## 7. Recommended next steps
+## 7. Environment switch for P63/P64 certification (2026-06-03)
+
+### Config sources checked
+
+| Source | Present? | `DATABASE_URL` host | DB name | User | `APP_ENV` |
+|--------|----------|---------------------|---------|------|-----------|
+| `comic-os-p41-feed/.env` | **Missing** | — | — | — | — |
+| `comic-os-p41-feed/apps/api/.env` | **Missing** | — | — | — | — |
+| `COMICOS_API_ENV_ROOT` | **Not set** | — | — | — | — |
+| **Companion** `C:\comic-os\apps\api\.env` | **Exists** | `localhost` | `comic_os` | `postgres` | `development` |
+| **Process** `DATABASE_URL` | Set | `localhost` | `comic_os` | `postgres` | (inherits settings) |
+| **`get_settings()` effective** | — | `localhost` | `comic_os` | `postgres` | `development` |
+
+All reachable targets in this workspace resolve to the **same** local empty-ledger DB. `ofoy@att.net` → **user id 41**, **inventory_count 0**.
+
+### Documented production / Render
+
+| Reference | Detail |
+|-----------|--------|
+| [RENDER_DEPLOYMENT_DRY_RUN.md](RENDER_DEPLOYMENT_DRY_RUN.md) | `DATABASE_URL=<render postgres connection string>`, `APP_ENV=production` |
+| [.github/workflows/migrate-production.yml](../.github/workflows/migrate-production.yml) | GitHub Actions secret **`PRODUCTION_DATABASE_URL`** (value **not** in repo) |
+| `apps/api/seed.log` (historical run) | `db_host=**dpg-d88dr5egvqtc73b0nrkg-a.ohio-postgres.render.com**`, `ofoy@att.net` → **owner_user_id=1** (production id, not local 41) |
+
+**Conclusion:** Real collection/inventory for certification lives on **Render Postgres** (`dpg-d88dr5egvqtc73b0nrkg-a.ohio-postgres.render.com`), not on `localhost:5433/comic_os`. This workspace has **no** `.env` pointing at Render; `gh` CLI is unavailable here to read `PRODUCTION_DATABASE_URL`.
+
+### Cert commands (run only after switching `DATABASE_URL`)
+
+Do **not** certify against localhost while `inventory_copy` is 0.
+
+```powershell
+# PowerShell: set session URL from Render dashboard External Database URL (do not commit)
+$env:DATABASE_URL = "postgresql+pg8000://USER:PASSWORD@dpg-d88dr5egvqtc73b0nrkg-a.ohio-postgres.render.com:5432/DATABASE"
+$env:APP_ENV = "production"
+
+cd apps\api
+python scripts/p63_market_intelligence_certification.py --list-owners-only --skip-pytest
+# Continue only if ofoy@att.net appears with inventory_count > 0
+python scripts/p63_market_intelligence_certification.py --skip-pytest --owner-email ofoy@att.net
+python scripts/p64_collector_assistant_certification.py --skip-pytest --owner-email ofoy@att.net
+```
+
+`config.py` loads companion `C:\comic-os\apps\api\.env` with **`override=False`**, so a **process-level** `DATABASE_URL` set before Python starts overrides the companion file for certification runs.
+
+---
+
+## 8. Recommended next steps
 
 1. On the machine where you see 22 copies, run `echo %DATABASE_URL%` (or inspect `.env`) and compare host/db to the table in §1.
 2. If inventory lives on another host, update `.env` for local cert runs **or** run certification on that host only.

@@ -127,6 +127,11 @@ class Settings(BaseSettings):
     p64_collector_assistant_enabled: bool = Field(default=True, alias="P64_COLLECTOR_ASSISTANT_ENABLED")
     p64_llm_narration_enabled: bool = Field(default=False, alias="P64_LLM_NARRATION_ENABLED")
 
+    p65_collector_workspace_enabled: bool = Field(default=True, alias="P65_COLLECTOR_WORKSPACE_ENABLED")
+    p65_llm_narration_enabled: bool = Field(default=False, alias="P65_LLM_NARRATION_ENABLED")
+    p65_automation_enabled: bool = Field(default=True, alias="P65_AUTOMATION_ENABLED")
+    p65_notification_center_enabled: bool = Field(default=True, alias="P65_NOTIFICATION_CENTER_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",

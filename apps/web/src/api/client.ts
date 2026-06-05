@@ -15832,6 +15832,65 @@ export interface CollectorDashboardRead {
   dashboard_json: Record<string, unknown>;
 }
 
+export interface CollectorTaskItemRead {
+  id: number;
+  snapshot_id: number;
+  task_type: string;
+  status: string;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  priority_score: number;
+  source_system: string;
+  source_ref_json: Record<string, unknown>;
+  explanation: string;
+  action_hint: string;
+  updated_at: string | null;
+}
+
+export interface CollectorTaskSnapshotRead {
+  snapshot_id: number | null;
+  readiness_status: string;
+  generated_at: string | null;
+  total_items: number;
+  items: CollectorTaskItemRead[];
+  by_type: Record<string, number>;
+}
+
+export interface CollectorNarrativeItemRead {
+  id: number;
+  narrative_kind: string;
+  title: string;
+  narrative_text: string;
+  signal_citations_json: unknown[];
+}
+
+export interface CollectorNarrativeSnapshotRead {
+  snapshot_id: number | null;
+  readiness_status: string;
+  week_start: string;
+  briefing_markdown: string;
+  items: CollectorNarrativeItemRead[];
+}
+
+export interface NotificationItemRead {
+  id: number;
+  notification_type: string;
+  status: string;
+  title: string;
+  message: string;
+  deep_link: string;
+  created_at: string | null;
+}
+
+export interface NotificationSnapshotRead {
+  snapshot_id: number | null;
+  readiness_status: string;
+  unread_count: number;
+  total_items: number;
+  items: NotificationItemRead[];
+}
+
 export interface ReleaseSeriesRead {
   id: number;
   publisher: string;
@@ -26171,6 +26230,52 @@ export const apiClient = {
 
   getCollectorAssistantAlertsLatest(): Promise<CollectorAlertsRead> {
     return requestScanV1<CollectorAlertsRead>("/collector-assistant/alerts/latest");
+  },
+
+  getCollectorWorkspaceTasksLatest(taskType?: string): Promise<CollectorTaskSnapshotRead> {
+    const q = taskType ? `?task_type=${encodeURIComponent(taskType)}` : "";
+    return requestScanV1<CollectorTaskSnapshotRead>(`/collector-workspace/tasks/latest${q}`);
+  },
+
+  buildCollectorWorkspaceTasks(): Promise<{ snapshot_id: number; total_items: number; status: string }> {
+    return requestScanV1<{ snapshot_id: number; total_items: number; status: string }>(
+      "/collector-workspace/tasks/build",
+      { method: "POST" },
+    );
+  },
+
+  patchCollectorWorkspaceTask(taskId: number, status: string): Promise<CollectorTaskItemRead> {
+    return requestScanV1<CollectorTaskItemRead>(`/collector-workspace/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  getCollectorNarrativesLatest(): Promise<CollectorNarrativeSnapshotRead> {
+    return requestScanV1<CollectorNarrativeSnapshotRead>("/collector-narratives/latest");
+  },
+
+  buildCollectorNarratives(): Promise<{ snapshot_id: number; readiness_status: string }> {
+    return requestScanV1<{ snapshot_id: number; readiness_status: string }>("/collector-narratives/build", {
+      method: "POST",
+    });
+  },
+
+  getNotificationsLatest(): Promise<NotificationSnapshotRead> {
+    return requestScanV1<NotificationSnapshotRead>("/notifications/latest");
+  },
+
+  buildNotifications(): Promise<{ snapshot_id: number; unread_count: number; total_items: number }> {
+    return requestScanV1<{ snapshot_id: number; unread_count: number; total_items: number }>("/notifications/build", {
+      method: "POST",
+    });
+  },
+
+  patchNotificationItem(itemId: number, status: string): Promise<NotificationItemRead> {
+    return requestScanV1<NotificationItemRead>(`/notifications/items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
   },
 
   getPullLists(params?: { status?: string; publisher?: string; search?: string; limit?: number; offset?: number }): Promise<PullListListResponse> {

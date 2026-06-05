@@ -285,6 +285,16 @@ from app.models.collector_assistant import (
     CollectorRecommendationItem,
     CollectorRecommendationSnapshot,
 )
+from app.models.collector_experience import (
+    AutomationRun,
+    AutomationSubscription,
+    CollectorNarrativeItem,
+    CollectorNarrativeSnapshot,
+    CollectorTaskItem,
+    CollectorTaskSnapshot,
+    NotificationItem,
+    NotificationSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,
@@ -1155,6 +1165,14 @@ __all__ = [
     "CollectorOpportunityAlertSnapshot",
     "CollectorOpportunityAlert",
     "CollectorExecutiveBundle",
+    "CollectorTaskSnapshot",
+    "CollectorTaskItem",
+    "CollectorNarrativeSnapshot",
+    "CollectorNarrativeItem",
+    "AutomationSubscription",
+    "AutomationRun",
+    "NotificationSnapshot",
+    "NotificationItem",
     "DemandRefreshRun",
     "IssueDemandSnapshot",
     "IssueDemandObservation",
