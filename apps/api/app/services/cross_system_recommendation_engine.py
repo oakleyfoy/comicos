@@ -564,6 +564,27 @@ def _finalize_confidence_for_persist(candidates: list[_Candidate]) -> None:
             cand.confidence_score = _clamp_confidence(norm)
 
 
+ScoreTraceEntry = tuple[float, float, float, float, float, float]
+
+
+def candidate_score_trace_map(
+    candidates: list[_Candidate],
+) -> dict[tuple[str, str], ScoreTraceEntry]:
+    """Map (type, title_key) → raw/norm/computed priority and confidence for audits."""
+    out: dict[tuple[str, str], ScoreTraceEntry] = {}
+    for cand in candidates:
+        key = (cand.recommendation_type.strip().upper(), cand.title_key)
+        out[key] = (
+            round(float(cand.raw_priority_score or cand.priority_score), 2),
+            round(float(cand.normalized_priority_score or cand.priority_score), 2),
+            round(float(_priority_for_persist(cand)), 2),
+            round(float(cand.raw_confidence_score or cand.confidence_score), 4),
+            round(float(cand.normalized_confidence_score or cand.confidence_score), 4),
+            round(float(_confidence_for_persist(cand)), 4),
+        )
+    return out
+
+
 def _priority_for_persist(cand: _Candidate) -> float:
     """Score written to cross_system_recommendation.priority_score."""
     if cand.budget_priority_adjusted:
@@ -702,6 +723,8 @@ def generate_cross_system_recommendations(
         build_timings=timer,
         index_cache=index_cache,
     )
+    if persist_audit is not None:
+        persist_audit["candidate_score_trace"] = candidate_score_trace_map(candidates)
 
     new_sig = timer.run("candidate_signature", lambda: _candidate_signature(candidates))
     prior_sig = timer.run(
@@ -732,7 +755,6 @@ def generate_cross_system_recommendations(
 
     def _persist() -> int:
         nonlocal created
-        apply_confidence_spread_inplace(candidates)
         _finalize_candidate_priorities_for_persist(candidates)
         _finalize_confidence_for_persist(candidates)
         batch_ts = utc_now()

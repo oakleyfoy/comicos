@@ -14,11 +14,12 @@ from app.schemas.recommendation_ranking import (
 )
 from app.services.cross_system_recommendation import list_latest_cross_system_recommendations
 from app.services.cross_system_recommendation_engine import (
-    _confidence_for_persist,
-    _priority_for_persist,
+    ScoreTraceEntry,
     build_cross_system_candidates,
+    candidate_score_trace_map,
     generate_cross_system_recommendations,
 )
+from app.services.recommendation_title_normalize import normalize_recommendation_title_key
 from app.services.recommendation_intelligence_audit import (
     attach_intelligence_scores_to_audit_rows,
     build_intelligence_audit_from_candidates,
@@ -54,7 +55,10 @@ def audit_from_listed_items(
     tied_top = sum(1 for s in scores if top_score is not None and abs(s - top_score) < 1e-9) if scores else 0
     rows = []
     for i in items:
-        trace_key = (i.recommendation_type.strip().upper(), i.title.strip().lower())
+        trace_key = (
+            i.recommendation_type.strip().upper(),
+            normalize_recommendation_title_key(i.title),
+        )
         raw_norm = score_trace.get(trace_key) if score_trace else None
         computed = raw_norm[2] if raw_norm and len(raw_norm) > 2 else None
         raw_conf = raw_norm[3] if raw_norm and len(raw_norm) > 3 else None
@@ -97,23 +101,13 @@ def build_score_trace_map(
     *,
     owner_user_id: int,
     refresh_upstream: bool = False,
-) -> dict[tuple[str, str], tuple[float, float, float, float, float, float]]:
+) -> dict[tuple[str, str], ScoreTraceEntry]:
     trace_candidates = build_cross_system_candidates(
         session,
         owner_user_id=owner_user_id,
         refresh_upstream=refresh_upstream,
     )
-    return {
-        (c.recommendation_type.strip().upper(), c.title_key): (
-            round(float(c.raw_priority_score or c.priority_score), 2),
-            round(float(c.normalized_priority_score or c.priority_score), 2),
-            round(float(_priority_for_persist(c)), 2),
-            round(float(c.raw_confidence_score or c.confidence_score), 4),
-            round(float(c.normalized_confidence_score or c.confidence_score), 4),
-            round(float(_confidence_for_persist(c)), 4),
-        )
-        for c in trace_candidates
-    }
+    return candidate_score_trace_map(trace_candidates)
 
 
 def build_recommendation_ranking_audit(
@@ -122,6 +116,9 @@ def build_recommendation_ranking_audit(
     owner_user_id: int,
     limit: int = 100,
     refresh: bool = True,
+    recompute_candidates: bool = True,
+    score_trace: dict[tuple[str, str], ScoreTraceEntry] | None = None,
+    include_decisions: bool = True,
 ) -> RecommendationRankingAuditRead:
     if refresh:
         from app.services.daily_action_engine import generate_daily_actions
@@ -130,32 +127,28 @@ def build_recommendation_ranking_audit(
         generate_unified_collector_recommendations(session, owner_user_id=owner_user_id)
         generate_daily_actions(session, owner_user_id=owner_user_id, refresh_unified=False)
         generate_cross_system_recommendations(session, owner_user_id=owner_user_id, refresh_upstream=False)
-    trace_candidates = build_cross_system_candidates(
-        session,
-        owner_user_id=owner_user_id,
-        refresh_upstream=False,
-    )
-    score_trace = {
-        (c.recommendation_type.strip().upper(), c.title_key): (
-            round(float(c.raw_priority_score or c.priority_score), 2),
-            round(float(c.normalized_priority_score or c.priority_score), 2),
-            round(float(_priority_for_persist(c)), 2),
-            round(float(c.raw_confidence_score or c.confidence_score), 4),
-            round(float(c.normalized_confidence_score or c.confidence_score), 4),
-            round(float(_confidence_for_persist(c)), 4),
+    trace_candidates: list = []
+    if recompute_candidates:
+        trace_candidates = build_cross_system_candidates(
+            session,
+            owner_user_id=owner_user_id,
+            refresh_upstream=False,
         )
-        for c in trace_candidates
-    }
+        score_trace = candidate_score_trace_map(trace_candidates)
+    elif score_trace is None:
+        score_trace = {}
     items, total = list_latest_cross_system_recommendations(
         session,
         owner_user_id=owner_user_id,
         limit=min(max(limit, 1), 200),
         offset=0,
+        include_decisions=include_decisions,
     )
     audit = audit_from_listed_items(items, total_count=total, score_trace=score_trace)
-    intel = build_intelligence_audit_from_candidates(trace_candidates, limit=limit)
-    attach_intelligence_scores_to_audit_rows(audit, trace_candidates)
-    audit.intelligence = intel
+    if trace_candidates:
+        intel = build_intelligence_audit_from_candidates(trace_candidates, limit=limit)
+        attach_intelligence_scores_to_audit_rows(audit, trace_candidates)
+        audit.intelligence = intel
     return audit
 
 

@@ -33,6 +33,8 @@ def test_verify_script_module_has_read_only_default() -> None:
     assert "build_recommendation_ranking_audit" in source
     assert "RECOMMENDATION_PIPELINE_EPOCH" in source
     assert "spread_verification" in source
+    assert "recompute_candidates" in source
+    assert "candidate_score_trace" in source
     assert '_stage_start("unified_recommendations")' in source
     assert '_stage_end("cross_system_recommendations"' in source
     assert "stage_elapsed_seconds" in source

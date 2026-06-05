@@ -15,6 +15,7 @@ from app.services.recommendation_priority_enrichment import (
     build_owned_series_inventory_stats,
     build_recommendation_priority_enrichment,
 )
+from app.services.recommendation_v2_scoring_context import build_recommendation_v2_scoring_context
 from app.services.recommendation_title_index import resolve_release_pair
 from app.services.recommendation_title_normalize import normalize_recommendation_title_key
 
@@ -48,6 +49,17 @@ def apply_collector_significance_priority_boost(
         return
     owned_stats = build_owned_series_inventory_stats(session, owner_user_id=owner_user_id)
     variants_by_issue = variants_by_issue or {}
+    boost_issue_ids: list[int] = []
+    for cand in candidates:
+        pair = resolve_release_pair(cand.title, release_index)
+        if pair is None or pair[0].id is None:
+            continue
+        boost_issue_ids.append(int(pair[0].id))
+    scoring_ctx = build_recommendation_v2_scoring_context(
+        session,
+        owner_user_id=owner_user_id,
+        issue_ids=list(dict.fromkeys(boost_issue_ids)),
+    )
 
     for cand in candidates:
         pair = resolve_release_pair(cand.title, release_index)
@@ -71,7 +83,7 @@ def apply_collector_significance_priority_boost(
             spec_type=None,
             owns_series_run=False,
             owned_stats=owned_stats,
-            scoring_ctx=None,
+            scoring_ctx=scoring_ctx,
             issue_id=issue_id,
             issue=issue,
             series=series,

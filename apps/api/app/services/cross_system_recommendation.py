@@ -56,12 +56,21 @@ def list_latest_cross_system_recommendations(
     priority_min: float | None = None,
     limit: int = 50,
     offset: int = 0,
+    include_decisions: bool = True,
 ) -> tuple[list[CrossSystemRecommendationRead], int]:
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     snapshot = _latest_snapshot_rows(session, owner_user_id=owner_user_id)
-    release_index = build_forward_release_title_index(session, owner_user_id=owner_user_id)
-    decision_ctx = build_recommendation_decision_context(session, owner_user_id=owner_user_id)
+    release_index = (
+        build_forward_release_title_index(session, owner_user_id=owner_user_id)
+        if include_decisions
+        else None
+    )
+    decision_ctx = (
+        build_recommendation_decision_context(session, owner_user_id=owner_user_id)
+        if include_decisions
+        else None
+    )
     items: list[CrossSystemRecommendationRead] = []
     for rank in sorted(snapshot.keys()):
         row = snapshot[rank]
@@ -71,25 +80,28 @@ def list_latest_cross_system_recommendations(
             continue
         if priority_min is not None and float(row.priority_score) < float(priority_min):
             continue
-        if not title_passes_top_recommendation_quality(
-            row.title,
-            session=session,
-            owner_user_id=owner_user_id,
-            release_index=release_index,
-        ):
-            continue
-        decision = decision_for_cross_system(
-            recommendation_type=row.recommendation_type,
-            title=row.title,
-            priority_score=float(row.priority_score),
-            confidence_score=float(row.confidence_score),
-            rationale=row.rationale,
-            source_systems=list(row.source_systems or []),
-            estimated_value=float(row.estimated_value) if row.estimated_value is not None else None,
-            session=session,
-            owner_user_id=owner_user_id,
-            ctx=decision_ctx,
-        )
+        if include_decisions and release_index is not None:
+            if not title_passes_top_recommendation_quality(
+                row.title,
+                session=session,
+                owner_user_id=owner_user_id,
+                release_index=release_index,
+            ):
+                continue
+        decision = None
+        if include_decisions and decision_ctx is not None:
+            decision = decision_for_cross_system(
+                recommendation_type=row.recommendation_type,
+                title=row.title,
+                priority_score=float(row.priority_score),
+                confidence_score=float(row.confidence_score),
+                rationale=row.rationale,
+                source_systems=list(row.source_systems or []),
+                estimated_value=float(row.estimated_value) if row.estimated_value is not None else None,
+                session=session,
+                owner_user_id=owner_user_id,
+                ctx=decision_ctx,
+            )
         items.append(_to_read(row, decision=decision))
     items.sort(
         key=lambda r: (

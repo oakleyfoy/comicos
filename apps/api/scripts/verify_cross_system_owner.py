@@ -70,6 +70,24 @@ def _stage_end(name: str, started: float) -> float:
     return elapsed_s
 
 
+def _json_safe_persist_audit(audit: dict[str, object]) -> dict[str, object]:
+    """Drop non-JSON-serializable in-memory trace maps before stdout report."""
+    safe = dict(audit)
+    trace = safe.get("candidate_score_trace")
+    if isinstance(trace, dict):
+        safe["candidate_score_trace_count"] = len(trace)
+        safe.pop("candidate_score_trace", None)
+    return safe
+
+
+def _json_safe_rebuild_stats(stats: dict[str, int | float | object]) -> dict[str, object]:
+    out: dict[str, object] = dict(stats)
+    audit = out.get("cross_system_persist_audit")
+    if isinstance(audit, dict):
+        out["cross_system_persist_audit"] = _json_safe_persist_audit(audit)
+    return out
+
+
 def _run_rebuild_pipeline(session, *, owner_user_id: int, timer: _QueryTimer) -> dict[str, int | float]:
     from app.services.cross_system_recommendation_engine import generate_cross_system_recommendations
     from app.services.daily_action_engine import generate_daily_actions
@@ -252,8 +270,17 @@ def main() -> int:
                 owner_user_id=owner_user_id,
                 limit=top_limit,
                 offset=0,
+                include_decisions=False,
             ),
         )
+        reused_trace = None
+        if rebuild_stats is not None:
+            persist_audit = rebuild_stats.get("cross_system_persist_audit")
+            if isinstance(persist_audit, dict):
+                raw_trace = persist_audit.get("candidate_score_trace")
+                if isinstance(raw_trace, dict):
+                    reused_trace = raw_trace
+
         ranking_audit = timer.run(
             "compute.ranking_diagnostics",
             lambda: build_recommendation_ranking_audit(
@@ -261,6 +288,9 @@ def main() -> int:
                 owner_user_id=owner_user_id,
                 limit=top_limit,
                 refresh=False,
+                recompute_candidates=reused_trace is None,
+                score_trace=reused_trace,
+                include_decisions=False,
             ),
         )
         ranking_diag = diagnostics_from_audit(ranking_audit)
@@ -399,9 +429,11 @@ def main() -> int:
             "total_elapsed_ms": total_elapsed_ms,
         }
         if rebuild_stats is not None:
-            report["rebuild"] = rebuild_stats
-            if isinstance(rebuild_stats.get("cross_system_persist_audit"), dict):
-                report["cross_system_persist_audit"] = rebuild_stats["cross_system_persist_audit"]
+            safe_rebuild = _json_safe_rebuild_stats(rebuild_stats)
+            report["rebuild"] = safe_rebuild
+            audit = safe_rebuild.get("cross_system_persist_audit")
+            if isinstance(audit, dict):
+                report["cross_system_persist_audit"] = audit
         print(json.dumps(report, indent=2))
     return 0
 
