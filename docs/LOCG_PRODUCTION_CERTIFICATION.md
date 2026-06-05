@@ -9,6 +9,10 @@ Internal certification uses `locg_capture_certification.json` (not distributor s
 | 2026-06-24 | PASS | Scroll discovery; 404/404 variants |
 | 2026-07-01 | PASS | Adaptive delay; 336/336 variants |
 
+## July 2026 forward — certified
+
+All forward weeks **PASS** (see `LOCG_JULY_2026_CAPTURE_VALIDATION.md`), including **2026-07-29** as a lighter week (completeness signals, not 400-row floor).
+
 ## July 2026 forward validation
 
 See `LOCG_JULY_2026_CAPTURE_VALIDATION.md`.
