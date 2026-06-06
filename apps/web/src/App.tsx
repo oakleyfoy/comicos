@@ -129,6 +129,7 @@ import { IntelligencePage } from "./pages/IntelligencePage";
 import { ComicOSIntelligenceDashboardPage } from "./pages/ComicOSIntelligenceDashboardPage";
 import { CollectorWorkspacePage } from "./pages/CollectorWorkspacePage";
 import { PortfolioAnalyticsPage } from "./pages/PortfolioAnalyticsPage";
+import { SellIntelligencePage } from "./pages/SellIntelligencePage";
 import { ReleaseImportsPage } from "./pages/ReleaseImportsPage";
 import { LunarFeedPage } from "./pages/LunarFeedPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
@@ -170,6 +171,7 @@ export default function App() {
         <Route path="/comicos-intelligence" element={<ComicOSIntelligenceDashboardPage />} />
         <Route path="/collector-workspace" element={<CollectorWorkspacePage />} />
         <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
+        <Route path="/sell-intelligence" element={<SellIntelligencePage />} />
         <Route path="/executive-dashboard" element={<ExecutiveDashboardPage />} />
         <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
         <Route path="/marketplace-dashboard" element={<MarketplaceDashboardPage />} />

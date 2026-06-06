@@ -22,6 +22,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Executive Dashboard", to: "/executive-dashboard", prominent: true },
       { label: "ComicOS Intelligence", to: "/comicos-intelligence", prominent: true },
       { label: "Portfolio Analytics", to: "/portfolio-analytics", prominent: true },
+      { label: "Sell Intelligence", to: "/sell-intelligence", prominent: true },
       { label: "Collector Workspace", to: "/collector-workspace", prominent: true },
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Unified Intelligence", to: "/unified-intelligence" },
