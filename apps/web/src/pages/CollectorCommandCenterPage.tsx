@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P84CollectorCommandCenterRead } from "../api/client";
 import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { CollectorErrorState } from "../components/CollectorErrorState";
 
 export function CollectorCommandCenterPage(): JSX.Element {
   const [cc, setCc] = useState<P84CollectorCommandCenterRead | null>(null);
@@ -25,7 +25,7 @@ export function CollectorCommandCenterPage(): JSX.Element {
   if (!cc) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
+        {error ? <CollectorErrorState message={error} onRetry={() => void load()} /> : <p className="text-slate-400">Loading…</p>}
       </div>
     );
   }
@@ -40,7 +40,7 @@ export function CollectorCommandCenterPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-5xl grid gap-6 px-4 py-6 md:grid-cols-2 lg:grid-cols-3 text-sm">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+        {error ? <CollectorErrorState message={error} onRetry={() => void load()} /> : null}
         <section className="rounded border border-slate-800 p-4">
           <h2 className="font-semibold">Marketplace deals</h2>
           <ul className="mt-2 text-slate-300">

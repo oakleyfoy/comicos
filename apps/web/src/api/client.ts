@@ -12807,6 +12807,61 @@ export interface P82P84CollectorExpansionCertificationRead {
   production_checklist: { area: string; status: string }[];
 }
 
+export interface P85CollectorHomeRead {
+  headline: string;
+  todays_actions: {
+    title: string;
+    action_type: string;
+    priority_score: number;
+    source: string;
+    action_url: string;
+  }[];
+  sections: {
+    key: string;
+    title: string;
+    items: Record<string, unknown>[];
+    empty_hint: string;
+    count: number;
+  }[];
+  budget_status: Record<string, unknown>;
+  portfolio_movement: Record<string, unknown>;
+  generated_at: string;
+}
+
+export interface P85PlatformCertificationRead {
+  title: string;
+  status: string;
+  certified_production_release: boolean;
+  readiness_score: number;
+  checks_passed: number;
+  warnings: number;
+  failures: number;
+  categories: {
+    category: string;
+    status: string;
+    passed: boolean;
+    warnings: number;
+    failures: number;
+    detail: string;
+  }[];
+  production_checklist: { area: string; status: string }[];
+}
+
+export interface P85WorkflowHealthRead {
+  health_score: number;
+  status: string;
+  issues: {
+    workflow: string;
+    severity: string;
+    issue_type: string;
+    message: string;
+    recommended_fix: string;
+    action_url: string;
+  }[];
+  stale_jobs: string[];
+  empty_workflows: string[];
+}
+
 export interface P78SellBundleRead {
   bundle_key: string;
   bundle_type: string;
@@ -30072,6 +30127,28 @@ export const apiClient = {
 
   getCollectorExpansionCertification(): Promise<P82P84CollectorExpansionCertificationRead> {
     return requestScanV1<P82P84CollectorExpansionCertificationRead>("/collector-expansion/certification");
+  },
+
+  getCollectorHome(): Promise<P85CollectorHomeRead> {
+    return requestScanV1<P85CollectorHomeRead>("/collector-home");
+  },
+
+  getPlatformCertification(): Promise<P85PlatformCertificationRead> {
+    return requestScanV1<P85PlatformCertificationRead>("/platform/certification");
+  },
+
+  getPlatformWorkflowHealth(): Promise<P85WorkflowHealthRead> {
+    return requestScanV1<P85WorkflowHealthRead>("/platform/workflow-health");
+  },
+
+  getPlatformProductionDashboard(): Promise<{
+    certification_status: string;
+    readiness_score: number;
+    collector_home_ready: boolean;
+    workflow_health_score: number;
+    safety_notes: string[];
+  }> {
+    return requestScanV1("/platform/production-dashboard");
   },
 };
 

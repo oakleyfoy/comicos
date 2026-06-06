@@ -15,12 +15,12 @@ from app.services.p81_discovery_personalization_service import list_alerts, list
 
 
 def build_collector_command_center(session: Session, *, owner_user_id: int) -> CollectorCommandCenterRead:
-    deals = list_acquisition_opportunities(session, owner_user_id=owner_user_id, limit=12, offset=0, refresh=True)
+    deals = list_acquisition_opportunities(session, owner_user_id=owner_user_id, limit=12, offset=0, refresh=False)
     buys = list_acquisition_opportunities(session, owner_user_id=owner_user_id, recommendation="STRONG_BUY", limit=8, offset=0, refresh=False)
     forecast = build_collection_forecast(session, owner_user_id=owner_user_id, persist=False)
     risk = build_collection_risk(session, owner_user_id=owner_user_id, persist=False)
-    notif_dash = build_notification_dashboard(session, owner_user_id=owner_user_id, refresh=True)
-    daily = get_daily_briefing(session, owner_user_id=owner_user_id, generate=True)
+    notif_dash = build_notification_dashboard(session, owner_user_id=owner_user_id, refresh=False)
+    daily = get_daily_briefing(session, owner_user_id=owner_user_id, generate=False)
     sell = build_sell_queue(session, owner_user_id=owner_user_id, limit=10, offset=0, refresh_upstream=False)
     foc = list_future_pull_list(session, owner_user_id=owner_user_id, limit=8, offset=0, refresh=False)
     discovery_alerts = list_alerts(session, owner_user_id=owner_user_id, limit=8, offset=0)

@@ -124,6 +124,9 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "collector_notifications": "P84",
     "collector_command_center": "P82-P84",
     "collector_expansion_certification": "P82-P84",
+    "platform_certification": "P85",
+    "collector_home": "P85",
+    "workflow_health": "P85",
 }
 
 

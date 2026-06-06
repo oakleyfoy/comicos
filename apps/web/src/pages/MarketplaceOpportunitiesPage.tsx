@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P82MarketplaceAcquisitionOpportunityRead } from "../api/client";
 import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { CollectorEmptyState } from "../components/CollectorEmptyState";
+import { CollectorErrorState } from "../components/CollectorErrorState";
 
 export function MarketplaceOpportunitiesPage(): JSX.Element {
   const [items, setItems] = useState<P82MarketplaceAcquisitionOpportunityRead[]>([]);
@@ -33,7 +34,15 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+        {error ? <CollectorErrorState message={error} onRetry={() => void load()} /> : null}
+        {items.length === 0 && !error ? (
+          <CollectorEmptyState
+            title="No marketplace opportunities yet"
+            description="Refresh deals from your inventory FMV spread or scan an eBay listing."
+            actionLabel="Acquisition dashboard"
+            actionTo="/marketplace-acquisition-dashboard"
+          />
+        ) : null}
         <ul className="space-y-2 text-sm">
           {items.map((o) => (
             <li key={o.id} className="rounded border border-slate-800 p-3">

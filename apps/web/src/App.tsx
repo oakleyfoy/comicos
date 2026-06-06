@@ -91,6 +91,9 @@ import { CollectorNotificationDashboardPage } from "./pages/CollectorNotificatio
 import { DailyBriefingPage } from "./pages/DailyBriefingPage";
 import { WeeklyBriefingPage } from "./pages/WeeklyBriefingPage";
 import { CollectorCommandCenterPage } from "./pages/CollectorCommandCenterPage";
+import { CollectorHomePage } from "./pages/CollectorHomePage";
+import { PlatformCertificationPage } from "./pages/PlatformCertificationPage";
+import { WorkflowHealthPage } from "./pages/WorkflowHealthPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -299,6 +302,9 @@ export default function App() {
         <Route path="/daily-briefing" element={<DailyBriefingPage />} />
         <Route path="/weekly-briefing" element={<WeeklyBriefingPage />} />
         <Route path="/collector-command-center" element={<CollectorCommandCenterPage />} />
+        <Route path="/collector-home" element={<CollectorHomePage />} />
+        <Route path="/platform-certification" element={<PlatformCertificationPage />} />
+        <Route path="/workflow-health" element={<WorkflowHealthPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />
