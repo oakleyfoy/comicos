@@ -86,6 +86,17 @@ import { RecommendationFeedbackPage } from "./pages/RecommendationFeedbackPage";
 import { GradingValidationPage } from "./pages/GradingValidationPage";
 import { GradingPlatformPage } from "./pages/GradingPlatformPage";
 import { ReleaseIntelligencePage } from "./pages/ReleaseIntelligencePage";
+import { ReleaseMonitoringPage } from "./pages/ReleaseMonitoringPage";
+import { FocPurchaseIntelligencePage } from "./pages/FocPurchaseIntelligencePage";
+import { ReleaseIntelligenceAnalyticsPage } from "./pages/ReleaseIntelligenceAnalyticsPage";
+import { StorageAssignmentPage } from "./pages/StorageAssignmentPage";
+import { StorageDashboardPage } from "./pages/StorageDashboardPage";
+import { InventoryLocatorPage } from "./pages/InventoryLocatorPage";
+import { StorageBoxContentsPage } from "./pages/StorageBoxContentsPage";
+import { StorageAuditPage } from "./pages/StorageAuditPage";
+import { StorageLabelPreviewPage } from "./pages/StorageLabelPreviewPage";
+import { StorageAnalyticsPage } from "./pages/StorageAnalyticsPage";
+import { StorageLocationsPage } from "./pages/StorageLocationsPage";
 import { ReleaseWatchlistPage } from "./pages/ReleaseWatchlistPage";
 import { SpecIntelligencePage } from "./pages/SpecIntelligencePage";
 import { ReleasePlatformPage } from "./pages/ReleasePlatformPage";
@@ -197,6 +208,17 @@ export default function App() {
         <Route path="/grading-validation" element={<GradingValidationPage />} />
         <Route path="/grading-platform" element={<GradingPlatformPage />} />
         <Route path="/release-intelligence" element={<ReleaseIntelligencePage />} />
+        <Route path="/release-monitoring" element={<ReleaseMonitoringPage />} />
+        <Route path="/foc-purchase-intelligence" element={<FocPurchaseIntelligencePage />} />
+        <Route path="/release-intelligence-analytics" element={<ReleaseIntelligenceAnalyticsPage />} />
+        <Route path="/storage-locations" element={<StorageLocationsPage />} />
+        <Route path="/storage-assignment" element={<StorageAssignmentPage />} />
+        <Route path="/storage-dashboard" element={<StorageDashboardPage />} />
+        <Route path="/inventory-locator" element={<InventoryLocatorPage />} />
+        <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
+        <Route path="/storage-audit" element={<StorageAuditPage />} />
+        <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />
+        <Route path="/storage-analytics" element={<StorageAnalyticsPage />} />
         <Route path="/release-watchlists" element={<ReleaseWatchlistPage />} />
         <Route path="/pull-lists" element={<PullListPage />} />
         <Route path="/pull-list-decisions" element={<PullListDecisionsPage />} />

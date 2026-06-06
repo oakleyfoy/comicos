@@ -366,12 +366,44 @@ from app.models.demand_intelligence import (
 )
 from app.models.lunar_feed import LunarFeedError, LunarFeedRawRow, LunarFeedRun, LunarFocAlert
 from app.models.lunar_scheduler import LunarScheduleConfig, LunarScheduledRun, LunarScheduledRunError
+from app.models.p74_foc_purchase import (
+    P74FocAlert,
+    P74FocRecommendationSnapshot,
+    P74PurchaseRecommendation,
+    P74RecommendationChangeEvent,
+)
+from app.models.p74_release_analytics import (
+    P74FocPerformanceSnapshot,
+    P74QuantityRecommendationSnapshot,
+    P74ReleaseAnalyticsSnapshot,
+    P74ReleaseCategorySnapshot,
+    P74ReleaseOutcome,
+)
+from app.models.storage_location import (
+    P79InventoryLocationAssignment,
+    P79StorageBox,
+    P79StorageLocation,
+    P79StorageSlot,
+)
+from app.models.p79_storage_audit import P79StorageAuditEntry, P79StorageAuditSession
+from app.models.p79_storage_analytics import (
+    P79StorageAnalyticsSnapshot,
+    P79StorageAuditPerformanceSnapshot,
+    P79StorageHealthSnapshot,
+    P79StorageUtilizationSnapshot,
+)
+from app.models.release_event_history import P74ReleaseChangeRecord, P74ReleaseEventHistory
 from app.models.release_intelligence import (
     ReleaseAgentExecution,
     ReleaseIssue,
     ReleaseKeySignal,
     ReleaseSeries,
     ReleaseVariant,
+)
+from app.models.release_monitoring_snapshot import (
+    P74ReleaseChangeSnapshot,
+    P74ReleaseMonitoringSnapshot,
+    P74VariantMonitoringSnapshot,
 )
 from app.models.pull_list import PullList, PullListIssue, PullListDecision, PullListAutomationRun, PullListAutomationSchedule, PullListCertificationRun
 from app.models.purchase_profile import PurchasePreference, PurchaseProfile
@@ -1205,6 +1237,30 @@ __all__ = [
     "GradingDriftEvent",
     "GradingReliabilityMetric",
     "GradingValidationExecution",
+    "P74FocAlert",
+    "P74FocPerformanceSnapshot",
+    "P74FocRecommendationSnapshot",
+    "P74PurchaseRecommendation",
+    "P74QuantityRecommendationSnapshot",
+    "P74RecommendationChangeEvent",
+    "P74ReleaseAnalyticsSnapshot",
+    "P74ReleaseCategorySnapshot",
+    "P74ReleaseOutcome",
+    "P79InventoryLocationAssignment",
+    "P79StorageBox",
+    "P79StorageLocation",
+    "P79StorageSlot",
+    "P79StorageAuditEntry",
+    "P79StorageAuditSession",
+    "P79StorageAnalyticsSnapshot",
+    "P79StorageAuditPerformanceSnapshot",
+    "P79StorageHealthSnapshot",
+    "P79StorageUtilizationSnapshot",
+    "P74ReleaseChangeRecord",
+    "P74ReleaseChangeSnapshot",
+    "P74ReleaseEventHistory",
+    "P74ReleaseMonitoringSnapshot",
+    "P74VariantMonitoringSnapshot",
     "ReleaseSeries",
     "ReleaseIssue",
     "ReleaseVariant",

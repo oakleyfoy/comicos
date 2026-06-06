@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlmodel import Session, select
 
-from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, ReleaseSeries, ReleaseVariant
+from app.models.release_intelligence import (
+    ReleaseIssue,
+    ReleaseKeySignal,
+    ReleaseSeries,
+    ReleaseVariant,
+    generate_uuid,
+)
 from app.schemas.release_intelligence import (
     ReleaseImportFeedRequest,
     ReleaseImportResult,
@@ -62,7 +70,16 @@ def import_issues(
             series_id=series_id,
             payload=payload,
         )
+        series_row = session.get(ReleaseSeries, series_id)
         if existing is not None:
+            before = None
+            try:
+                from app.services.release_change_detector import detect_and_record_issue_update, snapshot_issue
+
+                if series_row is not None:
+                    before = snapshot_issue(existing, series_row)
+            except Exception:
+                before = None
             maybe_promote_canonical_uuid(
                 session,
                 owner_user_id=owner_user_id,
@@ -75,6 +92,17 @@ def import_issues(
             session.add(existing)
             session.commit()
             session.refresh(existing)
+            if before is not None and series_row is not None:
+                try:
+                    detect_and_record_issue_update(
+                        session,
+                        owner_user_id=owner_user_id,
+                        issue=existing,
+                        series=series_row,
+                        before=before,
+                    )
+                except Exception:
+                    pass
             matched += 1
             rows.append(existing)
             continue
@@ -95,6 +123,18 @@ def import_issues(
         session.add(row)
         session.commit()
         session.refresh(row)
+        if series_row is not None:
+            try:
+                from app.services.release_change_detector import record_issue_discovered
+
+                record_issue_discovered(
+                    session,
+                    owner_user_id=owner_user_id,
+                    issue=row,
+                    series=series_row,
+                )
+            except Exception:
+                pass
         created += 1
         rows.append(row)
     return rows, created, matched
@@ -137,7 +177,7 @@ def import_variants(
         if row is None:
             row = ReleaseVariant(
                 issue_id=issue_id,
-                variant_uuid=payload.variant_uuid or "",
+                variant_uuid=payload.variant_uuid or generate_uuid(),
                 variant_name=payload.variant_name,
                 ratio_value=payload.ratio_value,
                 ratio_type=payload.ratio_type,
@@ -153,6 +193,24 @@ def import_variants(
             session.add(row)
             session.commit()
             session.refresh(row)
+            if owner_user_id is not None:
+                try:
+                    from app.services.release_change_detector import record_variant_added
+
+                    issue = session.get(ReleaseIssue, issue_id)
+                    late = False
+                    if issue is not None and issue.created_at:
+                        age_days = (datetime.now(timezone.utc) - issue.created_at).days
+                        late = age_days >= 7
+                    record_variant_added(
+                        session,
+                        owner_user_id=owner_user_id,
+                        issue_id=issue_id,
+                        variant=row,
+                        late_added=late,
+                    )
+                except Exception:
+                    pass
             created += 1
         else:
             row.ratio_value = payload.ratio_value

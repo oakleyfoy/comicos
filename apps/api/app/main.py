@@ -1180,6 +1180,8 @@ from app.api.grading_intelligence import attach_grading_intelligence_layer
 from app.api.grading_validation import attach_grading_validation_layer
 from app.api.grading_platform import attach_grading_platform_layer
 from app.api.release_intelligence import attach_release_intelligence_layer
+from app.api.release_monitoring import attach_release_monitoring_layer
+from app.api.storage_foundation import attach_storage_foundation_layer
 from app.api.release_watchlists import attach_release_watchlists_layer
 from app.api.spec_intelligence import attach_spec_intelligence_layer
 from app.api.release_imports import attach_release_imports_layer
@@ -1339,6 +1341,8 @@ attach_grading_intelligence_layer(app)
 attach_grading_validation_layer(app)
 attach_grading_platform_layer(app)
 attach_release_intelligence_layer(app)
+attach_release_monitoring_layer(app)
+attach_storage_foundation_layer(app)
 attach_release_watchlists_layer(app)
 attach_spec_intelligence_layer(app)
 attach_release_platform_layer(app)

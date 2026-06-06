@@ -16461,6 +16461,483 @@ export interface ReleaseIntelligenceDashboardRead {
   top_ratio_variants: ReleaseVariantRead[];
 }
 
+export interface P74UpcomingReleaseRowRead {
+  issue_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  title: string;
+  release_date: string | null;
+  variant_count: number;
+  window: string;
+}
+
+export interface P74UpcomingReleasesRead {
+  this_week: P74UpcomingReleaseRowRead[];
+  next_week: P74UpcomingReleaseRowRead[];
+  next_30_days: P74UpcomingReleaseRowRead[];
+  next_90_days: P74UpcomingReleaseRowRead[];
+  snapshot_id?: number;
+}
+
+export interface P74ReleaseChangeRead {
+  id: number;
+  issue_id: number | null;
+  variant_id: number | null;
+  change_type: string;
+  before_json: Record<string, unknown>;
+  after_json: Record<string, unknown>;
+  detected_at: string;
+}
+
+export interface P74ReleaseEventRead {
+  id: number;
+  issue_id: number | null;
+  variant_id: number | null;
+  event_type: string;
+  payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface P74DiscoveryHighlightRead {
+  category: string;
+  issue_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  release_date: string | null;
+}
+
+export interface P74VariantChangeRead {
+  change_id: number;
+  issue_id: number | null;
+  variant_id: number | null;
+  variant_name: string;
+  change_type: string;
+  detected_at: string;
+  late_added: boolean;
+}
+
+export interface P74WatchlistActivityRead {
+  watchlist_id: number;
+  watchlist_name: string;
+  watchlist_type: string;
+  changes_since_review: number;
+  recent_events: P74ReleaseEventRead[];
+}
+
+export interface P74FocWatchRead {
+  snapshot_id: number;
+  foc_this_week: number;
+  foc_next_week: number;
+  foc_within_30_days: number;
+  foc_missed: number;
+  foc_unknown: number;
+}
+
+export interface P74PurchaseRecommendationRead {
+  id: number;
+  release_issue_id: number;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  foc_date: string | null;
+  release_date: string | null;
+  foc_bucket: string;
+  priority_score: number;
+  purchase_action: string;
+  quantity_recommended: number;
+  owned_quantity: number;
+  ordered_quantity: number;
+  watchlist_match: boolean;
+  reasoning: string;
+}
+
+export interface P74PurchaseRecommendationChangeRead {
+  id: number;
+  release_issue_id: number;
+  change_kind: string;
+  previous_action: string;
+  current_action: string;
+  previous_quantity: number;
+  current_quantity: number;
+  reason: string;
+  created_at: string;
+}
+
+export interface P74FocDashboardRead {
+  snapshot_id: number;
+  generated_at: string;
+  foc_watch: P74FocWatchRead;
+  foc_this_week: P74PurchaseRecommendationRead[];
+  last_chance: P74PurchaseRecommendationRead[];
+  recommended_preorders: P74PurchaseRecommendationRead[];
+  quantity_changes: P74PurchaseRecommendationChangeRead[];
+  recommendation_upgrades: P74PurchaseRecommendationChangeRead[];
+  recommendation_downgrades: P74PurchaseRecommendationChangeRead[];
+  missed_foc: P74PurchaseRecommendationRead[];
+  watchlist_matches: P74PurchaseRecommendationRead[];
+  alerts: { alert_type: string; title: string; message: string }[];
+}
+
+export interface P74ReleaseMonitoringDashboardRead {
+  snapshot_id: number;
+  generated_at: string;
+  upcoming: P74UpcomingReleasesRead;
+  recent_changes: P74ReleaseChangeRead[];
+  new_number_ones: P74DiscoveryHighlightRead[];
+  variant_changes: P74VariantChangeRead[];
+  watchlist_activity: P74WatchlistActivityRead[];
+}
+
+export interface P74ReleaseOutcomeRead {
+  id: number;
+  release_issue_id: number;
+  recommended_quantity: number;
+  ordered_quantity: number;
+  actual_quantity_purchased: number;
+  foc_date: string | null;
+  release_date: string | null;
+  market_performance_pct: number;
+  inventory_performance_pct: number;
+  actual_profit: string;
+  actual_roi_pct: number;
+  outcome_status: string;
+  purchase_action: string;
+  recorded_at: string;
+}
+
+export interface P74FocAccuracyRead {
+  accuracy_rate_pct: number;
+  upgrade_accuracy_pct: number;
+  downgrade_accuracy_pct: number;
+  missed_opportunity_rate_pct: number;
+  snapshot_id: number;
+}
+
+export interface P74QuantityAccuracyRead {
+  success_rate_pct: number;
+  failure_rate_pct: number;
+  average_roi_pct: number;
+  median_roi_pct: number;
+  by_action: Record<string, Record<string, number>>;
+  snapshot_id: number;
+}
+
+export interface P74ReleaseCategoryPerformanceRead {
+  category_key: string;
+  sample_count: number;
+  success_rate_pct: number;
+  average_roi_pct: number;
+}
+
+export interface P74ReleaseCertificationCheckRead {
+  component: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface P74ReleaseCertificationRead {
+  approved_for_production: boolean;
+  checks: P74ReleaseCertificationCheckRead[];
+  platform_status: string;
+  reviewed_at: string;
+}
+
+export interface P79StorageLocationRead {
+  id: number;
+  parent_id: number | null;
+  location_kind: string;
+  name: string;
+  description: string;
+  capacity: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  utilization_pct: number;
+  current_occupancy: number;
+  remaining_capacity: number | null;
+}
+
+export interface P79StorageLocationListResponse {
+  items: P79StorageLocationRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface P79StorageBoxRead {
+  id: number;
+  shelf_location_id: number;
+  name: string;
+  description: string;
+  capacity: number;
+  is_active: boolean;
+  current_occupancy: number;
+  remaining_capacity: number;
+  utilization_pct: number;
+  suggested_next_slot: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P79StorageBoxListResponse {
+  items: P79StorageBoxRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface P79StorageLocationPathSegment {
+  kind: string;
+  name: string;
+  id: number;
+}
+
+export interface P79StorageAssignmentRead {
+  id: number;
+  inventory_copy_id: number;
+  box_id: number;
+  slot_number: number;
+  location_path: P79StorageLocationPathSegment[];
+  box_name: string;
+  assigned_at: string;
+  updated_at: string;
+  assigned_by_user_id: number | null;
+  series_name: string | null;
+  issue_number: string | null;
+  variant_label: string | null;
+}
+
+export interface P79StorageSearchResultRead {
+  inventory_copy_id: number;
+  series_name: string;
+  issue_number: string;
+  variant_label: string;
+  location_path: P79StorageLocationPathSegment[];
+  box_name: string;
+  slot_number: number;
+}
+
+export interface P79StorageSearchResponse {
+  items: P79StorageSearchResultRead[];
+  total_items: number;
+  query: string;
+}
+
+export interface P79LocatorPathRead {
+  room: string | null;
+  rack: string | null;
+  shelf: string | null;
+  box: string | null;
+  section: string | null;
+  slot: number | null;
+  location_path_text: string;
+}
+
+export interface P79LocatorMatchRead {
+  inventory_copy_id: number;
+  title: string;
+  series_name: string;
+  issue_number: string;
+  variant_label: string;
+  publisher: string;
+  assignment_status: string;
+  path: P79LocatorPathRead;
+  assigned_at: string | null;
+  assignment_confidence: string;
+  is_duplicate_assignment: boolean;
+  duplicate_matches: number[];
+  box_id: number | null;
+}
+
+export interface P79InventoryLocatorResponse {
+  query: string;
+  items: P79LocatorMatchRead[];
+  total_items: number;
+  unassigned_count: number;
+}
+
+export interface P79BoxContentRowRead {
+  inventory_copy_id: number;
+  slot_number: number;
+  section: string;
+  series_name: string;
+  issue_number: string;
+  variant_label: string;
+  estimated_fmv: string | null;
+  flag: string | null;
+}
+
+export interface P79BoxSectionGroupRead {
+  section: string;
+  items: P79BoxContentRowRead[];
+}
+
+export interface P79BoxContentsRead {
+  box_id: number;
+  box_name: string;
+  capacity: number;
+  total_count: number;
+  utilization_pct: number;
+  total_estimated_fmv: string;
+  sections: P79BoxSectionGroupRead[];
+  flagged_rows: P79BoxContentRowRead[];
+}
+
+export interface P79StorageAuditRead {
+  id: number;
+  audit_name: string;
+  scope_kind: string;
+  scope_location_id: number | null;
+  scope_box_id: number | null;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  expected_count: number;
+  verified_count: number;
+  missing_count: number;
+  unexpected_count: number;
+}
+
+export interface P79StorageAuditEntryRead {
+  id: number;
+  inventory_copy_id: number | null;
+  storage_box_id: number | null;
+  slot_number: number | null;
+  entry_status: string;
+  title_snapshot: string;
+}
+
+export interface P79StorageAuditDetailRead {
+  session: P79StorageAuditRead;
+  entries: P79StorageAuditEntryRead[];
+  detection_summary: Record<string, number>;
+}
+
+export interface P79StorageAuditListResponse {
+  items: P79StorageAuditRead[];
+  total_items: number;
+}
+
+export interface P79StorageLabelRead {
+  entity_type: string;
+  entity_id: number;
+  label_code: string;
+  qr_payload: string;
+  printable_title: string;
+  storage_path: string;
+  capacity: number | null;
+  current_count: number | null;
+}
+
+export interface P79StorageAnalyticsRead {
+  snapshot_id: number;
+  generated_at: string;
+  total_locations: number;
+  total_boxes: number;
+  total_capacity: number;
+  used_capacity: number;
+  available_capacity: number;
+  utilization_pct: number;
+  assigned_inventory_count: number;
+  unassigned_inventory_count: number;
+  over_capacity_boxes: number;
+  inactive_locations: number;
+  forecast_risk: string;
+  estimated_months_until_full: number | null;
+}
+
+export interface P79UtilizationRowRead {
+  group_kind: string;
+  group_key: string;
+  entity_id: number | null;
+  utilization_pct: number;
+  used_capacity: number;
+  total_capacity: number;
+}
+
+export interface P79StorageAuditAnalyticsRead {
+  snapshot_id: number;
+  audits_started: number;
+  audits_completed: number;
+  average_verification_rate_pct: number;
+  missing_books_found: number;
+  unexpected_books_found: number;
+  duplicate_assignments_found: number;
+  moved_books: number;
+  audit_accuracy_rate_pct: number;
+}
+
+export interface P79StorageHealthRead {
+  snapshot_id: number;
+  health_score: number;
+  health_status: string;
+  factors: Record<string, number>;
+}
+
+export interface P79StorageAnalyticsDashboardRead {
+  snapshot_id: number;
+  generated_at: string;
+  analytics: P79StorageAnalyticsRead;
+  health: P79StorageHealthRead;
+  utilization: P79UtilizationRowRead[];
+  audit_analytics: P79StorageAuditAnalyticsRead;
+  unassigned: P79UnassignedInventoryResponse;
+  over_capacity_alerts: P79UtilizationRowRead[];
+  certification_status: string;
+}
+
+export interface P79UnassignedInventoryRowRead {
+  inventory_copy_id: number;
+  title: string;
+  in_hand: boolean;
+  graded: boolean;
+  sell_queue: boolean;
+  high_value: boolean;
+  estimated_fmv: string | null;
+}
+
+export interface P79UnassignedInventoryResponse {
+  total_unassigned: number;
+  in_hand_unassigned: number;
+  graded_unassigned: number;
+  sell_queue_unassigned: number;
+  high_value_unassigned: number;
+  items: P79UnassignedInventoryRowRead[];
+}
+
+export interface P79StorageDashboardRead {
+  location_count: number;
+  box_count: number;
+  assigned_books: number;
+  unassigned_books: number;
+  total_slot_capacity: number;
+  occupied_slots: number;
+  available_slots: number;
+  location_utilization_pct: number;
+  shelf_utilization_pct: number;
+  box_utilization_pct: number;
+  recent_assignments: P79StorageAssignmentRead[];
+  locations: P79StorageLocationRead[];
+  boxes: P79StorageBoxRead[];
+}
+
+export interface P74ReleaseIntelligenceAnalyticsDashboardRead {
+  snapshot_id: number;
+  generated_at: string;
+  upcoming_count: number;
+  past_performance_count: number;
+  foc_accuracy: P74FocAccuracyRead;
+  quantity_accuracy: P74QuantityAccuracyRead;
+  best_categories: P74ReleaseCategoryPerformanceRead[];
+  worst_categories: P74ReleaseCategoryPerformanceRead[];
+  certification_status: string;
+  platform_confidence_pct: number;
+  recent_outcomes: P74ReleaseOutcomeRead[];
+}
+
 export interface CollectionRunRead {
   id: number;
   owner_user_id: number;
@@ -27885,6 +28362,98 @@ export const apiClient = {
 
   getReleaseIntelligenceDashboard(): Promise<ReleaseIntelligenceDashboardRead> {
     return requestScanV1<ReleaseIntelligenceDashboardRead>("/release-intelligence/dashboard");
+  },
+
+  getReleaseMonitoringDashboard(): Promise<P74ReleaseMonitoringDashboardRead> {
+    return requestScanV1<P74ReleaseMonitoringDashboardRead>("/release-monitoring/dashboard");
+  },
+
+  getFocPurchaseDashboard(): Promise<P74FocDashboardRead> {
+    return requestScanV1<P74FocDashboardRead>("/release-monitoring/foc-dashboard");
+  },
+
+  getReleaseIntelligenceAnalyticsDashboard(): Promise<P74ReleaseIntelligenceAnalyticsDashboardRead> {
+    return requestScanV1<P74ReleaseIntelligenceAnalyticsDashboardRead>("/release-monitoring/analytics-dashboard");
+  },
+
+  getReleaseMonitoringCertification(): Promise<P74ReleaseCertificationRead> {
+    return requestScanV1<P74ReleaseCertificationRead>("/release-monitoring/certification");
+  },
+
+  listStorageLocations(): Promise<P79StorageLocationListResponse> {
+    return requestScanV1<P79StorageLocationListResponse>("/storage/locations");
+  },
+
+  createStorageLocation(payload: {
+    parent_id?: number | null;
+    location_kind: string;
+    name: string;
+    description?: string;
+    seed_office_template?: boolean;
+  }): Promise<P79StorageLocationRead> {
+    return requestScanV1<P79StorageLocationRead>("/storage/locations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listStorageBoxes(): Promise<P79StorageBoxListResponse> {
+    return requestScanV1<P79StorageBoxListResponse>("/storage/boxes");
+  },
+
+  assignStorageLocation(payload: {
+    inventory_copy_id: number;
+    box_id: number;
+    slot_number?: number;
+    use_suggested_slot?: boolean;
+  }): Promise<P79StorageAssignmentRead> {
+    return requestScanV1<P79StorageAssignmentRead>("/storage/assign", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  searchStorage(q: string): Promise<P79StorageSearchResponse> {
+    const query = encodeURIComponent(q);
+    return requestScanV1<P79StorageSearchResponse>(`/storage/search?q=${query}`);
+  },
+
+  getStorageDashboard(): Promise<P79StorageDashboardRead> {
+    return requestScanV1<P79StorageDashboardRead>("/storage/dashboard");
+  },
+
+  locateInventory(q: string): Promise<P79InventoryLocatorResponse> {
+    return requestScanV1<P79InventoryLocatorResponse>(`/storage/locator?q=${encodeURIComponent(q)}`);
+  },
+
+  getStorageBoxContents(boxId: number): Promise<P79BoxContentsRead> {
+    return requestScanV1<P79BoxContentsRead>(`/storage/boxes/${boxId}/contents`);
+  },
+
+  createStorageAudit(payload: { audit_name: string; scope_box_id?: number; scope_location_id?: number }): Promise<P79StorageAuditDetailRead> {
+    return requestScanV1<P79StorageAuditDetailRead>("/storage/audits", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listStorageAudits(): Promise<P79StorageAuditListResponse> {
+    return requestScanV1<P79StorageAuditListResponse>("/storage/audits");
+  },
+
+  verifyStorageAudit(auditId: number, entryId: number): Promise<P79StorageAuditDetailRead> {
+    return requestScanV1<P79StorageAuditDetailRead>(`/storage/audits/${auditId}/verify`, {
+      method: "POST",
+      body: JSON.stringify({ entry_id: entryId }),
+    });
+  },
+
+  getStorageLabel(entityType: string, entityId: number): Promise<P79StorageLabelRead> {
+    return requestScanV1<P79StorageLabelRead>(`/storage/labels/${entityType}/${entityId}`);
+  },
+
+  getStorageAnalyticsDashboard(): Promise<P79StorageAnalyticsDashboardRead> {
+    return requestScanV1<P79StorageAnalyticsDashboardRead>("/storage/analytics-dashboard");
   },
 
   getReleaseWatchlistDashboard(): Promise<ContinuityDashboardRead> {
