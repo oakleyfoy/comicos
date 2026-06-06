@@ -374,7 +374,86 @@ def _prefetch_portfolio_movement(owner_user_id: int, *, timeout_seconds: float) 
     )
 
 
+def _static_safe_collector_home() -> P85CollectorHomeRead:
+    """Emergency-safe home payload: no DB/service fan-out from Collector Home."""
+    skipped = "Temporarily skipped on Collector Home; open the dedicated page for full data."
+    sections = [
+        _section_skipped(
+            "buy_alerts",
+            "Buy alerts",
+            empty_hint="Open Marketplace Opportunities for buy alerts.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "sell_alerts",
+            "Sell alerts",
+            empty_hint="Open Sell Queue for sell recommendations.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "grade_alerts",
+            "Grade alerts",
+            empty_hint="Open Sell Queue for grade candidates.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "foc_alerts",
+            "FOC alerts",
+            empty_hint="Open Future Pull List for FOC reminders.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "storage_issues",
+            "Storage issues",
+            empty_hint="Open Storage Dashboard for location status.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "marketplace_deals",
+            "Marketplace deals",
+            empty_hint="Open Marketplace Opportunities for deals.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "future_pull_list",
+            "Future pull list",
+            empty_hint="Open Future Pull List for recommendations.",
+            reason=skipped,
+        ),
+        _section_skipped(
+            "discovery_alerts",
+            "Discovery alerts",
+            empty_hint="Open Discovery Dashboard for alerts.",
+            reason=skipped,
+        ),
+    ]
+    return P85CollectorHomeRead(
+        headline="Collector Home is in fast safe mode.",
+        todays_actions=[],
+        todays_actions_status="SKIPPED",
+        todays_actions_error="Open Daily Actions for the full list.",
+        sections=sections,
+        budget_status={
+            "status": "SKIPPED",
+            "error": "Open Budget settings for current budget status.",
+            "state": None,
+            "monthly_budget": None,
+            "monthly_spend": None,
+        },
+        portfolio_movement={
+            "status": "SKIPPED",
+            "error": "Open Portfolio views for current value and risk.",
+            "current_value": None,
+            "risk_category": None,
+            "risk_score": None,
+        },
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 def build_collector_home(session: Session, *, owner_user_id: int) -> P85CollectorHomeRead:
+    return _static_safe_collector_home()
+
     started = time.monotonic()
     deadline = started + _HOME_DEADLINE_SECONDS
     timed_out = "Section timed out; open the dedicated page for full data."
