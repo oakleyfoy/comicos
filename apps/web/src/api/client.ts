@@ -11999,6 +11999,18 @@ export interface P80CollectorScanResultRead {
   spec_opportunity?: P80SpecOpportunityRead | null;
   action_card: P80CollectorActionCardRead;
   price_assessment?: P80PriceAssessmentRead | null;
+  personalization?: P77PersonalizationSnapshotRead | null;
+}
+
+export interface P77PersonalizationSnapshotRead {
+  global_score?: number | null;
+  collector_adjustment: number;
+  personalized_score?: number | null;
+  budget_impact?: number;
+  goal_alignment?: number;
+  quantity_recommendation?: number;
+  budget_state?: string;
+  reasons: string[];
 }
 
 export interface P80CollectorPriceEvalRequest {
@@ -12013,6 +12025,7 @@ export interface P80CollectorPriceEvalResultRead {
   identification?: P80ScanIdentificationRead | null;
   price_assessment: P80PriceAssessmentRead;
   action_card?: P80CollectorActionCardRead | null;
+  personalization?: P77PersonalizationSnapshotRead | null;
 }
 
 export interface P80CollectorOpportunityItemRead {
@@ -12040,6 +12053,266 @@ export interface P80CollectorDashboardRead {
   recommended_acquisitions: P80CollectorOpportunityItemRead[];
   spec_opportunities: P80CollectorOpportunityItemRead[];
   books_to_watch: P80CollectorOpportunityItemRead[];
+}
+
+export interface P77InterestItemRead {
+  id: number;
+  interest_type: string;
+  label: string;
+  priority_rank: number;
+}
+
+export interface P77CollectorProfileRead {
+  owner_id: number;
+  collector_type: string;
+  risk_profile: string;
+  time_horizon: string;
+  grading_preference: string;
+  hold_preference: string;
+  default_copy_count: number;
+  key_issue_copy_count: number;
+  ratio_variant_copy_count: number;
+  publishers: P77InterestItemRead[];
+  characters: P77InterestItemRead[];
+  creators: P77InterestItemRead[];
+  updated_at: string;
+}
+
+export interface P77CollectorProfileUpdate {
+  collector_type?: string;
+  risk_profile?: string;
+  time_horizon?: string;
+  grading_preference?: string;
+  hold_preference?: string;
+  default_copy_count?: number;
+  key_issue_copy_count?: number;
+  ratio_variant_copy_count?: number;
+  publishers?: { interest_type: string; label: string; priority_rank: number }[];
+  characters?: { interest_type: string; label: string; priority_rank: number }[];
+  creators?: { interest_type: string; label: string; priority_rank: number }[];
+}
+
+export interface P77BudgetAllocationRead {
+  name: string;
+  amount: number;
+}
+
+export interface P77CollectorBudgetRead {
+  owner_id: number;
+  monthly_budget: number;
+  budget_period: string;
+  publisher_allocations: P77BudgetAllocationRead[];
+  category_allocations: P77BudgetAllocationRead[];
+  updated_at: string;
+}
+
+export interface P77CollectorBudgetUpdate {
+  monthly_budget?: number;
+  budget_period?: string;
+  publisher_allocations?: P77BudgetAllocationRead[];
+  category_allocations?: P77BudgetAllocationRead[];
+}
+
+export interface P77CollectorGoalRead {
+  id: number;
+  goal_type: string;
+  title: string;
+  target_value: number;
+  progress_value: number;
+  completion_percent: number;
+  metadata: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface P77CollectorGoalCreate {
+  goal_type: string;
+  title: string;
+  target_value: number;
+  progress_value?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface P77CollectorGoalUpdate {
+  goal_type?: string;
+  title?: string;
+  target_value?: number;
+  progress_value?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface P77CollectorGoalListResponse {
+  items: P77CollectorGoalRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P77CollectorProfileDashboardRead {
+  profile: P77CollectorProfileRead;
+  budget: P77CollectorBudgetRead;
+  goals: P77CollectorGoalRead[];
+  goals_summary: Record<string, number>;
+}
+
+export interface P77PersonalizedRecommendationRead {
+  source: string;
+  title: string;
+  subtitle?: string;
+  global_score: number;
+  collector_adjustment: number;
+  personalized_score: number;
+  budget_impact?: number;
+  goal_alignment?: number;
+  quantity_recommendation?: number;
+  reasons: string[];
+}
+
+export interface P77PersonalizedRecommendationListResponse {
+  items: P77PersonalizedRecommendationRead[];
+  pagination: MarketApiV1Pagination;
+  estimated_spend?: number;
+  budget_filtered_count?: number;
+}
+
+export interface P77PersonalizedQuantityRead {
+  release_id?: number | null;
+  title: string;
+  series_name?: string;
+  publisher?: string;
+  global_quantity: number;
+  personalized_quantity: number;
+  global_score: number;
+  personalized_score: number;
+  reasons: string[];
+}
+
+export interface P77PersonalizedQuantityListResponse {
+  items: P77PersonalizedQuantityRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P77BudgetStatusRead {
+  monthly_budget: number;
+  monthly_spend: number;
+  remaining_budget: number;
+  projected_spend: number;
+  utilization_percent: number;
+  budget_state: string;
+}
+
+export interface P77PersonalizedDashboardRead {
+  budget_status: P77BudgetStatusRead;
+  top_recommendations: P77PersonalizedRecommendationRead[];
+  quantity_highlights: P77PersonalizedQuantityRead[];
+  profile_summary: Record<string, string | number>;
+}
+
+export interface P77ProfileSummaryRead {
+  collector_type: string;
+  risk_profile: string;
+  time_horizon: string;
+  preferred_publishers: string[];
+  preferred_characters: string[];
+  preferred_creators: string[];
+}
+
+export interface P77ProfileInfluenceRead {
+  publisher_match_pct: number;
+  character_match_pct: number;
+  creator_match_pct: number;
+  goal_match_pct: number;
+  risk_influence_pct: number;
+}
+
+export interface P77BudgetCategorySpendRead {
+  name: string;
+  spend: number;
+  purchase_count: number;
+  roi_pct?: number | null;
+}
+
+export interface P77BudgetForecastRead {
+  projected_month_end_spend: number;
+  monthly_budget: number;
+  status: string;
+}
+
+export interface P77BudgetAnalyticsRead {
+  monthly_budget: number;
+  current_spend: number;
+  remaining_budget: number;
+  utilization_percent: number;
+  budget_state: string;
+  category_breakdown: P77BudgetCategorySpendRead[];
+  forecast: P77BudgetForecastRead;
+  compliance_score: number;
+  snapshot_id?: number | null;
+}
+
+export interface P77GoalProgressRead {
+  goal_id: number;
+  title: string;
+  goal_type: string;
+  progress_value: number;
+  target_value: number;
+  completion_percent: number;
+  velocity_per_week?: number | null;
+  estimated_completion_date?: string | null;
+}
+
+export interface P77GoalAnalyticsRead {
+  goals: P77GoalProgressRead[];
+  goal_influenced_recommendation_pct: number;
+}
+
+export interface P77AdjustmentCategoryRead {
+  category: string;
+  count: number;
+  share_pct: number;
+}
+
+export interface P77RecommendationImpactRead {
+  recommendations_evaluated: number;
+  recommendations_adjusted: number;
+  adjustment_rate_pct: number;
+  categories: P77AdjustmentCategoryRead[];
+}
+
+export interface P77PersonalizationPerformanceRead {
+  global_recommendation_roi_pct: number;
+  personalized_recommendation_roi_pct: number;
+  roi_improvement_pct: number;
+  quantity_adjustment_count: number;
+  budget_compliance_pct: number;
+}
+
+export interface P77CollectorAssistantPerformanceRead {
+  buy_count: number;
+  pass_count: number;
+  hold_count: number;
+  sell_count: number;
+  grade_count: number;
+  action_alignment_pct: number;
+}
+
+export interface P77AnalyticsDashboardRead {
+  profile_summary: P77ProfileSummaryRead;
+  profile_influence: P77ProfileInfluenceRead;
+  budget: P77BudgetAnalyticsRead;
+  goals: P77GoalAnalyticsRead;
+  recommendation_impact: P77RecommendationImpactRead;
+  personalization_performance: P77PersonalizationPerformanceRead;
+  collector_assistant: P77CollectorAssistantPerformanceRead;
+  generated_at: string;
+  analytics_snapshot_id?: number | null;
+}
+
+export interface P77CollectorCertificationRead {
+  platform_status: string;
+  approved_for_production: boolean;
+  checks_passed: number;
+  warnings: number;
+  failures: number;
+  platform_readiness_percent: number;
+  production_checklist: { area: string; status: string }[];
 }
 
 export interface P80IntakeStartRequest {
@@ -29008,6 +29281,80 @@ export const apiClient = {
 
   getCollectorDashboard(): Promise<P80CollectorDashboardRead> {
     return requestScanV1<P80CollectorDashboardRead>("/collector/dashboard");
+  },
+
+  getCollectorProfile(): Promise<P77CollectorProfileRead> {
+    return requestScanV1<P77CollectorProfileRead>("/collector-profile");
+  },
+
+  updateCollectorProfile(payload: P77CollectorProfileUpdate): Promise<P77CollectorProfileRead> {
+    return requestScanV1<P77CollectorProfileRead>("/collector-profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listCollectorProfileGoals(params?: { limit?: number; offset?: number }): Promise<P77CollectorGoalListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P77CollectorGoalListResponse>(`/collector-profile/goals${q}`);
+  },
+
+  createCollectorProfileGoal(payload: P77CollectorGoalCreate): Promise<P77CollectorGoalRead> {
+    return requestScanV1<P77CollectorGoalRead>("/collector-profile/goals", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateCollectorProfileGoal(goalId: number, payload: P77CollectorGoalUpdate): Promise<P77CollectorGoalRead> {
+    return requestScanV1<P77CollectorGoalRead>(`/collector-profile/goals/${goalId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getCollectorProfileBudget(): Promise<P77CollectorBudgetRead> {
+    return requestScanV1<P77CollectorBudgetRead>("/collector-profile/budget");
+  },
+
+  updateCollectorProfileBudget(payload: P77CollectorBudgetUpdate): Promise<P77CollectorBudgetRead> {
+    return requestScanV1<P77CollectorBudgetRead>("/collector-profile/budget", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getCollectorProfileDashboard(): Promise<P77CollectorProfileDashboardRead> {
+    return requestScanV1<P77CollectorProfileDashboardRead>("/collector-profile/dashboard");
+  },
+
+  listPersonalizedRecommendations(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<P77PersonalizedRecommendationListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P77PersonalizedRecommendationListResponse>(`/collector-profile/recommendations${q}`);
+  },
+
+  listPersonalizedQuantities(params?: { limit?: number; offset?: number }): Promise<P77PersonalizedQuantityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P77PersonalizedQuantityListResponse>(`/collector-profile/quantities${q}`);
+  },
+
+  getCollectorBudgetStatus(): Promise<P77BudgetStatusRead> {
+    return requestScanV1<P77BudgetStatusRead>("/collector-profile/budget-status");
+  },
+
+  getPersonalizedDashboard(): Promise<P77PersonalizedDashboardRead> {
+    return requestScanV1<P77PersonalizedDashboardRead>("/collector-profile/personalized-dashboard");
+  },
+
+  getCollectorAnalyticsDashboard(): Promise<P77AnalyticsDashboardRead> {
+    return requestScanV1<P77AnalyticsDashboardRead>("/collector-profile/analytics-dashboard");
+  },
+
+  getCollectorProfileCertification(): Promise<P77CollectorCertificationRead> {
+    return requestScanV1<P77CollectorCertificationRead>("/collector-profile/certification");
   },
 };
 

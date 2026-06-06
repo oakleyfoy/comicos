@@ -807,6 +807,17 @@ from app.models.offline_inventory import (
 from app.models.mobile_scanning import IntakeStagingRecord, ScanCapture, ScanEvent, ScanLookupResult
 from app.models.p80_mobile_scan import P80MobileScan
 from app.models.p80_mobile_operations import P80MobileAuditLink, P80MobileIntakeSession
+from app.models.p77_collector_profile import (
+    P77CollectorBudget,
+    P77CollectorGoal,
+    P77CollectorInterest,
+    P77CollectorProfile,
+)
+from app.models.p77_collector_analytics import (
+    P77BudgetPerformanceSnapshot,
+    P77CollectorAnalyticsSnapshot,
+    P77RecommendationAdjustmentSnapshot,
+)
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,
@@ -1536,6 +1547,13 @@ __all__ = [
     "P80MobileScan",
     "P80MobileIntakeSession",
     "P80MobileAuditLink",
+    "P77CollectorProfile",
+    "P77CollectorInterest",
+    "P77CollectorGoal",
+    "P77CollectorBudget",
+    "P77CollectorAnalyticsSnapshot",
+    "P77RecommendationAdjustmentSnapshot",
+    "P77BudgetPerformanceSnapshot",
     "IntakeStagingRecord",
     "ScanEvent",
     "ConventionSession",

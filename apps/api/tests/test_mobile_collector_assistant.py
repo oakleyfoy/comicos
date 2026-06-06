@@ -123,6 +123,8 @@ def test_collector_scan_ownership_and_action_card(client: TestClient, session: S
     assert data["book_intelligence"]["ownership"]["total_copies"] == 1
     assert data["book_intelligence"]["fmv"]["authoritative_fmv"] == 28.0
     assert data["action_card"]["action"] in {"HOLD", "GRADE", "WATCH", "BUY", "PASS"}
+    assert data.get("personalization") is not None
+    assert "collector_adjustment" in data["personalization"]
 
 
 def test_collector_price_evaluation_great_buy(client: TestClient, session: Session) -> None:
@@ -148,6 +150,7 @@ def test_collector_price_evaluation_great_buy(client: TestClient, session: Sessi
     )
     assert eval_resp.status_code == 200
     assert eval_resp.json()["data"]["price_assessment"]["assessment"] == "GREAT_BUY"
+    assert eval_resp.json()["data"].get("personalization") is not None
 
 
 def test_collector_duplicate_ownership_pass(client: TestClient, session: Session) -> None:

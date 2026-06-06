@@ -27,11 +27,16 @@ from app.services.collection_gaps import (
     refresh_and_list_latest_collection_gaps,
 )
 from app.services.grading_candidate_engine import REC_GRADE, REC_PRESS_AND_GRADE
+from app.models.asset_ledger import InventoryCopy
 from app.services.mobile_scan_platform_service import (
+    _book_from_copy,
     build_book_intelligence,
     get_book_intelligence,
     identify_for_scan_input,
 )
+from app.schemas.p77_personalization import P77PersonalizationSnapshotRead
+from app.services.p77_personalization_engine import load_personalization_context
+from app.services.p77_personalization_service import personalization_for_scan
 from app.services.run_detection import run_detection_groups_for_user
 from app.services.unified_collector_intelligence import list_latest_unified_collector_recommendations
 
@@ -177,6 +182,8 @@ def build_collector_action_card(
     price_assessment: P80PriceAssessmentRead | None,
     collection_completion: P80CollectionCompletionRead | None,
     spec_opportunity: P80SpecOpportunityRead | None,
+    personalization: P77PersonalizationSnapshotRead | None = None,
+    copy_target: int | None = None,
 ) -> P80CollectorActionCardRead:
     reasons: list[str] = []
     if book_intel is None:
@@ -189,7 +196,8 @@ def build_collector_action_card(
     rec = (recommendation.recommendation or "HOLD").upper()
     score = recommendation.conviction_score
 
-    inventory_exceeded = ownership.total_copies >= _DUPLICATE_INVENTORY_THRESHOLD
+    target = copy_target or _DUPLICATE_INVENTORY_THRESHOLD
+    inventory_exceeded = ownership.total_copies > max(target, 1) and ownership.total_copies >= _DUPLICATE_INVENTORY_THRESHOLD
     if inventory_exceeded and not (collection_completion and collection_completion.gap_completion_opportunity):
         reasons.append(f"User owns {ownership.total_copies} copies")
         reasons.append("Inventory target exceeded")
@@ -249,6 +257,19 @@ def build_collector_action_card(
         action = "BUY"
         reasons.append("Vendor price below FMV")
 
+    if personalization is not None:
+        pscore = personalization.personalized_score or 0.0
+        if personalization.budget_state == "RED" and action == "BUY" and pscore < 72.0:
+            action = "PASS"
+            reasons = personalization.reasons[:4] + ["Budget exhausted — personalized PASS"]
+        elif action == "BUY" and pscore < 50.0 and not (collection_completion and collection_completion.gap_completion_opportunity):
+            action = "PASS"
+            reasons = personalization.reasons[:4] + [f"Personalized score {pscore:.0f}"]
+        else:
+            reasons = personalization.reasons[:2] + reasons
+            if personalization.personalized_score is not None:
+                reasons.append(f"Personalized score {personalization.personalized_score:.0f}")
+
     return P80CollectorActionCardRead(action=action, reasons=reasons[:6])
 
 
@@ -287,11 +308,30 @@ def evaluate_collector_scan(
         fmv_value = book_intel.fmv.authoritative_fmv if book_intel else None
         price_assessment = assess_price(asking_price=float(payload.vendor_price), authoritative_fmv=fmv_value)
 
+    personalization: P77PersonalizationSnapshotRead | None = None
+    copy_target: int | None = None
+    if book_intel is not None and identity is not None:
+        ctx = load_personalization_context(session, owner_user_id=owner_user_id)
+        copy_target = ctx.profile.default_copy_count
+        personalization = personalization_for_scan(
+            session,
+            owner_user_id=owner_user_id,
+            global_score=book_intel.recommendation.conviction_score,
+            publisher=identity.publisher,
+            series_name=identity.series_name,
+            title=identity.title,
+            owned_copies=book_intel.ownership.total_copies,
+            gap_completion=bool(collection_completion and collection_completion.gap_completion_opportunity),
+            estimated_fmv=book_intel.fmv.authoritative_fmv,
+        )
+
     action_card = build_collector_action_card(
         book_intel=book_intel,
         price_assessment=price_assessment,
         collection_completion=collection_completion,
         spec_opportunity=spec_opportunity,
+        personalization=personalization,
+        copy_target=copy_target,
     )
 
     return P80CollectorScanResultRead(
@@ -301,6 +341,7 @@ def evaluate_collector_scan(
         spec_opportunity=spec_opportunity,
         action_card=action_card,
         price_assessment=price_assessment,
+        personalization=personalization,
     )
 
 
@@ -312,38 +353,61 @@ def evaluate_collector_price(
 ) -> P80CollectorPriceEvalResultRead:
     identification = None
     book_intel: P80BookIntelligenceRead | None = None
+    resolved_identity = None
     fmv_override = payload.authoritative_fmv
 
     if payload.inventory_id is not None:
         book_intel = get_book_intelligence(session, owner_user_id=owner_user_id, inventory_id=payload.inventory_id)
+        copy = session.get(InventoryCopy, payload.inventory_id)
+        if copy is not None:
+            resolved_identity = _book_from_copy(session, copy, source="inventory_lookup")
         if fmv_override is None:
             fmv_override = book_intel.fmv.authoritative_fmv
     elif payload.barcode or payload.manual_entry:
-        identification, identity = identify_for_scan_input(
+        identification, resolved_identity = identify_for_scan_input(
             session,
             owner_user_id=owner_user_id,
             barcode=payload.barcode,
             manual_entry=payload.manual_entry,
         )
-        if identity is not None:
-            book_intel = build_book_intelligence(session, owner_user_id=owner_user_id, identity=identity)
+        if resolved_identity is not None:
+            book_intel = build_book_intelligence(session, owner_user_id=owner_user_id, identity=resolved_identity)
             if fmv_override is None:
                 fmv_override = book_intel.fmv.authoritative_fmv
 
     price_assessment = assess_price(asking_price=float(payload.asking_price), authoritative_fmv=fmv_override)
+    personalization: P77PersonalizationSnapshotRead | None = None
+    copy_target: int | None = None
     action_card = None
+    if book_intel is not None and resolved_identity is not None:
+        ctx = load_personalization_context(session, owner_user_id=owner_user_id)
+        copy_target = ctx.profile.default_copy_count
+        personalization = personalization_for_scan(
+            session,
+            owner_user_id=owner_user_id,
+            global_score=book_intel.recommendation.conviction_score,
+            publisher=resolved_identity.publisher,
+            series_name=resolved_identity.series_name,
+            title=resolved_identity.title,
+            owned_copies=book_intel.ownership.total_copies,
+            gap_completion=False,
+            estimated_fmv=book_intel.fmv.authoritative_fmv,
+        )
     if book_intel is not None:
         action_card = build_collector_action_card(
             book_intel=book_intel,
             price_assessment=price_assessment,
             collection_completion=None,
             spec_opportunity=None,
+            personalization=personalization,
+            copy_target=copy_target,
         )
 
     return P80CollectorPriceEvalResultRead(
         identification=identification,
         price_assessment=price_assessment,
         action_card=action_card,
+        personalization=personalization,
     )
 
 

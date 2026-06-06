@@ -58,6 +58,13 @@ import { MobileOperationsPage } from "./pages/MobileOperationsPage";
 import { CollectorAssistantPage } from "./pages/CollectorAssistantPage";
 import { CollectorConventionPage } from "./pages/CollectorConventionPage";
 import { CollectorDashboardPage } from "./pages/CollectorDashboardPage";
+import { CollectorProfilePage } from "./pages/CollectorProfilePage";
+import { CollectorGoalsPage } from "./pages/CollectorGoalsPage";
+import { CollectorBudgetPage } from "./pages/CollectorBudgetPage";
+import { CollectorRecommendationsPage } from "./pages/CollectorRecommendationsPage";
+import { CollectorBudgetDashboardPage } from "./pages/CollectorBudgetDashboardPage";
+import { CollectorQuantityIntelligencePage } from "./pages/CollectorQuantityIntelligencePage";
+import { CollectorAnalyticsPage } from "./pages/CollectorAnalyticsPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -233,6 +240,13 @@ export default function App() {
         <Route path="/collector-assistant" element={<CollectorAssistantPage />} />
         <Route path="/convention-mode" element={<CollectorConventionPage />} />
         <Route path="/collector-dashboard" element={<CollectorDashboardPage />} />
+        <Route path="/collector-profile" element={<CollectorProfilePage />} />
+        <Route path="/collector-goals" element={<CollectorGoalsPage />} />
+        <Route path="/collector-budget" element={<CollectorBudgetPage />} />
+        <Route path="/collector-recommendations" element={<CollectorRecommendationsPage />} />
+        <Route path="/collector-budget-dashboard" element={<CollectorBudgetDashboardPage />} />
+        <Route path="/collector-quantity-intelligence" element={<CollectorQuantityIntelligencePage />} />
+        <Route path="/collector-analytics" element={<CollectorAnalyticsPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />

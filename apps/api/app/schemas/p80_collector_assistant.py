@@ -11,6 +11,7 @@ from app.schemas.mobile_scan_platform import (
     P80BookIntelligenceRead,
     P80ScanIdentificationRead,
 )
+from app.schemas.p77_personalization import P77PersonalizationSnapshotRead
 
 CollectorShoppingAction = Literal["BUY", "PASS", "HOLD", "SELL", "GRADE", "WATCH"]
 PriceBuyAssessment = Literal["GREAT_BUY", "FAIR_BUY", "OVERPRICED", "UNKNOWN"]
@@ -60,6 +61,7 @@ class P80CollectorScanResultRead(BaseModel):
     spec_opportunity: P80SpecOpportunityRead | None = None
     action_card: P80CollectorActionCardRead
     price_assessment: P80PriceAssessmentRead | None = None
+    personalization: P77PersonalizationSnapshotRead | None = None
 
 
 class P80CollectorPriceEvalRequest(BaseModel):
@@ -77,6 +79,7 @@ class P80CollectorPriceEvalResultRead(BaseModel):
     identification: P80ScanIdentificationRead | None = None
     price_assessment: P80PriceAssessmentRead
     action_card: P80CollectorActionCardRead | None = None
+    personalization: P77PersonalizationSnapshotRead | None = None
 
 
 class P80CollectorGapListResponse(BaseModel):

@@ -108,6 +108,10 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "mobile_operations": "P80-02",
     "collector_assistant": "P80-03",
     "mobile_scanning_certification": "P80-04",
+    "collector_profile": "P77-01",
+    "collector_personalization": "P77-02",
+    "collector_profile_analytics": "P77-03",
+    "collector_profile_certification": "P77-03",
 }
 
 

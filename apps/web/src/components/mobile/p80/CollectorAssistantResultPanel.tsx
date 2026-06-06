@@ -33,6 +33,35 @@ export function CollectorAssistantResultPanel({ result }: { result: P80Collector
         </ul>
       </section>
 
+      {result.personalization ? (
+        <section className="rounded-2xl border border-sky-500/30 bg-sky-950/20 p-4 text-sm text-sky-100">
+          <p className="text-[10px] uppercase tracking-wider text-sky-300">P77 personalized score</p>
+          <p className="mt-1 text-lg font-semibold">
+            {result.personalization.personalized_score != null
+              ? result.personalization.personalized_score.toFixed(0)
+              : "—"}
+            {result.personalization.global_score != null ? (
+              <span className="ml-2 text-sm font-normal text-sky-200/80">
+                (global {result.personalization.global_score.toFixed(0)})
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-1 text-xs text-sky-200/70">
+            Budget {result.personalization.budget_state ?? "GREEN"}
+            {result.personalization.quantity_recommendation
+              ? ` · qty ${result.personalization.quantity_recommendation}`
+              : ""}
+          </p>
+          {result.personalization.reasons.length ? (
+            <ul className="mt-2 space-y-1">
+              {result.personalization.reasons.slice(0, 4).map((r) => (
+                <li key={r}>• {r}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       {result.price_assessment ? (
         <section className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4 text-sm">
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Price vs FMV</p>

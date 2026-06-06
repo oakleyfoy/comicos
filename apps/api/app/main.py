@@ -1258,6 +1258,7 @@ from app.api.mobile_analytics import attach_mobile_analytics_layer
 from app.api.mobile_scan_platform import attach_mobile_scan_platform_layer
 from app.api.mobile_operations import attach_mobile_operations_layer
 from app.api.p80_collector_assistant import attach_p80_collector_assistant_layer
+from app.api.p77_collector_profile import attach_p77_collector_profile_layer
 from app.api.agents import attach_agents_layer
 from app.api.workflows import attach_workflows_layer
 from app.api.research_agents import attach_research_agents_layer
@@ -1426,6 +1427,7 @@ attach_mobile_analytics_layer(app)
 attach_mobile_scan_platform_layer(app)
 attach_mobile_operations_layer(app)
 attach_p80_collector_assistant_layer(app)
+attach_p77_collector_profile_layer(app)
 attach_agents_layer(app)
 attach_workflows_layer(app)
 attach_research_agents_layer(app)
