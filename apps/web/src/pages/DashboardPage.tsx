@@ -1388,6 +1388,42 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   }, [applyDashboardWidgetResults, dashboardPortfolioFilters, inventoryQuery, loadProfile]);
 
   useEffect(() => {
+    if (loadsDealerData) {
+      return;
+    }
+    setListingRegistrySummaryLoading(false);
+    setListingIntelligenceSummaryLoading(false);
+    setConventionSummaryLoading(false);
+    setLiquiditySummaryLoading(false);
+    setSalesLedgerSummaryLoading(false);
+    setListingExportDashLoading(false);
+    setDealerDashLoading(false);
+    setStrategyDashLoading(false);
+    setPortfolioIntelLoading(false);
+    setDupIntelLoading(false);
+    setPortfolioLiquidityLoading(false);
+    setPortfolioRecommendationLoading(false);
+    setAcquisitionPriorityLoading(false);
+    setConcentrationRiskLoading(false);
+    setOpReportRollupsLoading(false);
+  }, [loadsDealerData]);
+
+  useEffect(() => {
+    if (loadsGradingData) {
+      return;
+    }
+    setDealerGradingDashLoading(false);
+    setGradingReportsLoading(false);
+    setGradingDashLoading(false);
+    setGradingSpreadLoading(false);
+    setGradingRoiLoading(false);
+    setGradingRiskLoading(false);
+    setGradingSubmissionLoading(false);
+    setGradingReconciliationLoading(false);
+    setGradingRecommendationLoading(false);
+  }, [loadsGradingData]);
+
+  useEffect(() => {
     if (!loadsMarketData) {
       return;
     }
@@ -3033,27 +3069,27 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
     Boolean(marketTrendSummary) ||
     marketMatchSuggestionsPendingLoading ||
     marketMatchSuggestionsPendingError ||
-    conventionSummaryLoading ||
-    conventionSummaryError ||
-    Boolean(conventionSummary) ||
-    liquiditySummaryLoading ||
-    liquiditySummaryError ||
-    Boolean(liquiditySummary) ||
-    salesLedgerSummaryLoading ||
-    salesLedgerSummaryError ||
-    Boolean(salesLedgerSummary) ||
-    listingRegistrySummaryLoading ||
-    listingRegistrySummaryError ||
-    Boolean(listingRegistrySummary) ||
-    listingIntelligenceSummaryLoading ||
-    listingIntelligenceSummaryError ||
-    Boolean(listingIntelligenceSummary) ||
-    listingExportDashLoading ||
-    listingExportDashError ||
-    Boolean(listingExportDash) ||
-    dealerDashLoading ||
-    dealerDashError ||
-    dealerDashResp !== null;
+    (loadsDealerData &&
+      (conventionSummaryLoading ||
+        conventionSummaryError ||
+        Boolean(conventionSummary) ||
+        liquiditySummaryLoading ||
+        liquiditySummaryError ||
+        Boolean(liquiditySummary) ||
+        salesLedgerSummaryLoading ||
+        salesLedgerSummaryError ||
+        Boolean(salesLedgerSummary) ||
+        listingRegistrySummaryLoading ||
+        listingRegistrySummaryError ||
+        Boolean(listingRegistrySummary) ||
+        listingIntelligenceSummaryLoading ||
+        listingIntelligenceSummaryError ||
+        Boolean(listingIntelligenceSummary) ||
+        listingExportDashLoading ||
+        listingExportDashError ||
+        Boolean(listingExportDash))) ||
+    (loadsDealerData &&
+      (dealerDashLoading || dealerDashError || dealerDashResp !== null));
 
   const marketRegistryRailsVisible =
     marketSourcesLoading ||
@@ -3294,7 +3330,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       {loadProfile === "portfolio" && physicalIntakeSummary ? (
         <section
           id="physical-intake"
-          className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-slate-200/50"
+          className="mt-6 rounded-3xl border border-emerald-400/25 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-slate-200/50"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -3340,7 +3376,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {physicalIntakeSummary ? (
             <section
               id="physical-intake"
-              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/20 p-5 shadow-xl shadow-slate-200/50"
+              className="rounded-3xl border border-emerald-400/25 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -3399,11 +3435,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {scanPipelineDash ? (
             <section
               id="bulk-scan-pipeline"
-              className="rounded-3xl border border-teal-400/25 bg-teal-950/15 p-5 shadow-xl shadow-slate-200/50"
+              className="rounded-3xl border border-teal-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-teal-100"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">Bulk scan pipeline · read-only snapshot</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-800">Bulk scan pipeline · read-only snapshot</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Session & queue visibility</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Condensed aggregates (QA ledger, unresolved routing signals, queued high-res asks, presets, replay deltas).
@@ -3412,7 +3448,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <Link
                       to="/scan-sessions"
-                      className="rounded-full border border-teal-400/35 px-3 py-1.5 font-semibold text-teal-100 transition hover:border-teal-300/55 hover:bg-teal-500/10"
+                      className="rounded-full border border-teal-400/45 px-3 py-1.5 font-semibold text-teal-800 transition hover:border-teal-500/55 hover:bg-teal-50"
                     >
                       Lifecycle &amp; ingest
                     </Link>
@@ -3430,7 +3466,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     </Link>
                   </div>
                 </div>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-teal-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-800">
                   Tables · Active {scanPipelineDash.active_sessions.length} · Recent{" "}
                   {scanPipelineDash.recent_sessions.length}
                 </p>
@@ -3525,11 +3561,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {marketSalesLoading || marketSalesError || marketSalesPreview.length > 0 ? (
             <section
               id="market-intelligence"
-              className="rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50"
+              className="rounded-3xl border border-emerald-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-emerald-100"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market sales foundation</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Market sales foundation</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only record preview</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic sales records, source names, and normalization states from the new market-sales layer.
@@ -3538,7 +3574,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops"
-                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                  className="rounded-full border border-emerald-400/45 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:border-emerald-500/60 hover:bg-emerald-50"
                 >
                   Open ops view
                 </Link>
@@ -3563,15 +3599,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         <th className="p-3 font-medium">Issues</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/10 text-slate-200">
+                    <tbody className="divide-y divide-slate-200 text-slate-800">
                       {marketSalesPreview.slice(0, 6).map((row) => (
                         <tr key={row.id}>
                           <td className="p-3 align-top">
-                            <div className="text-slate-100">{row.source_name}</div>
+                            <div className="text-slate-900">{row.source_name}</div>
                             <div className="mt-1 text-[11px] text-slate-500">{row.source_type}</div>
                           </td>
                           <td className="p-3 align-top">
-                            <div className="font-medium text-slate-100">{row.normalized_title ?? row.raw_title}</div>
+                            <div className="font-medium text-slate-900">{row.normalized_title ?? row.raw_title}</div>
                             <div className="mt-1 text-[11px] text-slate-600">
                               Issue {row.normalized_issue ?? row.raw_issue}
                             </div>
@@ -3605,10 +3641,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           <MarketIntelligenceDashboard ownerUserId={user?.id} />
 
           {marketSaleReviewQueueSummaryLoading || marketSaleReviewQueueSummaryError || marketSaleReviewQueueSummary ? (
-            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-cyan-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-cyan-100">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/70">Market sale review queue</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-800">Market sale review queue</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only review summary</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic queue counts only. Operators can open the review workspace to update normalized fields
@@ -3658,10 +3694,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketCompEligibilitySummaryLoading || marketCompEligibilitySummaryError || marketCompEligibilitySummary ? (
-            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Market comp eligibility</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Market comp eligibility</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only readiness counts</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic comp eligibility only. The dashboard stays read-only and shows lightweight readiness
@@ -3670,7 +3706,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#market-comp-eligibility"
-                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                  className="rounded-full border border-emerald-400/45 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:border-emerald-500/60 hover:bg-emerald-50"
                 >
                   Open ops eligibility
                 </Link>
@@ -3732,10 +3768,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketCompsSummaryLoading || marketCompsSummaryError || marketCompsSummary ? (
-            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-emerald-400/25 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">Comparable sales</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Comparable sales</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Comp readiness overview</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Lightweight grouped-comp summary. Open the ops explorer for full included and excluded sales evidence.
@@ -3743,7 +3779,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#market-comps"
-                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                  className="rounded-full border border-emerald-400/45 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:border-emerald-500/60 hover:bg-emerald-50"
                 >
                   Open comp explorer
                 </Link>
@@ -3775,10 +3811,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketFmvSummaryLoading || marketFmvSummaryError || marketFmvSummary ? (
-            <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-cyan-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-cyan-100">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/70">Market FMV snapshots</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-800">Market FMV snapshots</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic valuation ledger</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Snapshot-only FMV built from eligible comparable sales. This stays separate from manual inventory FMV edits
@@ -3822,10 +3858,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketTrendSummaryLoading || marketTrendSummaryError || marketTrendSummary ? (
-            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-white ring-1 ring-violet-100 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market trend snapshots</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-800">Market trend snapshots</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic trend signal strip</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Compare FMV history over fixed windows to surface rising, falling, stable, and volatile movement without
@@ -3834,7 +3870,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#market-trends"
-                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                  className="rounded-full border border-violet-400/45 px-3 py-1.5 text-xs font-semibold text-violet-800 transition hover:border-violet-500/60 hover:bg-violet-50"
                 >
                   Open ops trend workspace
                 </Link>
@@ -3857,10 +3893,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           ) : null}
 
           {marketMatchSuggestionsPendingLoading || marketMatchSuggestionsPendingError || marketMatchSuggestionsPendingCount >= 0 ? (
-            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/12 p-5 shadow-xl shadow-slate-200/50">
+            <section className="mt-6 rounded-3xl border border-violet-400/25 bg-white ring-1 ring-violet-100 p-5 shadow-xl shadow-slate-200/50">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Market match suggestions</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-800">Market match suggestions</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Read-only pending-count widget</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic match suggestions only. Open the ops review workspace to inspect evidence and approve,
@@ -3869,7 +3905,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#market-match-suggestions"
-                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                  className="rounded-full border border-violet-400/45 px-3 py-1.5 text-xs font-semibold text-violet-800 transition hover:border-violet-500/60 hover:bg-violet-50"
                 >
                   Open ops match suggestions
                 </Link>
@@ -3888,14 +3924,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsDealerData ? (
             <section
               id="dealer-command-dash"
               className="mt-6 rounded-3xl border border-lime-500/35 bg-white p-5 shadow-xl shadow-black/35"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-lime-200/85">Dealer command</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-lime-800">Dealer command</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Operational cockpit · Bloomberg-style density</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic overlays only: inventory movement, liquidity posture, exporter health, show operations, ledger sales,
@@ -3975,7 +4011,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                     <th className="p-3 font-medium">Evidence</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/10 text-slate-200">
+                                <tbody className="divide-y divide-slate-200 text-slate-800">
                                   {dealerAlerts.length === 0 ? (
                                     <tr>
                                       <td className="p-3 text-slate-500" colSpan={3}>
@@ -4007,7 +4043,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                     <th className="p-3 font-medium">Summary</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/10 text-slate-200">
+                                <tbody className="divide-y divide-slate-200 text-slate-800">
                                   {dealerFeed.length === 0 ? (
                                     <tr>
                                       <td className="p-3 text-slate-500" colSpan={3}>
@@ -4112,15 +4148,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsDealerData ? (
             <>
               <section
                 id="portfolio-intelligence-dash"
-              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-amber-400/35 bg-white ring-1 ring-amber-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Portfolio intelligence</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900">Portfolio intelligence</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic exposure & allocation truth</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Registry-grade rollups: portfolio counts, FMV and cost basis anchors (when present), concentration flags,
@@ -4190,11 +4226,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
             <section
               id="portfolio-liquidity-dash"
-              className="mt-6 rounded-3xl border border-teal-400/35 bg-teal-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-teal-400/35 bg-white ring-1 ring-teal-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-teal-100/90">Portfolio liquidity allocation</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-800">Portfolio liquidity allocation</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic capital &amp; liquidity posture</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Portfolio-wide liquidity buckets, weighted FMV posture, observational dead-capital estimate, balance status,
@@ -4279,11 +4315,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
             <section
               id="duplicate-intelligence-dash"
-              className="mt-6 rounded-3xl border border-rose-400/30 bg-rose-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-rose-400/30 bg-white ring-1 ring-rose-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-rose-100/90">Duplicate intelligence</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-800">Duplicate intelligence</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic overlaps & consolidation posture</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Observational duplicate clusters, deterministic strength tiers, liquidity-aware profiles, and consolidation
@@ -4349,14 +4385,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="dealer-grading-command-center"
-              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/60"
+              className="mt-6 rounded-3xl border border-cyan-400/35 bg-white ring-1 ring-cyan-100 p-5 shadow-xl shadow-slate-200/60"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/80">Dealer grading dashboard</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-800">Dealer grading dashboard</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Unified grading intelligence cockpit</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Dense dealer-grade grading operations only: candidate posture, recommendation quality, submission flow,
@@ -4506,7 +4542,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                   <th className="p-3 font-medium">Evidence</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/10 text-slate-200">
+                              <tbody className="divide-y divide-slate-200 text-slate-800">
                                 {dealerGradingAlerts.length === 0 ? (
                                   <tr>
                                     <td className="p-3 text-slate-500" colSpan={3}>
@@ -4538,7 +4574,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                                   <th className="p-3 font-medium">Summary</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/10 text-slate-200">
+                              <tbody className="divide-y divide-slate-200 text-slate-800">
                                 {dealerGradingFeed.length === 0 ? (
                                   <tr>
                                     <td className="p-3 text-slate-500" colSpan={3}>
@@ -4566,14 +4602,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-reporting-dash"
-              className="mt-6 rounded-3xl border border-indigo-400/35 bg-indigo-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-indigo-400/35 bg-white ring-1 ring-indigo-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-200/85">Grading reporting</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-800">Grading reporting</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 closeout CSV registry</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
                     Deterministic grading closeout reports for candidates, economics, submissions, reconciliation,
@@ -4641,8 +4677,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-rose-400/35 bg-rose-950/20 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-200/80">Failed reports</p>
+                  <div className="rounded-2xl border border-rose-400/35 bg-white ring-1 ring-rose-100 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-800">Failed reports</p>
                     {gradingReportsFailed && gradingReportsFailed.items.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-rose-100">
                         {gradingReportsFailed.items.map((run) => (
@@ -4663,14 +4699,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-candidates-dash"
-              className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-amber-400/35 bg-white ring-1 ring-amber-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/85">Grading operations</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900">Grading operations</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading candidate ledger</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Owner-scoped grading intentions, economics placeholders, replay-safe inserts, checksum snapshots, and
@@ -4705,14 +4741,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-spreads-dash"
-              className="mt-6 rounded-3xl border border-violet-400/35 bg-violet-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-violet-400/35 bg-white ring-1 ring-violet-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/85">Grading economics</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-800">Grading economics</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 raw-vs-graded spread engine</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic spread checks compare raw FMV, graded FMV, grading cost assumptions, and liquidity
@@ -4752,14 +4788,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-roi-dash"
-              className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-emerald-400/35 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/85">Grading economics</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Grading economics</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading ROI engine</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic ROI snapshots combine grading fees, shipping, insurance, liquidity weighting, and
@@ -4796,14 +4832,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-submission-dash"
-              className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-sky-400/35 bg-white ring-1 ring-sky-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/85">Submission workflow</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Submission workflow</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 submission batch operations</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic submission batches track grading groups, shipment states, lifecycle milestones, and
@@ -4840,14 +4876,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-reconciliation-dash"
-              className="mt-6 rounded-3xl border border-cyan-400/35 bg-cyan-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-cyan-400/35 bg-white ring-1 ring-cyan-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/85">Result reconciliation</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-800">Result reconciliation</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading outcome reconciliation</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Actual returned grades, ROI deltas, and grader performance snapshots without changing FMV,
@@ -4906,14 +4942,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-recommendation-dash"
-              className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/15 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-white ring-1 ring-fuchsia-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/85">Recommendation engine</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-800">Recommendation engine</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading decision support</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Explainable grading recommendations built from ROI, spread, liquidity, reconciliation, grader
@@ -4956,13 +4992,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
+          {loadsDealerData ? (
+          <>
           <section
             id="portfolio-strategy-dashboard-dash"
-            className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/12 p-5 shadow-xl shadow-black/18"
+            className="mt-6 rounded-3xl border border-emerald-400/35 bg-white ring-1 ring-emerald-100 p-5 shadow-xl shadow-black/18"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/90">Portfolio strategy dashboard</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Portfolio strategy dashboard</p>
                 <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Unified strategic portfolio command center</h2>
                 <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Dealer-grade portfolio cockpit consolidating exposure, duplicates, liquidity, hold/sell posture,
@@ -5137,11 +5175,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
           <section
             id="acquisition-priority-dash"
-            className="mt-6 rounded-3xl border border-sky-400/35 bg-sky-950/12 p-5 shadow-xl shadow-black/18"
+            className="mt-6 rounded-3xl border border-sky-400/35 bg-white ring-1 ring-sky-100 p-5 shadow-xl shadow-black/18"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-sky-100/90">Acquisition intelligence</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Acquisition intelligence</p>
                 <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic expansion and gap-analysis layer</h2>
                 <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explainable acquisition priorities that highlight diversification, liquidity, grading upside, sales velocity,
@@ -5193,11 +5231,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
           <section
             id="portfolio-recommendation-dash"
-            className="mt-6 rounded-3xl border border-amber-400/35 bg-amber-950/12 p-5 shadow-xl shadow-black/18"
+            className="mt-6 rounded-3xl border border-amber-400/35 bg-white ring-1 ring-amber-100 p-5 shadow-xl shadow-black/18"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/90">Hold / sell intelligence</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900">Hold / sell intelligence</p>
                 <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic strategic recommendation layer</h2>
                 <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explainable HOLD, SELL, REDUCE_EXPOSURE, GRADE_THEN_SELL, CONSOLIDATE, and WATCH signals built from
@@ -5251,11 +5289,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
 
           <section
             id="concentration-risk-dash"
-            className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-fuchsia-950/12 p-5 shadow-xl shadow-black/18"
+            className="mt-6 rounded-3xl border border-fuchsia-400/35 bg-white ring-1 ring-fuchsia-100 p-5 shadow-xl shadow-black/18"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-100/90">Concentration intelligence</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-800">Concentration intelligence</p>
                 <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic concentration-risk layer</h2>
                 <p className="mt-1 max-w-3xl text-sm text-slate-600">
                   Explicit portfolio concentration modeling across publishers, titles, eras, grading posture, liquidity posture,
@@ -5301,15 +5339,17 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="mt-4 text-sm text-slate-500">Generate concentration rows to populate this panel.</p>
             )}
           </section>
+          </>
+          ) : null}
 
-          {user ? (
+          {user && loadsGradingData ? (
             <section
               id="grading-risk-dash"
-              className="mt-6 rounded-3xl border border-rose-400/35 bg-rose-950/12 p-5 shadow-xl shadow-black/18"
+              className="mt-6 rounded-3xl border border-rose-400/35 bg-white ring-1 ring-rose-100 p-5 shadow-xl shadow-black/18"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-rose-200/85">Risk and confidence</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-800">Risk and confidence</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P37 grading uncertainty layer</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic risk and confidence snapshots explaining where grading economics are stable, thin,
@@ -5346,14 +5386,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </section>
           ) : null}
 
-          {user ? (
+          {user && loadsDealerData ? (
             <section
               id="operational-reporting-dash"
               className="mt-6 rounded-3xl border border-sky-400/30 bg-white p-5 shadow-xl shadow-slate-200/60"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Operational reporting</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Operational reporting</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">P36 closeout CSV registry</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic, checksum-backed summaries across listings, liquidity, conventions, exporters, ledger sales,
@@ -5421,8 +5461,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-rose-400/35 bg-rose-950/20 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-200/80">Failed reports</p>
+                  <div className="rounded-2xl border border-rose-400/35 bg-white ring-1 ring-rose-100 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-800">Failed reports</p>
                     {opReportRollups && opReportRollups.failed_runs.length > 0 ? (
                       <ul className="mt-3 space-y-2 text-xs text-rose-100">
                         {opReportRollups.failed_runs.map((run) => (
@@ -5448,11 +5488,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           listingRegistrySummary ? (
             <section
               id="listing-registry-dash"
-              className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-amber-400/25 bg-white ring-1 ring-amber-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">Listing registry</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900">Listing registry</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Canonical listing truth (manual + exports)</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Read-only workbook snapshot: draft/ready roll-up, live and sold counts, and the most recent lifecycle audit
@@ -5490,7 +5530,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Recorded</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {listingRegistrySummary.recent_events.slice(0, 6).map((evt) => (
                           <tr key={evt.id}>
                             <td className="p-3 font-mono text-[11px] text-slate-700">#{evt.listing_id}</td>
@@ -5514,11 +5554,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           listingIntelligenceSummary ? (
             <section
               id="listing-intelligence-dash"
-              className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-white ring-1 ring-fuchsia-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/80">Listing intelligence</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-800">Listing intelligence</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Completeness, export readiness, and cleanup signals</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic analysis only: listing quality, missing fields, stale-risk flags, and channel performance
@@ -5563,7 +5603,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Stale-risk</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {listingIntelligenceSummary.recent_weak_or_incomplete.length === 0 ? (
                           <tr>
                             <td className="p-3 text-slate-600" colSpan={5}>
@@ -5596,11 +5636,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {liquiditySummaryLoading || liquiditySummaryError || liquiditySummary ? (
             <section
               id="liquidity-dash"
-              className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-sky-400/25 bg-white ring-1 ring-sky-100 p-5 shadow-xl shadow-slate-200/50"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/80">Liquidity engine</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Liquidity engine</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Evidence-backed inventory liquidity snapshot</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic snapshots derived from listing velocity, stale thresholds, and actual sales. This panel is
@@ -5641,7 +5681,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Listing</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {liquiditySummary.recent_stale_events.length === 0 ? (
                           <tr>
                             <td className="p-4 text-slate-500" colSpan={4}>
@@ -5651,7 +5691,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         ) : (
                           liquiditySummary.recent_stale_events.slice(0, 6).map((event) => (
                             <tr key={event.id}>
-                              <td className="p-3 text-slate-200">{event.event_type.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-800">{event.event_type.replace(/_/g, " ")}</td>
                               <td className="p-3 text-slate-700">{event.threshold_days}+ days</td>
                               <td className="p-3 text-slate-700">{event.days_active} days</td>
                               <td className="p-3 font-mono text-[11px] text-slate-700">#{event.listing_id}</td>
@@ -5669,11 +5709,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {conventionSummaryLoading || conventionSummaryError || conventionSummary ? (
             <section
               id="convention-dash"
-              className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-violet-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-violet-100"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/80">Convention ops</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-800">Convention ops</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Dealer workflow and show inventory snapshot</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Deterministic convention assignments, movement history, temporary pricing, and active sale sessions.
@@ -5682,7 +5722,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#convention-ops"
-                  className="rounded-full border border-violet-400/35 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/10"
+                  className="rounded-full border border-violet-400/45 px-3 py-1.5 text-xs font-semibold text-violet-800 transition hover:border-violet-500/60 hover:bg-violet-50"
                 >
                   Open ops convention
                 </Link>
@@ -5712,7 +5752,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Window</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {conventionSummary.recent_events.length === 0 ? (
                           <tr>
                             <td className="p-4 text-slate-500" colSpan={4}>
@@ -5722,7 +5762,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                         ) : (
                           conventionSummary.recent_events.slice(0, 5).map((event) => (
                             <tr key={event.id}>
-                              <td className="p-3 text-slate-200">{event.name}</td>
+                              <td className="p-3 text-slate-800">{event.name}</td>
                               <td className="p-3 text-slate-700">{event.event_type.replace(/_/g, " ")}</td>
                               <td className="p-3 text-slate-700">{event.status}</td>
                               <td className="p-3 text-slate-700">
@@ -5742,11 +5782,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {salesLedgerSummaryLoading || salesLedgerSummaryError || salesLedgerSummary ? (
             <section
               id="sales-ledger-dash"
-              className="mt-6 rounded-3xl border border-emerald-400/25 bg-emerald-950/10 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-emerald-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-emerald-100"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/80">Sales ledger</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">Sales ledger</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Realized sale truth and profit snapshot</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Recorded sales only. This ledger captures realized outcomes, linked listing transitions, and stable money
@@ -5755,7 +5795,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 </div>
                 <Link
                   to="/ops#sales-ledger-ops"
-                  className="rounded-full border border-emerald-400/35 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-500/10"
+                  className="rounded-full border border-emerald-400/45 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:border-emerald-500/60 hover:bg-emerald-50"
                 >
                   Open ops sales ledger
                 </Link>
@@ -5778,7 +5818,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                     {salesLedgerSummary.sales_count_by_channel.map((row) => (
                       <span
                         key={row.channel}
-                        className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-100"
+                        className="rounded-full border border-emerald-300/50 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-800"
                       >
                         {row.channel.replace(/_/g, " ")} · {row.count}
                       </span>
@@ -5798,7 +5838,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Linked listing</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {salesLedgerSummary.recent_sales.length === 0 ? (
                           <tr>
                             <td className="p-4 text-slate-500" colSpan={8}>
@@ -5809,8 +5849,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           salesLedgerSummary.recent_sales.slice(0, 6).map((sale) => (
                             <tr key={sale.id}>
                               <td className="p-3 font-mono text-[11px] text-slate-700">#{sale.id}</td>
-                              <td className="p-3 text-slate-200">{sale.channel.replace(/_/g, " ")}</td>
-                              <td className="p-3 text-slate-200">{sale.status}</td>
+                              <td className="p-3 text-slate-800">{sale.channel.replace(/_/g, " ")}</td>
+                              <td className="p-3 text-slate-800">{sale.status}</td>
                               <td className="p-3 text-slate-700">{formatUsdCurrency(sale.gross_sale_amount)}</td>
                               <td className="p-3 text-slate-700">{formatUsdCurrency(sale.net_proceeds_amount)}</td>
                               <td className="p-3 text-slate-700">{formatUsdCurrency(sale.realized_profit_amount)}</td>
@@ -5830,11 +5870,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
           {listingExportDashLoading || listingExportDashError || listingExportDash ? (
             <section
               id="listing-export-dash"
-              className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-slate-200/50"
+              className="mt-6 rounded-3xl border border-cyan-300/60 bg-white p-5 shadow-xl shadow-slate-200/50 ring-1 ring-cyan-100"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-blue-700/75">Marketplace exports</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-800">Marketplace exports</p>
                   <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Deterministic CSV ledger (read-only)</h2>
                   <p className="mt-1 max-w-prose text-sm text-slate-600">
                     Channel-shaped listing files with checksums and append-only run history. Exports never post to marketplaces,
@@ -5876,7 +5916,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="p-3 font-medium">Completed</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/10 text-slate-200">
+                      <tbody className="divide-y divide-slate-200 text-slate-800">
                         {listingExportDash.recent_runs.length === 0 ? (
                           <tr>
                             <td className="p-4 text-slate-500" colSpan={7}>
@@ -5887,8 +5927,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           listingExportDash.recent_runs.slice(0, 6).map((run) => (
                             <tr key={run.id}>
                               <td className="p-3 font-mono text-[11px] text-slate-700">#{run.id}</td>
-                              <td className="p-3 text-slate-200">{run.channel}</td>
-                              <td className="p-3 text-slate-200">{run.status}</td>
+                              <td className="p-3 text-slate-800">{run.channel}</td>
+                              <td className="p-3 text-slate-800">{run.status}</td>
                               <td className="p-3 text-slate-700">{run.exported_listing_count}</td>
                               <td className="p-3 text-slate-700">{run.skipped_listing_count}</td>
                               <td className="p-3 font-mono text-[10px] text-slate-600">{shortenChecksum(run.checksum)}</td>
@@ -5912,10 +5952,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       marketImportRunsError ||
       marketSources.length > 0 ||
       marketImportRuns.length > 0 ? (
-        <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/12 p-5 shadow-xl shadow-slate-200/50">
+        <section className="mt-6 rounded-3xl border border-sky-400/25 bg-white ring-1 ring-sky-100 p-5 shadow-xl shadow-slate-200/50">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/70">Market source registry</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Market source registry</p>
               <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Registry and import-run summaries</h2>
               <p className="mt-1 max-w-prose text-sm text-slate-600">
                 Deterministic source rows and append-only import-run history. The dashboard only reads these records;
@@ -5947,10 +5987,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="pb-2 font-medium">Enabled</th>
                         </tr>
                       </thead>
-                      <tbody className="text-slate-200">
+                      <tbody className="text-slate-800">
                         {marketSources.slice(0, 8).map((row) => (
                           <tr key={row.id} className="border-t border-slate-200">
-                            <td className="py-2 pr-3 text-slate-100">{row.source_name}</td>
+                            <td className="py-2 pr-3 font-medium text-slate-900">{row.source_name}</td>
                             <td className="py-2 pr-3 text-slate-700">{row.source_type}</td>
                             <td className="py-2 pr-3 text-slate-700">{row.import_priority}</td>
                             <td className="py-2 text-slate-700">{row.enabled ? "Yes" : "No"}</td>
@@ -5977,11 +6017,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                           <th className="pb-2 font-medium">Started / updated</th>
                         </tr>
                       </thead>
-                      <tbody className="text-slate-200">
+                      <tbody className="text-slate-800">
                         {marketImportRuns.slice(0, 8).map((row) => (
                           <tr key={row.id} className="border-t border-slate-200">
                             <td className="py-2 pr-3">
-                              <div className="text-slate-100">{row.source_name}</div>
+                              <div className="text-slate-900">{row.source_name}</div>
                               <div className="mt-1 text-[11px] text-slate-500">#{row.market_source_id}</div>
                             </td>
                             <td className="py-2 pr-3 text-slate-700">{row.status.replace(/_/g, " ")}</td>

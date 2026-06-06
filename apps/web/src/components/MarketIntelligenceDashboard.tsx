@@ -23,11 +23,15 @@ function shortenChecksum(value: string | null | undefined): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
+function marketIntelPanelClass(accentBorder: string): string {
+  return `mt-6 rounded-3xl border ${accentBorder} bg-slate-900/95 p-5 shadow-xl shadow-black/25`;
+}
+
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    <div className="rounded-2xl border border-slate-600/80 bg-slate-950 p-4">
+      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-50">{value}</p>
     </div>
   );
 }
@@ -71,13 +75,13 @@ function PanelFooter(props: {
   onRetry: () => void;
 }): JSX.Element {
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3 text-[11px] text-slate-500">
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-600/60 pt-3 text-[11px] text-slate-400">
       <div className="space-y-1">
         <p>
-          <span className="text-slate-400">{props.checksumLabel}</span>{" "}
-          <span className="font-mono text-slate-200">{props.checksum}</span>
+          <span className="text-slate-300">{props.checksumLabel}</span>{" "}
+          <span className="font-mono text-slate-100">{props.checksum}</span>
         </p>
-        <p className="text-slate-500">{props.metaNote}</p>
+        <p className="text-slate-400">{props.metaNote}</p>
       </div>
       <button
         type="button"
@@ -146,8 +150,8 @@ function ScoreHistogram({ snap }: { snap: MarketAcquisitionScoreSnapshotRead | n
 
   return (
     <div className="mt-4">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Recommendation histogram (counts)</p>
-      <div className="mt-3 flex h-32 items-end gap-2 rounded-2xl border border-white/10 bg-slate-950/35 p-3">
+      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Recommendation histogram (counts)</p>
+      <div className="mt-3 flex h-32 items-end gap-2 rounded-2xl border border-slate-600/70 bg-slate-950 p-3">
         {segments.map((seg) => (
           <div key={seg.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
             <div
@@ -174,12 +178,12 @@ function IngestionPanel(props: {
   const metaOk = checksumAlignedWithEnvelope(props.state.meta, chk);
 
   return (
-    <section className="mt-6 rounded-3xl border border-cyan-400/25 bg-cyan-950/12 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-cyan-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-200/70">Market ingestion (P39-01)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Batch status & ingestion health</h2>
-          <p className="mt-1 max-w-prose text-sm text-slate-400">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-300">Market ingestion (P39-01)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Batch status & ingestion health</h2>
+          <p className="mt-1 max-w-prose text-sm text-slate-300">
             Read-only ingestion ledger summaries using the P39-07 response envelope.
           </p>
         </div>
@@ -248,12 +252,12 @@ function NormalizationPanel(props: {
 }): JSX.Element {
   const h = normalizeHealth(props.state.data);
   return (
-    <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/14 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-violet-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/70">Normalization (P39-02)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Canonical coverage & success rate</h2>
-          <p className="mt-1 max-w-prose text-sm text-slate-400">Deterministic normalization health only — no scoring.</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-violet-300">Normalization (P39-02)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Canonical coverage & success rate</h2>
+          <p className="mt-1 max-w-prose text-sm text-slate-300">Deterministic normalization health only — no scoring.</p>
         </div>
         <Link
           to="/ops#market-normalization-ops"
@@ -320,11 +324,11 @@ function ScoringPanel(props: {
   const snap = props.state.data?.items[0];
   const chkMetaOk = checksumAlignedWithEnvelope(props.state.meta, snap?.checksum ?? null);
   return (
-    <section className="mt-6 rounded-3xl border border-fuchsia-400/25 bg-fuchsia-950/14 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-fuchsia-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-200/70">Scoring (P39-03)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Score distribution</h2>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-fuchsia-300">Scoring (P39-03)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Score distribution</h2>
         </div>
         <Link
           to="/ops#market-scoring-ops"
@@ -375,7 +379,7 @@ function ScoringPanel(props: {
               />
             </>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">No scoring snapshots yet for this workspace.</p>
+            <p className="mt-4 text-sm text-slate-300">No scoring snapshots yet for this workspace.</p>
           )}
         </>
       ) : null}
@@ -404,11 +408,11 @@ function SignalsPanel(props: {
     : [];
 
   return (
-    <section className="mt-6 rounded-3xl border border-amber-400/25 bg-amber-950/14 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-amber-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/70">Signals (P39-04)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Signal type & strength breakdown</h2>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-amber-300">Signals (P39-04)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Signal type & strength breakdown</h2>
         </div>
         <Link
           to="/ops#market-signal-ops"
@@ -457,7 +461,7 @@ function SignalsPanel(props: {
               />
             </>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">No signal snapshots yet.</p>
+            <p className="mt-4 text-sm text-slate-300">No signal snapshots yet.</p>
           )}
         </>
       ) : null}
@@ -479,11 +483,11 @@ function OpportunitiesPanel(props: {
   const isModerateTier = /\bMODERATE\b/i.test(snap?.opportunity_classification ?? "");
 
   return (
-    <section className="mt-6 rounded-3xl border border-lime-400/25 bg-lime-950/14 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-lime-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-lime-200/70">Opportunities (P39-05)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Tiered opportunity snapshot</h2>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-lime-300">Opportunities (P39-05)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Tiered opportunity snapshot</h2>
         </div>
         <Link
           to="/ops#market-opportunity-ops"
@@ -535,7 +539,7 @@ function OpportunitiesPanel(props: {
               />
             </>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">No opportunity snapshots yet.</p>
+            <p className="mt-4 text-sm text-slate-300">No opportunity snapshots yet.</p>
           )}
         </>
       ) : null}
@@ -553,11 +557,11 @@ function CouplingPanel(props: {
   const metaOk = checksumAlignedWithEnvelope(props.state.meta, snap?.snapshot_checksum ?? null);
 
   return (
-    <section className="mt-6 rounded-3xl border border-sky-400/25 bg-sky-950/14 p-5 shadow-xl shadow-black/15">
+    <section className={marketIntelPanelClass("border-sky-400/40")}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/70">Coupling (P39-06)</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Portfolio-market alignment bridge</h2>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-sky-300">Coupling (P39-06)</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Portfolio-market alignment bridge</h2>
         </div>
         <Link
           to="/ops#market-portfolio-coupling-ops"
@@ -609,7 +613,7 @@ function CouplingPanel(props: {
               />
             </>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">No coupling snapshots yet.</p>
+            <p className="mt-4 text-sm text-slate-300">No coupling snapshots yet.</p>
           )}
         </>
       ) : null}
@@ -659,14 +663,14 @@ export function MarketIntelligenceDashboard({ ownerUserId }: MarketIntelligenceD
 
   return (
     <>
-      <section className="mt-6 rounded-3xl border border-emerald-400/35 bg-emerald-950/15 p-5 shadow-xl shadow-black/15">
+      <section className={marketIntelPanelClass("border-emerald-400/40")}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-200/80">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">
               Unified market intelligence (P39 · P39-07 envelope)
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Deterministic snapshot overview</h2>
-            <p className="mt-1 max-w-prose text-sm text-slate-400">
+            <h2 className="mt-1 text-lg font-semibold text-slate-50">Deterministic snapshot overview</h2>
+            <p className="mt-1 max-w-prose text-sm text-slate-300">
               Each panel loads independently, shares an in-flight dedupe key per endpoint, and tolerates partial outages.
               Summary rolls up whatever layers have surfaced for scoring snapshot boundary{" "}
               <span className="font-mono text-slate-200">{summarySnapshotKey}</span>.
@@ -719,8 +723,8 @@ export function MarketIntelligenceDashboard({ ownerUserId }: MarketIntelligenceD
           </div>
         ) : null}
 
-        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-[11px] text-slate-400">
-          <p className="font-semibold uppercase tracking-[0.14em] text-slate-200">Ops parity shortcuts</p>
+        <div className="mt-4 rounded-2xl border border-slate-600/70 bg-slate-950 p-4 text-[11px] text-slate-400">
+          <p className="font-semibold uppercase tracking-[0.14em] text-slate-100">Ops parity shortcuts</p>
           <div className="mt-3 flex flex-wrap gap-3">
             {marketIntelOpsHashes.map(([layer, hash]) => (
               <a

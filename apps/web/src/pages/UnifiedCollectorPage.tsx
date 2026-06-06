@@ -62,37 +62,37 @@ export function UnifiedCollectorPage(): JSX.Element {
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {summary ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Total</p>
-            <p className="text-lg font-semibold text-white">{summary.total_recommendations}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.total_recommendations}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Acquire</p>
-            <p className="text-lg font-semibold text-white">{summary.acquire_count}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.acquire_count}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Sell</p>
-            <p className="text-lg font-semibold text-white">{summary.sell_count}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.sell_count}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Multi-source</p>
-            <p className="text-lg font-semibold text-white">{summary.multi_source_count}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.multi_source_count}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Avg priority</p>
-            <p className="text-lg font-semibold text-white">{summary.average_priority.toFixed(1)}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.average_priority.toFixed(1)}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Avg confidence</p>
-            <p className="text-lg font-semibold text-white">{summary.average_confidence.toFixed(2)}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.average_confidence.toFixed(2)}</p>
           </div>
         </div>
       ) : null}
       <div className="mb-4 flex flex-wrap gap-3">
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Type{" "}
           <select
-            className="ml-1 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
@@ -103,10 +103,10 @@ export function UnifiedCollectorPage(): JSX.Element {
             ))}
           </select>
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Source{" "}
           <select
-            className="ml-1 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
           >
@@ -117,10 +117,10 @@ export function UnifiedCollectorPage(): JSX.Element {
             ))}
           </select>
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Priority min{" "}
           <input
-            className="ml-1 w-20 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={priorityMin}
             onChange={(e) => setPriorityMin(e.target.value)}
           />
@@ -134,9 +134,9 @@ export function UnifiedCollectorPage(): JSX.Element {
       ) : items.length === 0 ? (
         <p className="text-sm text-slate-500">No unified recommendations yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-400">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full text-left text-sm text-slate-800">
+            <thead className="bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
               <tr>
                 <th className="px-3 py-2">Type</th>
                 <th className="px-3 py-2">Title</th>
@@ -146,15 +146,15 @@ export function UnifiedCollectorPage(): JSX.Element {
                 <th className="px-3 py-2">Rationale</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-200">
               {items.map((row) => (
-                <tr key={row.id} className="border-t border-white/5">
-                  <td className="px-3 py-2 text-cyan-200">{row.recommendation_type}</td>
-                  <td className="px-3 py-2 font-medium text-white">{row.title}</td>
-                  <td className="px-3 py-2">{row.priority_score.toFixed(1)}</td>
-                  <td className="px-3 py-2">{row.confidence_score.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-xs text-slate-400">{row.source_systems.join(", ")}</td>
-                  <td className="px-3 py-2 text-slate-300">{row.rationale}</td>
+                <tr key={row.id}>
+                  <td className="px-3 py-2 font-medium text-teal-800">{row.recommendation_type}</td>
+                  <td className="px-3 py-2 font-medium text-slate-900">{row.title}</td>
+                  <td className="px-3 py-2 text-slate-800">{row.priority_score.toFixed(1)}</td>
+                  <td className="px-3 py-2 text-slate-800">{row.confidence_score.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-600">{row.source_systems.join(", ")}</td>
+                  <td className="px-3 py-2 text-slate-700">{row.rationale}</td>
                 </tr>
               ))}
             </tbody>
