@@ -68,3 +68,23 @@ def test_collector_home_returns_200_when_budget_dependency_fails(
     data = resp.json()["data"]
     assert data["budget_status"]["status"] == "ERROR"
     assert "collector profile unavailable" in data["budget_status"]["error"]
+
+
+def test_collector_home_skips_sell_sections_without_sell_queue(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = register_and_login(client, "p85-home-no-sell@example.com")
+
+    def _should_not_run(*args, **kwargs):
+        raise AssertionError("build_sell_queue must not run on collector home")
+
+    monkeypatch.setattr(collector_home_service, "build_sell_queue", _should_not_run)
+
+    resp = client.get("/api/v1/collector-home", headers=auth_headers(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    sell = next(s for s in data["sections"] if s["key"] == "sell_alerts")
+    grade = next(s for s in data["sections"] if s["key"] == "grade_alerts")
+    assert sell["status"] == "SKIPPED"
+    assert grade["status"] == "SKIPPED"

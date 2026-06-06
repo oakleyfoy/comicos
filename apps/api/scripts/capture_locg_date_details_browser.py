@@ -24,6 +24,14 @@ SYNC_BROWSER = "BROWSER"
 @dataclass
 class PilotSummary:
     date: str
+    warnings: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    db_issues: int = 0
+    db_variants: int = 0
+    skipped_missing_parent: int = 0
+    variant_upsert_failures: int = 0
+    elapsed_seconds: float = 0.0
+    raw_path: str = ""
     list_page_loaded: bool = False
     list_issues_found: int = 0
     list_variants_found: int = 0
@@ -52,6 +60,7 @@ class PilotSummary:
     crosswalk_skipped: bool = True
     crosswalk_seconds: float | None = None
     performance_audit: dict[str, object] = field(default_factory=dict)
+    max_issues_cap: int | None = None
 
 
 def resolve_run_crosswalk(*, run_crosswalk: bool, skip_crosswalk: bool) -> bool:
@@ -104,6 +113,103 @@ def _field_coverage(rows: list) -> dict[str, int]:
         "with_distributor_sku": sum(1 for r in rows if has_sku(r)),
         "with_cover_image": sum(1 for r in rows if r.cover_image_url),
     }
+
+
+def _safe_close_session(session) -> None:
+    if session is None:
+        return
+    try:
+        session.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: session close: {exc}", file=sys.stderr, flush=True)
+
+
+def _prepare_final_summary_fields(
+    summary: PilotSummary,
+    *,
+    page_date: date,
+    session,
+    run,
+    browser_counters,
+    run_crosswalk: bool,
+    raw_dir: Path | None,
+    run_started: float,
+) -> None:
+    from app.services.external_catalog.locg_capture_runner import (
+        default_raw_path,
+        merge_run_warnings,
+        skipped_missing_parent_count,
+        variant_upsert_failure_count,
+    )
+    from app.services.external_catalog.sync_service import count_locg_release_date_persistence
+
+    summary.elapsed_seconds = time.perf_counter() - run_started
+    summary.crosswalk_skipped = not run_crosswalk
+    if raw_dir is not None:
+        summary.raw_path = str(raw_dir)
+    elif not summary.raw_path:
+        summary.raw_path = default_raw_path(summary.date)
+    if browser_counters is not None:
+        vsk = browser_counters.variant_skipped_reason_counts
+        summary.skipped_missing_parent = skipped_missing_parent_count(vsk)
+        summary.variant_upsert_failures = variant_upsert_failure_count(vsk)
+        for warning in browser_counters.post_capture_warnings:
+            if warning not in summary.warnings:
+                summary.warnings.append(warning)
+    merge_run_warnings(run, summary.warnings)
+    if session is not None:
+        try:
+            counts = count_locg_release_date_persistence(session, release_date=page_date)
+            summary.db_issues = counts["issues"]
+            summary.db_variants = counts["variants"]
+        except Exception as exc:  # noqa: BLE001
+            summary.failures.append(f"db count: {exc}")
+    for err in summary.error_sample:
+        if err in summary.warnings:
+            continue
+        if err not in summary.failures:
+            summary.failures.append(err)
+
+
+def _finalize_exit_code(
+    summary: PilotSummary,
+    *,
+    max_issues: int | None,
+    hard_failure: bool,
+) -> int:
+    from app.services.external_catalog.locg_capture_runner import resolve_capture_exit_code
+
+    return resolve_capture_exit_code(
+        run_status=summary.status,
+        list_page_loaded=summary.list_page_loaded,
+        list_issues_found=summary.list_issues_found,
+        detail_pages_succeeded=summary.detail_pages_succeeded,
+        max_issues=max_issues,
+        hard_failure=hard_failure,
+    )
+
+
+def _print_required_final_summary(summary: PilotSummary) -> None:
+    from app.services.external_catalog.locg_capture_runner import print_final_capture_summary
+
+    parent_queue = summary.list_issues_found
+    if summary.max_issues_cap is not None:
+        parent_queue = min(parent_queue, summary.max_issues_cap)
+    print_final_capture_summary(
+        page_date=summary.date,
+        run_status=summary.status,
+        parent_queue=parent_queue,
+        parent_captured=summary.detail_pages_succeeded,
+        db_issues=summary.db_issues,
+        db_variants=summary.db_variants,
+        skipped_missing_parent=summary.skipped_missing_parent,
+        variant_upsert_failures=summary.variant_upsert_failures,
+        warnings=summary.warnings,
+        failures=summary.failures,
+        elapsed_seconds=summary.elapsed_seconds,
+        crosswalk_skipped=summary.crosswalk_skipped,
+        raw_path=summary.raw_path,
+    )
 
 
 def main() -> int:
@@ -162,28 +268,60 @@ def main() -> int:
         help="Rebuild external catalog crosswalk after capture (slow; scans full LoCG catalog).",
     )
     args = parser.parse_args()
+    run_started = time.perf_counter()
+    hard_failure = False
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+    page_date = date.fromisoformat(args.date)
+    summary = PilotSummary(date=page_date.isoformat(), dry_run=args.dry_run)
+    summary.max_issues_cap = args.max_issues
+    session = None
+    run = None
+    browser_counters = None
+    raw_dir: Path | None = None
+    run_crosswalk = not args.skip_crosswalk and args.run_crosswalk
+
+    def _exit_with_summary() -> int:
+        _prepare_final_summary_fields(
+            summary,
+            page_date=page_date,
+            session=session,
+            run=run,
+            browser_counters=browser_counters,
+            run_crosswalk=run_crosswalk,
+            raw_dir=raw_dir,
+            run_started=run_started,
+        )
+        _print_required_final_summary(summary)
+        _safe_close_session(session)
+        return _finalize_exit_code(summary, max_issues=args.max_issues, hard_failure=hard_failure)
+
     if args.production and not os.environ.get("DATABASE_URL", "").strip():
-        print("error: DATABASE_URL required for --production", file=sys.stderr)
-        return 1
+        summary.failures.append("DATABASE_URL required for --production")
+        summary.status = "FAILED"
+        hard_failure = True
+        return _exit_with_summary()
     if args.min_delay_seconds > args.max_delay_seconds:
-        print("error: --min-delay-seconds must be <= --max-delay-seconds", file=sys.stderr)
-        return 1
+        summary.failures.append("--min-delay-seconds must be <= --max-delay-seconds")
+        summary.status = "FAILED"
+        hard_failure = True
+        return _exit_with_summary()
     try:
         run_crosswalk = resolve_run_crosswalk(
             run_crosswalk=args.run_crosswalk,
             skip_crosswalk=args.skip_crosswalk,
         )
+        summary.crosswalk_skipped = not run_crosswalk
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        summary.failures.append(str(exc))
+        summary.status = "FAILED"
+        hard_failure = True
+        return _exit_with_summary()
 
-    page_date = date.fromisoformat(args.date)
     headless = not args.headful
     if args.headless:
         headless = True
@@ -211,14 +349,24 @@ def main() -> int:
         log_issue_timing,
     )
     from app.services.external_catalog.normalization import normalize_locg_issue
+    from app.services.external_catalog.locg_browser_finalize import finalize_browser_capture_sync_run
+    from app.services.external_catalog.locg_capture_runner import (
+        default_raw_path,
+        print_final_capture_summary,
+        resolve_capture_exit_code,
+        skipped_missing_parent_count,
+        variant_upsert_failure_count,
+    )
+    from app.services.external_catalog.sync_service import count_locg_release_date_persistence
     from app.services.external_catalog.sync_service import (
+        SYNC_COMPLETE_WITH_WARNINGS,
         SYNC_COMPLETED,
         SYNC_FAILED,
         SYNC_PARTIAL,
-        complete_sync_run,
         create_sync_run,
         ensure_locg_source,
         fail_sync_run,
+        fail_sync_run_preserving_counters,
         should_skip_browser_resume,
         upsert_characters,
         upsert_creators,
@@ -229,13 +377,9 @@ def main() -> int:
     )
     from app.services.external_catalog.sync_service import SyncCounters
 
-    summary = PilotSummary(date=page_date.isoformat(), dry_run=args.dry_run)
-    raw_dir = None
     if args.save_raw:
         raw_dir = Path(ROOT).parent.parent / "data" / "locg_browser_capture" / page_date.isoformat()
 
-    session = None
-    run = None
     counters = SyncCounters()
     owner_user_id = 1
     captured_issue_ids: list[int] = []
@@ -257,7 +401,17 @@ def main() -> int:
         if args.email:
             from owner_lookup import resolve_owner_user_id
 
-            owner_user_id = resolve_owner_user_id(session, args.email)
+            try:
+                owner_user_id = resolve_owner_user_id(session, args.email)
+            except Exception as exc:  # noqa: BLE001
+                summary.failures.append(f"owner lookup: {exc}")
+                summary.status = SYNC_FAILED
+                hard_failure = True
+                if run is not None:
+                    fail_sync_run_preserving_counters(
+                        session, run=run, counters=counters, message=str(exc)
+                    )
+                return _exit_with_summary()
 
     def should_skip(url: str) -> bool:
         if not args.resume or session is None:
@@ -371,6 +525,58 @@ def main() -> int:
             print(json.dumps(stats.first_variant_failure, indent=2, default=str), flush=True)
         return stats
 
+    browser_counters = None
+    capture_exception: BaseException | None = None
+
+    def _apply_browser_summary(bc) -> None:
+        summary.list_page_loaded = bc.list_page_loaded
+        summary.list_issues_found = bc.list_issues_found
+        summary.list_variants_found = bc.list_variants_found
+        summary.list_variants_persisted = bc.list_variants_persisted
+        summary.detail_pages_attempted = bc.detail_pages_attempted
+        summary.detail_pages_succeeded = bc.detail_pages_succeeded
+        summary.errors_count = max(counters.errors_count, bc.errors_count)
+        merged_errors = list(counters.error_sample)
+        for msg in bc.error_sample:
+            if len(merged_errors) >= 10:
+                break
+            if msg not in merged_errors:
+                merged_errors.append(msg)
+        summary.error_sample = merged_errors[:10]
+
+    def _post_capture_finalize(exc: BaseException | None = None) -> str | None:
+        if args.dry_run or session is None or run is None or browser_counters is None:
+            return None
+        summary.issues_created = counters.issues_created
+        summary.issues_updated = counters.issues_updated
+        summary.variants_created = counters.variants_created
+        summary.creators_created = counters.creators_created
+        summary.characters_created = counters.characters_created
+        post_warnings = list(browser_counters.post_capture_warnings)
+        status = finalize_browser_capture_sync_run(
+            session,
+            run=run,
+            page_date=page_date,
+            browser=browser_counters,
+            process_counters=counters,
+            max_issues=args.max_issues,
+            post_warnings=post_warnings,
+            capture_exception=exc,
+        )
+        summary.sync_run_id = run.id
+        summary.status = status
+        summary.crosswalk_skipped = not run_crosswalk
+        summary.crosswalk_seconds = None
+        if run_crosswalk:
+            t_xw = time.perf_counter()
+            crosswalk_counts = rebuild_external_catalog_crosswalk(
+                session, owner_user_id=owner_user_id
+            )
+            summary.crosswalk_seconds = round(time.perf_counter() - t_xw, 3)
+            timing_audit.crosswalk_end_seconds = summary.crosswalk_seconds
+            summary.missing_from_lunar_count = int(crosswalk_counts.get("missing_from_lunar", 0))
+        return status
+
     try:
         browser_counters, timing_audit = run_playwright_capture(
             page_date=page_date,
@@ -385,44 +591,10 @@ def main() -> int:
             timing_audit=timing_audit,
             adaptive_delay=adaptive_controller,
         )
-        summary.list_page_loaded = browser_counters.list_page_loaded
-        summary.list_issues_found = browser_counters.list_issues_found
-        summary.list_variants_found = browser_counters.list_variants_found
-        summary.list_variants_persisted = browser_counters.list_variants_persisted
-        summary.detail_pages_attempted = browser_counters.detail_pages_attempted
-        summary.detail_pages_succeeded = browser_counters.detail_pages_succeeded
-        summary.errors_count = browser_counters.errors_count
-        summary.error_sample = browser_counters.error_sample[:10]
+        _apply_browser_summary(browser_counters)
 
         if not args.dry_run and session is not None:
-            summary.issues_created = counters.issues_created
-            summary.issues_updated = counters.issues_updated
-            summary.variants_created = counters.variants_created
-            summary.creators_created = counters.creators_created
-            summary.characters_created = counters.characters_created
-            counters.pages_scanned = 1 if summary.list_page_loaded else 0
-            counters.errors_count = summary.errors_count
-            counters.error_sample = summary.error_sample
-            status = SYNC_PARTIAL if summary.errors_count else SYNC_COMPLETED
-            if summary.detail_pages_succeeded < summary.list_issues_found and args.max_issues is None:
-                status = SYNC_PARTIAL
-            assert run is not None
-            complete_sync_run(session, run=run, counters=counters, status=status)
-            summary.sync_run_id = run.id
-            summary.status = status
-
-            summary.crosswalk_skipped = not run_crosswalk
-            summary.crosswalk_seconds = None
-            if run_crosswalk:
-                t_xw = time.perf_counter()
-                crosswalk_counts = rebuild_external_catalog_crosswalk(
-                    session, owner_user_id=owner_user_id
-                )
-                summary.crosswalk_seconds = round(time.perf_counter() - t_xw, 3)
-                timing_audit.crosswalk_end_seconds = summary.crosswalk_seconds
-                summary.missing_from_lunar_count = int(
-                    crosswalk_counts.get("missing_from_lunar", 0)
-                )
+            _post_capture_finalize(None)
 
             from sqlmodel import select
 
@@ -512,44 +684,76 @@ def main() -> int:
             )
 
     except RuntimeError as exc:
-        if "locg capture certification failed" in str(exc).lower():
-            summary.errors_count += 1
-            summary.error_sample = [str(exc)]
-            summary.status = "CERTIFICATION_FAILED"
-            print(str(exc), file=sys.stderr)
-            if session is not None and run is not None:
-                fail_sync_run(session, run=run, message=str(exc))
-            return 4
-        if "below expected threshold" in str(exc):
-            summary.errors_count += 1
-            summary.error_sample = [str(exc)]
+        capture_exception = exc
+        msg = str(exc)
+        summary.errors_count += 1
+        summary.error_sample = [msg]
+        print(msg, file=sys.stderr)
+        if "below expected threshold" in msg:
             summary.status = "DISCOVERY_FAILED"
-            print(str(exc), file=sys.stderr)
+            summary.failures.append(msg)
+            hard_failure = True
             if session is not None and run is not None:
-                fail_sync_run(session, run=run, message=str(exc))
-            return 3
-        raise
+                fail_sync_run_preserving_counters(
+                    session, run=run, counters=counters, message=msg
+                )
+        elif session is not None and run is not None and browser_counters is not None:
+            _apply_browser_summary(browser_counters)
+            status = _post_capture_finalize(exc)
+            summary.status = status or summary.status
+        elif session is not None and run is not None:
+            summary.status = SYNC_FAILED
+            summary.failures.append(msg)
+            hard_failure = True
+            fail_sync_run_preserving_counters(
+                session, run=run, counters=counters, message=msg
+            )
+        else:
+            summary.status = SYNC_FAILED
+            summary.failures.append(msg)
+            hard_failure = True
     except LocgBrowserBlockedError as exc:
+        msg = str(exc)
         summary.errors_count += 1
-        summary.error_sample = [str(exc)]
+        summary.error_sample = [msg]
         summary.status = "BLOCKED"
+        summary.failures.append(msg)
+        hard_failure = True
         if session is not None and run is not None:
-            fail_sync_run(session, run=run, message=str(exc))
-        print(json.dumps(summary.__dict__, indent=2, default=str))
-        return 2
+            fail_sync_run_preserving_counters(
+                session, run=run, counters=counters, message=msg
+            )
+        print(msg, file=sys.stderr)
     except Exception as exc:  # noqa: BLE001
+        capture_exception = exc
+        msg = str(exc)
         summary.errors_count += 1
-        summary.error_sample = [str(exc)]
-        if session is not None and run is not None:
-            fail_sync_run(session, run=run, message=str(exc))
-        print(json.dumps(summary.__dict__, indent=2, default=str))
-        raise
+        summary.error_sample = [msg]
+        print(msg, file=sys.stderr)
+        if session is not None and run is not None and browser_counters is not None:
+            _apply_browser_summary(browser_counters)
+            status = _post_capture_finalize(exc)
+            summary.status = status or SYNC_FAILED
+            if summary.status == SYNC_FAILED:
+                summary.failures.append(msg)
+                hard_failure = True
+        elif session is not None and run is not None:
+            summary.status = SYNC_FAILED
+            summary.failures.append(msg)
+            hard_failure = True
+            fail_sync_run_preserving_counters(
+                session, run=run, counters=counters, message=msg
+            )
+        else:
+            summary.status = SYNC_FAILED
+            summary.failures.append(msg)
+            hard_failure = True
 
     print(
         json.dumps(_pilot_summary_for_stdout(summary), indent=2, default=str),
         flush=True,
     )
-    return 0 if summary.errors_count == 0 and summary.list_page_loaded else 1
+    return _exit_with_summary()
 
 
 if __name__ == "__main__":

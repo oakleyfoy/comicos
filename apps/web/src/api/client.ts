@@ -6750,11 +6750,14 @@ async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** P57 executive dashboard aggregates many services; cap wait so UI cannot hang indefinitely. */
 const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
+/** P85 collector home must not leave the shell on a pending request indefinitely. */
+const COLLECTOR_HOME_TIMEOUT_MS = 30_000;
 
 async function requestScanV1WithTimeout<T>(
   path: string,
   init?: RequestInit,
   timeoutMs: number = EXECUTIVE_DASHBOARD_TIMEOUT_MS,
+  timeoutMessage?: string,
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -6763,7 +6766,8 @@ async function requestScanV1WithTimeout<T>(
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError(
-        "Executive dashboard is taking too long to load. Try again or open Collector Home for a faster summary.",
+        timeoutMessage ??
+          "Executive dashboard is taking too long to load. Try again or open Collector Home for a faster summary.",
         408,
       );
     }
@@ -30155,7 +30159,12 @@ export const apiClient = {
   },
 
   getCollectorHome(): Promise<P85CollectorHomeRead> {
-    return requestScanV1<P85CollectorHomeRead>("/collector-home");
+    return requestScanV1WithTimeout<P85CollectorHomeRead>(
+      "/collector-home",
+      undefined,
+      COLLECTOR_HOME_TIMEOUT_MS,
+      "Collector Home is taking too long to load. Try again in a moment; sell alerts load separately on Sell Queue.",
+    );
   },
 
   getPlatformCertification(): Promise<P85PlatformCertificationRead> {

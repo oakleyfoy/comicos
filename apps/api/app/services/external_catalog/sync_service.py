@@ -37,6 +37,7 @@ SYNC_RUNNING = "RUNNING"
 SYNC_COMPLETED = "COMPLETED"
 SYNC_PARTIAL = "PARTIAL"
 SYNC_FAILED = "FAILED"
+SYNC_COMPLETE_WITH_WARNINGS = "COMPLETE_WITH_WARNINGS"
 
 SYNC_BACKFILL = "BACKFILL"
 SYNC_INCREMENTAL = "INCREMENTAL"
@@ -131,7 +132,27 @@ def create_sync_run(
     return run
 
 
-def complete_sync_run(session: Session, *, run: ExternalCatalogSyncRun, counters: SyncCounters, status: str) -> None:
+def _sync_run_error_sample(
+    counters: SyncCounters,
+    *,
+    warnings: list[str] | None = None,
+) -> dict[str, Any] | None:
+    payload: dict[str, Any] = {}
+    if counters.error_sample:
+        payload["messages"] = counters.error_sample[:20]
+    if warnings:
+        payload["warnings"] = warnings[:30]
+    return payload or None
+
+
+def complete_sync_run(
+    session: Session,
+    *,
+    run: ExternalCatalogSyncRun,
+    counters: SyncCounters,
+    status: str,
+    warnings: list[str] | None = None,
+) -> None:
     run.status = status
     run.pages_scanned = counters.pages_scanned
     run.issues_created = counters.issues_created
@@ -139,7 +160,7 @@ def complete_sync_run(session: Session, *, run: ExternalCatalogSyncRun, counters
     run.variants_created = counters.variants_created
     run.creators_created = counters.creators_created
     run.errors_count = counters.errors_count
-    run.error_sample = {"messages": counters.error_sample[:20]} if counters.error_sample else None
+    run.error_sample = _sync_run_error_sample(counters, warnings=warnings)
     from app.models.external_catalog import utc_now
 
     run.completed_at = utc_now()
@@ -154,6 +175,70 @@ def complete_sync_run(session: Session, *, run: ExternalCatalogSyncRun, counters
 def fail_sync_run(session: Session, *, run: ExternalCatalogSyncRun, message: str) -> None:
     counters = SyncCounters(errors_count=1, error_sample=[message])
     complete_sync_run(session, run=run, counters=counters, status=SYNC_FAILED)
+
+
+def fail_sync_run_preserving_counters(
+    session: Session,
+    *,
+    run: ExternalCatalogSyncRun,
+    counters: SyncCounters,
+    message: str,
+    warnings: list[str] | None = None,
+) -> None:
+    counters.errors_count += 1
+    if len(counters.error_sample) < 20:
+        counters.error_sample.append(message)
+    complete_sync_run(
+        session,
+        run=run,
+        counters=counters,
+        status=SYNC_FAILED,
+        warnings=warnings,
+    )
+
+
+def count_locg_release_date_persistence(
+    session: Session,
+    *,
+    release_date: date,
+) -> dict[str, int]:
+    from sqlalchemy import func
+
+    issue_count = session.exec(
+        select(func.count())
+        .select_from(ExternalCatalogIssue)
+        .where(
+            ExternalCatalogIssue.source_name == LOCG_SOURCE_NAME,
+            ExternalCatalogIssue.release_date == release_date,
+        )
+    ).one()
+    if hasattr(issue_count, "__getitem__"):
+        issue_count = issue_count[0]
+    variant_count = session.exec(
+        select(func.count())
+        .select_from(ExternalCatalogVariant)
+        .join(ExternalCatalogIssue, ExternalCatalogVariant.external_issue_id == ExternalCatalogIssue.id)
+        .where(
+            ExternalCatalogIssue.source_name == LOCG_SOURCE_NAME,
+            ExternalCatalogIssue.release_date == release_date,
+        )
+    ).one()
+    if hasattr(variant_count, "__getitem__"):
+        variant_count = variant_count[0]
+    return {"issues": int(issue_count or 0), "variants": int(variant_count or 0)}
+
+
+def parent_browser_capture_complete(
+    *,
+    list_page_loaded: bool,
+    list_issues_found: int,
+    detail_pages_succeeded: int,
+    max_issues: int | None,
+) -> bool:
+    if not list_page_loaded or list_issues_found <= 0:
+        return False
+    expected = list_issues_found if max_issues is None else min(list_issues_found, max_issues)
+    return detail_pages_succeeded >= expected
 
 
 def _find_issue(

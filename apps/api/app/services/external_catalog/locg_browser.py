@@ -101,6 +101,7 @@ class BrowserCaptureCounters:
     characters_created: int = 0
     errors_count: int = 0
     error_sample: list[str] = field(default_factory=list)
+    post_capture_warnings: list[str] = field(default_factory=list)
 
 
 def run_playwright_capture(
@@ -180,7 +181,10 @@ def run_playwright_capture(
             audit.cloudflare_total_wait_seconds = security_stats.cloudflare_total_wait_seconds
             audit.list_page_goto_seconds = round(time.perf_counter() - t0, 3)
             report_path = discovery_report_dir / "discovery_report.json"
-            save_discovery_report(discovery_audit, report_path)
+            try:
+                save_discovery_report(discovery_audit, report_path)
+            except OSError as exc:
+                counters.post_capture_warnings.append(f"discovery_report.json: {exc}")
             print("\n--- List discovery verification ---", flush=True)
             print_verification_summary(discovery_audit)
             print(f"Discovery report: {report_path}", flush=True)
@@ -200,9 +204,15 @@ def run_playwright_capture(
                 raise LocgBrowserBlockedError(f"list page blocked: {blocked} ({list_url})")
 
             if save_raw_dir is not None:
+                from app.services.external_catalog.locg_capture_io import safe_write_text
+
                 t_raw = time.perf_counter()
-                save_raw_dir.mkdir(parents=True, exist_ok=True)
-                (save_raw_dir / "list_page.html").write_text(list_html, encoding="utf-8")
+                safe_write_text(
+                    save_raw_dir / "list_page.html",
+                    list_html,
+                    warnings=counters.post_capture_warnings,
+                    label="list_page.html",
+                )
                 audit.list_raw_save_seconds = round(time.perf_counter() - t_raw, 3)
 
             counters.list_page_loaded = True
@@ -356,9 +366,19 @@ def run_playwright_capture(
                         )
                     issue_id = re.search(r"/comic/(\d+)", detail_url)
                     if save_raw_dir is not None and issue_id:
+                        from app.services.external_catalog.locg_capture_io import (
+                            safe_write_text,
+                            sanitize_path_segment,
+                        )
+
                         t_raw_d = time.perf_counter()
-                        fname = f"{issue_id.group(1)}_detail.html"
-                        (save_raw_dir / fname).write_text(detail_html, encoding="utf-8")
+                        fname = f"{sanitize_path_segment(issue_id.group(1))}_detail.html"
+                        safe_write_text(
+                            save_raw_dir / fname,
+                            detail_html,
+                            warnings=counters.post_capture_warnings,
+                            label=fname,
+                        )
                         issue_timing.raw_save_seconds = round(time.perf_counter() - t_raw_d, 3)
                     process_issue(stub, detail_html, issue_timing)
                     issue_timing.finalize()
@@ -454,8 +474,12 @@ def run_playwright_capture(
                 cert=cert,
                 live_page_state=live_state,
                 source_universe=universe,
+                warnings=counters.post_capture_warnings,
             )
-            print_capture_certification_summary(cert)
+            try:
+                print_capture_certification_summary(cert)
+            except OSError as exc:
+                counters.post_capture_warnings.append(f"certification_summary_print: {exc}")
             audit.total_runtime_seconds = round(time.perf_counter() - run_started, 3)
             cert.runtime["total_runtime_seconds"] = audit.total_runtime_seconds
             save_capture_certification_artifacts(
@@ -463,11 +487,18 @@ def run_playwright_capture(
                 cert=cert,
                 live_page_state=live_state,
                 source_universe=universe,
+                warnings=counters.post_capture_warnings,
+            )
+            parent_loop_complete = (
+                counters.list_issues_found > 0
+                and counters.detail_pages_succeeded >= counters.list_issues_found
             )
             if not dry_run and not cert.passed:
-                raise RuntimeError(
-                    "LoCG capture certification failed: " + "; ".join(cert.failure_reasons)
-                )
+                reason = "LoCG capture certification failed: " + "; ".join(cert.failure_reasons)
+                if parent_loop_complete:
+                    counters.post_capture_warnings.append(reason)
+                else:
+                    raise RuntimeError(reason)
             if adaptive_delay is not None:
                 audit.adaptive_throttle = adaptive_delay.to_dict()
                 audit.adaptive_throttle["cloudflare_wait_count"] = (
@@ -478,9 +509,19 @@ def run_playwright_capture(
                     force=True,
                 )
         finally:
+            from app.services.external_catalog.locg_capture_io import safe_browser_teardown
+
             t_down = time.perf_counter()
-            context.close()
-            browser.close()
+            safe_browser_teardown(
+                close_fn=context.close,
+                warnings=counters.post_capture_warnings,
+                label="browser context close",
+            )
+            safe_browser_teardown(
+                close_fn=browser.close,
+                warnings=counters.post_capture_warnings,
+                label="browser close",
+            )
             audit.browser_teardown_seconds = round(time.perf_counter() - t_down, 3)
 
     audit.total_runtime_seconds = round(time.perf_counter() - run_started, 3)

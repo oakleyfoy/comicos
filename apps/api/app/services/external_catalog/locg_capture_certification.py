@@ -526,16 +526,28 @@ def save_capture_certification_artifacts(
     cert: LocgCaptureCertificationResult,
     live_page_state: dict[str, Any],
     source_universe: dict[str, Any],
+    warnings: list[str] | None = None,
 ) -> None:
-    report_dir.mkdir(parents=True, exist_ok=True)
-    (report_dir / "locg_capture_certification.json").write_text(
-        json.dumps(cert.to_dict(), indent=2), encoding="utf-8"
+    from app.services.external_catalog.locg_capture_io import safe_write_json
+
+    warn = warnings if warnings is not None else []
+    safe_write_json(
+        report_dir / "locg_capture_certification.json",
+        cert.to_dict(),
+        warnings=warn,
+        label="locg_capture_certification.json",
     )
-    (report_dir / "live_page_state_report.json").write_text(
-        json.dumps(live_page_state, indent=2, ensure_ascii=False), encoding="utf-8"
+    safe_write_json(
+        report_dir / "live_page_state_report.json",
+        live_page_state,
+        warnings=warn,
+        label="live_page_state_report.json",
     )
-    (report_dir / "source_universe_report.json").write_text(
-        json.dumps(source_universe, indent=2, ensure_ascii=False), encoding="utf-8"
+    safe_write_json(
+        report_dir / "source_universe_report.json",
+        source_universe,
+        warnings=warn,
+        label="source_universe_report.json",
     )
 
 

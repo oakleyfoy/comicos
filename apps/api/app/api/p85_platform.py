@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from fastapi import APIRouter, Depends, FastAPI
 from sqlmodel import Session
 
@@ -20,6 +23,7 @@ from app.services.platform_production_certification import build_production_dash
 from app.services.workflow_health_service import build_workflow_health
 
 p85_platform_router = APIRouter(tags=["Platform API v1 (P85)"])
+logger = logging.getLogger(__name__)
 
 
 def attach_p85_platform_layer(app: FastAPI) -> None:
@@ -64,5 +68,14 @@ def v1_collector_home(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P85CollectorHomeRead = build_collector_home(session, owner_user_id=int(current_user.id))
-    return wrap_object(body, owner_user_id=int(current_user.id))
+    owner_user_id = int(current_user.id)
+    started = time.perf_counter()
+    body: P85CollectorHomeRead = build_collector_home(session, owner_user_id=owner_user_id)
+    elapsed = time.perf_counter() - started
+    logger.info(
+        "GET /api/v1/collector-home owner_user_id=%s elapsed_seconds=%.3f sections=%s",
+        owner_user_id,
+        elapsed,
+        len(body.sections),
+    )
+    return wrap_object(body, owner_user_id=owner_user_id)
