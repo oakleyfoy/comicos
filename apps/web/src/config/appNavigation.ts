@@ -143,6 +143,10 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Condition Intelligence", to: "/condition-intelligence" },
       { label: "Grading Intelligence", to: "/grading-intelligence" },
+      { label: "Grading Operations", to: "/grading-operations" },
+      { label: "Grading Queue", to: "/grading-queue" },
+      { label: "Submission Batches", to: "/grading-batches" },
+      { label: "Grading Analytics", to: "/grading-analytics" },
       { label: "Grading Validation", to: "/grading-validation" },
       { label: "Grading Platform", to: "/grading-platform" },
     ],

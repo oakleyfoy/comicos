@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.p72_grading_analytics import P72GradingAnalyticsDashboardRead
+from app.schemas.p72_grading_operations import P72GradingOperationsDashboardRead
+
 
 class GradePredictionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -164,6 +167,9 @@ class GradingDashboardRead(BaseModel):
     top_grading_candidates: list[GradingRecommendationRead] = Field(default_factory=list)
     roi_summary: list[GradingRoiAnalysisRead] = Field(default_factory=list)
     agent_activity: list[GradingAgentExecutionRead] = Field(default_factory=list)
+    decision_engine: P72GradingDecisionDashboardRead | None = None
+    operations_engine: P72GradingOperationsDashboardRead | None = None
+    analytics_engine: P72GradingAnalyticsDashboardRead | None = None
 
 
 class GradePredictionRunResponse(BaseModel):
@@ -195,3 +201,73 @@ class GradingReviewResponse(BaseModel):
 
     recommendation: GradingRecommendationRead
     review: GradingRecommendationReviewRead
+
+
+class P72GradeProbabilitiesRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grade_9_8: float = Field(serialization_alias="9.8")
+    grade_9_6: float = Field(serialization_alias="9.6")
+    grade_9_4: float = Field(serialization_alias="9.4")
+    grade_9_2: float = Field(serialization_alias="9.2")
+    grade_other: float = Field(serialization_alias="other")
+
+    def as_probability_map(self) -> dict[str, float]:
+        return {
+            "9.8": self.grade_9_8,
+            "9.6": self.grade_9_6,
+            "9.4": self.grade_9_4,
+            "9.2": self.grade_9_2,
+            "other": self.grade_other,
+        }
+
+
+class P72GradingDecisionCandidateRead(BaseModel):
+    """P72-01 read-only grading decision row (not P37 ops registry)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inventory_copy_id: int
+    title: str
+    publisher: str
+    issue_number: str
+    raw_fmv: float
+    blended_fmv: float
+    liquidity_score: float
+    market_confidence: float
+    sales_velocity: float
+    sell_intelligence_score: float
+    recommendation: str
+    pressing_recommendation: str
+    expected_grade: str
+    grade_probabilities: dict[str, float]
+    expected_graded_fmv: float
+    expected_total_cost: float
+    expected_profit: float
+    expected_roi_pct: float
+    grading_score: float
+    confidence: float
+    primary_reason: str
+    factors_json: dict[str, object] = Field(default_factory=dict)
+
+
+class P72GradingCandidatesListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[P72GradingDecisionCandidateRead] = Field(default_factory=list)
+    total_items: int
+    limit: int
+    offset: int = 0
+
+
+class P72GradingDecisionDashboardRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_count: int
+    average_grading_score: float
+    average_expected_roi_pct: float
+    press_and_grade_count: int
+    grade_count: int
+    watch_count: int
+    do_not_grade_count: int
+    top_grade_candidates: list[P72GradingDecisionCandidateRead] = Field(default_factory=list)

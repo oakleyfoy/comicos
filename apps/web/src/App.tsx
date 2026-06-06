@@ -77,6 +77,10 @@ import { OperationsReliabilityPage } from "./pages/OperationsReliabilityPage";
 import { ProductionReadinessPage } from "./pages/ProductionReadinessPage";
 import { ConditionIntelligencePage } from "./pages/ConditionIntelligencePage";
 import { GradingIntelligencePage } from "./pages/GradingIntelligencePage";
+import { GradingOperationsDashboardPage } from "./pages/GradingOperationsDashboardPage";
+import { GradingQueuePage } from "./pages/GradingQueuePage";
+import { GradingSubmissionBatchesPage } from "./pages/GradingSubmissionBatchesPage";
+import { GradingAnalyticsDashboardPage } from "./pages/GradingAnalyticsDashboardPage";
 import { GradingValidationPage } from "./pages/GradingValidationPage";
 import { GradingPlatformPage } from "./pages/GradingPlatformPage";
 import { ReleaseIntelligencePage } from "./pages/ReleaseIntelligencePage";
@@ -182,6 +186,10 @@ export default function App() {
         <Route path="/production-readiness" element={<ProductionReadinessPage />} />
         <Route path="/condition-intelligence" element={<ConditionIntelligencePage />} />
         <Route path="/grading-intelligence" element={<GradingIntelligencePage />} />
+        <Route path="/grading-operations" element={<GradingOperationsDashboardPage />} />
+        <Route path="/grading-queue" element={<GradingQueuePage />} />
+        <Route path="/grading-batches" element={<GradingSubmissionBatchesPage />} />
+        <Route path="/grading-analytics" element={<GradingAnalyticsDashboardPage />} />
         <Route path="/grading-validation" element={<GradingValidationPage />} />
         <Route path="/grading-platform" element={<GradingPlatformPage />} />
         <Route path="/release-intelligence" element={<ReleaseIntelligencePage />} />

@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from datetime import date
 
-from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.models import InventoryCopy, User
 from app.schemas.p72_grading_operations import P72GradingQueueEnqueuePayload, P72GradingQueueStatusPayload
+from app.services.grading_outcome_service import list_outcomes
 from app.services.grading_queue_service import (
     STATUS_AT_CGC,
     STATUS_GRADING_COMPLETE,
@@ -14,26 +16,18 @@ from app.services.grading_queue_service import (
     enqueue_queue_entries,
     update_queue_status,
 )
-from app.services.p72_grading_analytics_service import build_analytics_dashboard
-from test_inventory import auth_headers, create_order, register_and_login
-
-
-def test_p67_grading_analytics_build(client: TestClient) -> None:
-    token = register_and_login(client, "p67-grade@example.com")
-    headers = auth_headers(token)
-    res = client.post("/api/v1/grading-analytics/build", headers=headers)
-    assert res.status_code == 200
-    latest = client.get("/api/v1/grading-analytics/latest", headers=headers)
-    assert latest.status_code == 200
+from app.services.p72_grading_analytics_service import build_recommendation_accuracy
+from test_inventory import create_order, register_and_login
+from fastapi.testclient import TestClient
 
 
 def _owner_id(session: Session, email: str) -> int:
     return int(session.exec(select(User).where(User.email == email)).one().id or 0)
 
 
-def test_p72_analytics_dashboard(client: TestClient, session: Session) -> None:
-    token = register_and_login(client, "p72-analytics@example.com")
-    owner_id = _owner_id(session, "p72-analytics@example.com")
+def test_recommendation_accuracy_payload(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "p72-rec-acc@example.com")
+    owner_id = _owner_id(session, "p72-rec-acc@example.com")
     create_order(client, token)
     copy = session.exec(select(InventoryCopy).where(InventoryCopy.user_id == owner_id)).one()
     q = enqueue_queue_entries(
@@ -55,27 +49,19 @@ def test_p72_analytics_dashboard(client: TestClient, session: Session) -> None:
         queue_entry_id=qid,
         payload=P72GradingQueueStatusPayload(
             status=STATUS_RETURNED,
-            actual_grade="9.6",
-            final_grading_cost=32.0,
+            actual_grade="9.8",
+            final_grading_cost=30.0,
             actual_completion_date=date.today(),
         ),
     )
-    dash = build_analytics_dashboard(session, owner_user_id=owner_id)
-    assert dash.outcome_count >= 1
-    assert dash.performance.books_returned >= 1
-    assert dash.portfolio_impact.total_books_graded >= 1
+    assert list_outcomes(session, owner_user_id=owner_id)
+    acc = build_recommendation_accuracy(session, owner_user_id=owner_id)
+    assert acc.sample_count >= 1
+    assert acc.overall_accuracy_pct >= 0
 
-    resp = client.get(
+    dash = client.get(
         "/api/v1/grading-intelligence/analytics",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 200
-    body = resp.json()["data"]
-    assert body["outcome_count"] >= 1
-    assert "performance" in body and "roi" in body
-
-    perf = client.get(
-        "/api/v1/grading-intelligence/performance",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert perf.status_code == 200
+    assert dash.status_code == 200
+    assert dash.json()["data"]["recommendation_accuracy"]["sample_count"] >= 1

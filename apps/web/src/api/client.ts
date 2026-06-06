@@ -14183,6 +14183,186 @@ export interface GradingAgentExecutionRead {
   created_at: string;
 }
 
+export interface P72GradingDecisionCandidateRead {
+  inventory_copy_id: number;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  raw_fmv: number;
+  blended_fmv: number;
+  liquidity_score: number;
+  market_confidence: number;
+  sales_velocity: number;
+  sell_intelligence_score: number;
+  recommendation: string;
+  pressing_recommendation: string;
+  expected_grade: string;
+  grade_probabilities: Record<string, number>;
+  expected_graded_fmv: number;
+  expected_total_cost: number;
+  expected_profit: number;
+  expected_roi_pct: number;
+  grading_score: number;
+  confidence: number;
+  primary_reason: string;
+  factors_json: Record<string, unknown>;
+}
+
+export interface P72GradingDecisionDashboardRead {
+  candidate_count: number;
+  average_grading_score: number;
+  average_expected_roi_pct: number;
+  press_and_grade_count: number;
+  grade_count: number;
+  watch_count: number;
+  do_not_grade_count: number;
+  top_grade_candidates: P72GradingDecisionCandidateRead[];
+}
+
+export interface P72GradingOperationsMetricsRead {
+  total_submissions: number;
+  books_in_process: number;
+  books_completed: number;
+  average_turnaround_days: number;
+  average_grading_cost: number;
+  total_grading_spend: number;
+  waiting_count: number;
+  submitted_count: number;
+  at_cgc_count: number;
+  returned_count: number;
+  listed_count: number;
+  sold_count: number;
+}
+
+export interface P72GradingBatchRead {
+  id: number;
+  batch_name: string;
+  target_grader: string;
+  submission_date: string | null;
+  book_count: number;
+  estimated_cost: number | string | null;
+  actual_cost: number | string | null;
+  grader_received_date: string | null;
+  estimated_completion_date: string | null;
+  actual_completion_date: string | null;
+  turnaround_days: number | null;
+  batch_status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P72GradingQueueEntryRead {
+  id: number;
+  inventory_copy_id: number;
+  p72_grading_batch_id: number | null;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  status: string;
+  target_grader: string;
+  submission_date: string | null;
+  received_date: string | null;
+  estimated_completion_date: string | null;
+  actual_completion_date: string | null;
+  turnaround_days: number | null;
+  estimated_grading_cost: number | string | null;
+  actual_grade: string | null;
+  certification_number: string | null;
+  slab_notes: string | null;
+  final_grading_cost: number | string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P72GradingOperationsDashboardRead {
+  metrics: P72GradingOperationsMetricsRead;
+  batch_summary: P72GradingBatchRead[];
+  recent_queue: P72GradingQueueEntryRead[];
+}
+
+export interface P72GradingPerformanceRead {
+  books_submitted: number;
+  books_returned: number;
+  books_sold: number;
+  books_held: number;
+  average_grade: number;
+  median_grade: number;
+  hit_rate_9_8_pct: number;
+  hit_rate_9_6_plus_pct: number;
+  grade_distribution_pct: Record<string, number>;
+}
+
+export interface P72GradingRoiAnalyticsRead {
+  total_grading_spend: number;
+  total_profit: number;
+  net_roi_pct: number;
+  profit_by_publisher: Record<string, number>;
+  profit_by_series: Record<string, number>;
+  profit_by_character: Record<string, number>;
+  profit_by_creator: Record<string, number>;
+  profit_by_era: Record<string, number>;
+}
+
+export interface P72GradingPressingAnalyticsRead {
+  pressed_book_count: number;
+  non_pressed_book_count: number;
+  pressed_avg_roi_pct: number;
+  non_pressed_avg_roi_pct: number;
+  pressed_avg_grade: number;
+  non_pressed_avg_grade: number;
+  roi_difference_pct: number;
+  grade_difference: number;
+  pressing_success_rate_pct: number;
+  pressing_worth_it: boolean;
+}
+
+export interface P72GradingRecommendationAccuracyRead {
+  overall_accuracy_pct: number;
+  sample_count: number;
+  comparisons: Record<string, unknown>[];
+}
+
+export interface P72GradingPortfolioImpactRead {
+  total_books_graded: number;
+  total_slab_value: number;
+  total_raw_value: number;
+  total_graded_value: number;
+  value_added_through_grading: number;
+}
+
+export interface P72GradingWinLossRead {
+  title: string;
+  actual_profit: number;
+  actual_roi_pct: number;
+  actual_grade: string;
+  recommendation: string;
+}
+
+export interface P72GradingAnalyticsDashboardRead {
+  performance: P72GradingPerformanceRead;
+  roi: P72GradingRoiAnalyticsRead;
+  recommendation_accuracy: P72GradingRecommendationAccuracyRead;
+  pressing: P72GradingPressingAnalyticsRead;
+  portfolio_impact: P72GradingPortfolioImpactRead;
+  top_grading_wins: P72GradingWinLossRead[];
+  worst_grading_decisions: P72GradingWinLossRead[];
+  outcome_count: number;
+}
+
+export interface P72GradingCertificationCheckRead {
+  component: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface P72GradingCertificationRead {
+  approved_for_production: boolean;
+  checks: P72GradingCertificationCheckRead[];
+  platform_status: string;
+  reviewed_at: string;
+}
+
 export interface GradingDashboardRead {
   prediction_count: number;
   recommendation_count: number;
@@ -14195,6 +14375,9 @@ export interface GradingDashboardRead {
   top_grading_candidates: GradingIntelligenceRecommendationRead[];
   roi_summary: GradingIntelligenceRoiAnalysisRead[];
   agent_activity: GradingAgentExecutionRead[];
+  decision_engine?: P72GradingDecisionDashboardRead | null;
+  operations_engine?: P72GradingOperationsDashboardRead | null;
+  analytics_engine?: P72GradingAnalyticsDashboardRead | null;
 }
 
 export interface GradeValidationRead {
@@ -26183,6 +26366,58 @@ export const apiClient = {
 
   getGradingIntelligenceDashboard(): Promise<GradingDashboardRead> {
     return requestScanV1<GradingDashboardRead>("/grading-intelligence/dashboard");
+  },
+
+  async getGradingIntelligenceCandidates(limit = 50): Promise<P72GradingDecisionCandidateRead[]> {
+    const envelope = await fetchScanV1Envelope<{ items: P72GradingDecisionCandidateRead[] }>(
+      `/grading-intelligence/candidates?limit=${limit}`,
+    );
+    return envelope.data.items ?? [];
+  },
+
+  async getGradingQueue(params?: {
+    status?: string;
+    batch_id?: number;
+    search?: string;
+    limit?: number;
+  }): Promise<P72GradingQueueEntryRead[]> {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.batch_id != null) q.set("batch_id", String(params.batch_id));
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    const envelope = await fetchScanV1Envelope<{ items: P72GradingQueueEntryRead[] }>(
+      `/grading-intelligence/queue${suffix}`,
+    );
+    return envelope.data.items ?? [];
+  },
+
+  async getGradingBatches(limit = 50): Promise<P72GradingBatchRead[]> {
+    const envelope = await fetchScanV1Envelope<{ items: P72GradingBatchRead[] }>(
+      `/grading-intelligence/batches?limit=${limit}`,
+    );
+    return envelope.data.items ?? [];
+  },
+
+  createGradingBatch(body: {
+    batch_name: string;
+    target_grader?: string;
+    queue_entry_ids?: number[];
+    estimated_cost?: number;
+  }): Promise<P72GradingBatchRead> {
+    return requestScanV1<P72GradingBatchRead>("/grading-intelligence/batches", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getGradingAnalytics(): Promise<P72GradingAnalyticsDashboardRead> {
+    return requestScanV1<P72GradingAnalyticsDashboardRead>("/grading-intelligence/analytics");
+  },
+
+  getGradingCertification(): Promise<P72GradingCertificationRead> {
+    return requestScanV1<P72GradingCertificationRead>("/grading-intelligence/certification");
   },
 
   getGradingValidationDashboard(): Promise<GradingValidationDashboardRead> {

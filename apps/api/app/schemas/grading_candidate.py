@@ -42,6 +42,22 @@ GradingLifecycleEventType = Literal[
 ]
 
 
+P72GradingRecommendation = Literal["GRADE", "PRESS_AND_GRADE", "WATCH", "DO_NOT_GRADE"]
+P72PressingRecommendation = Literal["PRESS", "DO_NOT_PRESS"]
+
+
+class P72GradingCandidateSummary(BaseModel):
+    """P72-01 discovery summary (advisory; no workflow mutation)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inventory_copy_id: int
+    recommendation: P72GradingRecommendation | str
+    pressing_recommendation: P72PressingRecommendation | str
+    grading_score: float
+    expected_roi_pct: float
+
+
 class GradingCandidateDashboardSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

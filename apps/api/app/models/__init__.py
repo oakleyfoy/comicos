@@ -325,6 +325,13 @@ from app.models.market_pricing_engine import (
 )
 from app.models.ebay_market_pricing import EbayCompImportRun, EbayCompRecord
 from app.models.p70_market_refresh import P70MarketFmvTrendPoint, P70MarketRefreshRun
+from app.models.p72_grading_analytics import P72GradingOutcome
+from app.models.p72_grading_operations import (
+    P72GradingAuditLog,
+    P72GradingBatch,
+    P72GradingQueueEntry,
+    P72InventoryGradingHistory,
+)
 from app.models.sell_intelligence_platform import (
     P71ExitQueueItem,
     P71ExitQueueSnapshot,
@@ -1145,6 +1152,11 @@ __all__ = [
     "EbayCompImportRun",
     "P70MarketRefreshRun",
     "P70MarketFmvTrendPoint",
+    "P72GradingAuditLog",
+    "P72GradingBatch",
+    "P72GradingOutcome",
+    "P72GradingQueueEntry",
+    "P72InventoryGradingHistory",
     "PlatformHealthCheck",
     "ReliabilityIssue",
     "JobHealthMetric",

@@ -23,6 +23,20 @@ GradingRoiEvidenceType = Literal[
 GradingRoiScenarioName = Literal["pessimistic", "baseline", "optimistic"]
 
 
+class P72GradingRoiBreakdownRead(BaseModel):
+    """P72-01 advisory ROI breakdown (distinct from P37 snapshot ROI)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw_fmv: float
+    expected_graded_fmv: float
+    total_cost: float
+    expected_profit: float
+    expected_roi_pct: float
+    grade_fmv_breakdown: dict[str, float] = Field(default_factory=dict)
+    calculation_json: dict[str, object] = Field(default_factory=dict)
+
+
 class GradingRoiGeneratePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

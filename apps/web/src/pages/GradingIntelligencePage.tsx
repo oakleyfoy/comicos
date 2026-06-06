@@ -55,7 +55,7 @@ export function GradingIntelligencePage(): JSX.Element {
       <PageHeader
         eyebrow="Grading advisory"
         title="Grading Intelligence"
-        description="PSA/CGC-style grade predictions, recommendations, ROI, and submission priority — advisory only (P49-02)."
+        description="Grade-to-submit decisions, ROI, and P49 agent predictions — advisory only (P72-01 + P49-02)."
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
@@ -134,6 +134,47 @@ export function GradingIntelligencePage(): JSX.Element {
               )}
             </Panel>
           </div>
+
+          {dashboard.decision_engine ? (
+            <Panel title="Top Grade Candidates (P72)">
+              {!dashboard.decision_engine.top_grade_candidates.length ? (
+                <p className="text-sm text-slate-500">No raw inventory copies with FMV qualify yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm text-slate-700">
+                    <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="py-2 pr-3">Title</th>
+                        <th className="py-2 pr-3">Raw FMV</th>
+                        <th className="py-2 pr-3">Exp. grade</th>
+                        <th className="py-2 pr-3">Graded FMV</th>
+                        <th className="py-2 pr-3">Cost</th>
+                        <th className="py-2 pr-3">Profit</th>
+                        <th className="py-2 pr-3">ROI</th>
+                        <th className="py-2 pr-3">Rec.</th>
+                        <th className="py-2">Conf.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboard.decision_engine.top_grade_candidates.map((row) => (
+                        <tr key={row.inventory_copy_id} className="border-t border-slate-100">
+                          <td className="py-2 pr-3 font-medium text-slate-900">{row.title}</td>
+                          <td className="py-2 pr-3">${row.raw_fmv.toFixed(0)}</td>
+                          <td className="py-2 pr-3">{row.expected_grade}</td>
+                          <td className="py-2 pr-3">${row.expected_graded_fmv.toFixed(0)}</td>
+                          <td className="py-2 pr-3">${row.expected_total_cost.toFixed(0)}</td>
+                          <td className="py-2 pr-3">${row.expected_profit.toFixed(0)}</td>
+                          <td className="py-2 pr-3">{row.expected_roi_pct.toFixed(0)}%</td>
+                          <td className="py-2 pr-3">{row.recommendation}</td>
+                          <td className="py-2">{(row.confidence * 100).toFixed(0)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+          ) : null}
 
           <Panel title="Agent Activity">
             {!dashboard.agent_activity.length ? (

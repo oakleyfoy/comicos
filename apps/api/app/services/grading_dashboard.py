@@ -102,6 +102,14 @@ def build_grading_dashboard(session: Session, *, owner_user_id: int) -> GradingD
     avg_pri = round(sum(r.priority_score for r in recommendations) / len(recommendations), 3) if recommendations else 0.0
     avg_roi = round(sum(r.expected_roi_percent for r in roi_rows) / len(roi_rows), 2) if roi_rows else 0.0
 
+    from app.services.p72_grading_decision_dashboard import build_p72_decision_dashboard
+    from app.services.p72_grading_analytics_service import build_analytics_dashboard
+    from app.services.p72_grading_operations_dashboard import build_operations_dashboard
+
+    decision_engine = build_p72_decision_dashboard(session, owner_user_id=owner_user_id)
+    operations_engine = build_operations_dashboard(session, owner_user_id=owner_user_id)
+    analytics_engine = build_analytics_dashboard(session, owner_user_id=owner_user_id)
+
     return GradingDashboardRead(
         prediction_count=pred_count,
         recommendation_count=rec_count,
@@ -114,4 +122,7 @@ def build_grading_dashboard(session: Session, *, owner_user_id: int) -> GradingD
         top_grading_candidates=top,
         roi_summary=roi_rows,
         agent_activity=[GradingAgentExecutionRead.model_validate(row) for row in exec_rows],
+        decision_engine=decision_engine,
+        operations_engine=operations_engine,
+        analytics_engine=analytics_engine,
     )
