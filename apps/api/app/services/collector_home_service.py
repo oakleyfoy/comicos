@@ -31,6 +31,8 @@ _HOME_DEADLINE_SECONDS = 5.0
 _SECTION_TIMEOUT_SECONDS = 1.5
 # Sell queue is heavy on large inventories; keep it off home until bounded.
 _COLLECTOR_HOME_ENABLE_SELL_SECTIONS = False
+# Acquisition + daily actions both hit forward title index (~10s+ on prod).
+_COLLECTOR_HOME_ENABLE_ACQUISITION_SECTIONS = False
 
 T = TypeVar("T")
 
@@ -208,7 +210,12 @@ def _load_budget_status(session: Session, *, owner_user_id: int) -> dict:
         }
 
 
-def _load_portfolio_movement(session: Session, *, owner_user_id: int, timeout_seconds: float) -> dict:
+def _load_portfolio_movement(
+    _session: Session | None,
+    *,
+    owner_user_id: int,
+    timeout_seconds: float,
+) -> dict:
     def _compute(bounded_session: Session, uid: int) -> dict:
         forecast = build_collection_forecast(bounded_session, owner_user_id=uid, persist=False)
         risk = build_collection_risk(bounded_session, owner_user_id=uid, persist=False)
@@ -315,22 +322,98 @@ def _prefetch_storage_rows(owner_user_id: int, *, timeout_seconds: float) -> lis
     return _run_bounded(owner_user_id=owner_user_id, timeout_seconds=timeout_seconds, fn=_load)
 
 
+def _prefetch_todays_actions(
+    owner_user_id: int,
+    *,
+    timeout_seconds: float,
+) -> tuple[list[P85CollectorHomeActionRead], str, str]:
+    def _load(bounded_session: Session, uid: int) -> tuple[list[P85CollectorHomeActionRead], str, str]:
+        return _load_todays_actions(bounded_session, owner_user_id=uid)
+
+    payload, err = _run_bounded_soft(
+        owner_user_id=owner_user_id, timeout_seconds=timeout_seconds, fn=_load
+    )
+    if payload is not None:
+        return payload
+    if err:
+        return [], "ERROR", err
+    return [], "SKIPPED", "Daily actions timed out; open Daily Actions for the full list."
+
+
+def _prefetch_budget_status(owner_user_id: int, *, timeout_seconds: float) -> dict:
+    def _load(bounded_session: Session, uid: int) -> dict:
+        return _load_budget_status(bounded_session, owner_user_id=uid)
+
+    payload, err = _run_bounded_soft(
+        owner_user_id=owner_user_id, timeout_seconds=timeout_seconds, fn=_load
+    )
+    if payload is not None:
+        return payload
+    if err:
+        return {
+            "status": "ERROR",
+            "error": err,
+            "state": None,
+            "monthly_budget": None,
+            "monthly_spend": None,
+        }
+    return {
+        "status": "SKIPPED",
+        "error": "Budget status timed out.",
+        "state": None,
+        "monthly_budget": None,
+        "monthly_spend": None,
+    }
+
+
+def _prefetch_portfolio_movement(owner_user_id: int, *, timeout_seconds: float) -> dict:
+    return _load_portfolio_movement(
+        None,
+        owner_user_id=owner_user_id,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def build_collector_home(session: Session, *, owner_user_id: int) -> P85CollectorHomeRead:
     started = time.monotonic()
     deadline = started + _HOME_DEADLINE_SECONDS
     timed_out = "Section timed out; open the dedicated page for full data."
 
-    todays, todays_status, todays_error = _load_todays_actions(session, owner_user_id=owner_user_id)
-    budget_status = _load_budget_status(session, owner_user_id=owner_user_id)
-    portfolio_timeout = min(_SECTION_TIMEOUT_SECONDS, _remaining_seconds(deadline))
-    portfolio_movement = _load_portfolio_movement(
-        session, owner_user_id=owner_user_id, timeout_seconds=portfolio_timeout
-    )
-
     prefetch_timeout = min(_SECTION_TIMEOUT_SECONDS, _remaining_seconds(deadline))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        fut_acq = pool.submit(
-            _prefetch_acquisition_rows, owner_user_id, timeout_seconds=prefetch_timeout
+    wait_cap = prefetch_timeout + 0.35
+    acquisition_error: str | None = None
+    acquisition_rows: list | None = None
+    foc_rows: list | None = None
+    discovery_rows: list | None = None
+    storage_rows: list[dict] | None = None
+    todays: list[P85CollectorHomeActionRead] = []
+    todays_status = "OK"
+    todays_error = ""
+    budget_status: dict = {
+        "status": "SKIPPED",
+        "error": "",
+        "state": None,
+        "monthly_budget": None,
+        "monthly_spend": None,
+    }
+    portfolio_movement: dict = {
+        "status": "SKIPPED",
+        "error": "",
+        "current_value": None,
+        "risk_category": None,
+        "risk_score": None,
+    }
+
+    worker_count = 7 if _COLLECTOR_HOME_ENABLE_ACQUISITION_SECTIONS else 6
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
+        fut_today = pool.submit(
+            _prefetch_todays_actions, owner_user_id, timeout_seconds=prefetch_timeout
+        )
+        fut_budget = pool.submit(
+            _prefetch_budget_status, owner_user_id, timeout_seconds=prefetch_timeout
+        )
+        fut_port = pool.submit(
+            _prefetch_portfolio_movement, owner_user_id, timeout_seconds=prefetch_timeout
         )
         fut_foc = pool.submit(_prefetch_foc_rows, owner_user_id, timeout_seconds=prefetch_timeout)
         fut_disc = pool.submit(
@@ -339,16 +422,24 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
         fut_stor = pool.submit(
             _prefetch_storage_rows, owner_user_id, timeout_seconds=prefetch_timeout
         )
-        wait_cap = prefetch_timeout + 0.35
-        acquisition_error: str | None = None
+        fut_acq = None
+        if _COLLECTOR_HOME_ENABLE_ACQUISITION_SECTIONS:
+            fut_acq = pool.submit(
+                _prefetch_acquisition_rows, owner_user_id, timeout_seconds=prefetch_timeout
+            )
         try:
-            acquisition_rows, acquisition_error = fut_acq.result(timeout=wait_cap)
+            todays, todays_status, todays_error = fut_today.result(timeout=wait_cap)
+            budget_status = fut_budget.result(timeout=wait_cap)
+            portfolio_movement = fut_port.result(timeout=wait_cap)
             foc_rows = fut_foc.result(timeout=wait_cap)
             discovery_rows = fut_disc.result(timeout=wait_cap)
             storage_rows = fut_stor.result(timeout=wait_cap)
+            if fut_acq is not None:
+                acquisition_rows, acquisition_error = fut_acq.result(timeout=wait_cap)
         except concurrent.futures.TimeoutError:
             logger.warning("collector_home parallel prefetch wait exceeded %.2fs", wait_cap)
-            acquisition_rows = foc_rows = discovery_rows = storage_rows = None
+            foc_rows = discovery_rows = storage_rows = None
+            acquisition_rows = None
             acquisition_error = timed_out
 
     buy_alert_items: list[dict] | None = None
@@ -427,15 +518,44 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
         ]
     )
 
+    acquisition_section_defs = (
+        [
+            _section_skipped(
+                "buy_alerts",
+                "Buy alerts",
+                empty_hint="Open Marketplace Opportunities for buy alerts.",
+                reason="Temporarily disabled on Collector Home (slow title index).",
+            ),
+            _section_skipped(
+                "marketplace_deals",
+                "Marketplace deals",
+                empty_hint="Open Marketplace Opportunities for deals.",
+                reason="Temporarily disabled on Collector Home (slow title index).",
+            ),
+        ]
+        if not _COLLECTOR_HOME_ENABLE_ACQUISITION_SECTIONS
+        else [
+            _section_from_prefetch(
+                "buy_alerts",
+                "Buy alerts",
+                empty_hint="Scan marketplace opportunities or check discovery feed.",
+                prefetched=buy_alert_items,
+                skip_reason=timed_out,
+                load_error=acquisition_error,
+            ),
+            _section_from_prefetch(
+                "marketplace_deals",
+                "Marketplace deals",
+                empty_hint="Run marketplace acquisition scan or refresh deals.",
+                prefetched=marketplace_items,
+                skip_reason=timed_out,
+                load_error=acquisition_error,
+            ),
+        ]
+    )
+
     sections = [
-        _section_from_prefetch(
-            "buy_alerts",
-            "Buy alerts",
-            empty_hint="Scan marketplace opportunities or check discovery feed.",
-            prefetched=buy_alert_items,
-            skip_reason=timed_out,
-            load_error=acquisition_error,
-        ),
+        acquisition_section_defs[0],
         *sell_section_defs,
         _section_from_prefetch(
             "foc_alerts",
@@ -451,14 +571,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
             prefetched=storage_rows,
             skip_reason=timed_out,
         ),
-        _section_from_prefetch(
-            "marketplace_deals",
-            "Marketplace deals",
-            empty_hint="Run marketplace acquisition scan or refresh deals.",
-            prefetched=marketplace_items,
-            skip_reason=timed_out,
-            load_error=acquisition_error,
-        ),
+        acquisition_section_defs[1],
         _section_from_prefetch(
             "future_pull_list",
             "Future pull list",

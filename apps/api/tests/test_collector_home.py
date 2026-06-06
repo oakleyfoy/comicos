@@ -38,6 +38,7 @@ def test_collector_home_returns_200_when_buy_alerts_dependency_fails(
     def _raise_buy(*args, **kwargs):
         raise RuntimeError("marketplace acquisition offline")
 
+    monkeypatch.setattr(collector_home_service, "_COLLECTOR_HOME_ENABLE_ACQUISITION_SECTIONS", True)
     monkeypatch.setattr(collector_home_service, "list_acquisition_opportunities", _raise_buy)
 
     resp = client.get("/api/v1/collector-home", headers=auth_headers(token))
