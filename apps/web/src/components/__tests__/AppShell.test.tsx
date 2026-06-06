@@ -14,7 +14,7 @@ vi.mock("../../auth/AuthContext", () => ({
   }),
 }));
 
-function renderShell(initialPath = "/executive-dashboard") {
+function renderShell(initialPath = "/collector-home") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <AppShell>
@@ -38,10 +38,10 @@ describe("AppShell navigation", () => {
     mockLogout.mockReset();
   });
 
-  it("shows Executive Dashboard in Primary and header shortcut", () => {
+  it("shows Collector Home in nav and header shortcut", () => {
     renderShell();
-    expect(screen.getAllByRole("link", { name: "Executive Dashboard" }).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole("button", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Collector Home" }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: "Home" })).toBeInTheDocument();
   });
 
   it("renders Primary group expanded with core links", () => {
@@ -89,8 +89,8 @@ describe("AppShell navigation", () => {
       .getAllByRole("link")
       .map((node) => node.textContent?.trim())
       .filter(Boolean);
-    const executiveCount = labels.filter((label) => label === "Executive Dashboard").length;
-    expect(executiveCount).toBe(1);
+    const homeCount = labels.filter((label) => label === "Collector Home").length;
+    expect(homeCount).toBe(1);
     expect(new Set(labels).size).toBe(labels.length);
   });
 });

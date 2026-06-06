@@ -177,7 +177,6 @@ import { ExitDashboardPage } from "./pages/ExitDashboardPage";
 import { UnifiedCollectorPage } from "./pages/UnifiedCollectorPage";
 import { DailyActionPage } from "./pages/DailyActionPage";
 import { CrossSystemRecommendationPage } from "./pages/CrossSystemRecommendationPage";
-import { ExecutiveDashboardPage } from "./pages/ExecutiveDashboardPage";
 import { PullListDecisionsPage } from "./pages/PullListDecisionsPage";
 import { FocDashboardPage } from "./pages/FocDashboardPage";
 import { PurchaseProfilePage } from "./pages/PurchaseProfilePage";
@@ -213,7 +212,7 @@ function HomeRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to="/executive-dashboard" replace />;
+  return <Navigate to="/collector-home" replace />;
 }
 
 export default function App() {
@@ -234,7 +233,7 @@ export default function App() {
         <Route path="/collector-workspace" element={<CollectorWorkspacePage />} />
         <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
         <Route path="/sell-intelligence" element={<SellIntelligencePage />} />
-        <Route path="/executive-dashboard" element={<ExecutiveDashboardPage />} />
+        <Route path="/executive-dashboard" element={<Navigate to="/collector-home" replace />} />
         <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
         <Route path="/marketplace-dashboard" element={<MarketplaceDashboardPage />} />
         <Route path="/dealer-copilot" element={<DealerCopilotPage />} />

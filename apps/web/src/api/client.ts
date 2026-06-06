@@ -6748,6 +6748,31 @@ async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
   return envelope.data;
 }
 
+/** P57 executive dashboard aggregates many services; cap wait so UI cannot hang indefinitely. */
+const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
+
+async function requestScanV1WithTimeout<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = EXECUTIVE_DASHBOARD_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await requestScanV1<T>(path, { ...init, signal: controller.signal });
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(
+        "Executive dashboard is taking too long to load. Try again or open Collector Home for a faster summary.",
+        408,
+      );
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
   const token = getStoredToken();
   const headers = new Headers(init?.headers);
@@ -29480,7 +29505,7 @@ export const apiClient = {
     publisher?: string;
   }): Promise<ExecutiveDashboardRead> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<ExecutiveDashboardRead>(`/executive-dashboard${q}`);
+    return requestScanV1WithTimeout<ExecutiveDashboardRead>(`/executive-dashboard${q}`);
   },
 
   getExecutiveDashboardSummary(params?: {

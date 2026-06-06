@@ -20,7 +20,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const defaultAfterLogin = "/executive-dashboard";
+  const defaultAfterLogin = "/collector-home";
   const rawFrom = (location.state as LocationState | null)?.from?.pathname;
   const from =
     rawFrom === "/dashboard" || rawFrom === "/"
@@ -56,7 +56,7 @@ export function LoginPage() {
   return (
     <AuthShell
       title="Login"
-      subtitle="Sign in to open your executive dashboard."
+      subtitle="Sign in to open Collector Home."
       footer={
         <>
           New to ComicOS?{" "}

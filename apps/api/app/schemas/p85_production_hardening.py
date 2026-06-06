@@ -66,11 +66,15 @@ class P85CollectorHomeSectionRead(BaseModel):
     items: list[dict] = Field(default_factory=list)
     empty_hint: str = ""
     count: int = 0
+    status: str = "OK"
+    error: str = ""
 
 
 class P85CollectorHomeRead(BaseModel):
     headline: str
     todays_actions: list[P85CollectorHomeActionRead] = Field(default_factory=list)
+    todays_actions_status: str = "OK"
+    todays_actions_error: str = ""
     sections: list[P85CollectorHomeSectionRead] = Field(default_factory=list)
     budget_status: dict = Field(default_factory=dict)
     portfolio_movement: dict = Field(default_factory=dict)

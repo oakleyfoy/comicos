@@ -23,7 +23,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Notifications", to: "/notifications" },
       { label: "Daily Briefing", to: "/daily-briefing" },
       { label: "Workflow Health", to: "/workflow-health" },
-      { label: "Executive Dashboard", to: "/executive-dashboard" },
     ],
   },
   {
@@ -155,6 +154,9 @@ export function findGroupIdForPath(pathname: string): string | null {
   }
   if (pathname.startsWith("/inventory")) {
     return "inventory";
+  }
+  if (pathname === "/executive-dashboard") {
+    return "home";
   }
   if (pathname.startsWith("/collector-") || pathname === "/daily-actions") {
     return "home";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -9,6 +9,7 @@ import {
 import { AppShell } from "../components/AppShell";
 import { ExecutiveRecommendationCard } from "../components/ExecutiveRecommendationCard";
 import { PageHeader } from "../components/PageHeader";
+import { CollectorErrorState } from "../components/CollectorErrorState";
 import { StatusBanner } from "../components/StatusBanner";
 
 function money(value: number | null | undefined): string {
@@ -47,7 +48,11 @@ export function ExecutiveDashboardPage(): JSX.Element {
   const [priorityMin, setPriorityMin] = useState("");
   const [publisherFilter, setPublisherFilter] = useState("");
 
+  const loadRequestId = useRef(0);
+
   const load = useCallback(async () => {
+    const requestId = loadRequestId.current + 1;
+    loadRequestId.current = requestId;
     setLoading(true);
     setError(null);
     try {
@@ -63,16 +68,27 @@ export function ExecutiveDashboardPage(): JSX.Element {
       if (!Number.isNaN(pmin) && priorityMin.trim()) params.priority_min = pmin;
       if (publisherFilter.trim()) params.publisher = publisherFilter.trim();
       const body = await apiClient.getExecutiveDashboard(params);
+      if (loadRequestId.current !== requestId) {
+        return;
+      }
       setDashboard(body);
     } catch (err) {
+      if (loadRequestId.current !== requestId) {
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "Unable to load executive dashboard.");
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === requestId) {
+        setLoading(false);
+      }
     }
   }, [actionFilter, priorityMin, publisherFilter, typeFilter]);
 
   useEffect(() => {
     void load();
+    return () => {
+      loadRequestId.current += 1;
+    };
   }, [load]);
 
   const s = dashboard?.summary;
@@ -84,7 +100,10 @@ export function ExecutiveDashboardPage(): JSX.Element {
         title="Executive Dashboard"
         description="ComicOS command center — daily actions, cross-system recommendations, acquisition, exit, and portfolio signals in one view."
       />
-      {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      {error && !dashboard ? (
+        <CollectorErrorState message={error} onRetry={() => void load()} />
+      ) : null}
+      {error && dashboard ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       <div className="mb-4 flex flex-wrap gap-2">
         <select
           className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"

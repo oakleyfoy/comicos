@@ -175,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               Menu
             </button>
             <Link
-              to="/executive-dashboard"
+              to="/collector-home"
               className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-patriot-navy"
             >
               <ComicOsMark size={18} />
@@ -186,10 +186,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </p>
           </div>
           <Link
-            to="/executive-dashboard"
+            to="/collector-home"
             className="hidden rounded-lg border border-white/40 bg-patriot-red px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 sm:inline-flex"
           >
-            Executive Dashboard
+            Collector Home
           </Link>
         </div>
       </header>
