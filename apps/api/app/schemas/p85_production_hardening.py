@@ -50,6 +50,7 @@ class P85WorkflowHealthRead(BaseModel):
     issues: list[P85WorkflowIssueRead] = Field(default_factory=list)
     stale_jobs: list[str] = Field(default_factory=list)
     empty_workflows: list[str] = Field(default_factory=list)
+    load_message: str = ""
 
 
 class P85CollectorHomeActionRead(BaseModel):

@@ -145,6 +145,8 @@ class CollectorNotificationRead(BaseModel):
 
 
 class CollectorNotificationListResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[CollectorNotificationRead]
     total_items: int
     limit: int
@@ -169,9 +171,13 @@ class CollectorBriefingRead(BaseModel):
     sections: dict = Field(default_factory=dict)
     top_actions: list[str] = Field(default_factory=list)
     created_at: datetime
+    status: str = "OK"
+    message: str = ""
 
 
 class CollectorCommandCenterRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     marketplace_deals: list[MarketplaceAcquisitionOpportunityRead] = Field(default_factory=list)
     collection_forecast: CollectionForecastRead | None = None
     risk_alerts: list[CollectorNotificationRead] = Field(default_factory=list)

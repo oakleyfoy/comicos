@@ -29,13 +29,15 @@ from app.schemas.p82_p84_collector_expansion import (
     MarketplaceAcquisitionScanPayload,
 )
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
-from app.services.collector_briefing_service import (
-    generate_daily_briefing,
-    generate_weekly_briefing,
-    get_daily_briefing,
-    get_weekly_briefing,
+from app.services.collector_briefing_service import generate_daily_briefing, generate_weekly_briefing
+from app.services.collector_page_load_service import (
+    fast_build_collector_command_center,
+    fast_get_daily_briefing,
+    fast_get_weekly_briefing,
+    fast_list_collector_notifications,
+    safe_command_center_fallback,
+    safe_notifications_fallback,
 )
-from app.services.collector_command_center_service import build_collector_command_center
 from app.services.collector_expansion_certification import run_collector_expansion_certification
 from app.services.collector_notification_service import (
     build_notification_dashboard,
@@ -192,17 +194,25 @@ def v1_list_notifications(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: CollectorNotificationListResponse = list_collector_notifications(
-        session,
-        owner_user_id=int(current_user.id),
-        status=status,
-        limit=limit,
-        offset=offset,
-        refresh=refresh,
-    )
+    owner_user_id = int(current_user.id)
     if refresh:
-        session.commit()
-    return wrap_standard_list(body, owner_user_id=int(current_user.id))
+        body = safe_notifications_fallback(
+            limit=limit,
+            offset=offset,
+            message="Live notification refresh disabled on page load; use ops jobs or POST flows.",
+        )
+    else:
+        try:
+            body = fast_list_collector_notifications(
+                session,
+                owner_user_id=owner_user_id,
+                status=status,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:  # noqa: BLE001
+            body = safe_notifications_fallback(limit=limit, offset=offset, message=str(exc))
+    return wrap_standard_list(body, owner_user_id=owner_user_id)
 
 
 @p82_p84_router.put("/api/v1/notifications/{notification_id}", response_model=ScanApiV1Envelope)
@@ -244,8 +254,7 @@ def v1_daily_briefing(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: CollectorBriefingRead = get_daily_briefing(session, owner_user_id=int(current_user.id), generate=True)
-    session.commit()
+    body: CollectorBriefingRead = fast_get_daily_briefing(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -255,8 +264,7 @@ def v1_weekly_briefing(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: CollectorBriefingRead = get_weekly_briefing(session, owner_user_id=int(current_user.id), generate=True)
-    session.commit()
+    body: CollectorBriefingRead = fast_get_weekly_briefing(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -285,9 +293,12 @@ def v1_collector_command_center(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: CollectorCommandCenterRead = build_collector_command_center(session, owner_user_id=int(current_user.id))
-    session.commit()
-    return wrap_object(body, owner_user_id=int(current_user.id))
+    owner_user_id = int(current_user.id)
+    try:
+        body: CollectorCommandCenterRead = fast_build_collector_command_center(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        body = safe_command_center_fallback(str(exc))
+    return wrap_object(body, owner_user_id=owner_user_id)
 
 
 @p82_p84_router.get("/api/v1/collector-expansion/certification", response_model=ScanApiV1Envelope)

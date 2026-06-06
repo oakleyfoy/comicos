@@ -20,7 +20,7 @@ from app.schemas.p85_production_hardening import (
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
 from app.services.collector_home_service import build_collector_home
 from app.services.platform_production_certification import build_production_dashboard, run_platform_production_certification
-from app.services.workflow_health_service import build_workflow_health
+from app.services.collector_page_load_service import fast_build_workflow_health, safe_workflow_health_fallback
 
 p85_platform_router = APIRouter(tags=["Platform API v1 (P85)"])
 logger = logging.getLogger(__name__)
@@ -58,8 +58,12 @@ def v1_platform_workflow_health(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P85WorkflowHealthRead = build_workflow_health(session, owner_user_id=int(current_user.id))
-    return wrap_object(body, owner_user_id=int(current_user.id))
+    owner_user_id = int(current_user.id)
+    try:
+        body: P85WorkflowHealthRead = fast_build_workflow_health(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        body = safe_workflow_health_fallback(str(exc))
+    return wrap_object(body, owner_user_id=owner_user_id)
 
 
 @p85_platform_router.get("/api/v1/collector-home", response_model=ScanApiV1Envelope)

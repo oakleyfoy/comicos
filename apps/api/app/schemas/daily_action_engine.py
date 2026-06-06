@@ -27,6 +27,8 @@ class DailyCollectorActionRead(BaseModel):
 class DailyActionSummaryRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     total_actions: int
     critical_actions: int
     preorder_actions: int
@@ -40,6 +42,8 @@ class DailyActionSummaryRead(BaseModel):
 class DailyActionListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     items: list[DailyCollectorActionRead]
     total_items: int
     limit: int

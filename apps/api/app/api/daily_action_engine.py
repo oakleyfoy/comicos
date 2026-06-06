@@ -10,12 +10,13 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.daily_action_engine import DailyActionListResponse
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
-from app.services.daily_action_engine import (
-    generate_daily_actions,
-    get_daily_action_summary,
-    list_latest_daily_actions,
-    refresh_and_list_latest_daily_actions,
+from app.services.collector_page_load_service import (
+    fast_daily_action_summary,
+    fast_list_daily_actions,
+    safe_daily_action_summary_fallback,
+    safe_daily_actions_list_fallback,
 )
+from app.services.daily_action_engine import list_latest_daily_actions
 
 daily_action_v1_router = APIRouter(prefix="/api/v1", tags=["Daily Action Engine API v1 (P57-02)"])
 
@@ -35,17 +36,20 @@ def v1_daily_actions(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    items, total = refresh_and_list_latest_daily_actions(
-        session,
-        owner_user_id=int(current_user.id),
-        action_type=action_type,
-        priority_min=priority_min,
-        due_before=due_before,
-        limit=limit,
-        offset=offset,
-    )
-    body = DailyActionListResponse(items=items, total_items=total, limit=limit, offset=offset)
-    return wrap_standard_list(body, owner_user_id=int(current_user.id))
+    owner_user_id = int(current_user.id)
+    try:
+        body = fast_list_daily_actions(
+            session,
+            owner_user_id=owner_user_id,
+            action_type=action_type,
+            priority_min=priority_min,
+            due_before=due_before,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as exc:  # noqa: BLE001
+        body = safe_daily_actions_list_fallback(limit=limit, offset=offset, message=str(exc))
+    return wrap_standard_list(body, owner_user_id=owner_user_id)
 
 
 @daily_action_v1_router.get("/daily-actions/latest", response_model=ScanApiV1Envelope)
@@ -78,6 +82,9 @@ def v1_daily_actions_summary(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    generate_daily_actions(session, owner_user_id=int(current_user.id))
-    body = get_daily_action_summary(session, owner_user_id=int(current_user.id))
-    return wrap_object(body, owner_user_id=int(current_user.id))
+    owner_user_id = int(current_user.id)
+    try:
+        body = fast_daily_action_summary(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        body = safe_daily_action_summary_fallback(str(exc))
+    return wrap_object(body, owner_user_id=owner_user_id)

@@ -6752,6 +6752,8 @@ async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
 const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
 /** P85 collector home must not leave the shell on a pending request indefinitely. */
 const COLLECTOR_HOME_TIMEOUT_MS = 30_000;
+/** P84/P85 collector surfaces (actions, command center, notifications, briefings, workflow health). */
+const COLLECTOR_SURFACE_TIMEOUT_MS = 25_000;
 
 async function requestScanV1WithTimeout<T>(
   path: string,
@@ -29461,18 +29463,28 @@ export const apiClient = {
     offset?: number;
   }): Promise<{ items: DailyCollectorActionRead[]; total_items: number; limit: number; offset: number }> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<{ items: DailyCollectorActionRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
-      `/daily-actions${q}`,
-    ).then((data) => ({
-      items: data.items,
-      total_items: data.pagination.total_count,
-      limit: data.pagination.limit,
-      offset: data.pagination.offset,
-    }));
+    return requestScanV1WithTimeout<{
+      items: DailyCollectorActionRead[];
+      pagination: { total_count: number; limit: number; offset: number };
+      status?: string;
+      message?: string;
+    }>(`/daily-actions${q}`, undefined, COLLECTOR_SURFACE_TIMEOUT_MS, "Today's Actions is taking too long to load. Try again shortly.").then(
+      (data) => ({
+        items: data.items,
+        total_items: data.pagination.total_count,
+        limit: data.pagination.limit,
+        offset: data.pagination.offset,
+      }),
+    );
   },
 
   getDailyActionsSummary(): Promise<DailyActionSummaryRead> {
-    return requestScanV1<DailyActionSummaryRead>("/daily-actions/summary");
+    return requestScanV1WithTimeout<DailyActionSummaryRead>(
+      "/daily-actions/summary",
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Daily actions summary is taking too long to load.",
+    );
   },
 
   getCrossSystemRecommendations(params?: {
@@ -30134,7 +30146,12 @@ export const apiClient = {
   listCollectorNotifications(params?: { status?: string; limit?: number; refresh?: boolean }): Promise<P84CollectorNotificationListResponse> {
     const q =
       params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
-    return requestScanV1<P84CollectorNotificationListResponse>(`/notifications${q}`);
+    return requestScanV1WithTimeout<P84CollectorNotificationListResponse>(
+      `/notifications${q}`,
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Notifications are taking too long to load.",
+    );
   },
 
   updateCollectorNotification(notificationId: number, payload: { status?: string }): Promise<P84CollectorNotificationRead> {
@@ -30145,15 +30162,30 @@ export const apiClient = {
   },
 
   getDailyBriefing(): Promise<P84CollectorBriefingRead> {
-    return requestScanV1<P84CollectorBriefingRead>("/briefings/daily");
+    return requestScanV1WithTimeout<P84CollectorBriefingRead>(
+      "/briefings/daily",
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Daily briefing is taking too long to load.",
+    );
   },
 
   getWeeklyBriefing(): Promise<P84CollectorBriefingRead> {
-    return requestScanV1<P84CollectorBriefingRead>("/briefings/weekly");
+    return requestScanV1WithTimeout<P84CollectorBriefingRead>(
+      "/briefings/weekly",
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Weekly briefing is taking too long to load.",
+    );
   },
 
   getCollectorCommandCenter(): Promise<P84CollectorCommandCenterRead> {
-    return requestScanV1<P84CollectorCommandCenterRead>("/collector-command-center");
+    return requestScanV1WithTimeout<P84CollectorCommandCenterRead>(
+      "/collector-command-center",
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Command Center is taking too long to load.",
+    );
   },
 
   getCollectorExpansionCertification(): Promise<P82P84CollectorExpansionCertificationRead> {
@@ -30174,7 +30206,12 @@ export const apiClient = {
   },
 
   getPlatformWorkflowHealth(): Promise<P85WorkflowHealthRead> {
-    return requestScanV1<P85WorkflowHealthRead>("/platform/workflow-health");
+    return requestScanV1WithTimeout<P85WorkflowHealthRead>(
+      "/platform/workflow-health",
+      undefined,
+      COLLECTOR_SURFACE_TIMEOUT_MS,
+      "Workflow health is taking too long to load.",
+    );
   },
 
   getPlatformProductionDashboard(): Promise<{
