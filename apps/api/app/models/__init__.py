@@ -322,6 +322,17 @@ from app.models.market_pricing_engine import (
     P68MarketPriceSnapshot,
     P68MarketPricingProvider,
 )
+from app.models.sell_intelligence_platform import (
+    P71ExitQueueItem,
+    P71ExitQueueSnapshot,
+    P71ExitRecommendationItem,
+    P71ExitRecommendationSnapshot,
+    P71InvestorSellDashboardSnapshot,
+    P71LiquidityItem,
+    P71LiquiditySnapshot,
+    P71ListingRecommendationItem,
+    P71ListingRecommendationSnapshot,
+)
 from app.models.demand_intelligence import (
     DemandRefreshRun,
     DemandVelocitySnapshot,

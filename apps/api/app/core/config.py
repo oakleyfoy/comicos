@@ -148,6 +148,12 @@ class Settings(BaseSettings):
     p68_manual_fmv_enabled: bool = Field(default=True, alias="P68_MANUAL_FMV_ENABLED")
     p68_auto_overwrite_inventory_fmv: bool = Field(default=False, alias="P68_AUTO_OVERWRITE_INVENTORY_FMV")
 
+    p71_exit_recommendations_enabled: bool = Field(default=True, alias="P71_EXIT_RECOMMENDATIONS_ENABLED")
+    p71_listing_intelligence_enabled: bool = Field(default=True, alias="P71_LISTING_INTELLIGENCE_ENABLED")
+    p71_liquidity_enabled: bool = Field(default=True, alias="P71_LIQUIDITY_ENABLED")
+    p71_exit_queue_enabled: bool = Field(default=True, alias="P71_EXIT_QUEUE_ENABLED")
+    p71_sell_dashboard_enabled: bool = Field(default=True, alias="P71_SELL_DASHBOARD_ENABLED")
+
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",
