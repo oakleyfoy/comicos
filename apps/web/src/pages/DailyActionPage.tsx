@@ -14,6 +14,16 @@ import { StatusBanner } from "../components/StatusBanner";
 
 const ACTION_TYPES = ["", "PREORDER", "ACQUIRE", "GRADE", "SELL", "REBALANCE", "REVIEW", "WATCH"] as const;
 
+const ACTION_TYPE_BADGE: Record<string, string> = {
+  PREORDER: "bg-sky-100 text-sky-900 ring-sky-200",
+  ACQUIRE: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+  GRADE: "bg-violet-100 text-violet-900 ring-violet-200",
+  SELL: "bg-amber-100 text-amber-950 ring-amber-200",
+  REBALANCE: "bg-indigo-100 text-indigo-900 ring-indigo-200",
+  REVIEW: "bg-slate-100 text-slate-800 ring-slate-200",
+  WATCH: "bg-slate-100 text-slate-800 ring-slate-200",
+};
+
 export function DailyActionPage(): JSX.Element {
   const [items, setItems] = useState<DailyCollectorActionRead[]>([]);
   const [summary, setSummary] = useState<DailyActionSummaryRead | null>(null);
@@ -108,7 +118,7 @@ export function DailyActionPage(): JSX.Element {
         <label className="text-sm text-slate-600">
           Priority min{" "}
           <input
-            className="ml-1 w-20 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 w-20 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={priorityMin}
             onChange={(e) => setPriorityMin(e.target.value)}
           />
@@ -122,7 +132,11 @@ export function DailyActionPage(): JSX.Element {
             onChange={(e) => setDueBefore(e.target.value)}
           />
         </label>
-        <button type="button" className="rounded-lg bg-cyan-700 px-3 py-1 text-sm text-white" onClick={() => void load()}>
+        <button
+          type="button"
+          className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-800"
+          onClick={() => void load()}
+        >
           Refresh
         </button>
       </div>
@@ -132,29 +146,52 @@ export function DailyActionPage(): JSX.Element {
         <p className="text-sm text-slate-500">No daily actions yet.</p>
       ) : (
         <ul className="space-y-4">
-          {items.map((row) => (
-            <li key={row.id} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{row.action_type}</p>
-                  <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-white">
-                    <span>{row.title}</span>
-                    <PrintingBadge badge={row.decision?.printing_badge} />
-                  </h2>
+          {items.map((row) => {
+            const badgeClass = ACTION_TYPE_BADGE[row.action_type] ?? "bg-slate-100 text-slate-800 ring-slate-200";
+            return (
+              <li key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${badgeClass}`}
+                    >
+                      {row.action_type}
+                    </span>
+                    <h2 className="mt-2 flex flex-wrap items-center gap-2 text-lg font-semibold text-slate-900">
+                      <span>{row.title}</span>
+                      <PrintingBadge
+                        badge={row.decision?.printing_badge}
+                        className="border-amber-500/50 bg-amber-50 text-amber-950"
+                      />
+                    </h2>
+                  </div>
+                  <dl className="shrink-0 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-right text-xs text-slate-700">
+                    <div>
+                      <dt className="inline text-slate-500">Priority </dt>
+                      <dd className="inline font-semibold text-slate-900">{row.priority_score.toFixed(1)}</dd>
+                    </div>
+                    <div className="mt-0.5">
+                      <dt className="inline text-slate-500">Confidence </dt>
+                      <dd className="inline font-medium text-slate-800">{row.confidence_score.toFixed(2)}</dd>
+                    </div>
+                    {row.due_date ? (
+                      <div className="mt-0.5">
+                        <dt className="inline text-slate-500">Due </dt>
+                        <dd className="inline font-medium text-slate-800">{row.due_date}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
                 </div>
-                <div className="text-right text-xs text-slate-400">
-                  <p>Priority {row.priority_score.toFixed(1)}</p>
-                  <p>Confidence {row.confidence_score.toFixed(2)}</p>
-                  {row.due_date ? <p>Due {row.due_date}</p> : null}
-                </div>
-              </div>
-              {row.decision ? <RecommendationDecisionPanel decision={row.decision} /> : null}
-              {row.source_systems.length > 0 ? (
-                <p className="mt-2 text-xs text-slate-500">Sources: {row.source_systems.join(", ")}</p>
-              ) : null}
-              <p className="mt-2 text-sm text-slate-400">{row.rationale}</p>
-            </li>
-          ))}
+                {row.source_systems.length > 0 ? (
+                  <p className="mt-2 text-xs font-medium text-slate-600">
+                    Sources: <span className="font-normal text-slate-700">{row.source_systems.join(", ")}</span>
+                  </p>
+                ) : null}
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">{row.rationale}</p>
+                {row.decision ? <RecommendationDecisionPanel decision={row.decision} /> : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </AppShell>

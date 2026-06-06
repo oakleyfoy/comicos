@@ -75,7 +75,9 @@ def v1_list_marketplace_acquisition_opportunities(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: MarketplaceAcquisitionListResponse = list_acquisition_opportunities(
+    from app.services.nav_route_safe_get import fast_marketplace_opportunities_list
+
+    body: MarketplaceAcquisitionListResponse = fast_marketplace_opportunities_list(
         session,
         owner_user_id=int(current_user.id),
         recommendation=recommendation,
@@ -83,8 +85,6 @@ def v1_list_marketplace_acquisition_opportunities(
         offset=offset,
         refresh=refresh,
     )
-    if refresh:
-        session.commit()
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
 
@@ -179,8 +179,9 @@ def v1_collection_valuation_dashboard(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: CollectionValuationDashboardRead = build_valuation_dashboard(session, owner_user_id=int(current_user.id))
-    session.commit()
+    from app.services.nav_route_safe_get import fast_valuation_dashboard
+
+    body: CollectionValuationDashboardRead = fast_valuation_dashboard(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 

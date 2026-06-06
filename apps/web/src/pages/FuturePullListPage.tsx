@@ -11,7 +11,7 @@ export function FuturePullListPage(): JSX.Element {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const body = await apiClient.getFuturePullList({ refresh: true, limit: 50 });
+      const body = await apiClient.getFuturePullList({ refresh: false, limit: 50 });
       setItems(body.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load future pull list.");

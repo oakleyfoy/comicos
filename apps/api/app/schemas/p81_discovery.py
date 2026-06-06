@@ -50,6 +50,8 @@ class P81DiscoveryOpportunityListResponse(BaseModel):
 
 
 class P81DiscoveryFeedRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     new_discoveries: list[P81DiscoveryOpportunityRead] = Field(default_factory=list)
     top_opportunities: list[P81DiscoveryOpportunityRead] = Field(default_factory=list)
     new_number_ones: list[P81DiscoveryOpportunityRead] = Field(default_factory=list)

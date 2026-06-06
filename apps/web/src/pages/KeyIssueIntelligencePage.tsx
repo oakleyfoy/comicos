@@ -19,13 +19,13 @@ function IssueList({ items }: { items: KeyIssueDashboardRead["top_key_issues"] }
     return <p className="text-sm text-slate-500">No key issues in this bucket yet.</p>;
   }
   return (
-    <ul className="space-y-2 text-sm text-slate-300">
+    <ul className="space-y-2 text-sm text-blue-900">
       {items.map((row) => (
         <li key={row.id} className="flex justify-between gap-2">
           <span>
             {row.series_name} #{row.issue_number} · {row.classification}
           </span>
-          <span className="text-slate-400">{row.scores.overall_key_issue_score.toFixed(1)}</span>
+          <span className="text-blue-700">{row.scores.overall_key_issue_score.toFixed(1)}</span>
         </li>
       ))}
     </ul>
@@ -43,7 +43,6 @@ export function KeyIssueIntelligencePage(): JSX.Element {
       setLoading(true);
       setError(null);
       try {
-        await apiClient.postKeyIssuesRefresh();
         const body = await apiClient.getKeyIssuesDashboard();
         if (!cancelled) setDashboard(body);
       } catch (err) {

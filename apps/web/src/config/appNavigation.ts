@@ -3,6 +3,8 @@ export type NavLinkItem = {
   to: string;
   prominent?: boolean;
   requiresOpsAdmin?: boolean;
+  /** Hide from sidebar when route is not production-safe yet. */
+  hiddenFromNav?: boolean;
 };
 
 export type NavGroup = {
@@ -32,7 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Pull Lists", to: "/pull-lists", prominent: true },
       { label: "FOC Dashboard", to: "/foc-dashboard" },
       { label: "Purchase Budget", to: "/purchase-budget" },
-      { label: "Acquisition Opportunities", to: "/acquisition-opportunities" },
+      { label: "Acquisition Opportunities", to: "/acquisition-opportunities", hiddenFromNav: true },
       { label: "Marketplace Opportunities", to: "/marketplace-opportunities" },
       { label: "Discovery Feed", to: "/discovery-feed" },
       { label: "Future Pull List", to: "/future-pull-list" },
@@ -69,7 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Grading Queue", to: "/grading-queue", prominent: true },
       { label: "Grading Intelligence", to: "/grading-intelligence" },
-      { label: "Grading Operations", to: "/grading-operations" },
+      { label: "Grading Operations", to: "/grading-operations", hiddenFromNav: true },
       { label: "Grade Before Sell", to: "/grade-before-sell" },
       { label: "Grading Platform", to: "/grading-platform" },
     ],
@@ -79,11 +81,11 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Sell",
     links: [
       { label: "Sell Queue", to: "/sell-queue", prominent: true },
-      { label: "Sell Candidates", to: "/sell-candidates" },
+      { label: "Sell Candidates", to: "/sell-candidates", hiddenFromNav: true },
       { label: "Listing Drafts", to: "/listing-drafts" },
       { label: "Listings", to: "/listings" },
       { label: "Selling Analytics", to: "/selling-analytics" },
-      { label: "Exit Dashboard", to: "/exit-dashboard" },
+      { label: "Exit Dashboard", to: "/exit-dashboard", hiddenFromNav: true },
     ],
   },
   {
@@ -95,18 +97,18 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Watchlists", to: "/discovery-watchlists" },
       { label: "Discovery Alerts", to: "/discovery-alerts" },
       { label: "Release Intelligence", to: "/release-intelligence" },
-      { label: "Future Releases", to: "/future-releases" },
+      { label: "Future Releases", to: "/future-releases", hiddenFromNav: true },
     ],
   },
   {
     id: "mobile",
     title: "Mobile",
     links: [
-      { label: "Mobile Scanning", to: "/mobile-scanning", prominent: true },
+      { label: "Mobile Scanning", to: "/mobile-scan", prominent: true },
       { label: "Mobile Operations", to: "/mobile-operations" },
       { label: "Collector Assistant", to: "/collector-assistant" },
-      { label: "Convention Mode", to: "/convention-mode" },
-      { label: "Quick Sales", to: "/quick-sales" },
+      { label: "Convention Mode", to: "/convention-mode", hiddenFromNav: true },
+      { label: "Quick Sales", to: "/quick-sales", hiddenFromNav: true },
     ],
   },
   {
@@ -126,9 +128,9 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
-      { label: "Integrations", to: "/settings/integrations" },
-      { label: "Imports", to: "/imports" },
-      { label: "Data Protection", to: "/data-protection" },
+      { label: "Integrations", to: "/settings/integrations", hiddenFromNav: true },
+      { label: "Imports", to: "/imports", hiddenFromNav: true },
+      { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
     ],
   },
@@ -167,6 +169,8 @@ export function findGroupIdForPath(pathname: string): string | null {
 export function visibleNavGroups(isOpsAdmin: boolean): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    links: group.links.filter((link) => !link.requiresOpsAdmin || isOpsAdmin),
+    links: group.links.filter(
+      (link) => !link.hiddenFromNav && (!link.requiresOpsAdmin || isOpsAdmin),
+    ),
   })).filter((group) => group.links.length > 0);
 }

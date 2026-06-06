@@ -34,6 +34,8 @@ class KeyIssueProfileRead(BaseModel):
 class KeyIssueDashboardRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     top_key_issues: list[KeyIssueProfileRead] = Field(default_factory=list)
     first_appearances: list[KeyIssueProfileRead] = Field(default_factory=list)
     origins: list[KeyIssueProfileRead] = Field(default_factory=list)

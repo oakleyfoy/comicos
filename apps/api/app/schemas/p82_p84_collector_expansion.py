@@ -47,6 +47,8 @@ class MarketplaceAcquisitionOpportunityRead(BaseModel):
 
 
 class MarketplaceAcquisitionListResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[MarketplaceAcquisitionOpportunityRead]
     total_items: int
     limit: int
@@ -123,6 +125,8 @@ class CollectionOptimizationRead(BaseModel):
 
 
 class CollectionValuationDashboardRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     forecast: CollectionForecastRead
     risk: CollectionRiskRead
     optimization: CollectionOptimizationRead

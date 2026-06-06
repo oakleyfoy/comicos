@@ -36,7 +36,7 @@ export function DiscoveryFeedPage(): JSX.Element {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setFeed(await apiClient.getDiscoveryFeed({ refresh: true }));
+      setFeed(await apiClient.getDiscoveryFeed({ refresh: false }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load discovery feed.");
     }

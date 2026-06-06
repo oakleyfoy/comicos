@@ -30,6 +30,8 @@ class P78SellQueueItemRead(BaseModel):
 
 
 class P78SellQueueListResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[P78SellQueueItemRead]
     total_items: int
     limit: int

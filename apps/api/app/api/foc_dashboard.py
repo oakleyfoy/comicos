@@ -8,12 +8,8 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.foc_dashboard import FocDashboardListResponse, FocDashboardRead
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object, wrap_standard_list
-from app.services.foc_dashboard import (
-    get_foc_dashboard,
-    get_foc_dashboard_summary,
-    list_foc_dashboard_actions,
-    list_foc_dashboard_releases,
-)
+from app.services.foc_dashboard import get_foc_dashboard_summary, list_foc_dashboard_actions, list_foc_dashboard_releases
+from app.services.nav_route_safe_get import safe_foc_dashboard
 
 foc_dashboard_v1_router = APIRouter(prefix="/api/v1", tags=["FOC Action Dashboard API v1 (P52-03)"])
 
@@ -46,7 +42,7 @@ def v1_foc_dashboard(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = get_foc_dashboard(
+    body = safe_foc_dashboard(
         session,
         owner_user_id=int(current_user.id),
         **_filter_params(decision_type, publisher, max_days_until_foc, max_days_until_release),

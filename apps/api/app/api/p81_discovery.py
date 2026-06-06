@@ -57,13 +57,14 @@ def attach_p81_discovery_layer(app: FastAPI) -> None:
 
 @p81_discovery_v1_router.get("/api/v1/discovery/feed", response_model=ScanApiV1Envelope)
 def v1_discovery_feed(
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P81DiscoveryFeedRead = build_discovery_feed(session, owner_user_id=int(current_user.id), refresh=refresh)
-    session.commit()
+    from app.services.nav_route_safe_get import fast_discovery_feed
+
+    body: P81DiscoveryFeedRead = fast_discovery_feed(session, owner_user_id=int(current_user.id), refresh=refresh)
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -219,15 +220,15 @@ def v1_future_pull_list(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P81FuturePullListResponse = list_future_pull_list(
+    from app.services.nav_route_safe_get import fast_future_pull_list
+
+    body: P81FuturePullListResponse = fast_future_pull_list(
         session,
         owner_user_id=int(current_user.id),
         limit=limit,
         offset=offset,
         refresh=refresh,
     )
-    if refresh:
-        session.commit()
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
 

@@ -6754,6 +6754,16 @@ const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
 const COLLECTOR_HOME_TIMEOUT_MS = 30_000;
 /** P84/P85 collector surfaces (actions, command center, notifications, briefings, workflow health). */
 const COLLECTOR_SURFACE_TIMEOUT_MS = 25_000;
+const NAV_PAGE_TIMEOUT_MS = COLLECTOR_SURFACE_TIMEOUT_MS;
+
+function requestNavPageV1<T>(path: string, init?: RequestInit, timeoutMessage?: string): Promise<T> {
+  return requestScanV1WithTimeout<T>(
+    path,
+    init,
+    NAV_PAGE_TIMEOUT_MS,
+    timeoutMessage ?? "This page is taking too long to load. Try again shortly.",
+  );
+}
 
 async function requestScanV1WithTimeout<T>(
   path: string,
@@ -28351,7 +28361,7 @@ export const apiClient = {
   },
 
   getKeyIssuesDashboard(): Promise<KeyIssueDashboardRead> {
-    return requestScanV1<KeyIssueDashboardRead>("/key-issues/dashboard");
+    return requestNavPageV1<KeyIssueDashboardRead>("/key-issues/dashboard");
   },
 
   postMarketUserIntelligenceRefresh(): Promise<{
@@ -28542,7 +28552,7 @@ export const apiClient = {
 
   getPullLists(params?: { status?: string; publisher?: string; search?: string; limit?: number; offset?: number }): Promise<PullListListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<{ items: PullListRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+    return requestNavPageV1<{ items: PullListRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
       `/pull-lists${q}`,
     ).then((data) => ({
       items: data.items,
@@ -28627,7 +28637,7 @@ export const apiClient = {
     max_days_until_release?: number;
   }): Promise<FocDashboardRead> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<FocDashboardRead>(`/foc-dashboard${q}`);
+    return requestNavPageV1<FocDashboardRead>(`/foc-dashboard${q}`);
   },
 
   getFocDashboardSummary(params?: {
@@ -29607,7 +29617,7 @@ export const apiClient = {
   },
 
   getStorageDashboard(): Promise<P79StorageDashboardRead> {
-    return requestScanV1<P79StorageDashboardRead>("/storage/dashboard");
+    return requestNavPageV1<P79StorageDashboardRead>("/storage/dashboard");
   },
 
   locateInventory(q: string): Promise<P79InventoryLocatorResponse> {
@@ -29795,7 +29805,7 @@ export const apiClient = {
 
   listMobileScans(params?: { limit?: number; offset?: number }): Promise<P80MobileScanListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
-    return requestScanV1<P80MobileScanListResponse>(`/mobile/scans${q}`);
+    return requestNavPageV1<P80MobileScanListResponse>(`/mobile/scans${q}`);
   },
 
   startMobileIntake(payload: P80IntakeStartRequest): Promise<P80IntakeSessionRead> {
@@ -29965,7 +29975,7 @@ export const apiClient = {
 
   listSellQueue(params?: { limit?: number; offset?: number; refresh?: boolean }): Promise<P78SellQueueListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | boolean | undefined>) : "";
-    return requestScanV1<P78SellQueueListResponse>(`/sell-queue${q}`);
+    return requestNavPageV1<P78SellQueueListResponse>(`/sell-queue${q}`);
   },
 
   listSellBundles(): Promise<P78SellBundleListResponse> {
@@ -30023,7 +30033,7 @@ export const apiClient = {
 
   getDiscoveryFeed(params?: { refresh?: boolean }): Promise<P81DiscoveryFeedRead> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
-    return requestScanV1<P81DiscoveryFeedRead>(`/discovery/feed${q}`);
+    return requestNavPageV1<P81DiscoveryFeedRead>(`/discovery/feed${q}`);
   },
 
   listDiscoveryOpportunities(params?: {
@@ -30090,7 +30100,7 @@ export const apiClient = {
 
   getFuturePullList(params?: { limit?: number; offset?: number; refresh?: boolean }): Promise<P81FuturePullListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | boolean | undefined>) : "";
-    return requestScanV1<P81FuturePullListResponse>(`/discovery/future-pull-list${q}`);
+    return requestNavPageV1<P81FuturePullListResponse>(`/discovery/future-pull-list${q}`);
   },
 
   getDiscoveryAnalyticsDashboard(params?: { refresh?: boolean }): Promise<P81DiscoveryAnalyticsDashboardRead> {
@@ -30112,7 +30122,7 @@ export const apiClient = {
       params && Object.keys(params).length
         ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
         : "";
-    return requestScanV1<P82MarketplaceAcquisitionListResponse>(`/marketplace-acquisition/opportunities${q}`);
+    return requestNavPageV1<P82MarketplaceAcquisitionListResponse>(`/marketplace-acquisition/opportunities${q}`);
   },
 
   getMarketplaceAcquisitionOpportunity(opportunityId: number): Promise<P82MarketplaceAcquisitionOpportunityRead> {
@@ -30125,7 +30135,7 @@ export const apiClient = {
   },
 
   getCollectionValuationDashboard(): Promise<P83CollectionValuationDashboardRead> {
-    return requestScanV1<P83CollectionValuationDashboardRead>("/collection-valuation/dashboard");
+    return requestNavPageV1<P83CollectionValuationDashboardRead>("/collection-valuation/dashboard");
   },
 
   getCollectionForecast(): Promise<P83CollectionForecastRead> {

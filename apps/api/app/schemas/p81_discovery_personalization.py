@@ -102,6 +102,8 @@ class P81FuturePullListItemRead(BaseModel):
 
 
 class P81FuturePullListResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[P81FuturePullListItemRead]
     total_items: int
     limit: int

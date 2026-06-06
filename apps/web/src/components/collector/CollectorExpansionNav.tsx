@@ -10,17 +10,22 @@ const LINKS = [
   { to: "/weekly-briefing", label: "Weekly Briefing" },
 ];
 
-export function CollectorExpansionNav(): JSX.Element {
+type NavVariant = "dark" | "patriot";
+
+export function CollectorExpansionNav({ variant = "dark" }: { variant?: NavVariant }): JSX.Element {
+  const activeClass =
+    variant === "patriot"
+      ? "rounded bg-red-700 px-2 py-1 font-medium text-white shadow-sm"
+      : "rounded bg-violet-700/40 px-2 py-1 text-violet-100";
+  const idleClass =
+    variant === "patriot"
+      ? "rounded px-2 py-1 text-blue-100 hover:bg-white/10 hover:text-white"
+      : "rounded px-2 py-1 text-slate-400 hover:text-white";
+
   return (
     <nav className="flex flex-wrap gap-2 text-sm">
       {LINKS.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          className={({ isActive }) =>
-            isActive ? "rounded bg-violet-700/40 px-2 py-1 text-violet-100" : "rounded px-2 py-1 text-slate-400 hover:text-white"
-          }
-        >
+        <NavLink key={link.to} to={link.to} className={({ isActive }) => (isActive ? activeClass : idleClass)}>
           {link.label}
         </NavLink>
       ))}

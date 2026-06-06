@@ -37,19 +37,20 @@ def attach_p78_sell_workflow_layer(app: FastAPI) -> None:
 def v1_sell_queue(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P78SellQueueListResponse = build_sell_queue(
+    from app.services.nav_route_safe_get import fast_sell_queue_list
+
+    body: P78SellQueueListResponse = fast_sell_queue_list(
         session,
         owner_user_id=int(current_user.id),
         limit=limit,
         offset=offset,
-        refresh_upstream=refresh,
+        refresh=refresh,
     )
-    session.commit()
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
 

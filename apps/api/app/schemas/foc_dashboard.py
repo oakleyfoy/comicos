@@ -49,6 +49,8 @@ class FocDashboardItemRead(BaseModel):
 
 
 class FocDashboardRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     summary: FocDashboardSummaryRead
     action_required: list[FocDashboardItemRead] = Field(default_factory=list)
     upcoming_foc: list[FocDashboardItemRead] = Field(default_factory=list)
