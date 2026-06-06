@@ -145,6 +145,19 @@ class Settings(BaseSettings):
 
     p68_market_pricing_enabled: bool = Field(default=True, alias="P68_MARKET_PRICING_ENABLED")
     p68_ebay_provider_enabled: bool = Field(default=False, alias="P68_EBAY_PROVIDER_ENABLED")
+    ebay_api_client_id: str = Field(default="", alias="EBAY_API_CLIENT_ID")
+    ebay_account_deletion_compliance_enabled: bool = Field(
+        default=True,
+        alias="EBAY_ACCOUNT_DELETION_COMPLIANCE_ENABLED",
+    )
+    ebay_account_deletion_verification_token: str = Field(
+        default="",
+        alias="EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN",
+    )
+    ebay_account_deletion_endpoint_url: str = Field(
+        default="https://api.comicosapp.com/api/v1/ebay/account-deletion",
+        alias="EBAY_ACCOUNT_DELETION_ENDPOINT_URL",
+    )
     p68_manual_fmv_enabled: bool = Field(default=True, alias="P68_MANUAL_FMV_ENABLED")
     p68_auto_overwrite_inventory_fmv: bool = Field(default=False, alias="P68_AUTO_OVERWRITE_INVENTORY_FMV")
 

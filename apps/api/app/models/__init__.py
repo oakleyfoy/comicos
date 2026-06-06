@@ -209,6 +209,7 @@ from app.models.data_integrity import (
     DataIntegrityIssue,
     MigrationSafetyCheck,
 )
+from app.models.ebay_compliance import EbayAccountDeletionAuditLog
 from app.models.operations_reliability import (
     JobHealthMetric,
     PlatformHealthCheck,
@@ -1137,6 +1138,7 @@ __all__ = [
     "MigrationSafetyCheck",
     "AuditEvent",
     "ChangeRecord",
+    "EbayAccountDeletionAuditLog",
     "PlatformHealthCheck",
     "ReliabilityIssue",
     "JobHealthMetric",

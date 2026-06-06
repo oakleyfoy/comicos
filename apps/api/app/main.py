@@ -1142,6 +1142,7 @@ from app.api.automation_scheduling import attach_automation_scheduling_layer
 from app.api.automation_workers import attach_automation_workers_layer
 from app.api.organization import attach_organization_layer
 from app.api.whatnot import attach_whatnot_layer
+from app.api.ebay_compliance import attach_ebay_compliance_layer
 from app.api.shopify import attach_shopify_layer
 from app.api.marketplace_dashboard import attach_marketplace_dashboard_layer
 from app.api.marketplace_operations import attach_marketplace_operations_layer
@@ -1308,6 +1309,7 @@ attach_marketplace_sync_layer(app)
 attach_marketplace_operations_layer(app)
 attach_whatnot_layer(app)
 attach_shopify_layer(app)
+attach_ebay_compliance_layer(app)
 attach_marketplace_dashboard_layer(app)
 attach_marketplace_accounts_layer(app)
 attach_marketplace_events_layer(app)
