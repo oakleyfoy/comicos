@@ -325,6 +325,17 @@ from app.models.market_pricing_engine import (
 )
 from app.models.ebay_market_pricing import EbayCompImportRun, EbayCompRecord
 from app.models.p70_market_refresh import P70MarketFmvTrendPoint, P70MarketRefreshRun
+from app.models.recommendation_action_event import P73RecommendationActionEvent
+from app.models.recommendation_category_performance import P73RecommendationCategoryPerformance
+from app.models.recommendation_feedback_snapshot import (
+    P73RecommendationCategoryCalibrationSnapshot,
+    P73RecommendationConfidenceSnapshot,
+    P73RecommendationEffectivenessSnapshot,
+    P73RecommendationFeedbackBundleSnapshot,
+)
+from app.models.recommendation_outcome import P73RecommendationOutcome
+from app.models.recommendation_performance_snapshot import P73RecommendationPerformanceSnapshot
+from app.models.recommendation_profitability_snapshot import P73RecommendationProfitabilitySnapshot
 from app.models.p72_grading_analytics import P72GradingOutcome
 from app.models.p72_grading_operations import (
     P72GradingAuditLog,
@@ -1154,6 +1165,15 @@ __all__ = [
     "P70MarketFmvTrendPoint",
     "P72GradingAuditLog",
     "P72GradingBatch",
+    "P73RecommendationActionEvent",
+    "P73RecommendationCategoryCalibrationSnapshot",
+    "P73RecommendationCategoryPerformance",
+    "P73RecommendationConfidenceSnapshot",
+    "P73RecommendationEffectivenessSnapshot",
+    "P73RecommendationFeedbackBundleSnapshot",
+    "P73RecommendationOutcome",
+    "P73RecommendationPerformanceSnapshot",
+    "P73RecommendationProfitabilitySnapshot",
     "P72GradingOutcome",
     "P72GradingQueueEntry",
     "P72InventoryGradingHistory",

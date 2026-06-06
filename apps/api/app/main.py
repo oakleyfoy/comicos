@@ -1175,6 +1175,7 @@ from app.api.data_integrity import attach_data_integrity_layer
 from app.api.operations_reliability import attach_operations_reliability_layer
 from app.api.production_readiness import attach_production_readiness_layer
 from app.api.condition_intelligence import attach_condition_intelligence_layer
+from app.api.recommendation_feedback import attach_recommendation_feedback_layer
 from app.api.grading_intelligence import attach_grading_intelligence_layer
 from app.api.grading_validation import attach_grading_validation_layer
 from app.api.grading_platform import attach_grading_platform_layer
@@ -1333,6 +1334,7 @@ attach_data_integrity_layer(app)
 attach_operations_reliability_layer(app)
 attach_production_readiness_layer(app)
 attach_condition_intelligence_layer(app)
+attach_recommendation_feedback_layer(app)
 attach_grading_intelligence_layer(app)
 attach_grading_validation_layer(app)
 attach_grading_platform_layer(app)

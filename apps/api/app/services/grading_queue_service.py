@@ -131,6 +131,20 @@ def enqueue_queue_entries(
         )
         created.append(_entry_read(row))
     session.commit()
+    for row in created:
+        try:
+            from app.services.recommendation_outcome_service import record_automatic_event_for_inventory
+
+            record_automatic_event_for_inventory(
+                session,
+                owner_user_id=owner_user_id,
+                inventory_copy_id=row.inventory_copy_id,
+                event_type="GRADED",
+                event_source="grading_queue_enqueue",
+                metadata_json={"queue_entry_id": row.id},
+            )
+        except Exception:
+            pass
     return created
 
 
@@ -274,6 +288,20 @@ def update_queue_status(
         )
     session.commit()
     session.refresh(entry)
+    if new_status in {STATUS_LISTED, STATUS_SOLD}:
+        try:
+            from app.services.recommendation_outcome_service import record_automatic_event_for_inventory
+
+            record_automatic_event_for_inventory(
+                session,
+                owner_user_id=owner_user_id,
+                inventory_copy_id=entry.inventory_copy_id,
+                event_type=new_status,
+                event_source="grading_queue_status",
+                metadata_json={"queue_entry_id": queue_entry_id},
+            )
+        except Exception:
+            pass
     return _entry_read(entry)
 
 

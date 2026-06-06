@@ -14363,6 +14363,203 @@ export interface P72GradingCertificationRead {
   reviewed_at: string;
 }
 
+export interface P73RecommendationOutcomeRead {
+  id: number;
+  recommendation_id: string;
+  inventory_copy_id: number | null;
+  series: string;
+  issue: string;
+  variant: string;
+  publisher: string;
+  character: string;
+  creator: string;
+  expected_profit: number | null;
+  actual_profit: number | null;
+  expected_roi_pct: number | null;
+  actual_roi_pct: number | null;
+  recommendation_type: string;
+  recommendation_category: string;
+  created_date: string;
+  current_status: string;
+  attribution_outcome: string | null;
+  attribution_accurate: boolean | null;
+  source_table: string | null;
+  source_row_id: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P73RecommendationTimelineEntryRead {
+  event_type: string;
+  event_source: string;
+  created_at: string;
+  metadata_json: Record<string, unknown>;
+}
+
+export interface P73RecommendationOutcomeDetailRead {
+  outcome: P73RecommendationOutcomeRead;
+  timeline: P73RecommendationTimelineEntryRead[];
+}
+
+export interface P73RecommendationFeedbackSummaryRead {
+  recommendations_created: number;
+  viewed: number;
+  purchased: number;
+  skipped: number;
+  watchlisted: number;
+  held: number;
+  graded: number;
+  listed: number;
+  sold: number;
+  attribution_matches: number;
+  attribution_samples: number;
+  attribution_accuracy_pct: number;
+}
+
+export interface P73RecommendationFeedbackDashboardRead {
+  summary: P73RecommendationFeedbackSummaryRead;
+  recent_outcomes: P73RecommendationOutcomeRead[];
+}
+
+export interface P73RecommendationFunnelCountsRead {
+  recommendations_generated: number;
+  viewed: number;
+  purchased: number;
+  skipped: number;
+  held: number;
+  graded: number;
+  sold: number;
+}
+
+export interface P73RecommendationAdoptionMetricsRead {
+  view_rate_pct: number;
+  purchase_rate_pct: number;
+  watchlist_rate_pct: number;
+  grade_rate_pct: number;
+  sell_rate_pct: number;
+}
+
+export interface P73RecommendationAccuracyMetricsRead {
+  success_rate_pct: number;
+  failure_rate_pct: number;
+  average_return_pct: number;
+  median_return_pct: number;
+  win_rate_pct: number;
+  loss_rate_pct: number;
+}
+
+export interface P73RecommendationPerformanceRead {
+  snapshot_id: number;
+  generated_at: string;
+  funnel: P73RecommendationFunnelCountsRead;
+  adoption: P73RecommendationAdoptionMetricsRead;
+  accuracy: P73RecommendationAccuracyMetricsRead;
+}
+
+export interface P73RecommendationProfitabilityRead {
+  expected_profit: number;
+  actual_profit: number;
+  expected_roi_pct: number;
+  actual_roi_pct: number;
+}
+
+export interface P73RecommendationCategoryPerformanceRead {
+  recommendation_type: string;
+  recommendation_count: number;
+  success_rate_pct: number;
+  average_roi_pct: number;
+}
+
+export interface P73RecommendationOutcomeHighlightRead {
+  outcome_id: number;
+  recommendation_id: string;
+  series: string;
+  issue: string;
+  recommendation_type: string;
+  actual_roi_pct: number | null;
+  actual_profit: number | null;
+  attribution_accurate: boolean | null;
+}
+
+export interface P73RecommendationPerformanceDashboardRead {
+  performance_summary: P73RecommendationPerformanceRead;
+  adoption_metrics: P73RecommendationAdoptionMetricsRead;
+  profitability_metrics: P73RecommendationProfitabilityRead;
+  category_performance: P73RecommendationCategoryPerformanceRead[];
+  attribution_analytics: {
+    category: string;
+    outcomes: number;
+    purchases: number;
+    gradings: number;
+    sales: number;
+    profit_total: number;
+  }[];
+  top_wins: P73RecommendationOutcomeHighlightRead[];
+  worst_outcomes: P73RecommendationOutcomeHighlightRead[];
+}
+
+export interface P73RecommendationConfidenceRead {
+  buy_confidence: number;
+  grade_confidence: number;
+  sell_confidence: number;
+  watch_confidence: number;
+  snapshot_id?: number;
+  generated_at?: string | null;
+}
+
+export interface P73TypeEffectivenessRead {
+  recommendation_type: string;
+  expected_roi_pct: number;
+  actual_roi_pct: number;
+  win_rate_pct: number;
+  loss_rate_pct: number;
+  accuracy_label: string;
+}
+
+export interface P73RecommendationEffectivenessRead {
+  win_rate_pct: number;
+  loss_rate_pct: number;
+  expected_roi_pct: number;
+  actual_roi_pct: number;
+  recommendation_accuracy_pct: number;
+  by_type: P73TypeEffectivenessRead[];
+}
+
+export interface P73CategoryCalibrationRead {
+  calibration_category: string;
+  recommendation_count: number;
+  success_rate_pct: number;
+  average_roi_pct: number;
+  median_roi_pct: number;
+}
+
+export interface P73RecommendationQualityDashboardRead {
+  bundle_snapshot_id: number;
+  generated_at: string;
+  overall_accuracy_pct: number;
+  overall_roi_pct: number;
+  confidence: P73RecommendationConfidenceRead;
+  category_calibration: P73CategoryCalibrationRead[];
+  effectiveness: P73RecommendationEffectivenessRead;
+  category_performance: P73RecommendationCategoryPerformanceRead[];
+  best_recommendation_types: string[];
+  worst_recommendation_types: string[];
+}
+
+export interface P73RecommendationCertificationCheckRead {
+  component: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface P73RecommendationCertificationRead {
+  approved_for_production: boolean;
+  checks: P73RecommendationCertificationCheckRead[];
+  platform_status: string;
+  reviewed_at: string;
+}
+
 export interface GradingDashboardRead {
   prediction_count: number;
   recommendation_count: number;
@@ -26418,6 +26615,30 @@ export const apiClient = {
 
   getGradingCertification(): Promise<P72GradingCertificationRead> {
     return requestScanV1<P72GradingCertificationRead>("/grading-intelligence/certification");
+  },
+
+  getRecommendationFeedbackSummary(): Promise<P73RecommendationFeedbackDashboardRead> {
+    return requestScanV1<P73RecommendationFeedbackDashboardRead>("/recommendation-feedback/summary");
+  },
+
+  getRecommendationOutcomeDetail(outcomeId: number): Promise<P73RecommendationOutcomeDetailRead> {
+    return requestScanV1<P73RecommendationOutcomeDetailRead>(
+      `/recommendation-feedback/outcomes/${outcomeId}`,
+    );
+  },
+
+  getRecommendationPerformanceDashboard(): Promise<P73RecommendationPerformanceDashboardRead> {
+    return requestScanV1<P73RecommendationPerformanceDashboardRead>(
+      "/recommendation-feedback/performance-dashboard",
+    );
+  },
+
+  getRecommendationQualityDashboard(): Promise<P73RecommendationQualityDashboardRead> {
+    return requestScanV1<P73RecommendationQualityDashboardRead>("/recommendation-feedback/dashboard");
+  },
+
+  getRecommendationFeedbackCertification(): Promise<P73RecommendationCertificationRead> {
+    return requestScanV1<P73RecommendationCertificationRead>("/recommendation-feedback/certification");
   },
 
   getGradingValidationDashboard(): Promise<GradingValidationDashboardRead> {

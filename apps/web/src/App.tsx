@@ -81,6 +81,8 @@ import { GradingOperationsDashboardPage } from "./pages/GradingOperationsDashboa
 import { GradingQueuePage } from "./pages/GradingQueuePage";
 import { GradingSubmissionBatchesPage } from "./pages/GradingSubmissionBatchesPage";
 import { GradingAnalyticsDashboardPage } from "./pages/GradingAnalyticsDashboardPage";
+import { RecommendationAnalyticsPage } from "./pages/RecommendationAnalyticsPage";
+import { RecommendationFeedbackPage } from "./pages/RecommendationFeedbackPage";
 import { GradingValidationPage } from "./pages/GradingValidationPage";
 import { GradingPlatformPage } from "./pages/GradingPlatformPage";
 import { ReleaseIntelligencePage } from "./pages/ReleaseIntelligencePage";
@@ -190,6 +192,8 @@ export default function App() {
         <Route path="/grading-queue" element={<GradingQueuePage />} />
         <Route path="/grading-batches" element={<GradingSubmissionBatchesPage />} />
         <Route path="/grading-analytics" element={<GradingAnalyticsDashboardPage />} />
+        <Route path="/recommendation-feedback" element={<RecommendationFeedbackPage />} />
+        <Route path="/recommendation-analytics" element={<RecommendationAnalyticsPage />} />
         <Route path="/grading-validation" element={<GradingValidationPage />} />
         <Route path="/grading-platform" element={<GradingPlatformPage />} />
         <Route path="/release-intelligence" element={<ReleaseIntelligencePage />} />

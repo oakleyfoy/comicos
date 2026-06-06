@@ -90,6 +90,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Industry Signals", to: "/industry-signals" },
       { label: "Industry Opportunities", to: "/industry-opportunities" },
       { label: "Recommendations V2", to: "/recommendations-v2" },
+      { label: "Recommendation Feedback", to: "/recommendation-feedback" },
+      { label: "Recommendation Analytics", to: "/recommendation-analytics" },
       { label: "Spec Intelligence", to: "/spec-intelligence" },
       { label: "Spec Inputs", to: "/spec-inputs" },
       { label: "Spec Baseline", to: "/spec-baseline" },
