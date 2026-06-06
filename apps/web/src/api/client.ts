@@ -12851,6 +12851,8 @@ export interface P85CollectorHomeRead {
     items: Record<string, unknown>[];
     empty_hint: string;
     count: number;
+    status: string;
+    error: string;
   }[];
   budget_status: Record<string, unknown>;
   portfolio_movement: Record<string, unknown>;
