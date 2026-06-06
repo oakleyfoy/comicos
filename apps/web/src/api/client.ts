@@ -2,7 +2,18 @@ import { normalizeInventoryQueryParams } from "../lib/inventoryQueryParams";
 import { handleApi401Response } from "../lib/auth401Policy";
 import { ApiError } from "./apiError";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    return configured.trim().replace(/\/$/, "");
+  }
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8000";
+  }
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const MARKET_API_V1_PREFIX = "/api/v1/market";
 const SCAN_API_V1_PREFIX = "/api/v1";
 
@@ -6627,7 +6638,26 @@ async function rejectUnauthorized(path: string, response: Response): Promise<nev
   });
 }
 
+function assertJsonApiResponse(path: string, response: Response): void {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("json")) {
+    return;
+  }
+  throw new ApiError(
+    `Expected JSON from the ComicOS API for ${path}, but received ${contentType || "an unknown content type"}. ` +
+      "Confirm VITE_API_BASE_URL points at the API host (for example https://api.comicosapp.com), not the static web app.",
+    response.status,
+  );
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new ApiError(
+      "API base URL is not configured. Set VITE_API_BASE_URL to your backend origin before loading market data.",
+      0,
+    );
+  }
+
   const token = getStoredToken();
   const headers = new Headers(init?.headers);
 
@@ -6662,6 +6692,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(message, response.status);
   }
 
+  assertJsonApiResponse(path, response);
   return (await response.json()) as T;
 }
 
