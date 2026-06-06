@@ -825,6 +825,19 @@ from app.models.p78_marketplace_lifecycle import (
     P78SaleRecord,
     P78SellingAnalyticsSnapshot,
 )
+from app.models.p81_discovery import (
+    P81DiscoveryAlert,
+    P81DiscoveryOpportunity,
+    P81DiscoverySnapshot,
+    P81DiscoveryWatchlist,
+    P81FuturePullListItem,
+)
+from app.models.p81_discovery_analytics import (
+    P81DiscoveryAlertPerformanceSnapshot,
+    P81DiscoveryAnalyticsSnapshot,
+    P81DiscoveryOpportunityPerformanceSnapshot,
+    P81DiscoveryRoiSnapshot,
+)
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,
@@ -1566,6 +1579,15 @@ __all__ = [
     "P78InventoryReservation",
     "P78SaleRecord",
     "P78SellingAnalyticsSnapshot",
+    "P81DiscoveryOpportunity",
+    "P81DiscoverySnapshot",
+    "P81DiscoveryWatchlist",
+    "P81DiscoveryAlert",
+    "P81FuturePullListItem",
+    "P81DiscoveryAnalyticsSnapshot",
+    "P81DiscoveryOpportunityPerformanceSnapshot",
+    "P81DiscoveryAlertPerformanceSnapshot",
+    "P81DiscoveryRoiSnapshot",
     "IntakeStagingRecord",
     "ScanEvent",
     "ConventionSession",

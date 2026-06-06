@@ -1261,6 +1261,7 @@ from app.api.p80_collector_assistant import attach_p80_collector_assistant_layer
 from app.api.p77_collector_profile import attach_p77_collector_profile_layer
 from app.api.p78_sell_workflow import attach_p78_sell_workflow_layer
 from app.api.p78_marketplace import attach_p78_marketplace_layer
+from app.api.p81_discovery import attach_p81_discovery_layer
 from app.api.agents import attach_agents_layer
 from app.api.workflows import attach_workflows_layer
 from app.api.research_agents import attach_research_agents_layer
@@ -1432,6 +1433,7 @@ attach_p80_collector_assistant_layer(app)
 attach_p77_collector_profile_layer(app)
 attach_p78_sell_workflow_layer(app)
 attach_p78_marketplace_layer(app)
+attach_p81_discovery_layer(app)
 attach_agents_layer(app)
 attach_workflows_layer(app)
 attach_research_agents_layer(app)

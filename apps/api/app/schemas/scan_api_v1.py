@@ -115,6 +115,10 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "sell_workflow": "P78-01",
     "sell_marketplace": "P78-02",
     "selling_certification": "P78-02",
+    "discovery_engine": "P81-01",
+    "discovery_personalization": "P81-02",
+    "discovery_analytics": "P81-03",
+    "discovery_certification": "P81-03",
 }
 
 

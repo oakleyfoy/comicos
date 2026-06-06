@@ -12476,6 +12476,209 @@ export interface P78SellingCertificationRead {
   production_checklist: { area: string; status: string }[];
 }
 
+export interface P81DiscoveryOpportunityRead {
+  id: number;
+  opportunity_type: string;
+  registry_status: string;
+  title: string;
+  summary: string;
+  publisher: string;
+  series_name: string;
+  issue_number: string;
+  variant_label: string;
+  discovery_date: string;
+  release_date?: string | null;
+  discovery_score: number;
+  score_category: string;
+  signals: string[];
+  creator_metadata: Record<string, unknown>;
+  source_type: string;
+  release_issue_id?: number | null;
+  external_catalog_issue_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P81DiscoveryOpportunityListResponse {
+  items: P81DiscoveryOpportunityRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P81DiscoveryFeedRead {
+  new_discoveries: P81DiscoveryOpportunityRead[];
+  top_opportunities: P81DiscoveryOpportunityRead[];
+  new_number_ones: P81DiscoveryOpportunityRead[];
+  milestone_issues: P81DiscoveryOpportunityRead[];
+  creator_projects: P81DiscoveryOpportunityRead[];
+  new_variants: P81DiscoveryOpportunityRead[];
+  snapshot_id?: number | null;
+}
+
+export interface P81PersonalizedOpportunityRead {
+  opportunity: P81DiscoveryOpportunityRead;
+  discovery_score: number;
+  personalized_score: number;
+  collector_adjustment: number;
+  priority_category: string;
+  adjustments: { label: string; delta: number }[];
+  personalization_reasons: string[];
+  recommendation_action: string;
+  recommendation_quantity: number;
+  recommendation_score?: number | null;
+}
+
+export interface P81PersonalizedDiscoveryListResponse {
+  items: P81PersonalizedOpportunityRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P81DiscoveryWatchlistRead {
+  id: number;
+  watchlist_type: string;
+  label: string;
+  auto_managed: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P81DiscoveryWatchlistListResponse {
+  items: P81DiscoveryWatchlistRead[];
+  total_items: number;
+}
+
+export interface P81DiscoveryAlertRead {
+  id: number;
+  opportunity_id: number;
+  alert_type: string;
+  priority: string;
+  title: string;
+  message: string;
+  status: string;
+  personalized_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P81DiscoveryAlertListResponse {
+  items: P81DiscoveryAlertRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P81FuturePullListItemRead {
+  id: number;
+  opportunity_id: number;
+  title: string;
+  series_name: string;
+  issue_number: string;
+  pipeline_status: string;
+  watch_level: string;
+  recommendation_action: string;
+  recommendation_quantity: number;
+  personalized_score: number;
+  priority_category: string;
+  release_date?: string | null;
+  foc_date?: string | null;
+  updated_at: string;
+}
+
+export interface P81FuturePullListResponse {
+  items: P81FuturePullListItemRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P81FocOpportunityRead {
+  opportunity_id: number;
+  title: string;
+  foc_date: string;
+  release_date?: string | null;
+  personalized_score: number;
+}
+
+export interface P81PersonalizedDiscoveryDashboardRead {
+  must_buy: P81PersonalizedOpportunityRead[];
+  high_priority: P81PersonalizedOpportunityRead[];
+  watch: P81PersonalizedOpportunityRead[];
+  future_pull_list: P81FuturePullListItemRead[];
+  watchlists: P81DiscoveryWatchlistRead[];
+  active_alerts: P81DiscoveryAlertRead[];
+  upcoming_foc: P81FocOpportunityRead[];
+  counts: Record<string, number>;
+}
+
+export interface P81DiscoveryActivityRead {
+  opportunities_discovered: number;
+  opportunities_published: number;
+  opportunities_viewed: number;
+  opportunities_saved: number;
+  opportunities_purchased: number;
+}
+
+export interface P81DiscoveryCategoryPerformanceRead {
+  category: string;
+  detected: number;
+  purchased: number;
+  conversion_rate_pct: number;
+}
+
+export interface P81DiscoveryAlertPerformanceRead {
+  alerts_sent: number;
+  alerts_opened: number;
+  alerts_clicked: number;
+  alerts_converted: number;
+  by_type: Record<string, number>;
+}
+
+export interface P81DiscoveryWatchlistPerformanceRead {
+  label: string;
+  watchlist_type: string;
+  matches: number;
+  purchases: number;
+  roi_pct: number;
+}
+
+export interface P81FuturePullAnalyticsRead {
+  recommendations: number;
+  purchased: number;
+  skipped: number;
+  accuracy_pct: number;
+}
+
+export interface P81PersonalizationImpactRead {
+  opportunities_evaluated: number;
+  opportunities_adjusted: number;
+  adjustment_rate_pct: number;
+  adjustment_types: Record<string, number>;
+}
+
+export interface P81DiscoveryRoiRead {
+  portfolio_roi_pct: number;
+  average_fmv_gain_pct: number;
+  highlights: Record<string, unknown>[];
+}
+
+export interface P81DiscoveryAnalyticsDashboardRead {
+  activity: P81DiscoveryActivityRead;
+  opportunity_performance: P81DiscoveryCategoryPerformanceRead[];
+  alert_performance: P81DiscoveryAlertPerformanceRead;
+  watchlist_performance: P81DiscoveryWatchlistPerformanceRead[];
+  future_pull: P81FuturePullAnalyticsRead;
+  discovery_roi: P81DiscoveryRoiRead;
+  personalization_impact: P81PersonalizationImpactRead;
+  snapshot_ids: Record<string, number | null>;
+}
+
+export interface P81DiscoveryCertificationRead {
+  title: string;
+  status: string;
+  approved_for_production: boolean;
+  checks_passed: number;
+  warnings: number;
+  failures: number;
+  platform_readiness_percent: number;
+  production_checklist: { area: string; status: string }[];
+}
+
 export interface P78SellBundleRead {
   bundle_key: string;
   bundle_type: string;
@@ -29590,6 +29793,87 @@ export const apiClient = {
 
   getSellingCertification(): Promise<P78SellingCertificationRead> {
     return requestScanV1<P78SellingCertificationRead>("/selling-certification");
+  },
+
+  getDiscoveryFeed(params?: { refresh?: boolean }): Promise<P81DiscoveryFeedRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
+    return requestScanV1<P81DiscoveryFeedRead>(`/discovery/feed${q}`);
+  },
+
+  listDiscoveryOpportunities(params?: {
+    opportunity_type?: string;
+    score_category?: string;
+    limit?: number;
+    offset?: number;
+    refresh?: boolean;
+  }): Promise<P81DiscoveryOpportunityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return requestScanV1<P81DiscoveryOpportunityListResponse>(`/discovery/opportunities${q}`);
+  },
+
+  getDiscoveryOpportunity(opportunityId: number): Promise<P81DiscoveryOpportunityRead> {
+    return requestScanV1<P81DiscoveryOpportunityRead>(`/discovery/opportunities/${opportunityId}`);
+  },
+
+  getDiscoveryDashboard(params?: { refresh?: boolean }): Promise<P81PersonalizedDiscoveryDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
+    return requestScanV1<P81PersonalizedDiscoveryDashboardRead>(`/discovery/dashboard${q}`);
+  },
+
+  listPersonalizedDiscovery(params?: {
+    limit?: number;
+    offset?: number;
+    refresh?: boolean;
+  }): Promise<P81PersonalizedDiscoveryListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | boolean | undefined>) : "";
+    return requestScanV1<P81PersonalizedDiscoveryListResponse>(`/discovery/personalized${q}`);
+  },
+
+  listDiscoveryWatchlists(): Promise<P81DiscoveryWatchlistListResponse> {
+    return requestScanV1<P81DiscoveryWatchlistListResponse>("/discovery/watchlists");
+  },
+
+  createDiscoveryWatchlist(payload: { watchlist_type: string; label: string }): Promise<P81DiscoveryWatchlistRead> {
+    return requestScanV1<P81DiscoveryWatchlistRead>("/discovery/watchlists", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateDiscoveryWatchlist(
+    watchlistId: number,
+    payload: { label?: string; active?: boolean },
+  ): Promise<P81DiscoveryWatchlistRead> {
+    return requestScanV1<P81DiscoveryWatchlistRead>(`/discovery/watchlists/${watchlistId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listDiscoveryAlerts(params?: { status?: string; limit?: number; offset?: number }): Promise<P81DiscoveryAlertListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<P81DiscoveryAlertListResponse>(`/discovery/alerts${q}`);
+  },
+
+  updateDiscoveryAlert(alertId: number, payload: { status?: string }): Promise<P81DiscoveryAlertRead> {
+    return requestScanV1<P81DiscoveryAlertRead>(`/discovery/alerts/${alertId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getFuturePullList(params?: { limit?: number; offset?: number; refresh?: boolean }): Promise<P81FuturePullListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | boolean | undefined>) : "";
+    return requestScanV1<P81FuturePullListResponse>(`/discovery/future-pull-list${q}`);
+  },
+
+  getDiscoveryAnalyticsDashboard(params?: { refresh?: boolean }): Promise<P81DiscoveryAnalyticsDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
+    return requestScanV1<P81DiscoveryAnalyticsDashboardRead>(`/discovery/analytics-dashboard${q}`);
+  },
+
+  getDiscoveryCertification(): Promise<P81DiscoveryCertificationRead> {
+    return requestScanV1<P81DiscoveryCertificationRead>("/discovery/certification");
   },
 };
 

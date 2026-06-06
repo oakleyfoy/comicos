@@ -70,6 +70,14 @@ import { ListingDraftsPage } from "./pages/ListingDraftsPage";
 import { ListingsPage } from "./pages/ListingsPage";
 import { SellingAnalyticsPage } from "./pages/SellingAnalyticsPage";
 import { BundleOpportunitiesPage } from "./pages/BundleOpportunitiesPage";
+import { DiscoveryFeedPage } from "./pages/DiscoveryFeedPage";
+import { DiscoveryDashboardPage } from "./pages/DiscoveryDashboardPage";
+import { DiscoveryOpportunitiesPage } from "./pages/DiscoveryOpportunitiesPage";
+import { DiscoveryOpportunityDetailPage } from "./pages/DiscoveryOpportunityDetailPage";
+import { FuturePullListPage } from "./pages/FuturePullListPage";
+import { DiscoveryWatchlistsPage } from "./pages/DiscoveryWatchlistsPage";
+import { DiscoveryAlertsPage } from "./pages/DiscoveryAlertsPage";
+import { DiscoveryAnalyticsPage } from "./pages/DiscoveryAnalyticsPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -257,6 +265,14 @@ export default function App() {
         <Route path="/bundle-opportunities" element={<BundleOpportunitiesPage />} />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/selling-analytics" element={<SellingAnalyticsPage />} />
+        <Route path="/discovery-feed" element={<DiscoveryFeedPage />} />
+        <Route path="/discovery-dashboard" element={<DiscoveryDashboardPage />} />
+        <Route path="/discovery-opportunities" element={<DiscoveryOpportunitiesPage />} />
+        <Route path="/discovery-opportunity/:id" element={<DiscoveryOpportunityDetailPage />} />
+        <Route path="/future-pull-list" element={<FuturePullListPage />} />
+        <Route path="/discovery-watchlists" element={<DiscoveryWatchlistsPage />} />
+        <Route path="/discovery-alerts" element={<DiscoveryAlertsPage />} />
+        <Route path="/discovery-analytics" element={<DiscoveryAnalyticsPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />
