@@ -49,6 +49,15 @@ import { MobileFoundationPage } from "./pages/MobileFoundationPage";
 import { OfflineInventoryPage } from "./pages/OfflineInventoryPage";
 import { ConventionModePage } from "./pages/ConventionModePage";
 import { MobileScanningPage } from "./pages/MobileScanningPage";
+import { MobileScanPlatformPage } from "./pages/MobileScanPlatformPage";
+import { MobileScanResultPage } from "./pages/MobileScanResultPage";
+import { MobileIntakePage } from "./pages/MobileIntakePage";
+import { MobileStoragePage } from "./pages/MobileStoragePage";
+import { MobileAuditPage } from "./pages/MobileAuditPage";
+import { MobileOperationsPage } from "./pages/MobileOperationsPage";
+import { CollectorAssistantPage } from "./pages/CollectorAssistantPage";
+import { CollectorConventionPage } from "./pages/CollectorConventionPage";
+import { CollectorDashboardPage } from "./pages/CollectorDashboardPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -215,6 +224,15 @@ export default function App() {
         <Route path="/storage-assignment" element={<StorageAssignmentPage />} />
         <Route path="/storage-dashboard" element={<StorageDashboardPage />} />
         <Route path="/inventory-locator" element={<InventoryLocatorPage />} />
+        <Route path="/mobile-scan" element={<MobileScanPlatformPage />} />
+        <Route path="/mobile-scan/:scanId" element={<MobileScanResultPage />} />
+        <Route path="/mobile-intake" element={<MobileIntakePage />} />
+        <Route path="/mobile-storage" element={<MobileStoragePage />} />
+        <Route path="/mobile-audit" element={<MobileAuditPage />} />
+        <Route path="/mobile-operations" element={<MobileOperationsPage />} />
+        <Route path="/collector-assistant" element={<CollectorAssistantPage />} />
+        <Route path="/convention-mode" element={<CollectorConventionPage />} />
+        <Route path="/collector-dashboard" element={<CollectorDashboardPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />

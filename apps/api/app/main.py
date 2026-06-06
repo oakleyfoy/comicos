@@ -1255,6 +1255,9 @@ from app.api.quick_sales import attach_quick_sales_layer
 from app.api.mobile_ops_dashboard import attach_mobile_ops_dashboard_layer
 from app.api.mobile_device_security import attach_mobile_device_security_layer
 from app.api.mobile_analytics import attach_mobile_analytics_layer
+from app.api.mobile_scan_platform import attach_mobile_scan_platform_layer
+from app.api.mobile_operations import attach_mobile_operations_layer
+from app.api.p80_collector_assistant import attach_p80_collector_assistant_layer
 from app.api.agents import attach_agents_layer
 from app.api.workflows import attach_workflows_layer
 from app.api.research_agents import attach_research_agents_layer
@@ -1420,6 +1423,9 @@ attach_quick_sales_layer(app)
 attach_mobile_ops_dashboard_layer(app)
 attach_mobile_device_security_layer(app)
 attach_mobile_analytics_layer(app)
+attach_mobile_scan_platform_layer(app)
+attach_mobile_operations_layer(app)
+attach_p80_collector_assistant_layer(app)
 attach_agents_layer(app)
 attach_workflows_layer(app)
 attach_research_agents_layer(app)

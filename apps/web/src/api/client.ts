@@ -11859,6 +11859,315 @@ export interface MobileScanningDashboardResponse {
   recent_events: ScanEventResponse[];
 }
 
+export interface P80MobileScanCreateRequest {
+  barcode?: string | null;
+  image?: string | null;
+  manual_entry?: string | null;
+}
+
+export interface P80BookIdentificationRead {
+  cover_image_url?: string | null;
+  title: string;
+  series_name?: string;
+  issue_number?: string;
+  variant_description?: string;
+  publisher?: string;
+  release_date?: string | null;
+  identification_source?: string;
+  book_identity_key?: string;
+}
+
+export interface P80ScanIdentificationRead {
+  confidence: string;
+  requires_manual_review: boolean;
+  scan_source: string;
+  normalized_barcode?: string;
+  book?: P80BookIdentificationRead | null;
+  storage_entity?: Record<string, unknown> | null;
+}
+
+export interface P80OwnershipIntelligenceRead {
+  owned: boolean;
+  total_copies: number;
+  graded_copies: number;
+  raw_copies: number;
+  inventory_copy_ids: number[];
+}
+
+export interface P80FmvIntelligenceRead {
+  authoritative_fmv?: number | null;
+  confidence_score?: number | null;
+  liquidity_rating?: string | null;
+  sales_velocity?: number | null;
+  price_trend_30d?: string | null;
+}
+
+export interface P80RecommendationIntelligenceRead {
+  recommendation?: string | null;
+  conviction_score?: number | null;
+  confidence_score?: number | null;
+  rationale?: string | null;
+  source_system?: string | null;
+}
+
+export interface P80GradingIntelligenceRead {
+  grade_recommendation?: string | null;
+  press_recommendation?: string | null;
+  expected_grade?: string | null;
+  estimated_roi_pct?: number | null;
+}
+
+export interface P80StorageLocationRead {
+  inventory_copy_id: number;
+  location_path_text: string;
+  box_name?: string | null;
+  slot_number?: number | null;
+}
+
+export interface P80StorageIntelligenceRead {
+  locations: P80StorageLocationRead[];
+}
+
+export interface P80ActionCardRead {
+  action: string;
+  reasons: string[];
+}
+
+export interface P80BookIntelligenceRead {
+  inventory_id?: number | null;
+  ownership: P80OwnershipIntelligenceRead;
+  fmv: P80FmvIntelligenceRead;
+  recommendation: P80RecommendationIntelligenceRead;
+  grading: P80GradingIntelligenceRead;
+  storage: P80StorageIntelligenceRead;
+  action_card: P80ActionCardRead;
+}
+
+export interface P80MobileScanResultRead {
+  scan_id: number;
+  created_at: string;
+  identification: P80ScanIdentificationRead;
+  book_intelligence?: P80BookIntelligenceRead | null;
+}
+
+export interface P80MobileScanListResponse {
+  items: P80MobileScanResultRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P80CollectorScanRequest {
+  barcode?: string | null;
+  manual_entry?: string | null;
+  vendor_price?: number | null;
+}
+
+export interface P80CollectionCompletionRead {
+  label: string;
+  owned_issue_count: number;
+  known_issue_count: number;
+  completion_percent?: number | null;
+  missing_issue_numbers: string[];
+  suggested_next_purchases: string[];
+  scanned_issue_is_missing: boolean;
+  gap_completion_opportunity: boolean;
+}
+
+export interface P80SpecOpportunityRead {
+  detected: boolean;
+  score?: number | null;
+  signals: string[];
+  recommendation?: string | null;
+}
+
+export interface P80CollectorActionCardRead {
+  action: string;
+  reasons: string[];
+  inventory_target_exceeded?: boolean;
+}
+
+export interface P80PriceAssessmentRead {
+  asking_price: number;
+  authoritative_fmv?: number | null;
+  spread_percent?: number | null;
+  assessment: string;
+}
+
+export interface P80CollectorScanResultRead {
+  identification: P80ScanIdentificationRead;
+  book_intelligence?: P80BookIntelligenceRead | null;
+  collection_completion?: P80CollectionCompletionRead | null;
+  spec_opportunity?: P80SpecOpportunityRead | null;
+  action_card: P80CollectorActionCardRead;
+  price_assessment?: P80PriceAssessmentRead | null;
+}
+
+export interface P80CollectorPriceEvalRequest {
+  asking_price: number;
+  barcode?: string | null;
+  manual_entry?: string | null;
+  inventory_id?: number | null;
+  authoritative_fmv?: number | null;
+}
+
+export interface P80CollectorPriceEvalResultRead {
+  identification?: P80ScanIdentificationRead | null;
+  price_assessment: P80PriceAssessmentRead;
+  action_card?: P80CollectorActionCardRead | null;
+}
+
+export interface P80CollectorOpportunityItemRead {
+  kind: string;
+  title: string;
+  subtitle?: string;
+  score?: number | null;
+  recommendation?: string | null;
+  rationale?: string | null;
+}
+
+export interface P80CollectorGapListResponse {
+  items: CollectionGapRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P80CollectorOpportunityListResponse {
+  items: P80CollectorOpportunityItemRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P80CollectorDashboardRead {
+  gap_summary: Record<string, number>;
+  collection_gaps: CollectionGapRead[];
+  recommended_acquisitions: P80CollectorOpportunityItemRead[];
+  spec_opportunities: P80CollectorOpportunityItemRead[];
+  books_to_watch: P80CollectorOpportunityItemRead[];
+}
+
+export interface P80IntakeStartRequest {
+  intake_mode: string;
+  order_id?: number | null;
+}
+
+export interface P80IntakeSessionRead {
+  session_id: number;
+  intake_mode: string;
+  order_id?: number | null;
+  status: string;
+  expected_count: number;
+  scanned_count: number;
+  received_count: number;
+  missing_count: number;
+  duplicate_scan_count: number;
+  unknown_scan_count: number;
+  scans: Record<string, unknown>[];
+}
+
+export interface P80IntakeScanRequest {
+  session_id: number;
+  barcode: string;
+}
+
+export interface P80IntakeScanResultRead {
+  session_id: number;
+  session?: P80IntakeSessionRead | null;
+  scan_status: string;
+  title?: string | null;
+  inventory_copy_id?: number | null;
+  order_item_matched?: boolean;
+  created_inventory?: boolean;
+  duplicate_scan?: boolean;
+  message?: string;
+}
+
+export interface P80IntakeCompleteRequest {
+  session_id: number;
+}
+
+export interface P80IntakeCompleteRead {
+  session: P80IntakeSessionRead;
+  status_label: string;
+}
+
+export interface P80StorageSuggestRequest {
+  inventory_copy_id: number;
+  box_id?: number | null;
+}
+
+export interface P80StorageSuggestionRead {
+  inventory_copy_id: number;
+  recommended_box_id?: number | null;
+  recommended_box_name?: string | null;
+  suggested_slot_number?: number | null;
+  section_label?: string | null;
+  location_path_text?: string | null;
+  series_grouping_score?: number;
+  capacity_available?: boolean;
+  reasons?: string[];
+}
+
+export interface P80StorageAssignRequest {
+  inventory_copy_id?: number;
+  box_id: number;
+  slot_number?: number | null;
+  use_suggested_slot?: boolean;
+  barcode?: string | null;
+}
+
+export interface P80AuditStartRequest {
+  audit_name: string;
+  scope_box_id?: number | null;
+  scope_location_id?: number | null;
+}
+
+export interface P80AuditStartRead {
+  audit_id: number;
+  audit_name: string;
+  expected_count: number;
+  scope_box_id?: number | null;
+  scope_location_id?: number | null;
+}
+
+export interface P80AuditScanRequest {
+  audit_id: number;
+  barcode: string;
+}
+
+export interface P80AuditScanRead {
+  audit_id: number;
+  outcome: string;
+  inventory_copy_id?: number | null;
+  entry_id?: number | null;
+  title?: string | null;
+  verified_count?: number;
+  unexpected_count?: number;
+  message?: string;
+}
+
+export interface P80AuditCompleteRequest {
+  audit_id: number;
+}
+
+export interface P80AuditCompleteRead {
+  audit_id: number;
+  status: string;
+  verified_count: number;
+  missing_count: number;
+  unexpected_count: number;
+  duplicate_assignments: number;
+  audit_accuracy_pct: number;
+}
+
+export interface P80OperationsDashboardRead {
+  intake_received_today: number;
+  intake_received_this_week: number;
+  intake_pending_receipts: number;
+  storage_assigned_today: number;
+  storage_unassigned_inventory: number;
+  audit_open_sessions: number;
+  audit_recent_completed: number;
+  audit_average_accuracy_pct: number;
+  generated_at: string;
+}
+
 export interface ScanCaptureRequest {
   device_id: number;
   scan_type: string;
@@ -28588,6 +28897,117 @@ export const apiClient = {
     return requestScanV1<DealerCopilotRunResponse>("/dealer-copilot/run", {
       method: "POST",
     });
+  },
+
+  createMobileScan(payload: P80MobileScanCreateRequest): Promise<P80MobileScanResultRead> {
+    return requestScanV1<P80MobileScanResultRead>("/mobile/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMobileScan(scanId: number): Promise<P80MobileScanResultRead> {
+    return requestScanV1<P80MobileScanResultRead>(`/mobile/scan/${scanId}`);
+  },
+
+  getMobileBookIntelligence(inventoryId: number): Promise<P80BookIntelligenceRead> {
+    return requestScanV1<P80BookIntelligenceRead>(`/mobile/book/${inventoryId}`);
+  },
+
+  listMobileScans(params?: { limit?: number; offset?: number }): Promise<P80MobileScanListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P80MobileScanListResponse>(`/mobile/scans${q}`);
+  },
+
+  startMobileIntake(payload: P80IntakeStartRequest): Promise<P80IntakeSessionRead> {
+    return requestScanV1<P80IntakeSessionRead>("/mobile/intake/start", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  scanMobileIntake(payload: P80IntakeScanRequest): Promise<P80IntakeScanResultRead> {
+    return requestScanV1<P80IntakeScanResultRead>("/mobile/intake/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeMobileIntake(payload: P80IntakeCompleteRequest): Promise<P80IntakeCompleteRead> {
+    return requestScanV1<P80IntakeCompleteRead>("/mobile/intake/complete", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  suggestMobileStorage(payload: P80StorageSuggestRequest): Promise<P80StorageSuggestionRead> {
+    return requestScanV1<P80StorageSuggestionRead>("/mobile/storage/suggest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  assignMobileStorage(payload: P80StorageAssignRequest): Promise<P79StorageAssignmentRead> {
+    return requestScanV1<P79StorageAssignmentRead>("/mobile/storage/assign", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  startMobileAudit(payload: P80AuditStartRequest): Promise<P80AuditStartRead> {
+    return requestScanV1<P80AuditStartRead>("/mobile/audit/start", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  scanMobileAudit(payload: P80AuditScanRequest): Promise<P80AuditScanRead> {
+    return requestScanV1<P80AuditScanRead>("/mobile/audit/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeMobileAudit(payload: P80AuditCompleteRequest): Promise<P80AuditCompleteRead> {
+    return requestScanV1<P80AuditCompleteRead>("/mobile/audit/complete", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMobileOperationsDashboard(): Promise<P80OperationsDashboardRead> {
+    return requestScanV1<P80OperationsDashboardRead>("/mobile/operations");
+  },
+
+  collectorScan(payload: P80CollectorScanRequest): Promise<P80CollectorScanResultRead> {
+    return requestScanV1<P80CollectorScanResultRead>("/collector/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  collectorEvaluatePrice(payload: P80CollectorPriceEvalRequest): Promise<P80CollectorPriceEvalResultRead> {
+    return requestScanV1<P80CollectorPriceEvalResultRead>("/collector/evaluate-price", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listCollectorGaps(params?: { limit?: number; offset?: number }): Promise<P80CollectorGapListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P80CollectorGapListResponse>(`/collector/gaps${q}`);
+  },
+
+  listCollectorOpportunities(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<P80CollectorOpportunityListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
+    return requestScanV1<P80CollectorOpportunityListResponse>(`/collector/opportunities${q}`);
+  },
+
+  getCollectorDashboard(): Promise<P80CollectorDashboardRead> {
+    return requestScanV1<P80CollectorDashboardRead>("/collector/dashboard");
   },
 };
 

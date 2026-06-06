@@ -805,6 +805,8 @@ from app.models.offline_inventory import (
     OfflineSyncQueue,
 )
 from app.models.mobile_scanning import IntakeStagingRecord, ScanCapture, ScanEvent, ScanLookupResult
+from app.models.p80_mobile_scan import P80MobileScan
+from app.models.p80_mobile_operations import P80MobileAuditLink, P80MobileIntakeSession
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,
@@ -1531,6 +1533,9 @@ __all__ = [
     "OfflineInventoryEvent",
     "ScanCapture",
     "ScanLookupResult",
+    "P80MobileScan",
+    "P80MobileIntakeSession",
+    "P80MobileAuditLink",
     "IntakeStagingRecord",
     "ScanEvent",
     "ConventionSession",

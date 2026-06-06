@@ -104,6 +104,10 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "market_user_intelligence": "P51-03",
     "recommendations_v2": "P51-04",
     "recommendation_intelligence_certification": "P51-05",
+    "mobile_scan_platform": "P80-01",
+    "mobile_operations": "P80-02",
+    "collector_assistant": "P80-03",
+    "mobile_scanning_certification": "P80-04",
 }
 
 
