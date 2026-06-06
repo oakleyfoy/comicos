@@ -21,13 +21,13 @@ function SectionBlock({
 }): JSX.Element {
   return (
     <section className="mt-8">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h2>
       {rows.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500">{empty}</p>
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase text-slate-200">
               <tr>
                 <th className="px-3 py-2">Rank</th>
                 <th className="px-3 py-2">Final</th>
@@ -40,12 +40,12 @@ function SectionBlock({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${title}-${row.id}`} className="border-b border-white/5">
+                <tr key={`${title}-${row.id}`} className="border-b border-slate-100">
                   <td className="px-3 py-2 text-white">#{row.rank}</td>
                   <td className="px-3 py-2 text-cyan-200">{row.final_score.toFixed(1)}</td>
                   <td className="px-3 py-2 text-slate-300">{row.confidence_score.toFixed(3)}</td>
                   <td className="px-3 py-2 text-slate-400">{row.risk_level}</td>
-                  <td className="px-3 py-2 text-xs text-amber-200/90">{row.foc_urgency_label}</td>
+                  <td className="px-3 py-2 text-xs text-amber-800/90">{row.foc_urgency_label}</td>
                   <td className="px-3 py-2 text-white">{row.title || row.publisher}</td>
                   <td className="px-3 py-2 text-xs text-slate-500">{row.signal_types.join(", ") || "—"}</td>
                 </tr>
@@ -123,16 +123,16 @@ export function WeeklySpecDashboardPage(): JSX.Element {
               { label: "First appearances", value: summary.first_appearance_count },
               { label: "FOC approaching", value: summary.foc_approaching_count },
             ].map((card) => (
-              <div key={card.label} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+              <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-500">{card.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{card.value}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Publisher breakdown</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Publisher breakdown</h2>
               {Object.keys(dash.publisher_breakdown).length === 0 ? (
                 <p className="mt-2 text-sm text-slate-500">No publisher data yet.</p>
               ) : (
@@ -140,14 +140,14 @@ export function WeeklySpecDashboardPage(): JSX.Element {
                   {Object.entries(dash.publisher_breakdown).map(([publisher, count]) => (
                     <li key={publisher} className="flex justify-between gap-4">
                       <span>{publisher}</span>
-                      <span className="text-cyan-200">{count}</span>
+                      <span className="font-medium text-teal-800">{count}</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Signal breakdown</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Signal breakdown</h2>
               {Object.keys(dash.signal_breakdown).length === 0 ? (
                 <p className="mt-2 text-sm text-slate-500">No signals tagged on current picks.</p>
               ) : (
@@ -155,7 +155,7 @@ export function WeeklySpecDashboardPage(): JSX.Element {
                   {Object.entries(dash.signal_breakdown).map(([signal, count]) => (
                     <li key={signal} className="flex justify-between gap-4">
                       <span>{signal}</span>
-                      <span className="text-cyan-200">{count}</span>
+                      <span className="font-medium text-teal-800">{count}</span>
                     </li>
                   ))}
                 </ul>

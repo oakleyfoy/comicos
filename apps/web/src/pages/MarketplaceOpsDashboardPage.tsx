@@ -100,7 +100,7 @@ export function MarketplaceOpsDashboardPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -175,7 +175,7 @@ export function MarketplaceOpsDashboardPage(): JSX.Element {
         </div>
       ) : null}
       {loading ? (
-        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 text-sm text-slate-300">
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-300">
           Loading marketplace ops dashboard...
         </section>
       ) : null}
@@ -190,21 +190,21 @@ export function MarketplaceOpsDashboardPage(): JSX.Element {
       {!loading && organization && canView && dashboard ? (
         <>
           <section className="mt-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Dashboard status</p>
-              <p className="mt-2 text-2xl font-semibold text-white">visible</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">visible</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Diagnostics</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{String((diagnosticsSummary.warning ?? 0) as number)} warnings</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{String((diagnosticsSummary.warning ?? 0) as number)} warnings</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Latest snapshot</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{dashboard.latest_snapshot ? `#${dashboard.latest_snapshot.id}` : "none"}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{dashboard.latest_snapshot ? `#${dashboard.latest_snapshot.id}` : "none"}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Events</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{dashboard.events.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{dashboard.events.length}</p>
             </div>
           </section>
 

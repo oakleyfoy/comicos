@@ -13,8 +13,8 @@ function scoreClass(score: number): string {
 
 function riskClass(level: string): string {
   if (level === "LOW") return "text-emerald-300";
-  if (level === "MEDIUM") return "text-amber-200";
-  return "text-rose-300";
+  if (level === "MEDIUM") return "text-amber-800";
+  return "text-rose-800";
 }
 
 export function TopSpecPicksPage(): JSX.Element {
@@ -86,23 +86,23 @@ export function TopSpecPicksPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Active picks</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_picks}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_picks}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg final score</p>
             <p className={`mt-1 text-2xl font-semibold ${scoreClass(summary.average_final_score)}`}>
               {summary.average_final_score.toFixed(1)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg confidence</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{summary.average_confidence_score.toFixed(3)}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Qty bridge</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.with_suggested_quantity}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.with_suggested_quantity}</p>
           </div>
         </div>
       ) : null}

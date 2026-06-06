@@ -150,7 +150,7 @@ export function MobileFoundationPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -238,7 +238,7 @@ export function MobileFoundationPage(): JSX.Element {
           <MobileStatusDashboard summary={dashboard.summary} runtimeRegistry={dashboard.runtime_registry} />
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Device registry</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Device registry</h2>
             {canManage ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <input
@@ -290,14 +290,14 @@ export function MobileFoundationPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Mobile sessions</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Mobile sessions</h2>
             <div className="mt-4">
               <MobileSessionViewer items={sessions?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Offline sync contracts</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Offline sync contracts</h2>
             {canManage ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <select
@@ -326,7 +326,7 @@ export function MobileFoundationPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Foundation events</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Foundation events</h2>
             <div className="mt-4">
               <MobileFoundationEventTimeline events={dashboard.recent_events} />
             </div>

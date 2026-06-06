@@ -77,15 +77,15 @@ export function IndustryPublishersPage(): JSX.Element {
 
       {!loading && items.length > 0 ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Publishers</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{items.length}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{items.length}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Scan enabled</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{includedCount}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Classification</p>
             <p className="mt-1 text-lg font-semibold text-slate-200">STANDARD</p>
           </div>
@@ -95,9 +95,9 @@ export function IndustryPublishersPage(): JSX.Element {
       {loading ? (
         <p className="mt-6 text-sm text-slate-400">Loading industry publishers…</p>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
               <tr>
                 <th className="px-4 py-3">Publisher</th>
                 <th className="px-4 py-3">Code</th>
@@ -109,8 +109,8 @@ export function IndustryPublishersPage(): JSX.Element {
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium text-white">{row.publisher_name}</td>
+                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">{row.publisher_name}</td>
                   <td className="px-4 py-3 text-slate-400">{row.publisher_code}</td>
                   <td className="px-4 py-3">
                     <select

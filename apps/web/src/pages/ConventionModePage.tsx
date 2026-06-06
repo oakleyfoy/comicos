@@ -186,7 +186,7 @@ export function ConventionModePage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -243,7 +243,7 @@ export function ConventionModePage(): JSX.Element {
           <ConventionSummaryCards summary={dashboard.summary} />
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Sessions</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Sessions</h2>
             <div className="mt-4">
               <ConventionSessionManager
                 sessions={sessions?.items ?? []}
@@ -258,7 +258,7 @@ export function ConventionModePage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Booths</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Booths</h2>
             <div className="mt-4">
               <ConventionBoothManager
                 booths={booths?.items ?? []}
@@ -277,7 +277,7 @@ export function ConventionModePage(): JSX.Element {
 
           {canManage && selectedSessionId !== null ? (
             <section>
-              <h2 className="text-lg font-semibold text-white">Stage inventory</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Stage inventory</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 <input
                   value={inventoryItemId}
@@ -297,21 +297,21 @@ export function ConventionModePage(): JSX.Element {
           ) : null}
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Staged inventory</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Staged inventory</h2>
             <div className="mt-4">
               <ConventionStagedInventoryViewer items={staged?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Activities</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Activities</h2>
             <div className="mt-4">
               <ConventionActivityTimeline activities={activities?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Convention events</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Convention events</h2>
             <div className="mt-4">
               <ConventionEventTimeline events={dashboard.recent_events} />
             </div>

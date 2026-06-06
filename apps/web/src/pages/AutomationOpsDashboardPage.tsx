@@ -21,8 +21,8 @@ function formatDateTime(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -30,9 +30,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -181,7 +181,7 @@ export function AutomationOpsDashboardPage() {
               <ul className="space-y-2 text-xs text-slate-300">
                 {issues.slice(0, 16).map((row) => (
                   <li key={row.id} className="rounded-xl border border-white/5 bg-slate-950/40 px-3 py-2">
-                    <span className="font-semibold text-amber-200">{row.issue_type}</span> · {row.severity} · {row.issue_message}
+                    <span className="font-semibold text-amber-800">{row.issue_type}</span> · {row.severity} · {row.issue_message}
                   </li>
                 ))}
               </ul>
@@ -214,7 +214,7 @@ export function AutomationOpsDashboardPage() {
           </Panel>
 
           <Panel title="Safe admin controls">
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600">
               Pause queue, resume queue, acknowledge alerts, maintenance lock, and replay verify are available from the ops console. Destructive controls are not exposed.
             </p>
           </Panel>

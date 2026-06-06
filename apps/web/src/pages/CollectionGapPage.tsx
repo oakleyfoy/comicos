@@ -29,8 +29,8 @@ const GAP_TYPE_FILTERS: { label: string; value: CollectionGapType | "" }[] = [
 ];
 
 function priorityClass(p: CollectionGapPriority): string {
-  if (p === "CRITICAL") return "text-rose-300";
-  if (p === "HIGH") return "text-amber-200";
+  if (p === "CRITICAL") return "text-rose-800";
+  if (p === "HIGH") return "text-amber-800";
   if (p === "MEDIUM") return "text-cyan-200";
   return "text-slate-400";
 }
@@ -152,15 +152,15 @@ export function CollectionGapPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">Active gaps</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{summary.total_gaps}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.total_gaps}</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">Avg completion</p>
             <p className="mt-2 text-2xl font-semibold text-cyan-100">{summary.average_completion_percent.toFixed(1)}%</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">Critical</p>
             <p className="mt-2 text-2xl font-semibold text-rose-200">{summary.by_priority.CRITICAL ?? 0}</p>
           </div>
@@ -186,14 +186,14 @@ export function CollectionGapPage(): JSX.Element {
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5">
+                <tr key={row.id} className="border-b border-slate-100">
                   <td className="px-4 py-3 text-white">
                     {row.publisher ? `${row.publisher} · ` : ""}
                     {row.series_name}
                   </td>
-                  <td className="px-4 py-3 text-slate-200">{row.issue_number || "—"}</td>
-                  <td className="px-4 py-3 text-slate-300">{row.gap_type.replace(/_/g, " ")}</td>
-                  <td className="px-4 py-3 text-slate-200">{row.completion_percent.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-slate-800">{row.issue_number || "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.gap_type.replace(/_/g, " ")}</td>
+                  <td className="px-4 py-3 text-slate-800">{row.completion_percent.toFixed(1)}%</td>
                   <td className={`px-4 py-3 font-medium ${priorityClass(row.priority)}`}>{row.priority}</td>
                   <td className="max-w-md px-4 py-3 text-slate-400">{row.rationale}</td>
                 </tr>

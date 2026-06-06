@@ -119,7 +119,7 @@ export function ScanVisualEvidencePage() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1fr,1.2fr]">
           <div className="space-y-4">
             <label className="block text-xs font-semibold text-slate-300">
@@ -228,7 +228,7 @@ export function ScanVisualEvidencePage() {
 
           <section className="mt-6 grid gap-4 xl:grid-cols-2">
             <Panel title="Review packet panel">
-              <p className="text-sm font-semibold text-white">{selectedPackage?.package_title ?? "Review packet"}</p>
+              <p className="text-sm font-semibold text-slate-900">{selectedPackage?.package_title ?? "Review packet"}</p>
               <ul className="mt-2 space-y-1 text-xs text-slate-400">
                 {run.artifacts
                   .filter((a) => a.artifact_type.includes("REPORT") || a.artifact_type.includes("PACKET") || a.artifact_type.includes("EXPORT"))
@@ -293,8 +293,8 @@ function PreviewCard({ title, src }: { title: string; src: string | null }): JSX
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </div>
   );

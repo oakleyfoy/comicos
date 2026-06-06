@@ -232,12 +232,12 @@ export function EmailImportsPage() {
                   <h2 className="text-xl font-semibold text-white">
                     {entry.draft_import.parsed_payload_json.retailer ?? "Unknown retailer"}
                   </h2>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-600">
                     Imported {formatTimestamp(entry.imported_at)} into draft #{entry.draft_import.id}
                   </p>
                   <p className="text-sm text-slate-300">
                     Status:{" "}
-                    <span className="font-medium text-white">{entry.draft_import.status}</span> | Items:{" "}
+                    <span className="font-medium text-slate-900">{entry.draft_import.status}</span> | Items:{" "}
                     {entry.draft_import.parsed_payload_json.items.length}
                   </p>
                 </div>

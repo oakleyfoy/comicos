@@ -139,7 +139,7 @@ export function OrderDetailPage() {
               Back to Orders
             </Link>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-              Order <span className="font-medium text-white">#{order.order_id}</span>
+              Order <span className="font-medium text-slate-900">#{order.order_id}</span>
             </div>
           </>
         }
@@ -201,7 +201,7 @@ export function OrderDetailPage() {
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className="text-lg font-semibold text-slate-900">
                       {item.title} #{item.issue_number}
                     </h3>
                     <p className="mt-1 text-sm text-slate-400">{item.publisher}</p>

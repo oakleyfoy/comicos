@@ -171,7 +171,7 @@ export function OrganizationReviewsPage(): JSX.Element {
         }
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading review workspace…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading review workspace…</p> : null}
       {!loading && organization && !canView ? (
         <OrganizationAccessDeniedState
           title="Access denied"

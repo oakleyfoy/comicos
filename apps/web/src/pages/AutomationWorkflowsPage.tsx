@@ -35,8 +35,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -44,9 +44,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -242,7 +242,7 @@ export function AutomationWorkflowsPage() {
               schedules.slice(0, 6).map((schedule) => (
                 <div key={schedule.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{schedule.schedule_name}</p>
+                    <p className="text-sm font-semibold text-slate-900">{schedule.schedule_name}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(schedule.schedule_status)}`}>
                       {schedule.schedule_status}
                     </span>
@@ -252,7 +252,7 @@ export function AutomationWorkflowsPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-400">No schedules created yet.</p>
+              <p className="text-sm text-slate-600">No schedules created yet.</p>
             )}
           </div>
         </Panel>
@@ -297,7 +297,7 @@ export function AutomationWorkflowsPage() {
               triggers.slice(0, 6).map((trigger) => (
                 <div key={trigger.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{trigger.trigger_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{trigger.trigger_type}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(trigger.trigger_status)}`}>
                       {trigger.trigger_status}
                     </span>
@@ -307,7 +307,7 @@ export function AutomationWorkflowsPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-400">No triggers recorded yet.</p>
+              <p className="text-sm text-slate-600">No triggers recorded yet.</p>
             )}
           </div>
         </Panel>
@@ -316,7 +316,7 @@ export function AutomationWorkflowsPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Panel title="Workflow table">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading workflow orchestration…</p>
+            <p className="text-sm text-slate-600">Loading workflow orchestration…</p>
           ) : workflows.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm text-slate-300">
@@ -363,14 +363,14 @@ export function AutomationWorkflowsPage() {
             <div className="space-y-3">
               {selectedWorkflow.steps.map((step) => (
                 <div key={step.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">#{step.step_rank} · {step.step_key}</p>
+                  <p className="text-sm font-semibold text-slate-900">#{step.step_rank} · {step.step_key}</p>
                   <p className="mt-1 text-xs text-slate-400">{step.job_type} · {step.dependency_mode}</p>
                   <p className="mt-1 text-xs text-slate-500">Delay {step.delay_seconds ?? 0}s · Required {step.required_success ? "yes" : "no"}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select a workflow to inspect its dependency-aware step graph.</p>
+            <p className="text-sm text-slate-600">Select a workflow to inspect its dependency-aware step graph.</p>
           )}
         </Panel>
       </div>
@@ -384,10 +384,10 @@ export function AutomationWorkflowsPage() {
                   key={execution.id}
                   type="button"
                   onClick={() => setSelectedExecution(execution)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-cyan-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left transition hover:border-cyan-300/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Execution #{execution.id}</p>
+                    <p className="text-sm font-semibold text-slate-900">Execution #{execution.id}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(execution.execution_status)}`}>
                       {execution.execution_status}
                     </span>
@@ -398,7 +398,7 @@ export function AutomationWorkflowsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No executions available yet.</p>
+            <p className="text-sm text-slate-600">No executions available yet.</p>
           )}
         </Panel>
 
@@ -408,7 +408,7 @@ export function AutomationWorkflowsPage() {
               This workflow currently has {selectedWorkflow.blocked_step_count} blocked step(s). Review the dependency graph and execution manifest for the preserved blocking reason.
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No workflow issues are visible for the selected workflow.</p>
+            <p className="text-sm text-slate-600">No workflow issues are visible for the selected workflow.</p>
           )}
         </Panel>
       </div>
@@ -419,26 +419,26 @@ export function AutomationWorkflowsPage() {
             <div className="space-y-3">
               {artifactRefs.map((artifact, index) => (
                 <div key={`${artifact.artifact_type?.toString() ?? "artifact"}-${index}`} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{String(artifact.artifact_type ?? "artifact")}</p>
+                  <p className="text-sm font-semibold text-slate-900">{String(artifact.artifact_type ?? "artifact")}</p>
                   <p className="mt-1 break-all text-xs text-slate-400">{String(artifact.storage_path ?? "—")}</p>
                   <p className="mt-1 text-xs text-slate-500">Checksum {shortenChecksum(String(artifact.artifact_checksum ?? ""))}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Execution artifacts appear here once a workflow run has been selected.</p>
+            <p className="text-sm text-slate-600">Execution artifacts appear here once a workflow run has been selected.</p>
           )}
         </Panel>
 
         <Panel title="History timeline">
           {selectedExecution ? (
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-              <p className="text-sm font-semibold text-white">Activation key</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Activation key</p>
               <p className="mt-1 break-all text-xs text-slate-400">{String(selectedExecution.metadata_json.activation_key ?? "—")}</p>
               <p className="mt-3 text-xs text-slate-500">Replay-safe lineage is embedded in the execution manifest and append-only workflow history.</p>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select an execution to inspect orchestration lineage metadata.</p>
+            <p className="text-sm text-slate-600">Select an execution to inspect orchestration lineage metadata.</p>
           )}
         </Panel>
       </div>

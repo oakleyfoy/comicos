@@ -187,7 +187,7 @@ export function MarketplaceAcquisitionPage(): JSX.Element {
       </div>
 
       {showForm ? (
-        <div className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-900/65 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
           <select
             value={form.marketplace_source_id}
             onChange={(e) => setForm((f) => ({ ...f, marketplace_source_id: e.target.value }))}
@@ -268,15 +268,15 @@ export function MarketplaceAcquisitionPage(): JSX.Element {
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5">
+                <tr key={row.id} className="border-b border-slate-100">
                   <td className="px-4 py-3 text-white">{row.title}</td>
-                  <td className="px-4 py-3 text-slate-300">{row.source_name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-200">{money(row.total_price)}</td>
-                  <td className="px-4 py-3 text-slate-300">{row.acquisition_opportunity_id ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-300">{(row.match_confidence * 100).toFixed(0)}%</td>
+                  <td className="px-4 py-3 text-slate-600">{row.source_name ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-800">{money(row.total_price)}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.acquisition_opportunity_id ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{(row.match_confidence * 100).toFixed(0)}%</td>
                   <td className="px-4 py-3 text-cyan-200">{row.value_score.toFixed(1)}</td>
                   <td className="px-4 py-3 font-medium text-slate-200">{row.recommendation}</td>
-                  <td className="px-4 py-3 text-slate-300">{row.status}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.status}</td>
                   <td className="max-w-xs px-4 py-3 text-slate-400">{row.rationale}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <button type="button" onClick={() => void onEvaluate(row.id)} className="text-cyan-300 hover:underline">
@@ -285,7 +285,7 @@ export function MarketplaceAcquisitionPage(): JSX.Element {
                     <button type="button" onClick={() => void onStatus(row.id, "REVIEWED")} className="ml-2 text-slate-300 hover:underline">
                       Reviewed
                     </button>
-                    <button type="button" onClick={() => void onStatus(row.id, "IGNORED")} className="ml-2 text-rose-300 hover:underline">
+                    <button type="button" onClick={() => void onStatus(row.id, "IGNORED")} className="ml-2 text-rose-800 hover:underline">
                       Ignore
                     </button>
                   </td>

@@ -232,11 +232,11 @@ export function OrdersPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-white">Orders</h2>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-600">
                   Page {page} of {pageCount} with {total} orders tracked
                 </p>
               </div>
-              {isLoading ? <p className="text-sm text-slate-400">Refreshing orders...</p> : null}
+              {isLoading ? <p className="text-sm text-slate-600">Refreshing orders...</p> : null}
             </div>
           </div>
 
@@ -283,7 +283,7 @@ export function OrdersPage() {
               </thead>
               <tbody>
                 {orders.map((order) => (
-                  <tr key={order.order_id} className="border-b border-white/5">
+                  <tr key={order.order_id} className="border-b border-slate-100">
                     <td className="px-4 py-3.5 font-medium text-white">{order.retailer}</td>
                     <td className="px-4 py-3.5">{formatDate(order.order_date)}</td>
                     <td className="px-4 py-3.5">{order.source_type ?? "Unspecified"}</td>
@@ -361,7 +361,7 @@ export function OrdersPage() {
             >
               Previous
             </button>
-            <span className="text-sm text-slate-400">
+            <span className="text-sm text-slate-600">
               Showing page {page} of {pageCount}
             </span>
             <button

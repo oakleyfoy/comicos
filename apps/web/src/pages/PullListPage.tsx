@@ -7,8 +7,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -70,10 +70,10 @@ export function PullListPage(): JSX.Element {
         <div className="mt-6 space-y-6">
           <Panel title="My Pull Lists">
             {items.length === 0 ? (
-              <p className="text-sm text-slate-400">No pull lists yet. Create one via the API to start tracking releases.</p>
+              <p className="text-sm text-slate-600">No pull lists yet. Create one via the API to start tracking releases.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm text-slate-200">
+                <table className="min-w-full text-left text-sm text-slate-800">
                   <thead className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
                     <tr>
                       <th className="pb-3 pr-4 font-medium">Series</th>

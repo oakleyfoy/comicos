@@ -360,7 +360,7 @@ export function ImportsPage() {
                           setNeedsReleaseDateReviewFilter(event.target.checked);
                         })
                       }
-                      className="h-4 w-4 rounded border-white/20 bg-slate-950 text-rose-300 focus:ring-rose-300/40"
+                      className="h-4 w-4 rounded border-white/20 bg-slate-950 text-rose-800 focus:ring-rose-300/40"
                     />
                     Release date warnings only
                   </label>
@@ -405,11 +405,11 @@ export function ImportsPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-white">Imports</h2>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-600">
                     Page {page} of {pageCount} with {total} saved AI import drafts
                   </p>
                 </div>
-                {isLoading ? <p className="text-sm text-slate-400">Refreshing imports...</p> : null}
+                {isLoading ? <p className="text-sm text-slate-600">Refreshing imports...</p> : null}
               </div>
             </div>
 
@@ -469,7 +469,7 @@ export function ImportsPage() {
                           <div className="space-y-2">
                             <p>{metrics.warningCount}</p>
                             {draftImport.needs_metadata_review ? (
-                              <span className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">
+                              <span className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">
                                 {metrics.metadataReviewItemCount} metadata
                                 {metrics.metadataReviewItemCount === 1 ? " item" : " items"}
                               </span>
@@ -660,7 +660,7 @@ export function ImportsPage() {
               >
                 Previous
               </button>
-              <span className="text-sm text-slate-400">
+              <span className="text-sm text-slate-600">
                 Showing page {page} of {pageCount}
               </span>
               <button

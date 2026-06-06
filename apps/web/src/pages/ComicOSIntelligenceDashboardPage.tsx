@@ -154,13 +154,13 @@ export function ComicOSIntelligenceDashboardPage(): JSX.Element {
         description="Read-only view of collector assistant lanes, P63 market intelligence, and P62 buy queue / FOC / watchlists."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading intelligence…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading intelligence…</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title="Collector briefing">
           {briefing ? (
             <>
-              <p className="text-lg font-semibold text-white">{briefing.headline || "—"}</p>
+              <p className="text-lg font-semibold text-slate-900">{briefing.headline || "—"}</p>
               <p className="mt-1 text-xs text-slate-400">Status: {briefing.readiness_status}</p>
               {briefing.briefing_markdown ? (
                 <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-300">

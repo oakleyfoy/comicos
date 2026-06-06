@@ -81,19 +81,19 @@ export function SpecInputsPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Total inputs</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_inputs}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_inputs}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Unique releases</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.unique_releases}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.unique_releases}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Industry linked</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{summary.with_industry_candidate}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Future match linked</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{summary.with_future_match}</p>
           </div>
@@ -130,7 +130,7 @@ export function SpecInputsPage(): JSX.Element {
                     <p className="font-medium text-white">{row.title || `${row.series_name} #${row.issue_number}`}</p>
                     <p className="text-xs text-slate-500">Release #{row.release_id ?? "—"}</p>
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{row.publisher || "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.publisher || "—"}</td>
                   <td className="px-4 py-3 text-slate-400">{row.foc_date ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-cyan-100/90">{systemsLabel(row.source_systems)}</td>
                 </tr>

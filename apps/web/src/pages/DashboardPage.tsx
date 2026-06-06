@@ -733,7 +733,7 @@ function gainLossClass(value: string | null): string {
     return "text-emerald-300";
   }
   if (amount < 0) {
-    return "text-rose-300";
+    return "text-rose-800";
   }
   return "text-slate-700";
 }

@@ -36,8 +36,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -45,9 +45,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -260,7 +260,7 @@ export function ScanReplayPage() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
           <div className="space-y-4">
             <div>
@@ -321,7 +321,7 @@ export function ScanReplayPage() {
               >
                 {running ? "Running replay…" : "Run replay verification"}
               </button>
-              {run ? <p className="text-sm text-slate-400">Latest status: {run.replay_status}</p> : null}
+              {run ? <p className="text-sm text-slate-600">Latest status: {run.replay_status}</p> : null}
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -335,7 +335,7 @@ export function ScanReplayPage() {
 
       {criticalWarnings.length ? (
         <section className="mt-6 rounded-3xl border border-rose-400/30 bg-rose-950/12 p-5">
-          <h2 className="text-sm font-semibold text-white">Ops-critical replay warnings</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Ops-critical replay warnings</h2>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             {criticalWarnings.map((row) => (
               <div key={row.id} className="rounded-2xl border border-rose-400/20 bg-slate-950/45 p-4">
@@ -395,7 +395,7 @@ export function ScanReplayPage() {
               <div className="grid gap-3 lg:grid-cols-2">
                 {checksumChecks.length ? (
                   checksumChecks.map((row: ScanReplayCheckRead) => (
-                    <div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium text-white">{row.check_type}</p>
                         <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${severityTone(row.check_status === "FAIL" ? "ERROR" : row.check_status === "WARNING" ? "WARNING" : "INFO")}`}>
@@ -408,7 +408,7 @@ export function ScanReplayPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400">No checksum audit rows recorded yet.</p>
+                  <p className="text-sm text-slate-600">No checksum audit rows recorded yet.</p>
                 )}
               </div>
             </Panel>
@@ -416,7 +416,7 @@ export function ScanReplayPage() {
             <Panel title="Lineage Panel">
               <div className="space-y-3">
                 {run.lineage_chain.map((row, index) => (
-                  <div key={`${String(row.phase_key)}-${index}`} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                  <div key={`${String(row.phase_key)}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="font-medium text-white">{String(row.phase_key)}</p>
                       <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${stepTone(String(row.replay_step_status ?? "SKIPPED"))}`}>
@@ -459,7 +459,7 @@ export function ScanReplayPage() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No replay discrepancies recorded for this run.</p>
+                <p className="text-sm text-slate-600">No replay discrepancies recorded for this run.</p>
               )}
             </Panel>
           </div>
@@ -469,7 +469,7 @@ export function ScanReplayPage() {
               {run.issues.length ? (
                 <div className="space-y-3">
                   {run.issues.map((row) => (
-                    <div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium text-white">{row.issue_type}</p>
                         <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${severityTone(row.severity)}`}>{row.severity}</span>
@@ -479,14 +479,14 @@ export function ScanReplayPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No replay issues recorded.</p>
+                <p className="text-sm text-slate-600">No replay issues recorded.</p>
               )}
             </Panel>
 
             <Panel title="Artifact Export Panel">
               <div className="space-y-3">
                 {run.artifacts.map((artifact) => (
-                  <div key={artifact.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                  <div key={artifact.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-medium text-white">{artifact.artifact_type}</p>
@@ -509,7 +509,7 @@ export function ScanReplayPage() {
                 ))}
                 {selectedArtifact ? (
                   <div className="rounded-2xl border border-cyan-400/25 bg-slate-950/60 p-4">
-                    <p className="text-sm font-semibold text-white">{selectedArtifact.artifact_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{selectedArtifact.artifact_type}</p>
                     <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-950/80 p-3 text-xs text-slate-200">
                       {selectedArtifact.text_preview ?? "Binary artifact preview unavailable."}
                     </pre>
@@ -522,7 +522,7 @@ export function ScanReplayPage() {
               {run.history.length ? (
                 <div className="space-y-3">
                   {run.history.map((row) => (
-                    <div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                    <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium text-white">{row.event_type}</p>
                         <p className="text-xs text-slate-500">{formatDateTime(row.created_at)}</p>
@@ -532,7 +532,7 @@ export function ScanReplayPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No replay history recorded yet.</p>
+                <p className="text-sm text-slate-600">No replay history recorded yet.</p>
               )}
             </Panel>
           </div>

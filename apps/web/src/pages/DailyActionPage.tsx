@@ -56,45 +56,45 @@ export function DailyActionPage(): JSX.Element {
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {summary ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-4 lg:grid-cols-8">
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Total</p>
-            <p className="text-lg font-semibold text-white">{summary.total_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.total_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Critical</p>
-            <p className="text-lg font-semibold text-white">{summary.critical_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.critical_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Preorder</p>
-            <p className="text-lg font-semibold text-white">{summary.preorder_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.preorder_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Acquire</p>
-            <p className="text-lg font-semibold text-white">{summary.acquisition_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.acquisition_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Grade</p>
-            <p className="text-lg font-semibold text-white">{summary.grading_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.grading_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Sell</p>
-            <p className="text-lg font-semibold text-white">{summary.sell_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.sell_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Rebalance</p>
-            <p className="text-lg font-semibold text-white">{summary.rebalance_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.rebalance_actions}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
             <p className="text-slate-500">Watch</p>
-            <p className="text-lg font-semibold text-white">{summary.watch_actions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.watch_actions}</p>
           </div>
         </div>
       ) : null}
       <div className="mb-4 flex flex-wrap gap-3">
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Action{" "}
           <select
-            className="ml-1 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
@@ -105,7 +105,7 @@ export function DailyActionPage(): JSX.Element {
             ))}
           </select>
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Priority min{" "}
           <input
             className="ml-1 w-20 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
@@ -113,11 +113,11 @@ export function DailyActionPage(): JSX.Element {
             onChange={(e) => setPriorityMin(e.target.value)}
           />
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Due before{" "}
           <input
             type="date"
-            className="ml-1 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={dueBefore}
             onChange={(e) => setDueBefore(e.target.value)}
           />

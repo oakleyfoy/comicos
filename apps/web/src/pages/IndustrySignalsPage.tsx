@@ -144,9 +144,9 @@ export function IndustrySignalsPage(): JSX.Element {
       {loading ? (
         <p className="mt-6 text-sm text-slate-400">Loading industry signals…</p>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
               <tr>
                 <th className="px-4 py-3">Publisher</th>
                 <th className="px-4 py-3">Series</th>
@@ -165,8 +165,8 @@ export function IndustrySignalsPage(): JSX.Element {
                 </tr>
               ) : (
                 items.map((row) => (
-                  <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-4 py-3 text-slate-300">{row.publisher_name}</td>
+                  <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3 text-slate-600">{row.publisher_name}</td>
                     <td className="px-4 py-3 text-white">{row.series_name}</td>
                     <td className="px-4 py-3 text-slate-400">#{row.issue_number}</td>
                     <td className="px-4 py-3 font-medium text-cyan-100">{row.signal_type}</td>

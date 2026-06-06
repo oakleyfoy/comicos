@@ -136,7 +136,7 @@ export function MarketplaceListingsPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -205,7 +205,7 @@ export function MarketplaceListingsPage(): JSX.Element {
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {message ? <StatusBanner tone="success">{message}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading marketplace listing workspace…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading marketplace listing workspace…</p> : null}
       {!loading && organization && !hasOrganizationPermission(organization, "organization:view") ? (
         <OrganizationAccessDeniedState title="Access denied" description="Marketplace listing visibility requires organization access." />
       ) : null}

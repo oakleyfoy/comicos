@@ -7,8 +7,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -81,11 +81,11 @@ export function MarketUserIntelligencePage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading market & user intelligence…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading market & user intelligence…</p> : null}
 
       {dashboard ? (
         <div className="space-y-6">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-600">
             {dashboard.total_market_profiles} market demand profiles · {dashboard.total_active_preferences} active user
             preferences
           </p>
@@ -205,7 +205,7 @@ export function MarketUserIntelligencePage(): JSX.Element {
                       <span>{row.preference_label}</span>
                       <button
                         type="button"
-                        className="text-xs text-rose-300 hover:text-rose-200"
+                        className="text-xs text-rose-800 hover:text-rose-200"
                         onClick={() => void disablePreference(row)}
                       >
                         Disable

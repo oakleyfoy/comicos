@@ -200,7 +200,7 @@ export function ScannerProfilesPage() {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-          <h2 className="text-lg font-semibold text-white">Add custom preset</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Add custom preset</h2>
           <p className="mt-2 text-xs text-slate-400">
             Stored as configuration notes only — ComicOS never talks to scanners or modifies images automatically.
           </p>
@@ -335,7 +335,7 @@ export function ScannerProfilesPage() {
 
         <section className="rounded-3xl border border-white/10 bg-slate-900/55 p-6">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-white">Library</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Library</h2>
             <button
               type="button"
               onClick={() => void reload()}
@@ -347,7 +347,7 @@ export function ScannerProfilesPage() {
           </div>
           <div className="mt-4 space-y-3">
             {sortedItems.length === 0 ? (
-              <p className="text-sm text-slate-400">Loading presets…</p>
+              <p className="text-sm text-slate-600">Loading presets…</p>
             ) : (
               sortedItems.map((row) => (
                 <div
@@ -413,7 +413,7 @@ export function ScannerProfilesPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/65 p-4">
           <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-3xl border border-white/15 bg-slate-950 p-6 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-white">Edit preset</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Edit preset</h3>
               <button type="button" className="text-sm text-slate-400 underline" onClick={() => setEditing(null)}>
                 Close
               </button>

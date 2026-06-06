@@ -118,7 +118,7 @@ export function OrganizationsPage(): JSX.Element {
       <div className="mt-6 grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <OrganizationCreateForm submitting={submitting} onSubmit={handleCreate} />
         {loading ? (
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 text-sm text-slate-300">Loading organizations...</section>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-300">Loading organizations...</section>
         ) : (
           <OrganizationListPanel organizations={organizations} />
         )}

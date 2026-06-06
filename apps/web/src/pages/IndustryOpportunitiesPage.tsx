@@ -12,8 +12,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function riskClass(level: string): string {
   if (level === "LOW") return "text-emerald-300";
-  if (level === "MEDIUM") return "text-amber-200";
-  return "text-rose-300";
+  if (level === "MEDIUM") return "text-amber-800";
+  return "text-rose-800";
 }
 
 function scoreClass(score: number): string {
@@ -90,27 +90,27 @@ export function IndustryOpportunitiesPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Opportunities</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_opportunities}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_opportunities}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg score</p>
             <p className={`mt-1 text-2xl font-semibold ${scoreClass(summary.average_opportunity_score)}`}>
               {summary.average_opportunity_score.toFixed(1)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">High (≥70)</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{summary.high_opportunity_count}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Low risk</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{summary.low_risk_count}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">High risk</p>
-            <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.high_risk_count}</p>
+            <p className="mt-1 text-2xl font-semibold text-rose-800">{summary.high_risk_count}</p>
           </div>
         </div>
       ) : null}
@@ -118,9 +118,9 @@ export function IndustryOpportunitiesPage(): JSX.Element {
       {loading ? (
         <p className="mt-6 text-sm text-slate-400">Loading industry opportunities…</p>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
               <tr>
                 <th className="px-4 py-3">Score</th>
                 <th className="px-4 py-3">Publisher</th>
@@ -140,11 +140,11 @@ export function IndustryOpportunitiesPage(): JSX.Element {
                 </tr>
               ) : (
                 items.map((row) => (
-                  <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className={`px-4 py-3 text-lg font-semibold ${scoreClass(row.opportunity_score)}`}>
                       {row.opportunity_score.toFixed(1)}
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{row.publisher_name}</td>
+                    <td className="px-4 py-3 text-slate-600">{row.publisher_name}</td>
                     <td className="px-4 py-3 text-white">{row.series_name}</td>
                     <td className="px-4 py-3 text-slate-400">#{row.issue_number}</td>
                     <td className="px-4 py-3 text-cyan-200">{row.confidence_score.toFixed(2)}</td>

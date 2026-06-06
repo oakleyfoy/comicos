@@ -20,20 +20,20 @@ function SectionTable({
   empty: string;
 }): JSX.Element {
   return (
-    <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h3>
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h3>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">{empty}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {items.map((item) => (
-            <li key={`${item.item_type}-${item.item_id}`} className="rounded-xl border border-white/5 bg-slate-950/50 px-3 py-2 text-sm">
+            <li key={`${item.item_type}-${item.item_id}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium text-white">{item.title}</span>
+                <span className="font-medium text-slate-900">{item.title}</span>
                 {item.recommendation ? (
-                  <span className="text-cyan-200">{item.recommendation.replace(/_/g, " ")}</span>
+                  <span className="font-medium text-teal-800">{item.recommendation.replace(/_/g, " ")}</span>
                 ) : item.action ? (
-                  <span className="text-amber-200">{item.action.replace(/_/g, " ")}</span>
+                  <span className="font-medium text-amber-800">{item.action.replace(/_/g, " ")}</span>
                 ) : null}
               </div>
               <p className="mt-1 text-xs text-slate-500">
@@ -126,7 +126,7 @@ export function ExitDashboardPage(): JSX.Element {
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
               <p className="text-xs uppercase text-slate-500">Exit candidates</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{s.total_exit_candidates}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{s.total_exit_candidates}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
               <p className="text-xs uppercase text-slate-500">Sell recs</p>
@@ -138,7 +138,7 @@ export function ExitDashboardPage(): JSX.Element {
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
               <p className="text-xs uppercase text-slate-500">Rebalance actions</p>
-              <p className="mt-1 text-2xl font-semibold text-amber-200">{s.rebalance_actions}</p>
+              <p className="mt-1 text-2xl font-semibold text-amber-800">{s.rebalance_actions}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
               <p className="text-xs uppercase text-slate-500">Capital recovery</p>
@@ -146,7 +146,7 @@ export function ExitDashboardPage(): JSX.Element {
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-900/65 p-4">
               <p className="text-xs uppercase text-slate-500">Review required</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{s.review_required_count}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{s.review_required_count}</p>
             </div>
           </div>
           <div className="mt-8 grid gap-4 lg:grid-cols-2">

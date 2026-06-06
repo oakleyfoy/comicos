@@ -146,12 +146,12 @@ export function LunarFeedPage(): JSX.Element {
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {message ? <StatusBanner tone="success">{message}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading Lunar feed…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading Lunar feed…</p> : null}
 
       {dashboard && scheduler ? (
         <div className="space-y-6">
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-            <h2 className="text-sm font-semibold text-white">Credential Status</h2>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Credential Status</h2>
             <p className="mt-2 text-sm text-slate-300">
               {credentialOk
                 ? `Credentials configured${dashboard.credential_status.username_masked ? ` (${dashboard.credential_status.username_masked})` : ""}.`
@@ -159,8 +159,8 @@ export function LunarFeedPage(): JSX.Element {
             </p>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-            <h2 className="text-sm font-semibold text-white">Scheduler Status</h2>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Scheduler Status</h2>
             <ul className="mt-3 space-y-1 text-sm text-slate-300">
               <li>Enabled: {scheduler.enabled ? "Yes" : "No"}</li>
               <li>
@@ -204,8 +204,8 @@ export function LunarFeedPage(): JSX.Element {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-            <h2 className="text-sm font-semibold text-white">Remote Import Controls</h2>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Remote Import Controls</h2>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -225,7 +225,7 @@ export function LunarFeedPage(): JSX.Element {
               </button>
             </div>
             <div className="mt-4">
-              <label className="text-sm text-slate-400">Upload CSV (manual fallback)</label>
+              <label className="text-sm text-slate-600">Upload CSV (manual fallback)</label>
               <input
                 type="file"
                 accept=".csv,text/csv"
@@ -240,15 +240,15 @@ export function LunarFeedPage(): JSX.Element {
           </section>
 
           {history ? (
-            <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-              <h2 className="text-sm font-semibold text-white">Import History</h2>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900">Import History</h2>
               <p className="mt-2 text-sm text-slate-400">
                 {history.import_runs} imports · {history.no_change_runs} no-change · {history.failed_runs} failed
               </p>
               <ul className="mt-3 space-y-2 text-sm text-slate-300">
                 {history.runs.slice(0, 8).map((run) => (
                   <li key={run.run_uuid} className="rounded-xl border border-white/5 px-3 py-2">
-                    <span className="font-medium text-white">{run.status}</span> · {run.trigger_type} ·{" "}
+                    <span className="font-medium text-slate-900">{run.status}</span> · {run.trigger_type} ·{" "}
                     {run.file_name ?? "—"} · imported {run.records_imported}
                   </li>
                 ))}
@@ -257,8 +257,8 @@ export function LunarFeedPage(): JSX.Element {
           ) : null}
 
           {dashboard.last_run ? (
-            <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-              <h2 className="text-sm font-semibold text-white">Latest Manual Feed Run</h2>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900">Latest Manual Feed Run</h2>
               <ul className="mt-3 space-y-1 text-sm text-slate-300">
                 <li>Status: {dashboard.last_run.status}</li>
                 <li>File: {dashboard.last_run.file_name}</li>
@@ -271,8 +271,8 @@ export function LunarFeedPage(): JSX.Element {
           ) : null}
 
           {lastResult ? (
-            <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-              <h2 className="text-sm font-semibold text-white">Last Import Result</h2>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900">Last Import Result</h2>
               <p className="mt-2 text-sm text-slate-300">
                 {lastResult.status} — {lastResult.records_processed} processed, {lastResult.records_failed} failed
               </p>

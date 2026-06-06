@@ -23,7 +23,7 @@ function statusClass(status: CollectedRunStatus): string {
   if (status === "ACTIVE") return "text-emerald-300";
   if (status === "INACTIVE") return "text-slate-400";
   if (status === "COMPLETE") return "text-cyan-200";
-  return "text-amber-200";
+  return "text-amber-800";
 }
 
 export function CollectedRunsPage(): JSX.Element {
@@ -92,25 +92,25 @@ export function CollectedRunsPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Total runs</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_runs}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_runs}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Active</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{summary.active_runs}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Inactive</p>
             <p className="mt-1 text-2xl font-semibold text-slate-300">{summary.inactive_runs}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Complete</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{summary.complete_runs}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Unknown</p>
-            <p className="mt-1 text-2xl font-semibold text-amber-200">{summary.unknown_runs}</p>
+            <p className="mt-1 text-2xl font-semibold text-amber-800">{summary.unknown_runs}</p>
           </div>
         </div>
       ) : null}
@@ -157,9 +157,9 @@ export function CollectedRunsPage(): JSX.Element {
         </button>
       </div>
 
-      <div className="mt-8 overflow-x-auto rounded-xl border border-white/10">
+      <div className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
             <tr>
               <th className="px-4 py-3 font-medium">Series</th>
               <th className="px-4 py-3 font-medium">Publisher</th>
@@ -183,11 +183,11 @@ export function CollectedRunsPage(): JSX.Element {
               </tr>
             ) : (
               items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium text-white">{row.series_name}</td>
-                  <td className="px-4 py-3 text-slate-300">{row.publisher}</td>
-                  <td className="px-4 py-3 text-slate-200">#{row.latest_owned_issue}</td>
-                  <td className="px-4 py-3 text-slate-200">{row.total_owned_issues}</td>
+                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">{row.series_name}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.publisher}</td>
+                  <td className="px-4 py-3 text-slate-800">#{row.latest_owned_issue}</td>
+                  <td className="px-4 py-3 text-slate-800">{row.total_owned_issues}</td>
                   <td className={`px-4 py-3 font-medium ${statusClass(row.run_status)}`}>{row.run_status}</td>
                 </tr>
               ))

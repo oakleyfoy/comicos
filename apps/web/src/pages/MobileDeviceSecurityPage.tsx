@@ -199,7 +199,7 @@ export function MobileDeviceSecurityPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -236,7 +236,7 @@ export function MobileDeviceSecurityPage(): JSX.Element {
         </div>
       ) : null}
       {loading ? (
-        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 text-sm text-slate-300">
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-300">
           Loading mobile device security...
         </section>
       ) : null}
@@ -256,8 +256,8 @@ export function MobileDeviceSecurityPage(): JSX.Element {
 
           {canManage ? (
             <section className="mt-6 grid gap-4 xl:grid-cols-2">
-              <form onSubmit={(event) => void handleCreateTrustState(event)} className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-                <h2 className="text-lg font-semibold text-white">Register trust state</h2>
+              <form onSubmit={(event) => void handleCreateTrustState(event)} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">Register trust state</h2>
                 <div className="mt-4 grid gap-3">
                   <label className="text-sm text-slate-300">
                     Device
@@ -304,8 +304,8 @@ export function MobileDeviceSecurityPage(): JSX.Element {
                 </div>
               </form>
 
-              <form onSubmit={(event) => void handleCreatePolicy(event)} className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-                <h2 className="text-lg font-semibold text-white">Create policy</h2>
+              <form onSubmit={(event) => void handleCreatePolicy(event)} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">Create policy</h2>
                 <div className="mt-4 grid gap-3">
                   <label className="text-sm text-slate-300">
                     Policy key

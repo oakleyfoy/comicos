@@ -125,16 +125,16 @@ export function PurchaseBudgetPage(): JSX.Element {
       ) : summary ? (
         <>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs uppercase text-slate-500">Monthly budget</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{money(summary.total_budget)}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{money(summary.total_budget)}</p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs uppercase text-slate-500">Allocated budget</p>
               <p className="mt-2 text-2xl font-semibold text-cyan-100">{money(summary.allocated_budget)}</p>
               <p className="mt-1 text-xs text-slate-500">{summary.allocation_percentage.toFixed(1)}% utilized</p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs uppercase text-slate-500">Remaining budget</p>
               <p className="mt-2 text-2xl font-semibold text-emerald-200">{money(summary.remaining_budget)}</p>
             </div>

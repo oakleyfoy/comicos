@@ -131,14 +131,14 @@ export function OrganizationActivityPage(): JSX.Element {
         </div>
       ) : null}
       {loading || !organization ? (
-        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 text-sm text-slate-300">
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-300">
           Loading activity workspace...
         </section>
       ) : (
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Activity timeline</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Activity timeline</h2>
               {canViewFeed ? <OrganizationActivityFilters category={category} onCategoryChange={setCategory} /> : null}
             </div>
             {!canViewFeed ? (

@@ -30,8 +30,8 @@ const TYPE_FILTERS: { label: string; value: PurchaseVariantType | "" }[] = [
 
 function recTone(rec: PurchaseVariantAction): string {
   if (rec === "BUY") return "text-emerald-300";
-  if (rec === "WATCH") return "text-amber-200";
-  return "text-rose-300";
+  if (rec === "WATCH") return "text-amber-800";
+  return "text-rose-800";
 }
 
 export function PurchaseVariantPage(): JSX.Element {

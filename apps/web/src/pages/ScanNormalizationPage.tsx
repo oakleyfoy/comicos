@@ -17,9 +17,9 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -163,7 +163,7 @@ export function ScanNormalizationPage() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-xl shadow-black/15">
         <div className="grid gap-4 xl:grid-cols-[1fr,1.2fr]">
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -246,10 +246,10 @@ export function ScanNormalizationPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-xl shadow-black/15">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-white">Run detail</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Run detail</h2>
             <p className="mt-1 text-xs text-slate-400">
               Checksum lineage, issue flags, and append-only history for the selected normalization run.
             </p>
@@ -273,8 +273,8 @@ export function ScanNormalizationPage() {
 
             <div className="mt-5 grid gap-5 xl:grid-cols-[1.1fr,0.9fr]">
               <div className="space-y-4">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                  <h3 className="text-sm font-semibold text-white">Artifacts</h3>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-900">Artifacts</h3>
                   <div className="mt-3 space-y-2">
                     {currentRun.artifacts.map((artifact) => (
                       <button
@@ -290,8 +290,8 @@ export function ScanNormalizationPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                  <h3 className="text-sm font-semibold text-white">Issues</h3>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-900">Issues</h3>
                   {currentRun.issues.length === 0 ? (
                     <p className="mt-3 text-sm text-slate-500">No deterministic normalization issues were recorded.</p>
                   ) : (
@@ -309,8 +309,8 @@ export function ScanNormalizationPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                <h3 className="text-sm font-semibold text-white">Replay-safe checksum panel</h3>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Replay-safe checksum panel</h3>
                 <div className="mt-3 space-y-3 text-xs text-slate-300">
                   <ChecksumRow label="Source" value={currentRun.source_sha256_checksum} />
                   {currentRun.history.map((row) => (
@@ -349,8 +349,8 @@ export function ScanNormalizationPage() {
         ) : null}
       </section>
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15">
-        <h2 className="text-sm font-semibold text-white">Recent runs for selected image</h2>
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-xl shadow-black/15">
+        <h2 className="text-sm font-semibold text-slate-900">Recent runs for selected image</h2>
         {runList.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">No prior normalization runs for this image.</p>
         ) : (
@@ -388,8 +388,8 @@ function PreviewCard({
   src: string | null;
 }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <p className="mt-1 text-xs text-slate-400">{description}</p>
       {src ? (
         <img src={src} alt={title} className="mt-3 h-72 w-full rounded-2xl border border-white/10 object-contain bg-slate-950/50" />

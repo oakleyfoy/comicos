@@ -141,15 +141,15 @@ export function AcquisitionOpportunityPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">Active opportunities</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{summary.total_opportunities}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.total_opportunities}</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">Avg priority score</p>
             <p className="mt-2 text-2xl font-semibold text-cyan-100">{summary.average_priority_score.toFixed(1)}</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-slate-500">With target price</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-200">{summary.with_target_price}</p>
           </div>
@@ -176,15 +176,15 @@ export function AcquisitionOpportunityPage(): JSX.Element {
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5">
+                <tr key={row.id} className="border-b border-slate-100">
                   <td className="px-4 py-3 text-white">
                     {row.publisher ? `${row.publisher} · ` : ""}
                     {row.series_name} #{row.issue_number}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{row.opportunity_type.replace(/_/g, " ")}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.opportunity_type.replace(/_/g, " ")}</td>
                   <td className="px-4 py-3 font-medium text-cyan-100">{row.priority_score.toFixed(1)}</td>
-                  <td className="px-4 py-3 text-slate-300">{(row.confidence_score * 100).toFixed(0)}%</td>
-                  <td className="px-4 py-3 text-slate-200">{money(row.target_price)}</td>
+                  <td className="px-4 py-3 text-slate-600">{(row.confidence_score * 100).toFixed(0)}%</td>
+                  <td className="px-4 py-3 text-slate-800">{money(row.target_price)}</td>
                   <td className="px-4 py-3 text-emerald-200">{money(row.value_gap)}</td>
                   <td className="max-w-md px-4 py-3 text-slate-400">{row.rationale}</td>
                 </tr>

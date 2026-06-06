@@ -421,8 +421,8 @@ export function ScanSessionsPage() {
       ) : null}
 
       <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <section id="bulk-session-controls" className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-1">
-          <h2 className="text-sm font-semibold text-white">Session controls</h2>
+        <section id="bulk-session-controls" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-xl shadow-black/15 xl:col-span-1">
+          <h2 className="text-sm font-semibold text-slate-900">Session controls</h2>
           <p className="mt-1 text-xs text-slate-400">
             Create a deterministic bulk session target, paste its numeric id from exports, refresh rows after each ingest batch.
           </p>
@@ -575,8 +575,8 @@ export function ScanSessionsPage() {
           ) : null}
         </section>
 
-        <section id="bulk-multipart-ingest" className="rounded-3xl border border-white/10 bg-slate-900/65 p-5 shadow-xl shadow-black/15 xl:col-span-2">
-          <h2 className="text-sm font-semibold text-white">Multipart ingest ({selectedFiles.length} files staged)</h2>
+        <section id="bulk-multipart-ingest" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-xl shadow-black/15 xl:col-span-2">
+          <h2 className="text-sm font-semibold text-slate-900">Multipart ingest ({selectedFiles.length} files staged)</h2>
           <p className="mt-1 text-xs text-slate-400">
             JSON manifest rows align positionally with multipart file order; omit entries to accept defaults (
             auto-increment sequential indices unless you collide—then ingest records a deterministic failure row).

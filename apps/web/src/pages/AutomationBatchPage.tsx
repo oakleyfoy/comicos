@@ -32,8 +32,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -41,9 +41,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -162,7 +162,7 @@ export function AutomationBatchPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Panel title="Batch ledger">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading batch runs…</p>
+            <p className="text-sm text-slate-600">Loading batch runs…</p>
           ) : runs.length ? (
             <div className="space-y-3">
               {runs.map((run) => (
@@ -170,10 +170,10 @@ export function AutomationBatchPage() {
                   key={run.id}
                   type="button"
                   onClick={() => void inspectBatch(run.id)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-amber-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left transition hover:border-amber-300/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Batch #{run.id} · {run.batch_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">Batch #{run.id} · {run.batch_type}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(run.batch_status)}`}>
                       {run.batch_status}
                     </span>
@@ -194,7 +194,7 @@ export function AutomationBatchPage() {
               {chunks.map((chunk) => (
                 <div key={chunk.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">Chunk #{chunk.chunk_rank}</p>
+                    <p className="text-sm font-semibold text-slate-900">Chunk #{chunk.chunk_rank}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(chunk.chunk_status)}`}>
                       {chunk.chunk_status}
                     </span>
@@ -205,7 +205,7 @@ export function AutomationBatchPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select a batch run to inspect its deterministic chunk layout.</p>
+            <p className="text-sm text-slate-600">Select a batch run to inspect its deterministic chunk layout.</p>
           )}
         </Panel>
       </div>
@@ -217,7 +217,7 @@ export function AutomationBatchPage() {
               {maintenanceJobs.map((job) => (
                 <div key={job.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{job.maintenance_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{job.maintenance_type}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(job.maintenance_status)}`}>
                       {job.maintenance_status}
                     </span>
@@ -228,7 +228,7 @@ export function AutomationBatchPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No maintenance jobs recorded yet.</p>
+            <p className="text-sm text-slate-600">No maintenance jobs recorded yet.</p>
           )}
         </Panel>
 
@@ -239,7 +239,7 @@ export function AutomationBatchPage() {
                 .filter((job) => ["CHECKSUM_AUDIT", "LINEAGE_AUDIT", "QUEUE_INTEGRITY_CHECK", "STORAGE_AUDIT"].includes(job.maintenance_type))
                 .map((job) => (
                   <div key={job.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                    <p className="text-sm font-semibold text-white">{job.maintenance_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{job.maintenance_type}</p>
                     <p className="mt-1 text-xs text-slate-400">
                       {job.results.map((result) => `${result.result_type}:${result.result_status}`).join(" · ") || "No results"}
                     </p>
@@ -247,7 +247,7 @@ export function AutomationBatchPage() {
                 ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Integrity audit visibility appears here once maintenance jobs have run.</p>
+            <p className="text-sm text-slate-600">Integrity audit visibility appears here once maintenance jobs have run.</p>
           )}
         </Panel>
       </div>
@@ -258,13 +258,13 @@ export function AutomationBatchPage() {
             <div className="space-y-3">
               {selectedRun.issues.map((issue) => (
                 <div key={issue.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{issue.issue_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{issue.issue_type}</p>
                   <p className="mt-1 text-xs text-slate-400">{issue.issue_message}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No batch issues are visible for the selected run.</p>
+            <p className="text-sm text-slate-600">No batch issues are visible for the selected run.</p>
           )}
         </Panel>
 
@@ -273,14 +273,14 @@ export function AutomationBatchPage() {
             <div className="space-y-3">
               {selectedRun.artifacts.map((artifact) => (
                 <div key={artifact.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{artifact.artifact_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{artifact.artifact_type}</p>
                   <p className="mt-1 break-all text-xs text-slate-400">{artifact.storage_path}</p>
                   <p className="mt-1 text-xs text-slate-500">Checksum {shortenChecksum(artifact.artifact_checksum)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Batch artifacts appear here once a run is selected.</p>
+            <p className="text-sm text-slate-600">Batch artifacts appear here once a run is selected.</p>
           )}
         </Panel>
       </div>
@@ -291,14 +291,14 @@ export function AutomationBatchPage() {
             <div className="space-y-3">
               {selectedRun.history.map((entry) => (
                 <div key={entry.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{entry.event_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{entry.event_type}</p>
                   <p className="mt-1 text-xs text-slate-400">{entry.event_message}</p>
                   <p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.created_at)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Append-only batch events appear here once a run is selected.</p>
+            <p className="text-sm text-slate-600">Append-only batch events appear here once a run is selected.</p>
           )}
         </Panel>
       </div>

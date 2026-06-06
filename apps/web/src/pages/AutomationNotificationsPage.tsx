@@ -20,8 +20,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -29,9 +29,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -107,7 +107,7 @@ export function AutomationNotificationsPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Panel title="Notification ledger">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading notifications…</p>
+            <p className="text-sm text-slate-600">Loading notifications…</p>
           ) : notifications.length ? (
             <div className="space-y-3">
               {notifications.map((row) => (
@@ -115,9 +115,9 @@ export function AutomationNotificationsPage() {
                   key={row.id}
                   type="button"
                   onClick={() => void refresh(row.id)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-violet-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left transition hover:border-violet-300/40"
                 >
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     {row.notification_type} · {row.notification_status}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">{row.source_event_type} · checksum {shortenChecksum(row.notification_checksum)}</p>
@@ -134,7 +134,7 @@ export function AutomationNotificationsPage() {
             <div className="space-y-3">
               {alerts.map((alert) => (
                 <div key={alert.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{alert.alert_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{alert.alert_type}</p>
                   <p className="mt-1 text-xs text-slate-400">
                     {alert.alert_severity} · {alert.escalation_level} · {alert.alert_status}
                   </p>
@@ -142,7 +142,7 @@ export function AutomationNotificationsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No alerts recorded yet.</p>
+            <p className="text-sm text-slate-600">No alerts recorded yet.</p>
           )}
         </Panel>
       </div>
@@ -153,7 +153,7 @@ export function AutomationNotificationsPage() {
             <div className="space-y-3">
               {selected.deliveries.map((delivery) => (
                 <div key={delivery.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     #{delivery.delivery_rank} · {delivery.delivery_channel}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">{delivery.delivery_status} · {delivery.failure_reason ?? "—"}</p>
@@ -161,7 +161,7 @@ export function AutomationNotificationsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select a notification to inspect delivery lineage.</p>
+            <p className="text-sm text-slate-600">Select a notification to inspect delivery lineage.</p>
           )}
         </Panel>
 
@@ -170,13 +170,13 @@ export function AutomationNotificationsPage() {
             <div className="space-y-3">
               {selected.history.map((entry) => (
                 <div key={entry.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{entry.event_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{entry.event_type}</p>
                   <p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.created_at)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Append-only notification events appear here once a notification is selected.</p>
+            <p className="text-sm text-slate-600">Append-only notification events appear here once a notification is selected.</p>
           )}
         </Panel>
       </div>

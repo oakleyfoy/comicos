@@ -37,17 +37,17 @@ function StatusBadge({ value }: { value: string }): JSX.Element {
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -130,7 +130,7 @@ export function DataProtectionPage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading data protection dashboard…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading data protection dashboard…</p> : null}
 
       {!loading ? (
         <div className="space-y-6">
@@ -147,7 +147,7 @@ export function DataProtectionPage(): JSX.Element {
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge value={latestCheck.check_status} />
-                    <span className="text-sm text-slate-400">{latestCheck.check_type}</span>
+                    <span className="text-sm text-slate-600">{latestCheck.check_type}</span>
                   </div>
                   <p className="text-sm text-slate-300">Detected {issueCount(latestCheck)} open integrity issue(s) in the latest validation pass.</p>
                 </div>
@@ -179,7 +179,7 @@ export function DataProtectionPage(): JSX.Element {
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge value={latestMigrationCheck.check_status} />
-                    <span className="text-sm text-slate-400">{latestMigrationCheck.migration_revision}</span>
+                    <span className="text-sm text-slate-600">{latestMigrationCheck.migration_revision}</span>
                   </div>
                   <p className="text-sm text-slate-300">
                     Validated counts across {Object.keys(latestMigrationCheck.validation_payload_json?.comparison ?? {}).length} tracked entities.

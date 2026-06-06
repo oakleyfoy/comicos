@@ -174,7 +174,7 @@ export function OfflineInventoryPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -237,7 +237,7 @@ export function OfflineInventoryPage(): JSX.Element {
           <OfflineInventorySummaryPanel summary={dashboard.summary} runtimeRegistry={dashboard.runtime_registry} />
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Offline inventory</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Offline inventory</h2>
             {canManage ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <input
@@ -263,7 +263,7 @@ export function OfflineInventoryPage(): JSX.Element {
 
           {canManage ? (
             <section>
-              <h2 className="text-lg font-semibold text-white">Device operations</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Device operations</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 <select
                   value={deviceId ?? ""}
@@ -297,16 +297,16 @@ export function OfflineInventoryPage(): JSX.Element {
           ) : null}
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Sync queue</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Sync queue</h2>
             <div className="mt-4">
               <OfflineSyncQueueViewer items={queue?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Changes</h2>
-            <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-left text-sm text-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">Changes</h2>
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table className="min-w-full text-left text-sm text-slate-800">
                 <thead className="border-b border-white/10 bg-slate-950/60 text-[11px] uppercase tracking-[0.14em] text-slate-500">
                   <tr>
                     <th className="px-4 py-3">Change</th>
@@ -316,7 +316,7 @@ export function OfflineInventoryPage(): JSX.Element {
                 </thead>
                 <tbody>
                   {(changes?.items ?? []).map((row) => (
-                    <tr key={row.id} className="border-b border-white/5">
+                    <tr key={row.id} className="border-b border-slate-100">
                       <td className="px-4 py-3 font-mono text-xs">#{row.id}</td>
                       <td className="px-4 py-3">{row.change_type}</td>
                       <td className="px-4 py-3">#{row.device_id}</td>
@@ -328,7 +328,7 @@ export function OfflineInventoryPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Conflicts</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Conflicts</h2>
             <div className="mt-4">
               <OfflineConflictViewer
                 items={conflicts?.items ?? []}
@@ -340,7 +340,7 @@ export function OfflineInventoryPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Offline events</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Offline events</h2>
             <div className="mt-4">
               <OfflineInventoryEventTimeline events={dashboard.recent_events} />
             </div>

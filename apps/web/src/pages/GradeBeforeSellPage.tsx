@@ -24,8 +24,8 @@ function money(value: number): string {
 
 function recClass(rec: GradeBeforeSellAction): string {
   if (rec === "GRADE_BEFORE_SELL") return "text-emerald-300";
-  if (rec === "SELL_RAW") return "text-rose-300";
-  return "text-amber-200";
+  if (rec === "SELL_RAW") return "text-rose-800";
+  return "text-amber-800";
 }
 
 export function GradeBeforeSellPage(): JSX.Element {

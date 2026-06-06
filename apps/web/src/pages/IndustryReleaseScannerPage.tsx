@@ -80,21 +80,21 @@ export function IndustryReleaseScannerPage(): JSX.Element {
 
       {latestRun ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Latest scan</p>
             <p className="mt-1 text-lg font-semibold text-white">{latestRun.status}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Lunar releases scanned</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{latestRun.releases_scanned}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Candidates (latest run)</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{latestRun.candidates_total}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Publishers included</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{latestRun.publishers_included}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{latestRun.publishers_included}</p>
           </div>
         </div>
       ) : null}
@@ -104,10 +104,10 @@ export function IndustryReleaseScannerPage(): JSX.Element {
       ) : (
         <div className="mt-8 grid gap-8 lg:grid-cols-2">
           <section>
-            <h2 className="text-sm font-semibold text-white">Scan history</h2>
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-white/10">
+            <h2 className="text-sm font-semibold text-slate-900">Scan history</h2>
+            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
               <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
                   <tr>
                     <th className="px-3 py-2">Started</th>
                     <th className="px-3 py-2">Status</th>
@@ -124,7 +124,7 @@ export function IndustryReleaseScannerPage(): JSX.Element {
                     </tr>
                   ) : (
                     runs.map((run) => (
-                      <tr key={run.id} className="border-b border-white/5">
+                      <tr key={run.id} className="border-b border-slate-100">
                         <td className="px-3 py-2 text-slate-300">{new Date(run.started_at).toLocaleString()}</td>
                         <td className="px-3 py-2">{run.status}</td>
                         <td className="px-3 py-2 text-slate-400">{run.releases_scanned}</td>
@@ -138,11 +138,11 @@ export function IndustryReleaseScannerPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-white">Monitoring candidates</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Monitoring candidates</h2>
             <p className="mt-1 text-xs text-slate-500">From the latest successful scan.</p>
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-white/10">
+            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
               <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
                   <tr>
                     <th className="px-3 py-2">Publisher</th>
                     <th className="px-3 py-2">Series</th>
@@ -159,7 +159,7 @@ export function IndustryReleaseScannerPage(): JSX.Element {
                     </tr>
                   ) : (
                     candidates.map((row) => (
-                      <tr key={row.id} className="border-b border-white/5">
+                      <tr key={row.id} className="border-b border-slate-100">
                         <td className="px-3 py-2 text-slate-300">{row.publisher_name}</td>
                         <td className="px-3 py-2 text-white">{row.series_name}</td>
                         <td className="px-3 py-2 text-slate-400">#{row.issue_number}</td>

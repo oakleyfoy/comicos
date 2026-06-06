@@ -12,6 +12,21 @@ import {
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import {
+  futureReleaseActionBadge,
+  lightSectionTitle,
+  lightStatCardLg,
+  lightStatLabelSm,
+  lightStatValueXl,
+  lightTable,
+  lightTableCell,
+  lightTableCellMuted,
+  lightTableCellPrimary,
+  lightTableEmpty,
+  lightTableHead,
+  lightTableRow,
+  lightTableWrap,
+} from "../lib/lightSurfaceUi";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -29,8 +44,8 @@ function SectionTable({
 }): JSX.Element {
   return (
     <section className="mt-8">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
-      <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">{children}</div>
+      <h2 className={lightSectionTitle}>{title}</h2>
+      <div className={`mt-3 ${lightTableWrap}`}>{children}</div>
       {!children ? <p className="mt-2 text-sm text-slate-500">{empty}</p> : null}
     </section>
   );
@@ -70,7 +85,7 @@ export function FutureReleaseDashboardPage(): JSX.Element {
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
       {loading ? (
-        <p className="mt-8 text-slate-400">Loading dashboard…</p>
+        <p className="mt-8 text-slate-600">Loading dashboard…</p>
       ) : summary ? (
         <>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -81,16 +96,16 @@ export function FutureReleaseDashboardPage(): JSX.Element {
               { label: "Preorder now", value: summary.preorder_now },
               { label: "Missed FOC", value: summary.missed_foc },
             ].map((card) => (
-              <div key={card.label} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">{card.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{card.value}</p>
+              <div key={card.label} className={lightStatCardLg}>
+                <p className={lightStatLabelSm}>{card.label}</p>
+                <p className={lightStatValueXl}>{card.value}</p>
               </div>
             ))}
           </div>
 
           <SectionTable title="Next issues" empty="">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+            <table className={lightTable}>
+              <thead className={lightTableHead}>
                 <tr>
                   <th className="px-4 py-2">Series</th>
                   <th className="px-4 py-2">Current</th>
@@ -101,17 +116,17 @@ export function FutureReleaseDashboardPage(): JSX.Element {
               <tbody>
                 {(dash?.next_issues ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan={4} className={lightTableEmpty}>
                       No next issues detected.
                     </td>
                   </tr>
                 ) : (
                   (dash?.next_issues ?? []).map((row: NextIssueRead) => (
-                    <tr key={row.id} className="border-b border-white/5">
-                      <td className="px-4 py-2 text-white">{row.series_name}</td>
-                      <td className="px-4 py-2">#{row.current_issue}</td>
-                      <td className="px-4 py-2">#{row.next_issue}</td>
-                      <td className="px-4 py-2">{row.confidence.toFixed(2)}</td>
+                    <tr key={row.id} className={lightTableRow}>
+                      <td className={lightTableCellPrimary}>{row.series_name}</td>
+                      <td className={lightTableCell}>#{row.current_issue}</td>
+                      <td className={lightTableCell}>#{row.next_issue}</td>
+                      <td className={lightTableCell}>{row.confidence.toFixed(2)}</td>
                     </tr>
                   ))
                 )}
@@ -146,8 +161,8 @@ export function FutureReleaseDashboardPage(): JSX.Element {
 
 function FocMatchTable({ rows }: { rows: FutureReleaseMatchRead[] }): JSX.Element {
   return (
-    <table className="min-w-full text-left text-sm">
-      <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+    <table className={lightTable}>
+      <thead className={lightTableHead}>
         <tr>
           <th className="px-4 py-2">Series</th>
           <th className="px-4 py-2">Issue</th>
@@ -158,17 +173,17 @@ function FocMatchTable({ rows }: { rows: FutureReleaseMatchRead[] }): JSX.Elemen
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+            <td colSpan={4} className={lightTableEmpty}>
               No upcoming FOC rows.
             </td>
           </tr>
         ) : (
           rows.map((row) => (
-            <tr key={row.id} className="border-b border-white/5">
-              <td className="px-4 py-2 text-white">{row.series_name}</td>
-              <td className="px-4 py-2">#{row.issue_number}</td>
-              <td className="px-4 py-2">{formatDate(row.foc_date)}</td>
-              <td className="px-4 py-2">{formatDate(row.release_date)}</td>
+            <tr key={row.id} className={lightTableRow}>
+              <td className={lightTableCellPrimary}>{row.series_name}</td>
+              <td className={lightTableCell}>#{row.issue_number}</td>
+              <td className={lightTableCell}>{formatDate(row.foc_date)}</td>
+              <td className={lightTableCell}>{formatDate(row.release_date)}</td>
             </tr>
           ))
         )}
@@ -179,8 +194,8 @@ function FocMatchTable({ rows }: { rows: FutureReleaseMatchRead[] }): JSX.Elemen
 
 function ActionTable({ rows }: { rows: FutureReleaseActionRead[] }): JSX.Element {
   return (
-    <table className="min-w-full text-left text-sm">
-      <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+    <table className={lightTable}>
+      <thead className={lightTableHead}>
         <tr>
           <th className="px-4 py-2">Series</th>
           <th className="px-4 py-2">Issue</th>
@@ -192,18 +207,20 @@ function ActionTable({ rows }: { rows: FutureReleaseActionRead[] }): JSX.Element
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+            <td colSpan={5} className={lightTableEmpty}>
               None in this lane.
             </td>
           </tr>
         ) : (
           rows.map((row) => (
-            <tr key={row.id} className="border-b border-white/5">
-              <td className="px-4 py-2 text-white">{row.series_name}</td>
-              <td className="px-4 py-2">#{row.issue_number}</td>
-              <td className="px-4 py-2">{row.action_type}</td>
-              <td className="px-4 py-2">{row.priority_score.toFixed(1)}</td>
-              <td className="px-4 py-2">{formatDate(row.foc_date)}</td>
+            <tr key={row.id} className={lightTableRow}>
+              <td className={lightTableCellPrimary}>{row.series_name}</td>
+              <td className={lightTableCell}>#{row.issue_number}</td>
+              <td className="px-4 py-2">
+                <span className={futureReleaseActionBadge(row.action_type)}>{row.action_type}</span>
+              </td>
+              <td className={lightTableCell}>{row.priority_score.toFixed(1)}</td>
+              <td className={lightTableCellMuted}>{formatDate(row.foc_date)}</td>
             </tr>
           ))
         )}
@@ -214,8 +231,8 @@ function ActionTable({ rows }: { rows: FutureReleaseActionRead[] }): JSX.Element
 
 function WatchlistTable({ rows }: { rows: WatchlistMatchRead[] }): JSX.Element {
   return (
-    <table className="min-w-full text-left text-sm">
-      <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+    <table className={lightTable}>
+      <thead className={lightTableHead}>
         <tr>
           <th className="px-4 py-2">Watchlist</th>
           <th className="px-4 py-2">Issue</th>
@@ -226,19 +243,19 @@ function WatchlistTable({ rows }: { rows: WatchlistMatchRead[] }): JSX.Element {
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+            <td colSpan={4} className={lightTableEmpty}>
               No upcoming watchlist matches.
             </td>
           </tr>
         ) : (
           rows.map((row, idx) => (
-            <tr key={`${row.watchlist.id}-${row.release_issue.id}-${idx}`} className="border-b border-white/5">
-              <td className="px-4 py-2 text-white">{row.watchlist.watchlist_name}</td>
-              <td className="px-4 py-2">
+            <tr key={`${row.watchlist.id}-${row.release_issue.id}-${idx}`} className={lightTableRow}>
+              <td className={lightTableCellPrimary}>{row.watchlist.watchlist_name}</td>
+              <td className={lightTableCell}>
                 {row.release_issue.title || `#${row.release_issue.issue_number}`}
               </td>
-              <td className="px-4 py-2">{formatDate(row.release_issue.foc_date as string | null)}</td>
-              <td className="px-4 py-2">{formatDate(row.release_issue.release_date as string | null)}</td>
+              <td className={lightTableCellMuted}>{formatDate(row.release_issue.foc_date as string | null)}</td>
+              <td className={lightTableCellMuted}>{formatDate(row.release_issue.release_date as string | null)}</td>
             </tr>
           ))
         )}

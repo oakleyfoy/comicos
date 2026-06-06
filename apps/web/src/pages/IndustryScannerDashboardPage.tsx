@@ -21,13 +21,13 @@ function SectionBlock({
 }): JSX.Element {
   return (
     <section className="mt-8">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h2>
       {rows.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500">{empty}</p>
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase text-slate-200">
               <tr>
                 <th className="px-3 py-2">Score</th>
                 <th className="px-3 py-2">Publisher</th>
@@ -38,7 +38,7 @@ function SectionBlock({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${title}-${row.id}`} className="border-b border-white/5">
+                <tr key={`${title}-${row.id}`} className="border-b border-slate-100">
                   <td className="px-3 py-2 text-cyan-200">{row.opportunity_score.toFixed(1)}</td>
                   <td className="px-3 py-2 text-slate-300">{row.publisher_name}</td>
                   <td className="px-3 py-2 text-white">{row.series_name}</td>
@@ -144,9 +144,9 @@ export function IndustryScannerDashboardPage(): JSX.Element {
               { label: "Ratio variants", value: summary.ratio_variants },
               { label: "Key events", value: summary.key_events },
             ].map((card) => (
-              <div key={card.label} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+              <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-500">{card.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{card.value}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</p>
               </div>
             ))}
           </div>

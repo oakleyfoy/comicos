@@ -32,8 +32,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -41,9 +41,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -163,7 +163,7 @@ export function AutomationRecoveryPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Panel title="Recovery ledger">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading recovery ledger…</p>
+            <p className="text-sm text-slate-600">Loading recovery ledger…</p>
           ) : runs.length ? (
             <div className="space-y-3">
               {runs.map((run) => (
@@ -171,10 +171,10 @@ export function AutomationRecoveryPage() {
                   key={run.id}
                   type="button"
                   onClick={() => void inspectRun(run.id)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-rose-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left transition hover:border-rose-300/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-slate-900">
                       Recovery #{run.id} · job #{run.job_id}
                     </p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(run.recovery_status)}`}>
@@ -197,7 +197,7 @@ export function AutomationRecoveryPage() {
               {deadLetter.map((row) => (
                 <div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">Job #{row.original_job_id}</p>
+                    <p className="text-sm font-semibold text-slate-900">Job #{row.original_job_id}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(row.dead_letter_status)}`}>
                       {row.dead_letter_status}
                     </span>
@@ -208,7 +208,7 @@ export function AutomationRecoveryPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No dead-letter jobs recorded yet.</p>
+            <p className="text-sm text-slate-600">No dead-letter jobs recorded yet.</p>
           )}
         </Panel>
       </div>
@@ -220,7 +220,7 @@ export function AutomationRecoveryPage() {
               {failures.map((failure) => (
                 <div key={failure.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{failure.failure_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{failure.failure_type}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(failure.failure_severity)}`}>
                       {failure.failure_severity}
                     </span>
@@ -231,21 +231,21 @@ export function AutomationRecoveryPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No failure events have been captured yet.</p>
+            <p className="text-sm text-slate-600">No failure events have been captured yet.</p>
           )}
         </Panel>
 
         <Panel title="Replay recovery panel">
           {selectedRun ? (
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-              <p className="text-sm font-semibold text-white">Replay lineage</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Replay lineage</p>
               <p className="mt-1 text-xs text-slate-400">
                 Replay references {shortenChecksum(replayJobChecksum)}
               </p>
               <p className="mt-2 text-xs text-slate-500">Dead-letter state {selectedRun.dead_letter?.dead_letter_status ?? "—"}</p>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select a recovery run to inspect replay recovery lineage.</p>
+            <p className="text-sm text-slate-600">Select a recovery run to inspect replay recovery lineage.</p>
           )}
         </Panel>
       </div>
@@ -256,13 +256,13 @@ export function AutomationRecoveryPage() {
             <div className="space-y-3">
               {selectedRun.issues.map((issue) => (
                 <div key={issue.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{issue.issue_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{issue.issue_type}</p>
                   <p className="mt-1 text-xs text-slate-400">{issue.issue_message}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No recovery issues are visible for the selected run.</p>
+            <p className="text-sm text-slate-600">No recovery issues are visible for the selected run.</p>
           )}
         </Panel>
 
@@ -271,14 +271,14 @@ export function AutomationRecoveryPage() {
             <div className="space-y-3">
               {selectedRun.artifacts.map((artifact) => (
                 <div key={artifact.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{artifact.artifact_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{artifact.artifact_type}</p>
                   <p className="mt-1 break-all text-xs text-slate-400">{artifact.storage_path}</p>
                   <p className="mt-1 text-xs text-slate-500">Checksum {shortenChecksum(artifact.artifact_checksum)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Recovery artifacts appear here once a run is selected.</p>
+            <p className="text-sm text-slate-600">Recovery artifacts appear here once a run is selected.</p>
           )}
         </Panel>
       </div>
@@ -289,14 +289,14 @@ export function AutomationRecoveryPage() {
             <div className="space-y-3">
               {selectedRun.history.map((entry) => (
                 <div key={entry.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{entry.event_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{entry.event_type}</p>
                   <p className="mt-1 text-xs text-slate-400">{entry.event_message}</p>
                   <p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.created_at)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Append-only recovery history appears here once a run is selected.</p>
+            <p className="text-sm text-slate-600">Append-only recovery history appears here once a run is selected.</p>
           )}
         </Panel>
       </div>

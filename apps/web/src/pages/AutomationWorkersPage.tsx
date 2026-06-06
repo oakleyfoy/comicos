@@ -32,8 +32,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -41,9 +41,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -161,7 +161,7 @@ export function AutomationWorkersPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Panel title="Worker table">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading automation workers…</p>
+            <p className="text-sm text-slate-600">Loading automation workers…</p>
           ) : workers.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm text-slate-300">
@@ -214,14 +214,14 @@ export function AutomationWorkersPage() {
             <div className="space-y-3">
               {selectedWorker.leases.map((lease) => (
                 <div key={lease.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">Job #{lease.job_id} · {lease.lease_status}</p>
+                  <p className="text-sm font-semibold text-slate-900">Job #{lease.job_id} · {lease.lease_status}</p>
                   <p className="mt-1 text-xs text-slate-400">Token {lease.reservation_token}</p>
                   <p className="mt-1 text-xs text-slate-500">Expires {formatDateTime(lease.lease_expires_at)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No worker leases recorded yet.</p>
+            <p className="text-sm text-slate-600">No worker leases recorded yet.</p>
           )}
         </Panel>
       </div>
@@ -235,10 +235,10 @@ export function AutomationWorkersPage() {
                   key={execution.id}
                   type="button"
                   onClick={() => setSelectedExecution(execution)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-left transition hover:border-violet-300/40"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left transition hover:border-violet-300/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Execution #{execution.id} · job #{execution.job_id}</p>
+                    <p className="text-sm font-semibold text-slate-900">Execution #{execution.id} · job #{execution.job_id}</p>
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone(execution.execution_status)}`}>
                       {execution.execution_status}
                     </span>
@@ -251,7 +251,7 @@ export function AutomationWorkersPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No worker executions available yet.</p>
+            <p className="text-sm text-slate-600">No worker executions available yet.</p>
           )}
         </Panel>
 
@@ -260,13 +260,13 @@ export function AutomationWorkersPage() {
             <div className="space-y-3">
               {selectedWorker.issues.map((issue) => (
                 <div key={issue.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{issue.issue_type} · {issue.severity}</p>
+                  <p className="text-sm font-semibold text-slate-900">{issue.issue_type} · {issue.severity}</p>
                   <p className="mt-1 text-xs text-slate-400">{issue.issue_message}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No worker issues recorded for the selected runtime.</p>
+            <p className="text-sm text-slate-600">No worker issues recorded for the selected runtime.</p>
           )}
         </Panel>
       </div>
@@ -276,14 +276,14 @@ export function AutomationWorkersPage() {
           {selectedExecution ? (
             <div className="space-y-3">
               <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                <p className="text-sm font-semibold text-white">Execution snapshot</p>
+                <p className="text-sm font-semibold text-slate-900">Execution snapshot</p>
                 <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-slate-950/70 p-3 text-xs text-slate-300">
                   {JSON.stringify(selectedExecution.execution_snapshot_json, null, 2)}
                 </pre>
               </div>
               {selectedExecutionArtifacts.length ? (
                 <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">Stored artifact refs</p>
+                  <p className="text-sm font-semibold text-slate-900">Stored artifact refs</p>
                   <div className="mt-3 space-y-2">
                     {selectedExecutionArtifacts.map((artifact, index) => (
                       <div key={`${index}-${String((artifact as Record<string, unknown>).artifact_type ?? "artifact")}`} className="rounded-xl border border-white/5 p-3 text-xs text-slate-300">
@@ -296,7 +296,7 @@ export function AutomationWorkersPage() {
               ) : null}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Select an execution to inspect its immutable runtime snapshot and artifact refs.</p>
+            <p className="text-sm text-slate-600">Select an execution to inspect its immutable runtime snapshot and artifact refs.</p>
           )}
         </Panel>
 
@@ -304,9 +304,9 @@ export function AutomationWorkersPage() {
           {selectedWorker?.history.length ? (
             <div className="space-y-3">
               {selectedWorker.history.map((event) => (
-                <div key={event.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">{event.event_type}</p>
+                    <p className="text-sm font-semibold text-slate-900">{event.event_type}</p>
                     <p className="text-xs text-slate-500">{formatDateTime(event.created_at)}</p>
                   </div>
                   <p className="mt-1 text-sm text-slate-300">{event.event_message}</p>
@@ -317,7 +317,7 @@ export function AutomationWorkersPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Append-only worker/runtime history will appear here as heartbeats, leases, and executions are recorded.</p>
+            <p className="text-sm text-slate-600">Append-only worker/runtime history will appear here as heartbeats, leases, and executions are recorded.</p>
           )}
         </Panel>
       </div>

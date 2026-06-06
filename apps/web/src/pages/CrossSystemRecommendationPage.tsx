@@ -105,35 +105,35 @@ export function CrossSystemRecommendationPage(): JSX.Element {
         <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Total</p>
-            <p className="text-lg font-semibold text-white">{summary.total_recommendations}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.total_recommendations}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Top acquire</p>
-            <p className="text-lg font-semibold text-white">{summary.top_acquisitions}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.top_acquisitions}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Top preorder</p>
-            <p className="text-lg font-semibold text-white">{summary.top_preorders}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.top_preorders}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Top grade</p>
-            <p className="text-lg font-semibold text-white">{summary.top_grading_opportunities}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.top_grading_opportunities}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Top sell</p>
-            <p className="text-lg font-semibold text-white">{summary.top_sell_opportunities}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.top_sell_opportunities}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
             <p className="text-white/70">Top rebalance</p>
-            <p className="text-lg font-semibold text-white">{summary.top_rebalance_opportunities}</p>
+            <p className="text-lg font-semibold text-slate-900">{summary.top_rebalance_opportunities}</p>
           </div>
         </div>
       ) : null}
       <div className="mb-4 flex flex-wrap gap-3">
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Type{" "}
           <select
-            className="ml-1 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
+            className="ml-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
@@ -144,7 +144,7 @@ export function CrossSystemRecommendationPage(): JSX.Element {
             ))}
           </select>
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Rank max{" "}
           <input
             className="ml-1 w-16 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
@@ -152,7 +152,7 @@ export function CrossSystemRecommendationPage(): JSX.Element {
             onChange={(e) => setRankMax(e.target.value)}
           />
         </label>
-        <label className="text-sm text-slate-400">
+        <label className="text-sm text-slate-600">
           Priority min{" "}
           <input
             className="ml-1 w-20 rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-white"
@@ -215,7 +215,7 @@ export function CrossSystemRecommendationPage(): JSX.Element {
                 >
                   {row.source_systems.length > 0 ? (
                     <p className="text-xs leading-relaxed text-white/90">
-                      <span className="font-medium text-white">Sources:</span>{" "}
+                      <span className="font-medium text-slate-900">Sources:</span>{" "}
                       {row.source_systems.join(", ")}
                     </p>
                   ) : null}

@@ -82,7 +82,7 @@ export function MobileAnalyticsPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -129,7 +129,7 @@ export function MobileAnalyticsPage(): JSX.Element {
         </div>
       ) : null}
       {loading ? (
-        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5 text-sm text-slate-300">
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-300">
           Loading mobile analytics...
         </section>
       ) : null}

@@ -18,8 +18,8 @@ function scoreClass(score: number): string {
 
 function riskClass(score: number): string {
   if (score <= 35) return "text-emerald-300";
-  if (score <= 60) return "text-amber-200";
-  return "text-rose-300";
+  if (score <= 60) return "text-amber-800";
+  return "text-rose-800";
 }
 
 export function SpecBaselinePage(): JSX.Element {
@@ -92,29 +92,29 @@ export function SpecBaselinePage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Scores</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_scores}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_scores}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg baseline</p>
             <p className={`mt-1 text-2xl font-semibold ${scoreClass(summary.average_baseline_score)}`}>
               {summary.average_baseline_score.toFixed(1)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg confidence</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">
               {summary.average_confidence_score.toFixed(3)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg risk</p>
             <p className={`mt-1 text-2xl font-semibold ${riskClass(summary.average_risk_score)}`}>
               {summary.average_risk_score.toFixed(1)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">High baseline (≥70)</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{summary.high_baseline_count}</p>
           </div>

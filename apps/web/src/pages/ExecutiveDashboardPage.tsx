@@ -87,7 +87,7 @@ export function ExecutiveDashboardPage(): JSX.Element {
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       <div className="mb-4 flex flex-wrap gap-2">
         <select
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
         >
@@ -99,7 +99,7 @@ export function ExecutiveDashboardPage(): JSX.Element {
           ))}
         </select>
         <select
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
@@ -111,13 +111,13 @@ export function ExecutiveDashboardPage(): JSX.Element {
           ))}
         </select>
         <input
-          className="w-28 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="w-28 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
           placeholder="Priority min"
           value={priorityMin}
           onChange={(e) => setPriorityMin(e.target.value)}
         />
         <input
-          className="w-36 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="w-36 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
           placeholder="Publisher"
           value={publisherFilter}
           onChange={(e) => setPublisherFilter(e.target.value)}

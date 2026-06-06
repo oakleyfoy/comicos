@@ -33,8 +33,8 @@ function statusTone(status: string): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -101,7 +101,7 @@ export function RecommendationIntelligenceCertificationPage(): JSX.Element {
         description="Validation, health, calibration, and certification for P51 advisory recommendations (read-only)."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading certification…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading certification…</p> : null}
 
       {certification && summary ? (
         <div className="space-y-6">
@@ -112,21 +112,21 @@ export function RecommendationIntelligenceCertificationPage(): JSX.Element {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase text-slate-500">Must Buy</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{summary.must_buy_count}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.must_buy_count}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase text-slate-500">Strong Buy</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{summary.strong_buy_count}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.strong_buy_count}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase text-slate-500">V2 total</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{summary.total_recommendations_v2}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.total_recommendations_v2}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase text-slate-500">V1 preserved</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{summary.v1_recommendation_count}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.v1_recommendation_count}</p>
             </div>
           </div>
 
@@ -177,7 +177,7 @@ export function RecommendationIntelligenceCertificationPage(): JSX.Element {
                 <p className="mb-3">
                   <StatusBadge value={calibration.overall_status} />
                 </p>
-                <p className="text-sm text-slate-400">Score variance: {calibration.score_variance}</p>
+                <p className="text-sm text-slate-600">Score variance: {calibration.score_variance}</p>
                 <ul className="mt-2 space-y-1 text-sm text-slate-300">
                   {calibration.findings.map((f) => (
                     <li key={f}>{f}</li>

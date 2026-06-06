@@ -122,7 +122,7 @@ export function ScanSpineTicksPage() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1fr,1.2fr]">
           <div className="space-y-4">
             <label className="block text-xs font-semibold text-slate-300">
@@ -257,8 +257,8 @@ function PreviewCard({ title, src }: { title: string; src: string | null }): JSX
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </div>
   );

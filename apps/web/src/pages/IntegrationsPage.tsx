@@ -27,7 +27,7 @@ function formatDateTime(value: string | null): string {
 function statusBadgeClass(isPositive: boolean): string {
   return isPositive
     ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-    : "border-amber-400/20 bg-amber-400/10 text-amber-200";
+    : "border-amber-400/20 bg-amber-400/10 text-amber-800";
 }
 
 export function IntegrationsPage() {
@@ -171,10 +171,10 @@ export function IntegrationsPage() {
           <div className="space-y-3">
             <div>
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Gmail</p>
-              <h2 className="mt-1 text-2xl font-semibold text-white">Receipt Sync Foundation</h2>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-900">Receipt Sync Foundation</h2>
             </div>
             {isLoading ? (
-              <p className="text-sm text-slate-400">Loading Gmail connection status...</p>
+              <p className="text-sm text-slate-600">Loading Gmail connection status...</p>
             ) : (
               <div className="space-y-3 text-sm text-slate-300">
                 <div className="flex flex-wrap gap-3">
@@ -191,49 +191,49 @@ export function IntegrationsPage() {
                 </div>
                 <p>
                   Configuration:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {gmailStatus?.configured ? "Configured" : "Missing Google OAuth settings"}
                   </span>
                 </p>
                 <p>
                   Connection:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {gmailStatus?.connected ? "Connected" : "Not connected"}
                   </span>
                 </p>
                 <p>
                   Gmail account:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {gmailStatus?.connected ? gmailStatus.gmail_email ?? "Unknown" : "None"}
                   </span>
                 </p>
                 <p>
                   Token expires:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {formatDateTime(gmailStatus?.token_expires_at ?? null)}
                   </span>
                 </p>
                 <p>
                   Auto Sync:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {gmailSyncStatus?.auto_sync_enabled ? "Enabled" : "Disabled"}
                   </span>
                 </p>
                 <p>
                   Last sync started:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {formatDateTime(gmailSyncStatus?.last_sync_started_at ?? null)}
                   </span>
                 </p>
                 <p>
                   Last sync completed:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {formatDateTime(gmailSyncStatus?.last_sync_completed_at ?? null)}
                   </span>
                 </p>
                 <p>
                   Last sync status:{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-slate-900">
                     {gmailSyncStatus?.last_sync_status ?? "Never run"}
                   </span>
                 </p>

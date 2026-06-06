@@ -4,17 +4,11 @@ import { ApiError, apiClient, type FutureReleaseActionRead } from "../api/client
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import { futureReleaseActionBadge, lightTable } from "../lib/lightSurfaceUi";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return value.slice(0, 10);
-}
-
-function actionClass(action: string): string {
-  if (action === "PREORDER_NOW") return "text-rose-300";
-  if (action === "PREORDER_THIS_WEEK") return "text-amber-200";
-  if (action === "MISSED_FOC") return "text-orange-300";
-  return "text-slate-300";
 }
 
 export function FutureReleaseActionsPage(): JSX.Element {
@@ -77,9 +71,9 @@ export function FutureReleaseActionsPage(): JSX.Element {
         </button>
       </div>
 
-      <div className="mt-8 overflow-x-auto rounded-xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-white/10 bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+      <div className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <table className={lightTable}>
+          <thead className="border-b border-slate-200 bg-slate-800 text-xs uppercase tracking-wide text-slate-200">
             <tr>
               <th className="px-4 py-3 font-medium">Series</th>
               <th className="px-4 py-3 font-medium">Issue</th>
@@ -103,12 +97,14 @@ export function FutureReleaseActionsPage(): JSX.Element {
               </tr>
             ) : (
               items.map((row) => (
-                <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 font-medium text-white">{row.series_name}</td>
-                  <td className="px-4 py-3 text-slate-200">#{row.issue_number}</td>
-                  <td className={`px-4 py-3 font-medium ${actionClass(row.action_type)}`}>{row.action_type}</td>
-                  <td className="px-4 py-3 text-slate-200">{row.priority_score.toFixed(1)}</td>
-                  <td className="px-4 py-3 text-slate-300">{formatDate(row.foc_date)}</td>
+                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">{row.series_name}</td>
+                  <td className="px-4 py-3 text-slate-800">#{row.issue_number}</td>
+                  <td className="px-4 py-3">
+                    <span className={futureReleaseActionBadge(row.action_type)}>{row.action_type}</span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-800">{row.priority_score.toFixed(1)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatDate(row.foc_date)}</td>
                 </tr>
               ))
             )}

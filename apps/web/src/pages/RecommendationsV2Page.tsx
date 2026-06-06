@@ -8,8 +8,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -83,7 +83,7 @@ export function RecommendationsV2Page(): JSX.Element {
         description="Explainable scoring from character, key issue, market, and user intelligence (P51-04). Advisory only."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Running Recommendation Engine V2…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Running Recommendation Engine V2…</p> : null}
       {dashboard ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel title="Must Buy">
@@ -120,7 +120,7 @@ export function RecommendationsV2Page(): JSX.Element {
             <Panel title="Score Breakdown & Explanation">
               <p className="text-sm text-slate-300">{detail.decision?.decision_summary}</p>
               <p className="mt-2 text-sm text-slate-400">{detail.decision?.primary_reason}</p>
-              <p className="mt-2 text-sm text-amber-200/90">{detail.decision?.risk_note}</p>
+              <p className="mt-2 text-sm text-amber-800/90">{detail.decision?.risk_note}</p>
               <ul className="mt-4 space-y-1 text-xs text-slate-400">
                 {detail.components.map((c) => (
                   <li key={c.component_name}>

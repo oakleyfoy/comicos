@@ -18,8 +18,8 @@ function scoreClass(score: number): string {
 
 function riskClass(level: string): string {
   if (level === "LOW") return "text-emerald-300";
-  if (level === "MEDIUM") return "text-amber-200";
-  return "text-rose-300";
+  if (level === "MEDIUM") return "text-amber-800";
+  return "text-rose-800";
 }
 
 export function AISpecEvaluationsPage(): JSX.Element {
@@ -92,29 +92,29 @@ export function AISpecEvaluationsPage(): JSX.Element {
 
       {summary ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Evaluations</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{summary.total_evaluations}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.total_evaluations}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg AI score</p>
             <p className={`mt-1 text-2xl font-semibold ${scoreClass(summary.average_ai_score)}`}>
               {summary.average_ai_score.toFixed(1)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Avg confidence</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-200">{summary.average_ai_confidence.toFixed(3)}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">AI success</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">{summary.success_count}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Fallback</p>
-            <p className="mt-1 text-2xl font-semibold text-amber-200">{summary.fallback_count}</p>
+            <p className="mt-1 text-2xl font-semibold text-amber-800">{summary.fallback_count}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs uppercase tracking-wide text-slate-500">Risk mix</p>
             <p className="mt-1 text-xs text-slate-300">
               L {summary.low_risk_count} · M {summary.medium_risk_count} · H {summary.high_risk_count}

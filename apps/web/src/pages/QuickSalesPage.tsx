@@ -244,7 +244,7 @@ export function QuickSalesPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -299,7 +299,7 @@ export function QuickSalesPage(): JSX.Element {
 
           {canManage ? (
             <section>
-              <h2 className="text-lg font-semibold text-white">Create quick sale</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Create quick sale</h2>
               <div className="mt-4">
                 <QuickSaleCreateForm
                   saleIdentifier={saleIdentifier}
@@ -323,7 +323,7 @@ export function QuickSalesPage(): JSX.Element {
 
           <section className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
             <div>
-              <h2 className="text-lg font-semibold text-white">Sale list</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Sale list</h2>
               <div className="mt-4">
                 <QuickSaleListPanel
                   items={sales?.items ?? []}
@@ -333,7 +333,7 @@ export function QuickSalesPage(): JSX.Element {
               </div>
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Sale detail</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Sale detail</h2>
               <div className="mt-4">
                 <QuickSaleDetailPanel
                   detail={selectedSale}
@@ -360,7 +360,7 @@ export function QuickSalesPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Quick sale event timeline</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Quick sale event timeline</h2>
             <div className="mt-4">
               <QuickSaleEventTimeline events={selectedSale?.events ?? []} />
             </div>

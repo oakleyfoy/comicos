@@ -25,9 +25,9 @@ import { hasOrganizationPermission } from "../lib/organizationPermissions";
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -183,7 +183,7 @@ export function MobileScanningPage(): JSX.Element {
   if (!Number.isFinite(parsedOrganizationId)) {
     return (
       <AppShell>
-        <p className="text-sm text-slate-400">Invalid organization id.</p>
+        <p className="text-sm text-slate-600">Invalid organization id.</p>
       </AppShell>
     );
   }
@@ -266,7 +266,7 @@ export function MobileScanningPage(): JSX.Element {
 
           {canManage && (devices?.items.length ?? 0) > 0 ? (
             <section>
-              <h2 className="text-lg font-semibold text-white">Scan capture</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Scan capture</h2>
               <p className="mt-1 text-sm text-slate-400">Manual entry simulates device capture until camera integration lands.</p>
               <div className="mt-4">
                 <ScanCaptureForm
@@ -295,21 +295,21 @@ export function MobileScanningPage(): JSX.Element {
           ) : null}
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Scan history</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Scan history</h2>
             <div className="mt-4">
               <ScanHistoryTable items={scans?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Lookup results</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Lookup results</h2>
             <div className="mt-4">
               <ScanLookupResultViewer items={lookups?.items ?? []} />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Intake staging</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Intake staging</h2>
             <div className="mt-4">
               <IntakeStagingViewer
                 items={staging?.items ?? []}
@@ -322,7 +322,7 @@ export function MobileScanningPage(): JSX.Element {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white">Scan events</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Scan events</h2>
             <div className="mt-4">
               <ScanEventTimeline events={dashboard.recent_events} />
             </div>

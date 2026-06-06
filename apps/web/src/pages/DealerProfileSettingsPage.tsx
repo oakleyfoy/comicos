@@ -101,7 +101,7 @@ export function DealerProfileSettingsPage(): JSX.Element {
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {message ? <StatusBanner tone="success">{message}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading storefront settings…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading storefront settings…</p> : null}
       {!loading && organization && !canManage ? (
         <OrganizationAccessDeniedState
           title="Access denied"
@@ -111,7 +111,7 @@ export function DealerProfileSettingsPage(): JSX.Element {
       {!loading && organization && canManage ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Dealer profile</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Dealer profile</h2>
             <label className="block text-xs text-slate-400">
               Public slug
               <input
@@ -138,7 +138,7 @@ export function DealerProfileSettingsPage(): JSX.Element {
             </label>
           </section>
           <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Visibility & featured inventory</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Visibility & featured inventory</h2>
             <label className="block text-xs text-slate-400">
               Storefront visibility
               <select

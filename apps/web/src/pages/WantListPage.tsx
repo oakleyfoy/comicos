@@ -17,8 +17,8 @@ const PRIORITIES: WantListPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const STATUSES: WantListItemStatus[] = ["WANTED", "FOUND", "ACQUIRED", "REMOVED"];
 
 function priorityClass(p: WantListPriority): string {
-  if (p === "CRITICAL") return "text-rose-300";
-  if (p === "HIGH") return "text-amber-200";
+  if (p === "CRITICAL") return "text-rose-800";
+  if (p === "HIGH") return "text-amber-800";
   if (p === "MEDIUM") return "text-cyan-200";
   return "text-slate-400";
 }
@@ -176,7 +176,7 @@ export function WantListPage(): JSX.Element {
       {message ? <StatusBanner tone="success">{message}</StatusBanner> : null}
 
       <div className="mt-6 flex flex-wrap gap-6">
-        <div className="min-w-[220px] rounded-3xl border border-white/10 bg-slate-900/65 p-4">
+        <div className="min-w-[220px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase text-slate-500">Want lists</p>
           {loading && lists.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400">Loading…</p>
@@ -219,7 +219,7 @@ export function WantListPage(): JSX.Element {
         <div className="min-w-0 flex-1">
           {detail ? (
             <>
-              <h2 className="text-lg font-semibold text-white">{detail.name}</h2>
+              <h2 className="text-lg font-semibold text-slate-900">{detail.name}</h2>
               {detail.description ? <p className="mt-1 text-sm text-slate-400">{detail.description}</p> : null}
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -290,7 +290,7 @@ export function WantListPage(): JSX.Element {
                     <tbody>
                       {items.map((item) =>
                         editing?.id === item.id ? (
-                          <tr key={item.id} className="border-b border-white/5">
+                          <tr key={item.id} className="border-b border-slate-100">
                             <td className="px-4 py-3">
                               <input
                                 value={editing.series_name}
@@ -358,7 +358,7 @@ export function WantListPage(): JSX.Element {
                             </td>
                           </tr>
                         ) : (
-                          <tr key={item.id} className="border-b border-white/5">
+                          <tr key={item.id} className="border-b border-slate-100">
                             <td className="px-4 py-3 text-white">
                               {item.publisher ? `${item.publisher} · ` : ""}
                               {item.series_name} #{item.issue_number}
@@ -369,7 +369,7 @@ export function WantListPage(): JSX.Element {
                             <td className={`px-4 py-3 font-medium ${priorityClass(item.priority)}`}>
                               {item.priority}
                             </td>
-                            <td className="px-4 py-3 text-slate-300">{item.status}</td>
+                            <td className="px-4 py-3 text-slate-600">{item.status}</td>
                             <td className="px-4 py-3 text-slate-400">{item.notes || "—"}</td>
                             <td className="px-4 py-3">
                               <button
@@ -382,7 +382,7 @@ export function WantListPage(): JSX.Element {
                               <button
                                 type="button"
                                 onClick={() => void onRemoveItem(item.id)}
-                                className="ml-2 text-rose-300 hover:underline"
+                                className="ml-2 text-rose-800 hover:underline"
                               >
                                 Remove
                               </button>
@@ -396,7 +396,7 @@ export function WantListPage(): JSX.Element {
               )}
             </>
           ) : (
-            <p className="text-sm text-slate-400">Select a want list.</p>
+            <p className="text-sm text-slate-600">Select a want list.</p>
           )}
         </div>
       </div>

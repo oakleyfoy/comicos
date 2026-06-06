@@ -7,8 +7,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -69,11 +69,11 @@ export function KeyIssueIntelligencePage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-sm text-slate-400">Loading key issue intelligence…</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Loading key issue intelligence…</p> : null}
 
       {dashboard ? (
         <div className="space-y-6">
-          <p className="text-sm text-slate-400">{dashboard.total_profiles} key issue profiles indexed for your catalog.</p>
+          <p className="text-sm text-slate-600">{dashboard.total_profiles} key issue profiles indexed for your catalog.</p>
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Top Key Issues">
               <IssueList items={dashboard.top_key_issues} />

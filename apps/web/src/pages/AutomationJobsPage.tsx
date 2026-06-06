@@ -33,8 +33,8 @@ function shortenChecksum(value?: string | null): string {
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -42,9 +42,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }): JSX
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -215,7 +215,7 @@ export function AutomationJobsPage() {
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/65 p-5">
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr]">
           <div className="space-y-4">
             <div>
@@ -321,7 +321,7 @@ export function AutomationJobsPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr,0.75fr]">
         <Panel title="Job table">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading automation jobs…</p>
+            <p className="text-sm text-slate-600">Loading automation jobs…</p>
           ) : jobs.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm text-slate-300">
@@ -379,11 +379,11 @@ export function AutomationJobsPage() {
               .sort((left, right) => left[0].localeCompare(right[0]))
               .map(([queueKey, count]) => (
                 <div key={queueKey} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">{queueKey}</p>
+                  <p className="text-sm font-semibold text-slate-900">{queueKey}</p>
                   <p className="mt-1 text-xs text-slate-400">{count} deterministic ledger entries</p>
                 </div>
               ))}
-            {!jobs.length ? <p className="text-sm text-slate-400">Queue health appears here once jobs exist.</p> : null}
+            {!jobs.length ? <p className="text-sm text-slate-600">Queue health appears here once jobs exist.</p> : null}
           </div>
         </Panel>
       </div>
@@ -394,7 +394,7 @@ export function AutomationJobsPage() {
             <div className="space-y-3">
               {selectedJob.dependencies.map((dependency) => (
                 <div key={dependency.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     Job #{dependency.job_id} depends on #{dependency.depends_on_job_id}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">{dependency.dependency_status}</p>
@@ -402,7 +402,7 @@ export function AutomationJobsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Selected job has no registered dependency edges yet.</p>
+            <p className="text-sm text-slate-600">Selected job has no registered dependency edges yet.</p>
           )}
         </Panel>
 
@@ -411,7 +411,7 @@ export function AutomationJobsPage() {
             <div className="space-y-3">
               {selectedJob.attempts.map((attempt) => (
                 <div key={attempt.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     Attempt {attempt.attempt_number} · {attempt.attempt_status}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">
@@ -421,7 +421,7 @@ export function AutomationJobsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No worker attempts yet. This phase stores the foundation but does not execute jobs.</p>
+            <p className="text-sm text-slate-600">No worker attempts yet. This phase stores the foundation but does not execute jobs.</p>
           )}
         </Panel>
       </div>
@@ -432,7 +432,7 @@ export function AutomationJobsPage() {
             <div className="space-y-3">
               {selectedJob.issues.map((issue) => (
                 <div key={issue.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     {issue.issue_type} · {issue.severity}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">{issue.issue_message}</p>
@@ -440,7 +440,7 @@ export function AutomationJobsPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No queue issues recorded for the selected job.</p>
+            <p className="text-sm text-slate-600">No queue issues recorded for the selected job.</p>
           )}
         </Panel>
 
@@ -463,7 +463,7 @@ export function AutomationJobsPage() {
                 <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-white">{selectedArtifact.artifact_type}</p>
+                      <p className="text-sm font-semibold text-slate-900">{selectedArtifact.artifact_type}</p>
                       <p className="mt-1 text-xs text-slate-500">{selectedArtifact.storage_path}</p>
                       <p className="mt-1 text-xs text-slate-500">Checksum {shortenChecksum(selectedArtifact.artifact_checksum)}</p>
                     </div>
@@ -480,11 +480,11 @@ export function AutomationJobsPage() {
                   </pre>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">Select a payload snapshot, manifest, or debug preview artifact to inspect it.</p>
+                <p className="text-sm text-slate-600">Select a payload snapshot, manifest, or debug preview artifact to inspect it.</p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No artifacts available until a job is created.</p>
+            <p className="text-sm text-slate-600">No artifacts available until a job is created.</p>
           )}
         </Panel>
       </div>
@@ -493,9 +493,9 @@ export function AutomationJobsPage() {
         {selectedJob?.history.length ? (
           <div className="space-y-3">
             {selectedJob.history.map((event) => (
-              <div key={event.id} className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-white">{event.event_type}</p>
+                  <p className="text-sm font-semibold text-slate-900">{event.event_type}</p>
                   <p className="text-xs text-slate-500">{formatDateTime(event.created_at)}</p>
                 </div>
                 <p className="mt-1 text-sm text-slate-300">{event.event_message}</p>
@@ -506,7 +506,7 @@ export function AutomationJobsPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">Append-only job history will appear here after the first deterministic creation event.</p>
+          <p className="text-sm text-slate-600">Append-only job history will appear here after the first deterministic creation event.</p>
         )}
       </Panel>
     </AppShell>

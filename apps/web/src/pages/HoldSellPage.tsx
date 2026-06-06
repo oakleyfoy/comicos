@@ -23,8 +23,8 @@ function money(value: number): string {
 }
 
 function recClass(rec: HoldSellAction): string {
-  if (rec === "SELL") return "text-rose-300";
-  if (rec === "WATCH") return "text-amber-200";
+  if (rec === "SELL") return "text-rose-800";
+  if (rec === "WATCH") return "text-amber-800";
   return "text-slate-300";
 }
 

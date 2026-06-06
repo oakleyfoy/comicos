@@ -202,7 +202,7 @@ export function PortfolioRebalancingPage(): JSX.Element {
                     <div className="font-medium text-white">{row.target_label}</div>
                     {row.publisher ? <div className="text-xs text-slate-500">{row.publisher}</div> : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{row.rebalance_type.replace(/_/g, " ")}</td>
+                  <td className="px-4 py-3 text-slate-600">{row.rebalance_type.replace(/_/g, " ")}</td>
                   <td className="px-4 py-3">{row.exposure_percent.toFixed(1)}%</td>
                   <td className="px-4 py-3">{money(row.exposure_value)}</td>
                   <td className="px-4 py-3 text-amber-100">{row.recommended_action.replace(/_/g, " ")}</td>

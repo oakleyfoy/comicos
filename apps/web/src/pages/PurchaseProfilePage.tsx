@@ -110,8 +110,8 @@ export function PurchaseProfilePage(): JSX.Element {
         <p className="mt-6 text-sm text-slate-400">Loading purchase profile…</p>
       ) : profile && prefs ? (
         <div className="mt-6 space-y-6">
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-            <h2 className="text-sm font-semibold text-white">Current Profile</h2>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Current Profile</h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {PROFILE_OPTIONS.map((opt) => (
                 <button
@@ -132,8 +132,8 @@ export function PurchaseProfilePage(): JSX.Element {
             <p className="mt-4 text-lg font-medium text-white">{profile.display_name || profile.profile_type}</p>
             <p className="mt-2 text-sm text-slate-400">{profile.description || "—"}</p>
           </section>
-          <section className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-            <h2 className="text-sm font-semibold text-white">Preferences</h2>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Preferences</h2>
             <div className="mt-4 space-y-5">
               {SLIDER_FIELDS.map(({ key, label }) => (
                 <label key={key} className="block">

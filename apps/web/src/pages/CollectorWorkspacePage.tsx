@@ -118,21 +118,21 @@ export function CollectorWorkspacePage(): JSX.Element {
       {loading ? <p className="text-slate-400">Loading…</p> : null}
 
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
           <p className="text-slate-500">Tasks</p>
-          <p className="text-lg font-semibold text-white">{tasks?.total_items ?? 0}</p>
+          <p className="text-lg font-semibold text-slate-900">{tasks?.total_items ?? 0}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
           <p className="text-slate-500">Unread notifications</p>
-          <p className="text-lg font-semibold text-white">{notifications?.unread_count ?? 0}</p>
+          <p className="text-lg font-semibold text-slate-900">{notifications?.unread_count ?? 0}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
           <p className="text-slate-500">Narratives</p>
-          <p className="text-lg font-semibold text-white">{narratives?.items.length ?? 0}</p>
+          <p className="text-lg font-semibold text-slate-900">{narratives?.items.length ?? 0}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
           <p className="text-slate-500">Readiness</p>
-          <p className="text-lg font-semibold text-white">{tasks?.readiness_status ?? "—"}</p>
+          <p className="text-lg font-semibold text-slate-900">{tasks?.readiness_status ?? "—"}</p>
         </div>
       </div>
 
@@ -156,7 +156,7 @@ export function CollectorWorkspacePage(): JSX.Element {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <span className="mr-2 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">{t.task_type}</span>
-                  <span className="font-medium text-white">{t.title}</span>
+                  <span className="font-medium text-slate-900">{t.title}</span>
                   <p className="mt-1 text-slate-400">{t.explanation || t.action_hint}</p>
                 </div>
                 <div className="flex gap-1">
@@ -259,7 +259,7 @@ export function CollectorWorkspacePage(): JSX.Element {
           <ul className="grid gap-2 sm:grid-cols-2">
             {variants.items.slice(0, 8).map((v) => (
               <li key={v.id} className="rounded-lg border border-white/10 bg-slate-900/40 p-2 text-sm">
-                <span className="font-medium text-white">
+                <span className="font-medium text-slate-900">
                   {v.cover_label} {v.variant_name}
                 </span>
                 <span className="ml-2 text-indigo-300">
