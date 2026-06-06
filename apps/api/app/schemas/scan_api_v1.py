@@ -112,6 +112,9 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "collector_personalization": "P77-02",
     "collector_profile_analytics": "P77-03",
     "collector_profile_certification": "P77-03",
+    "sell_workflow": "P78-01",
+    "sell_marketplace": "P78-02",
+    "selling_certification": "P78-02",
 }
 
 

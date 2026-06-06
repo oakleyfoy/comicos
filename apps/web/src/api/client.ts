@@ -12315,6 +12315,183 @@ export interface P77CollectorCertificationRead {
   production_checklist: { area: string; status: string }[];
 }
 
+export interface P78SellQueueItemRead {
+  inventory_copy_id: number;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  priority: string;
+  owned_copies: number;
+  target_hold_copies: number;
+  suggested_sell_quantity: number;
+  fmv: number;
+  cost_basis: number;
+  liquidity_score: number;
+  average_sale_days?: number | null;
+  signals: string[];
+  listing_draft_id?: number | null;
+  exit_score?: number | null;
+}
+
+export interface P78SellQueueListResponse {
+  items: P78SellQueueItemRead[];
+  pagination: MarketApiV1Pagination;
+  high_priority_count?: number;
+  medium_priority_count?: number;
+  watch_count?: number;
+}
+
+export interface P78ListingPricingRead {
+  fmv: number;
+  quick_sale_price: number;
+  market_price: number;
+  premium_price: number;
+  expected_days_to_sell?: number | null;
+}
+
+export interface P78ListingDraftRead {
+  id: number;
+  owner_user_id: number;
+  inventory_copy_id?: number | null;
+  status: string;
+  title: string;
+  description: string;
+  condition_suggested: string;
+  category: string;
+  shipping_recommendation: string;
+  suggested_sell_quantity: number;
+  fmv_at_generation: number;
+  quick_sale_price: number;
+  market_price: number;
+  premium_price: number;
+  priority: string;
+  signals: string[];
+  bundle_key?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P78ListingDraftListResponse {
+  items: P78ListingDraftRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P78ListingDraftCreate {
+  inventory_copy_id: number;
+  status?: string;
+  suggested_sell_quantity?: number;
+}
+
+export interface P78ListingDraftUpdate {
+  status?: string;
+  title?: string;
+  description?: string;
+  condition_suggested?: string;
+  category?: string;
+  shipping_recommendation?: string;
+  suggested_sell_quantity?: number;
+  quick_sale_price?: number;
+  market_price?: number;
+  premium_price?: number;
+}
+
+export interface P78ListingRead {
+  id: number;
+  listing_draft_id: number;
+  lifecycle_status: string;
+  sync_state: string;
+  marketplace: string;
+  external_listing_id?: string | null;
+  listing_url?: string | null;
+  title: string;
+  asking_price: number;
+  sold_price?: number | null;
+  quantity_listed: number;
+  quantity_reserved: number;
+  listed_at?: string | null;
+  sold_at?: string | null;
+  available_copies_hint?: number | null;
+}
+
+export interface P78ListingListResponse {
+  items: P78ListingRead[];
+  pagination: MarketApiV1Pagination;
+}
+
+export interface P78ListingPublishRead {
+  listing: P78ListingRead;
+  reserved_copy_ids: number[];
+  export_payload: Record<string, unknown>;
+}
+
+export interface P78ListingSyncRead {
+  listings_checked: number;
+  listings_updated: number;
+  sales_recorded: number;
+}
+
+export interface P78SaleRecordRead {
+  id: number;
+  listing_id: number;
+  marketplace: string;
+  sale_price: number;
+  fees: number;
+  shipping_cost: number;
+  cost_basis: number;
+  profit: number;
+  roi_pct: number;
+  quantity_sold: number;
+  sold_at: string;
+  p73_outcome_id?: number | null;
+}
+
+export interface P78SellingAnalyticsRead {
+  revenue: number;
+  profit: number;
+  roi_pct: number;
+  listings_created: number;
+  listings_sold: number;
+  sell_conversion_rate_pct: number;
+  average_days_to_sell?: number | null;
+  sell_recommendation_accuracy_pct?: number | null;
+  snapshot_id?: number | null;
+}
+
+export interface P78SellingDashboardRead {
+  analytics: P78SellingAnalyticsRead;
+  active_listings: P78ListingRead[];
+  sold_listings: P78ListingRead[];
+  draft_listings: Record<string, unknown>[];
+  recent_sales: P78SaleRecordRead[];
+}
+
+export interface P78SellingCertificationRead {
+  title: string;
+  status: string;
+  approved_for_production: boolean;
+  checks_passed: number;
+  warnings: number;
+  failures: number;
+  platform_readiness_percent: number;
+  production_checklist: { area: string; status: string }[];
+}
+
+export interface P78SellBundleRead {
+  bundle_key: string;
+  bundle_type: string;
+  label: string;
+  item_count: number;
+  inventory_copy_ids: number[];
+  expected_bundle_fmv: number;
+  suggested_list_price: number;
+  signals: string[];
+}
+
+export interface P78SellBundleListResponse {
+  items: P78SellBundleRead[];
+  total_items: number;
+}
+
 export interface P80IntakeStartRequest {
   intake_mode: string;
   order_id?: number | null;
@@ -29355,6 +29532,64 @@ export const apiClient = {
 
   getCollectorProfileCertification(): Promise<P77CollectorCertificationRead> {
     return requestScanV1<P77CollectorCertificationRead>("/collector-profile/certification");
+  },
+
+  listSellQueue(params?: { limit?: number; offset?: number; refresh?: boolean }): Promise<P78SellQueueListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | boolean | undefined>) : "";
+    return requestScanV1<P78SellQueueListResponse>(`/sell-queue${q}`);
+  },
+
+  listSellBundles(): Promise<P78SellBundleListResponse> {
+    return requestScanV1<P78SellBundleListResponse>("/sell-queue/bundles");
+  },
+
+  listListingDrafts(params?: { status?: string; limit?: number; offset?: number }): Promise<P78ListingDraftListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<P78ListingDraftListResponse>(`/listing-drafts${q}`);
+  },
+
+  createListingDraft(payload: P78ListingDraftCreate): Promise<P78ListingDraftRead> {
+    return requestScanV1<P78ListingDraftRead>("/listing-drafts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateListingDraft(draftId: number, payload: P78ListingDraftUpdate): Promise<P78ListingDraftRead> {
+    return requestScanV1<P78ListingDraftRead>(`/listing-drafts/${draftId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getListingDraftPricing(draftId: number): Promise<P78ListingPricingRead> {
+    return requestScanV1<P78ListingPricingRead>(`/listing-drafts/${draftId}/pricing`);
+  },
+
+  listListings(params?: { lifecycle_status?: string; limit?: number; offset?: number }): Promise<P78ListingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<P78ListingListResponse>(`/listings${q}`);
+  },
+
+  publishListing(draftId: number, priceMode?: string): Promise<P78ListingPublishRead> {
+    const q = priceMode ? buildQueryString({ price_mode: priceMode }) : "";
+    return requestScanV1<P78ListingPublishRead>(`/listings/${draftId}/publish${q}`, { method: "POST" });
+  },
+
+  syncListings(): Promise<P78ListingSyncRead> {
+    return requestScanV1<P78ListingSyncRead>("/listings/sync", { method: "POST" });
+  },
+
+  getSellingAnalytics(): Promise<P78SellingAnalyticsRead> {
+    return requestScanV1<P78SellingAnalyticsRead>("/selling-analytics");
+  },
+
+  getSellingDashboard(): Promise<P78SellingDashboardRead> {
+    return requestScanV1<P78SellingDashboardRead>("/selling-dashboard");
+  },
+
+  getSellingCertification(): Promise<P78SellingCertificationRead> {
+    return requestScanV1<P78SellingCertificationRead>("/selling-certification");
   },
 };
 

@@ -65,6 +65,11 @@ import { CollectorRecommendationsPage } from "./pages/CollectorRecommendationsPa
 import { CollectorBudgetDashboardPage } from "./pages/CollectorBudgetDashboardPage";
 import { CollectorQuantityIntelligencePage } from "./pages/CollectorQuantityIntelligencePage";
 import { CollectorAnalyticsPage } from "./pages/CollectorAnalyticsPage";
+import { SellQueuePage } from "./pages/SellQueuePage";
+import { ListingDraftsPage } from "./pages/ListingDraftsPage";
+import { ListingsPage } from "./pages/ListingsPage";
+import { SellingAnalyticsPage } from "./pages/SellingAnalyticsPage";
+import { BundleOpportunitiesPage } from "./pages/BundleOpportunitiesPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -247,6 +252,11 @@ export default function App() {
         <Route path="/collector-budget-dashboard" element={<CollectorBudgetDashboardPage />} />
         <Route path="/collector-quantity-intelligence" element={<CollectorQuantityIntelligencePage />} />
         <Route path="/collector-analytics" element={<CollectorAnalyticsPage />} />
+        <Route path="/sell-queue" element={<SellQueuePage />} />
+        <Route path="/listing-drafts" element={<ListingDraftsPage />} />
+        <Route path="/bundle-opportunities" element={<BundleOpportunitiesPage />} />
+        <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/selling-analytics" element={<SellingAnalyticsPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />

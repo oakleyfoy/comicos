@@ -818,6 +818,13 @@ from app.models.p77_collector_analytics import (
     P77CollectorAnalyticsSnapshot,
     P77RecommendationAdjustmentSnapshot,
 )
+from app.models.p78_sell_workflow import P78ListingDraft
+from app.models.p78_marketplace_lifecycle import (
+    P78InventoryReservation,
+    P78Listing,
+    P78SaleRecord,
+    P78SellingAnalyticsSnapshot,
+)
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,
@@ -1554,6 +1561,11 @@ __all__ = [
     "P77CollectorAnalyticsSnapshot",
     "P77RecommendationAdjustmentSnapshot",
     "P77BudgetPerformanceSnapshot",
+    "P78ListingDraft",
+    "P78Listing",
+    "P78InventoryReservation",
+    "P78SaleRecord",
+    "P78SellingAnalyticsSnapshot",
     "IntakeStagingRecord",
     "ScanEvent",
     "ConventionSession",
