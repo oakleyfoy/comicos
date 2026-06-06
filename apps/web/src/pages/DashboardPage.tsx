@@ -66,6 +66,7 @@ import {
   type OrderArrivalClassification,
   type OrderArrivalIntelSummary,
   type PhysicalIntakeSummaryResponse,
+  type InventoryArrivalTrackingResponse,
   type PortfolioIntelligenceSummary,
   type DuplicateIntelligenceSummary,
   type MarketSourceImportRunSummaryRead,
@@ -900,6 +901,8 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const [scanPipelineDash, setScanPipelineDash] = useState<ScanPipelineDashboardResponse | null>(null);
   const [physicalIntakeSummary, setPhysicalIntakeSummary] =
     useState<PhysicalIntakeSummaryResponse | null>(null);
+  const [inventoryArrivalTracking, setInventoryArrivalTracking] =
+    useState<InventoryArrivalTrackingResponse | null>(null);
   const [marketSources, setMarketSources] = useState<MarketSourceRead[]>([]);
   const [marketSourcesLoading, setMarketSourcesLoading] = useState(true);
   const [marketSourcesError, setMarketSourcesError] = useState<string | null>(null);
@@ -1329,6 +1332,9 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
     }
     if (data.physicalIntake) {
       setPhysicalIntakeSummary(data.physicalIntake as PhysicalIntakeSummaryResponse);
+    }
+    if (data.inventoryArrivalTracking) {
+      setInventoryArrivalTracking(data.inventoryArrivalTracking as InventoryArrivalTrackingResponse);
     }
   }, []);
 
@@ -3324,6 +3330,110 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               <p className="mt-2 text-xl font-semibold text-patriot-navy">{card.value}</p>
             </article>
           ))}
+        </section>
+      ) : null}
+
+      {(loadProfile === "portfolio" || loadProfile === "full") &&
+      (inventoryArrivalTracking || dashboardWidgetErrors.inventoryArrivalTracking) ? (
+        <section
+          id="inventory-arrival-tracking"
+          className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/50"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Ordered / not in hand</p>
+              <h2 className="mt-1 text-lg font-semibold text-patriot-navy">Inventory arrival tracking</h2>
+              <p className="mt-1 max-w-prose text-sm text-slate-600">
+                Read-only split from persisted order status, release dates, expected ship dates, and receipt timestamps —
+                no FMV or market rebuilds.
+              </p>
+            </div>
+            {inventoryArrivalTracking ? (
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                As of {inventoryArrivalTracking.summary.generated_as_of_date}
+              </p>
+            ) : null}
+          </div>
+          {dashboardWidgetErrors.inventoryArrivalTracking ? (
+            <div className="mt-4">
+              <StatusBanner tone="error">{dashboardWidgetErrors.inventoryArrivalTracking}</StatusBanner>
+            </div>
+          ) : null}
+          {inventoryArrivalTracking ? (
+            <>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <article className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-sky-900/80">On the way</p>
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
+                    {inventoryArrivalTracking.summary.on_the_way_count}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">Shipped or expected ship window</p>
+                </article>
+                <article className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-900/80">Not released yet</p>
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
+                    {inventoryArrivalTracking.summary.not_released_yet_count}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">Preorder / future release date</p>
+                </article>
+                <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-900/80">
+                    Released, not received
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-patriot-navy">
+                    {inventoryArrivalTracking.summary.released_not_received_count}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">Past release, still awaiting receipt</p>
+                </article>
+              </div>
+              <div className="mt-5 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-sm font-semibold text-patriot-navy">Not released yet</h3>
+                <p className="mt-1 text-xs text-slate-600">Sorted by release date (soonest first).</p>
+                {inventoryArrivalTracking.not_released_yet_items.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">No upcoming-not-released copies in this lane.</p>
+                ) : (
+                  <div className="mt-3 overflow-auto">
+                    <table className="w-full border-collapse text-left text-xs text-slate-800">
+                      <thead className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="pb-2 pr-3 font-medium">Title</th>
+                          <th className="pb-2 pr-3 font-medium">Release</th>
+                          <th className="pb-2 pr-3 font-medium">Order</th>
+                          <th className="pb-2 pr-3 font-medium">Source</th>
+                          <th className="pb-2 font-medium">Expected ship</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryArrivalTracking.not_released_yet_items.map((row) => (
+                          <tr key={row.inventory_copy_id} className="border-t border-slate-200 align-top">
+                            <td className="py-2 pr-3">
+                              <Link
+                                to={`/inventory/${row.inventory_copy_id}`}
+                                className="font-medium text-slate-900 hover:text-blue-700"
+                              >
+                                {row.publisher} · {row.title} #{row.issue_number}
+                              </Link>
+                              <div className="text-[11px] text-slate-500">{row.retailer}</div>
+                            </td>
+                            <td className="py-2 pr-3 font-medium text-slate-900">
+                              {row.release_date ? formatDate(row.release_date) : "—"}
+                            </td>
+                            <td className="py-2 pr-3 text-slate-700">{row.order_status.replace(/_/g, " ")}</td>
+                            <td className="py-2 pr-3 text-slate-600">
+                              {row.source_type ? row.source_type.replace(/_/g, " ") : "—"}
+                            </td>
+                            <td className="py-2 text-slate-600">
+                              {row.expected_ship_date ? formatDate(row.expected_ship_date) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
         </section>
       ) : null}
 

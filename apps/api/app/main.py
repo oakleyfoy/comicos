@@ -433,6 +433,7 @@ from app.schemas.inventory_action_center import (
     InventoryActionCenterSummary,
     InventoryReleaseStatusFilter,
 )
+from app.schemas.inventory_arrival_tracking import InventoryArrivalTrackingResponse
 from app.schemas.order_arrival_intelligence import (
     OrderArrivalClassification,
     OrderArrivalIntelCalendarResponse,
@@ -933,6 +934,7 @@ from app.services.inventory import (
     portfolio_performance,
     update_inventory_copy,
 )
+from app.services.inventory_arrival_tracking import build_inventory_arrival_tracking
 from app.services.inventory_fmv import (
     inventory_fmv_detail_for_scope,
     inventory_fmv_inventory_response_for_scope,
@@ -5794,6 +5796,19 @@ def get_inventory_summary(
     current_user: User = Depends(get_current_user),
 ) -> InventorySummaryResponse:
     return inventory_summary(session=session, current_user=current_user)
+
+
+@app.get("/inventory-arrival-tracking", response_model=InventoryArrivalTrackingResponse)
+def get_inventory_arrival_tracking(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    not_released_limit: Annotated[int, Query(ge=1, le=200, description="Max not-released-yet rows.")] = 50,
+) -> InventoryArrivalTrackingResponse:
+    return build_inventory_arrival_tracking(
+        session,
+        current_user=current_user,
+        not_released_limit=not_released_limit,
+    )
 
 
 @app.get("/inventory-intelligence/summary", response_model=InventoryIntelligenceSummary)

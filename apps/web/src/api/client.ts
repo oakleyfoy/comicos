@@ -6145,6 +6145,37 @@ export interface InventorySummary {
   sell_count: number;
 }
 
+export type InventoryArrivalTrackingLane = "on_the_way" | "not_released_yet" | "released_not_received";
+
+export interface InventoryArrivalTrackingRow {
+  inventory_copy_id: number;
+  title: string;
+  publisher: string;
+  issue_number: string;
+  retailer: string;
+  source_type: string | null;
+  order_status: string;
+  release_status: string;
+  release_date: string | null;
+  expected_ship_date: string | null;
+  received_at: string | null;
+  lane: InventoryArrivalTrackingLane;
+}
+
+export interface InventoryArrivalTrackingSummary {
+  scope_user_id: number | null;
+  generated_as_of_date: string;
+  not_in_hand_total: number;
+  on_the_way_count: number;
+  not_released_yet_count: number;
+  released_not_received_count: number;
+}
+
+export interface InventoryArrivalTrackingResponse {
+  summary: InventoryArrivalTrackingSummary;
+  not_released_yet_items: InventoryArrivalTrackingRow[];
+}
+
 export interface KeyedInventoryCountRow {
   key: string | null;
   count: number;
@@ -17075,6 +17106,13 @@ export const apiClient = {
 
   getInventorySummary(): Promise<InventorySummary> {
     return request<InventorySummary>("/inventory/summary");
+  },
+
+  getInventoryArrivalTracking(params?: { not_released_limit?: number }): Promise<InventoryArrivalTrackingResponse> {
+    const query = buildQueryString({
+      not_released_limit: params?.not_released_limit,
+    });
+    return request<InventoryArrivalTrackingResponse>(`/inventory-arrival-tracking${query}`);
   },
 
   getInventoryIntelligenceSummary(): Promise<InventoryIntelligenceRollupSummary> {

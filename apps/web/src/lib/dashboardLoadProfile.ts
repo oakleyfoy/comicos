@@ -162,6 +162,7 @@ export function buildDashboardWidgetPromises(
   if (profile === "portfolio" || profile === "full") {
     widgets.portfolioValue = apiClient.getPortfolioValueSummary(portfolioValueParams);
     widgets.physicalIntake = apiClient.getPhysicalIntakeSummary();
+    widgets.inventoryArrivalTracking = apiClient.getInventoryArrivalTracking({ not_released_limit: 40 });
   }
 
   if (profile === "collection" || profile === "full") {

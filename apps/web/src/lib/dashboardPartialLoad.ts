@@ -18,6 +18,7 @@ export const DASHBOARD_WIDGET_KEYS = [
   "collectionAnalyticsQuality",
   "scanPipeline",
   "physicalIntake",
+  "inventoryArrivalTracking",
 ] as const;
 
 export type DashboardWidgetKey = (typeof DASHBOARD_WIDGET_KEYS)[number];
