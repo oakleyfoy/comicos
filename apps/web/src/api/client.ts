@@ -12679,6 +12679,134 @@ export interface P81DiscoveryCertificationRead {
   production_checklist: { area: string; status: string }[];
 }
 
+export interface P82MarketplaceAcquisitionOpportunityRead {
+  id: number;
+  marketplace: string;
+  external_listing_id: string;
+  listing_url: string;
+  title: string;
+  publisher: string;
+  series: string;
+  issue: string;
+  variant: string;
+  asking_price: number;
+  estimated_fmv: number;
+  discount_to_fmv: number;
+  liquidity: number;
+  velocity: number;
+  grading_upside: number;
+  ownership_status: string;
+  profile_match_score: number;
+  opportunity_score: number;
+  recommendation: string;
+  reasons: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P82MarketplaceAcquisitionListResponse {
+  items: P82MarketplaceAcquisitionOpportunityRead[];
+  pagination: MarketApiV1Pagination;
+  unread_count?: number;
+}
+
+export interface P82MarketplaceAcquisitionDashboardRead {
+  strong_buys: P82MarketplaceAcquisitionOpportunityRead[];
+  good_buys: P82MarketplaceAcquisitionOpportunityRead[];
+  watch: P82MarketplaceAcquisitionOpportunityRead[];
+  pass_list: P82MarketplaceAcquisitionOpportunityRead[];
+  largest_spread: P82MarketplaceAcquisitionOpportunityRead[];
+  best_grading_upside: P82MarketplaceAcquisitionOpportunityRead[];
+  best_profile_matches: P82MarketplaceAcquisitionOpportunityRead[];
+  snapshot_id: number | null;
+}
+
+export interface P83CollectionForecastRead {
+  current_value: number;
+  horizons: { horizon: string; forecast_value: number; forecast_change: number; confidence: number }[];
+  top_gain_contributors: Record<string, unknown>[];
+  top_downside_risks: Record<string, unknown>[];
+  snapshot_id: number | null;
+}
+
+export interface P83CollectionRiskRead {
+  risk_score: number;
+  risk_category: string;
+  factors: Record<string, unknown>;
+  snapshot_id: number | null;
+}
+
+export interface P83CollectionValuationDashboardRead {
+  forecast: P83CollectionForecastRead;
+  risk: P83CollectionRiskRead;
+  optimization: {
+    sell_candidates: Record<string, unknown>[];
+    grade_candidates: Record<string, unknown>[];
+    hold_candidates: Record<string, unknown>[];
+    buy_targets: Record<string, unknown>[];
+    reduce_exposure: string[];
+    increase_exposure: string[];
+  };
+}
+
+export interface P84CollectorNotificationRead {
+  id: number;
+  notification_type: string;
+  priority: string;
+  title: string;
+  message: string;
+  related_entity_type: string;
+  related_entity_id: number | null;
+  action_url: string;
+  status: string;
+  reasons: string[];
+  created_at: string;
+  read_at: string | null;
+  dismissed_at: string | null;
+}
+
+export interface P84CollectorNotificationListResponse {
+  items: P84CollectorNotificationRead[];
+  pagination: MarketApiV1Pagination;
+  unread_count: number;
+}
+
+export interface P84CollectorBriefingRead {
+  id: number;
+  briefing_type: string;
+  briefing_date: string;
+  sections: Record<string, unknown>;
+  top_actions: string[];
+  created_at: string;
+}
+
+export interface P84CollectorCommandCenterRead {
+  marketplace_deals: P82MarketplaceAcquisitionOpportunityRead[];
+  collection_forecast: P83CollectionForecastRead | null;
+  risk_alerts: P84CollectorNotificationRead[];
+  daily_briefing: P84CollectorBriefingRead | null;
+  top_buy_opportunities: P82MarketplaceAcquisitionOpportunityRead[];
+  top_sell_opportunities: Record<string, unknown>[];
+  upcoming_foc: Record<string, unknown>[];
+  discovery_alerts: Record<string, unknown>[];
+  budget_status: Record<string, unknown>;
+  portfolio_movement: Record<string, unknown>;
+  storage_warnings: Record<string, unknown>[];
+  grading_candidates: Record<string, unknown>[];
+}
+
+export interface P82P84CollectorExpansionCertificationRead {
+  title: string;
+  status: string;
+  approved_for_production: boolean;
+  checks_passed: number;
+  warnings: number;
+  failures: number;
+  platform_readiness_percent: number;
+  production_checklist: { area: string; status: string }[];
+}
+
 export interface P78SellBundleRead {
   bundle_key: string;
   bundle_type: string;
@@ -29874,6 +30002,76 @@ export const apiClient = {
 
   getDiscoveryCertification(): Promise<P81DiscoveryCertificationRead> {
     return requestScanV1<P81DiscoveryCertificationRead>("/discovery/certification");
+  },
+
+  listMarketplaceAcquisitionOpportunities(params?: {
+    recommendation?: string;
+    limit?: number;
+    offset?: number;
+    refresh?: boolean;
+  }): Promise<P82MarketplaceAcquisitionListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, string | number | boolean | undefined>)
+        : "";
+    return requestScanV1<P82MarketplaceAcquisitionListResponse>(`/marketplace-acquisition/opportunities${q}`);
+  },
+
+  getMarketplaceAcquisitionOpportunity(opportunityId: number): Promise<P82MarketplaceAcquisitionOpportunityRead> {
+    return requestScanV1<P82MarketplaceAcquisitionOpportunityRead>(`/marketplace-acquisition/opportunities/${opportunityId}`);
+  },
+
+  getMarketplaceAcquisitionDashboard(params?: { refresh?: boolean }): Promise<P82MarketplaceAcquisitionDashboardRead> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
+    return requestScanV1<P82MarketplaceAcquisitionDashboardRead>(`/marketplace-acquisition/dashboard${q}`);
+  },
+
+  getCollectionValuationDashboard(): Promise<P83CollectionValuationDashboardRead> {
+    return requestScanV1<P83CollectionValuationDashboardRead>("/collection-valuation/dashboard");
+  },
+
+  getCollectionForecast(): Promise<P83CollectionForecastRead> {
+    return requestScanV1<P83CollectionForecastRead>("/collection-valuation/forecast");
+  },
+
+  getCollectionRisk(): Promise<P83CollectionRiskRead> {
+    return requestScanV1<P83CollectionRiskRead>("/collection-valuation/risk");
+  },
+
+  runCollectionScenario(scenarioType: string): Promise<{ id: number; scenario_type: string; projected_value: number; explanation: string }> {
+    return requestScanV1("/collection-valuation/scenario", {
+      method: "POST",
+      body: JSON.stringify({ scenario_type: scenarioType }),
+    });
+  },
+
+  listCollectorNotifications(params?: { status?: string; limit?: number; refresh?: boolean }): Promise<P84CollectorNotificationListResponse> {
+    const q =
+      params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | boolean | undefined>) : "";
+    return requestScanV1<P84CollectorNotificationListResponse>(`/notifications${q}`);
+  },
+
+  updateCollectorNotification(notificationId: number, payload: { status?: string }): Promise<P84CollectorNotificationRead> {
+    return requestScanV1<P84CollectorNotificationRead>(`/notifications/${notificationId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getDailyBriefing(): Promise<P84CollectorBriefingRead> {
+    return requestScanV1<P84CollectorBriefingRead>("/briefings/daily");
+  },
+
+  getWeeklyBriefing(): Promise<P84CollectorBriefingRead> {
+    return requestScanV1<P84CollectorBriefingRead>("/briefings/weekly");
+  },
+
+  getCollectorCommandCenter(): Promise<P84CollectorCommandCenterRead> {
+    return requestScanV1<P84CollectorCommandCenterRead>("/collector-command-center");
+  },
+
+  getCollectorExpansionCertification(): Promise<P82P84CollectorExpansionCertificationRead> {
+    return requestScanV1<P82P84CollectorExpansionCertificationRead>("/collector-expansion/certification");
   },
 };
 

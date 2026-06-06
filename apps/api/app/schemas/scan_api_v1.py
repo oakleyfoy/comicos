@@ -119,6 +119,11 @@ SCAN_API_V1_ENGINE_VERSIONS: dict[str, str] = {
     "discovery_personalization": "P81-02",
     "discovery_analytics": "P81-03",
     "discovery_certification": "P81-03",
+    "marketplace_acquisition": "P82",
+    "collection_valuation": "P83",
+    "collector_notifications": "P84",
+    "collector_command_center": "P82-P84",
+    "collector_expansion_certification": "P82-P84",
 }
 
 

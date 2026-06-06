@@ -78,6 +78,19 @@ import { FuturePullListPage } from "./pages/FuturePullListPage";
 import { DiscoveryWatchlistsPage } from "./pages/DiscoveryWatchlistsPage";
 import { DiscoveryAlertsPage } from "./pages/DiscoveryAlertsPage";
 import { DiscoveryAnalyticsPage } from "./pages/DiscoveryAnalyticsPage";
+import { MarketplaceOpportunitiesPage } from "./pages/MarketplaceOpportunitiesPage";
+import { MarketplaceOpportunityDetailPage } from "./pages/MarketplaceOpportunityDetailPage";
+import { MarketplaceAcquisitionDashboardPage } from "./pages/MarketplaceAcquisitionDashboardPage";
+import { CollectionForecastPage } from "./pages/CollectionForecastPage";
+import { CollectionRiskPage } from "./pages/CollectionRiskPage";
+import { CollectionScenariosPage } from "./pages/CollectionScenariosPage";
+import { CollectionOptimizationPage } from "./pages/CollectionOptimizationPage";
+import { CollectionValuationDashboardPage } from "./pages/CollectionValuationDashboardPage";
+import { CollectorNotificationsPage } from "./pages/CollectorNotificationsPage";
+import { CollectorNotificationDashboardPage } from "./pages/CollectorNotificationDashboardPage";
+import { DailyBriefingPage } from "./pages/DailyBriefingPage";
+import { WeeklyBriefingPage } from "./pages/WeeklyBriefingPage";
+import { CollectorCommandCenterPage } from "./pages/CollectorCommandCenterPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
 import { MobileOpsDashboardPage } from "./pages/MobileOpsDashboardPage";
 import { MobileDeviceSecurityPage } from "./pages/MobileDeviceSecurityPage";
@@ -273,6 +286,19 @@ export default function App() {
         <Route path="/discovery-watchlists" element={<DiscoveryWatchlistsPage />} />
         <Route path="/discovery-alerts" element={<DiscoveryAlertsPage />} />
         <Route path="/discovery-analytics" element={<DiscoveryAnalyticsPage />} />
+        <Route path="/marketplace-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
+        <Route path="/marketplace-acquisition-dashboard" element={<MarketplaceAcquisitionDashboardPage />} />
+        <Route path="/collection-forecast" element={<CollectionForecastPage />} />
+        <Route path="/collection-risk" element={<CollectionRiskPage />} />
+        <Route path="/collection-scenarios" element={<CollectionScenariosPage />} />
+        <Route path="/collection-optimization" element={<CollectionOptimizationPage />} />
+        <Route path="/collection-valuation-dashboard" element={<CollectionValuationDashboardPage />} />
+        <Route path="/notifications" element={<CollectorNotificationsPage />} />
+        <Route path="/notification-dashboard" element={<CollectorNotificationDashboardPage />} />
+        <Route path="/daily-briefing" element={<DailyBriefingPage />} />
+        <Route path="/weekly-briefing" element={<WeeklyBriefingPage />} />
+        <Route path="/collector-command-center" element={<CollectorCommandCenterPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
         <Route path="/storage-audit" element={<StorageAuditPage />} />
         <Route path="/storage-label-preview" element={<StorageLabelPreviewPage />} />

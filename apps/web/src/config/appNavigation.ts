@@ -24,6 +24,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Portfolio Analytics", to: "/portfolio-analytics", prominent: true },
       { label: "Sell Intelligence", to: "/sell-intelligence", prominent: true },
       { label: "Collector Workspace", to: "/collector-workspace", prominent: true },
+      { label: "Collector Command Center", to: "/collector-command-center", prominent: true },
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Unified Intelligence", to: "/unified-intelligence" },
       { label: "Top Recommendations", to: "/cross-system-recommendations" },
@@ -62,6 +63,19 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Acquisition Opportunities", to: "/acquisition-opportunities" },
       { label: "Marketplace Acquisitions", to: "/marketplace-acquisitions" },
       { label: "Acquisition Dashboard", to: "/acquisition-dashboard" },
+      { label: "Marketplace Opportunities (P82)", to: "/marketplace-opportunities" },
+      { label: "Marketplace Acquisition Dashboard", to: "/marketplace-acquisition-dashboard" },
+    ],
+  },
+  {
+    id: "collector-expansion",
+    title: "Collector Expansion (P82–P84)",
+    links: [
+      { label: "Command Center", to: "/collector-command-center", prominent: true },
+      { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
+      { label: "Notifications", to: "/notifications" },
+      { label: "Daily Briefing", to: "/daily-briefing" },
+      { label: "Weekly Briefing", to: "/weekly-briefing" },
     ],
   },
   {

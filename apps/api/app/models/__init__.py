@@ -838,6 +838,15 @@ from app.models.p81_discovery_analytics import (
     P81DiscoveryOpportunityPerformanceSnapshot,
     P81DiscoveryRoiSnapshot,
 )
+from app.models.p82_p84_collector_expansion import (
+    CollectionRiskSnapshot,
+    CollectionScenarioRun,
+    CollectionValuationSnapshot,
+    CollectorBriefing,
+    CollectorNotification,
+    MarketplaceAcquisitionOpportunity,
+    MarketplaceAcquisitionSnapshot,
+)
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,
