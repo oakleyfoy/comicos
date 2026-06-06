@@ -61,12 +61,30 @@ def load_owner_inventory_rows(session: Session, *, owner_user_id: int) -> list[I
         key = (pub.lower(), title.lower(), issue.lower())
         grouped.setdefault(key, []).append(copy)
 
+    from app.services.p67_inventory_bridge import enrich_row_value, fmv_lookup_by_title, p68_computed_fmv_for_copy
+
     rows: list[InventoryIntelRow] = []
+    fmv_map = fmv_lookup_by_title(session, owner_user_id=owner_user_id)
     for (_pub, _title, _issue), group in grouped.items():
         for copy in group:
             cost = _money(copy.acquisition_cost)
-            fmv = _money(copy.current_fmv)
-            has_value = copy.current_fmv is not None
+            p68 = p68_computed_fmv_for_copy(session, owner_user_id=owner_user_id, copy_id=int(copy.id or 0))
+            pub, series, issue, _ = _split_identity_key(copy.metadata_identity_key)
+            bridge_row = InventoryIntelRow(
+                copy_id=int(copy.id or 0),
+                publisher=pub,
+                title=series or (copy.metadata_identity_key or ""),
+                issue_number=issue,
+                quantity=1,
+                cost_basis=cost,
+                current_value=_money(copy.current_fmv),
+                unrealized_gain=0.0,
+                unrealized_gain_pct=0.0,
+                grade_status=copy.grade_status or "raw",
+                identity_key=copy.metadata_identity_key or "",
+            )
+            fmv = enrich_row_value(bridge_row, fmv_map, p68_computed=p68)
+            has_value = fmv > 0
             gain = fmv - cost if has_value else 0.0
             gain_pct = (gain / cost * 100.0) if cost > 0 and has_value else 0.0
             pub, series, issue, _ = _split_identity_key(copy.metadata_identity_key)

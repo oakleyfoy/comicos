@@ -696,6 +696,9 @@ def list_inventory(
         row_map["inventory_action_center"] = attachment_from_items(actions_by_inventory.get(inv_pk, []))
         fmv_attachment = build_inventory_fmv_attachment(session, row=row_map, include_detail=False)
         row_map["current_market_fmv"] = fmv_attachment.current_market_fmv
+        p68_fmv = (fmv_attachment.valuation_evidence_json or {}).get("p68_authoritative_fmv")
+        if p68_fmv is not None:
+            row_map["current_fmv"] = quantize_money(Decimal(str(p68_fmv)))
         row_map["fmv_snapshot_id"] = fmv_attachment.fmv_snapshot_id
         row_map["fmv_method"] = fmv_attachment.fmv_method
         row_map["fmv_confidence_bucket"] = fmv_attachment.fmv_confidence_bucket

@@ -32,6 +32,7 @@ from app.schemas.inventory import InventoryListResponse, InventoryRow
 from app.schemas.market_fmv import MarketFmvSnapshotRead, MarketFmvSnapshotSummaryRead
 from app.schemas.market_fmv import MarketFmvCompReferenceRead
 from app.schemas.market_trends import MarketTrendSnapshotSummaryRead
+from app.services.authoritative_fmv_service import authoritative_fmv_to_evidence, get_authoritative_fmv
 from app.services.duplicate_ownership_intelligence import (
     duplicate_ownership_inventory_context_for_owner,
     duplicate_ownership_inventory_attach_map,
@@ -350,26 +351,40 @@ def build_inventory_fmv_attachment(
             valuation_scope = "preorder_pending"
         else:
             valuation_scope = "no_market_data"
+        evidence = {
+            "inventory_copy_id": projection.inventory_copy_id,
+            "ownership_state": ownership_state,
+            "order_status": order_status,
+            "release_status": release_status,
+            "approved_canonical_issue_id": approved_canonical_issue_id,
+            "market_fmv_snapshot_id": None,
+            "match_reason": "no_market_data" if not is_cancelled else "cancelled_excluded",
+        }
+        current_market_fmv = None
+        conf_bucket = None
+        liq_bucket = None
+        copy_row = session.get(InventoryCopy, projection.inventory_copy_id)
+        if copy_row is not None and copy_row.user_id is not None and valuation_scope not in {"preorder_pending", "cancelled_excluded"}:
+            p68 = get_authoritative_fmv(session, owner_user_id=int(copy_row.user_id), inventory_copy_id=projection.inventory_copy_id)
+            if p68 is not None:
+                current_market_fmv = quantize_money(Decimal(str(p68.authoritative_fmv)))
+                evidence.update(authoritative_fmv_to_evidence(p68))
+                evidence["authoritative_source"] = "P68_MARKET_PRICING_ENGINE"
+                conf_bucket = evidence.get("p68_confidence_bucket")
+                liq_bucket = evidence.get("p68_liquidity_bucket")
+                valuation_scope = "raw" if projection.grade_status == "raw" else "graded"
         return InventoryFmvAttachmentRead(
             inventory_copy_id=projection.inventory_copy_id,
-            current_market_fmv=None,
+            current_market_fmv=current_market_fmv,
             fmv_snapshot_id=None,
             fmv_method=None,
-            fmv_confidence_bucket=None,
-            fmv_liquidity_bucket=None,
+            fmv_confidence_bucket=conf_bucket,  # type: ignore[arg-type]
+            fmv_liquidity_bucket=liq_bucket,  # type: ignore[arg-type]
             fmv_volatility_bucket=None,
             fmv_stale_data=None,
-            fmv_currency_code=None,
+            fmv_currency_code="USD" if current_market_fmv is not None else None,
             valuation_scope=valuation_scope,
-            valuation_evidence_json={
-                "inventory_copy_id": projection.inventory_copy_id,
-                "ownership_state": ownership_state,
-                "order_status": order_status,
-                "release_status": release_status,
-                "approved_canonical_issue_id": approved_canonical_issue_id,
-                "market_fmv_snapshot_id": None,
-                "match_reason": "no_market_data" if not is_cancelled else "cancelled_excluded",
-            },
+            valuation_evidence_json=evidence,
         )
 
     if is_cancelled:
@@ -389,18 +404,7 @@ def build_inventory_fmv_attachment(
 
     trend_snapshot = _trend_snapshot_for_value(session, chosen_snapshot=chosen_snapshot)
     snapshot_read: MarketFmvSnapshotRead | None = _snapshot_read(session, snapshot=chosen_snapshot) if include_detail else None
-    return InventoryFmvAttachmentRead(
-        inventory_copy_id=projection.inventory_copy_id,
-        current_market_fmv=current_market_fmv,
-        fmv_snapshot_id=int(chosen_snapshot.id or 0),
-        fmv_method=chosen_snapshot.valuation_method,
-        fmv_confidence_bucket=chosen_snapshot.confidence_bucket,  # type: ignore[arg-type]
-        fmv_liquidity_bucket=chosen_snapshot.liquidity_bucket,  # type: ignore[arg-type]
-            fmv_volatility_bucket=_attachment_volatility_bucket(chosen_snapshot.volatility_bucket),  # type: ignore[arg-type]
-        fmv_stale_data=bool(chosen_snapshot.stale_data),
-        fmv_currency_code=chosen_snapshot.currency_code,
-        valuation_scope=valuation_scope,
-        valuation_evidence_json={
+    evidence = {
             "inventory_copy_id": projection.inventory_copy_id,
             "title": projection.title,
             "publisher": projection.publisher,
@@ -420,7 +424,30 @@ def build_inventory_fmv_attachment(
             "market_trend_snapshot_id": trend_snapshot.id if trend_snapshot is not None else None,
             "match_reason": "approved_canonical_issue" if approved_canonical_issue_id is not None else "exact_metadata_identity_key",
             "preorder_informational": is_preorder,
-        },
+        }
+    copy_row = session.get(InventoryCopy, projection.inventory_copy_id)
+    conf_bucket = chosen_snapshot.confidence_bucket
+    liq_bucket = chosen_snapshot.liquidity_bucket
+    if copy_row is not None and copy_row.user_id is not None:
+        p68 = get_authoritative_fmv(session, owner_user_id=int(copy_row.user_id), inventory_copy_id=projection.inventory_copy_id)
+        if p68 is not None and valuation_scope not in {"preorder_pending", "cancelled_excluded"}:
+            current_market_fmv = quantize_money(Decimal(str(p68.authoritative_fmv)))
+            evidence.update(authoritative_fmv_to_evidence(p68))
+            evidence["authoritative_source"] = "P68_MARKET_PRICING_ENGINE"
+            conf_bucket = evidence.get("p68_confidence_bucket") or conf_bucket
+            liq_bucket = evidence.get("p68_liquidity_bucket") or liq_bucket
+    return InventoryFmvAttachmentRead(
+        inventory_copy_id=projection.inventory_copy_id,
+        current_market_fmv=current_market_fmv,
+        fmv_snapshot_id=int(chosen_snapshot.id or 0),
+        fmv_method=chosen_snapshot.valuation_method,
+        fmv_confidence_bucket=conf_bucket,  # type: ignore[arg-type]
+        fmv_liquidity_bucket=liq_bucket,  # type: ignore[arg-type]
+            fmv_volatility_bucket=_attachment_volatility_bucket(chosen_snapshot.volatility_bucket),  # type: ignore[arg-type]
+        fmv_stale_data=bool(chosen_snapshot.stale_data),
+        fmv_currency_code=chosen_snapshot.currency_code,
+        valuation_scope=valuation_scope,
+        valuation_evidence_json=evidence,
         market_fmv_snapshot=snapshot_read,
         market_trend_snapshot=trend_snapshot,
     )

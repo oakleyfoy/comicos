@@ -146,6 +146,8 @@ class Settings(BaseSettings):
     p68_market_pricing_enabled: bool = Field(default=True, alias="P68_MARKET_PRICING_ENABLED")
     p68_ebay_provider_enabled: bool = Field(default=False, alias="P68_EBAY_PROVIDER_ENABLED")
     ebay_api_client_id: str = Field(default="", alias="EBAY_API_CLIENT_ID")
+    ebay_api_client_secret: str = Field(default="", alias="EBAY_API_CLIENT_SECRET")
+    ebay_environment: str = Field(default="production", alias="EBAY_ENVIRONMENT")
     ebay_account_deletion_compliance_enabled: bool = Field(
         default=True,
         alias="EBAY_ACCOUNT_DELETION_COMPLIANCE_ENABLED",
@@ -160,6 +162,9 @@ class Settings(BaseSettings):
     )
     p68_manual_fmv_enabled: bool = Field(default=True, alias="P68_MANUAL_FMV_ENABLED")
     p68_auto_overwrite_inventory_fmv: bool = Field(default=False, alias="P68_AUTO_OVERWRITE_INVENTORY_FMV")
+
+    p70_market_refresh_enabled: bool = Field(default=True, alias="P70_MARKET_REFRESH_ENABLED")
+    p70_market_refresh_top_holdings_limit: int = Field(default=50, alias="P70_MARKET_REFRESH_TOP_HOLDINGS_LIMIT")
 
     p71_exit_recommendations_enabled: bool = Field(default=True, alias="P71_EXIT_RECOMMENDATIONS_ENABLED")
     p71_listing_intelligence_enabled: bool = Field(default=True, alias="P71_LISTING_INTELLIGENCE_ENABLED")
@@ -411,6 +416,9 @@ def validate_production_settings(settings: Settings) -> None:
         "GOOGLE_CLIENT_ID": settings.google_client_id or "",
         "GOOGLE_CLIENT_SECRET": settings.google_client_secret or "",
         "GOOGLE_REDIRECT_URI": settings.google_redirect_uri or "",
+        "EBAY_API_CLIENT_ID": settings.ebay_api_client_id,
+        "EBAY_API_CLIENT_SECRET": settings.ebay_api_client_secret,
+        "EBAY_ENVIRONMENT": settings.ebay_environment,
         "OPENAI_API_KEY": settings.openai_api_key or "",
         "OPS_ADMIN_EMAILS": settings.ops_admin_emails_raw,
     }

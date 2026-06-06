@@ -30,6 +30,7 @@ class P71ExitRecommendationItemRead(_Orm):
     exit_confidence: float
     primary_reason: str
     secondary_reasons: list[str] = Field(default_factory=list)
+    factors_json: dict = Field(default_factory=dict)
 
 
 class P71ExitRecommendationsListRead(BaseModel):
@@ -49,6 +50,7 @@ class P71ListingItemRead(_Orm):
     expected_roi_pct: float
     expected_days_to_sell: float
     listing_recommendation: str
+    factors_json: dict = Field(default_factory=dict)
 
 
 class P71ListingListRead(BaseModel):
@@ -67,6 +69,7 @@ class P71LiquidityItemRead(_Orm):
     demand_strength: float
     market_confidence: float
     days_to_sell_estimate: float
+    factors_json: dict = Field(default_factory=dict)
 
 
 class P71LiquidityListRead(BaseModel):
@@ -85,6 +88,7 @@ class P71ExitQueueItemRead(_Orm):
     recommended_action: str
     target_price: float | None = None
     expected_days: float
+    factors_json: dict = Field(default_factory=dict)
 
 
 class P71ExitQueueListRead(BaseModel):
@@ -98,6 +102,7 @@ class P71SellDashboardRead(_Orm):
     generated_at: datetime
     expected_realized_profit: float
     cards_json: dict = Field(default_factory=dict)
+    metadata_json: dict = Field(default_factory=dict)
 
 
 class P71PlatformBuildRead(BaseModel):

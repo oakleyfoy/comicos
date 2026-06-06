@@ -37,7 +37,12 @@ def build_exit_recommendation_snapshot(session: Session, *, owner_user_id: int) 
         owner_user_id=owner_user_id,
         snapshot_date=today,
         generated_at=utc_now(),
-        metadata_json={"source": "P61-P69_read_only"},
+        metadata_json={
+            "source": "P61-P69_read_only",
+            "avg_market_confidence": round(sum(c.fmv_confidence for c in contexts) / max(1, len(contexts)), 3),
+            "avg_market_liquidity": round(sum(c.market_liquidity_score for c in contexts) / max(1, len(contexts)), 2),
+            "avg_market_sales_velocity": round(sum(c.market_sales_velocity for c in contexts) / max(1, len(contexts)), 3),
+        },
     )
     session.add(snap)
     session.flush()

@@ -15,6 +15,7 @@ class P68ProviderRead(_Orm):
     enabled: bool
     health_status: str
     last_ingest_at: datetime | None = None
+    metadata_json: dict = Field(default_factory=dict)
 
 
 class P68ObservationRead(_Orm):
@@ -48,7 +49,43 @@ class P68SnapshotRead(_Orm):
     confidence: float
     price_trend_30d: str
     primary_provider: str
+    provider_breakdown: dict[str, int] = Field(default_factory=dict)
+    last_comp_date: date | None = None
     metadata_json: dict = Field(default_factory=dict)
+
+
+class P70MarketRefreshRunRead(_Orm):
+    id: int
+    trigger_type: str
+    status: str
+    started_at: datetime
+    completed_at: datetime | None = None
+    target_copy_count: int
+    books_refreshed: int
+    comps_fetched: int
+    fmv_snapshots_generated: int
+    failure_count: int
+    error_message: str | None = None
+    metadata_json: dict = Field(default_factory=dict)
+
+
+class P70MarketRefreshHistoryRead(BaseModel):
+    items: list[P70MarketRefreshRunRead] = Field(default_factory=list)
+    total: int = 0
+
+
+class P70MarketTrendPointRead(_Orm):
+    id: int
+    inventory_copy_id: int
+    recorded_on: date
+    blended_fmv: float | None = None
+    confidence: float
+    liquidity_score: float
+    sales_count: int
+    price_trend_7d: str
+    price_trend_30d: str
+    price_trend_90d: str
+    provider_breakdown_json: dict[str, int] = Field(default_factory=dict)
 
 
 class P68ManualObservationWrite(BaseModel):

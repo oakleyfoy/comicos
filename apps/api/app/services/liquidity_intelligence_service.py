@@ -33,7 +33,16 @@ def list_liquidity_items(session: Session, *, snapshot_id: int, limit: int = 200
 def build_liquidity_snapshot(session: Session, *, owner_user_id: int) -> P71LiquiditySnapshot:
     today = date.today()
     contexts = load_sell_intel_contexts(session, owner_user_id=owner_user_id)
-    snap = P71LiquiditySnapshot(owner_user_id=owner_user_id, snapshot_date=today, generated_at=utc_now())
+    snap = P71LiquiditySnapshot(
+        owner_user_id=owner_user_id,
+        snapshot_date=today,
+        generated_at=utc_now(),
+        metadata_json={
+            "avg_market_confidence": round(sum(c.fmv_confidence for c in contexts) / max(1, len(contexts)), 3),
+            "avg_market_liquidity": round(sum(c.market_liquidity_score for c in contexts) / max(1, len(contexts)), 2),
+            "avg_market_sales_velocity": round(sum(c.market_sales_velocity for c in contexts) / max(1, len(contexts)), 3),
+        },
+    )
     session.add(snap)
     session.flush()
 

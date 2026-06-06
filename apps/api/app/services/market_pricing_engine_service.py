@@ -120,7 +120,12 @@ def _ingest_ebay_fixtures(session: Session, *, owner_user_id: int, copies: list[
     return created
 
 
-def build_market_price_snapshots(session: Session, *, owner_user_id: int) -> list[P68MarketPriceSnapshot]:
+def build_market_price_snapshots(
+    session: Session,
+    *,
+    owner_user_id: int,
+    inventory_copy_ids: set[int] | None = None,
+) -> list[P68MarketPriceSnapshot]:
     providers = ensure_provider_registry(session, owner_user_id=owner_user_id)
     by_type = {p.provider_type: p for p in providers}
 
@@ -142,6 +147,8 @@ def build_market_price_snapshots(session: Session, *, owner_user_id: int) -> lis
         if (copy.hold_status or "") in {"sold", "sold_internal"}:
             continue
         copy_id = int(copy.id or 0)
+        if inventory_copy_ids is not None and copy_id not in inventory_copy_ids:
+            continue
         target = _identity_target_from_copy(copy)
         matched: list[P68MarketPriceObservation] = []
         for obs in all_obs:
@@ -191,7 +198,11 @@ def build_market_price_snapshots(session: Session, *, owner_user_id: int) -> lis
             price_trend_30d=bundle["price_trend_30d"],
             price_trend_90d=bundle["price_trend_90d"],
             primary_provider=bundle["primary_provider"],
-            metadata_json={"matched_observation_ids": [int(o.id or 0) for o in matched]},
+            metadata_json={
+                "matched_observation_ids": [int(o.id or 0) for o in matched],
+                "provider_breakdown": bundle.get("provider_breakdown") or {},
+                "last_comp_date": bundle.get("last_comp_date"),
+            },
             source_version=P68_SOURCE_VERSION,
         )
         session.add(snap)
@@ -207,7 +218,10 @@ def build_market_price_snapshots(session: Session, *, owner_user_id: int) -> lis
                 computed_fmv=float(fmv_val or 0),
                 computed_fmv_source=source,
                 confidence=float(bundle["confidence"]),
-                provider_blend_json={"providers": list({o.provider for o in matched})},
+                provider_blend_json={
+                    "providers": list({o.provider for o in matched}),
+                    "provider_breakdown": bundle.get("provider_breakdown") or {},
+                },
                 generated_at=now,
             )
         )

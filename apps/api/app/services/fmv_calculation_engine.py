@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date, timedelta
 from statistics import median
 
@@ -103,6 +104,9 @@ def compute_fmv_bundle(
     trend_90 = "RISING" if len(recent_90) >= 5 else "STABLE"
 
     primary = "INTERNAL_SALE" if "INTERNAL_SALE" in providers else (next(iter(providers)) if providers else "")
+    provider_breakdown = dict(Counter(o.provider for o in observations))
+    sale_dates = [o.sale_date for o in observations if o.sale_date is not None]
+    last_comp_date = max(sale_dates) if sale_dates else None
 
     return {
         "raw_fmv": raw_fmv,
@@ -118,4 +122,6 @@ def compute_fmv_bundle(
         "price_trend_30d": trend_30,
         "price_trend_90d": trend_90,
         "primary_provider": primary,
+        "provider_breakdown": provider_breakdown,
+        "last_comp_date": last_comp_date.isoformat() if last_comp_date else None,
     }

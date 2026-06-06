@@ -323,6 +323,8 @@ from app.models.market_pricing_engine import (
     P68MarketPriceSnapshot,
     P68MarketPricingProvider,
 )
+from app.models.ebay_market_pricing import EbayCompImportRun, EbayCompRecord
+from app.models.p70_market_refresh import P70MarketFmvTrendPoint, P70MarketRefreshRun
 from app.models.sell_intelligence_platform import (
     P71ExitQueueItem,
     P71ExitQueueSnapshot,
@@ -1139,6 +1141,10 @@ __all__ = [
     "AuditEvent",
     "ChangeRecord",
     "EbayAccountDeletionAuditLog",
+    "EbayCompRecord",
+    "EbayCompImportRun",
+    "P70MarketRefreshRun",
+    "P70MarketFmvTrendPoint",
     "PlatformHealthCheck",
     "ReliabilityIssue",
     "JobHealthMetric",
