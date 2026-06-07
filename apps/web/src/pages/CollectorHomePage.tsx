@@ -6,8 +6,8 @@ import { AppShell } from "../components/AppShell";
 import { CollectorErrorState } from "../components/CollectorErrorState";
 import {
   buildCollectorHomeHeaderSummary,
-  buildPortfolioStrip,
-  buildTodaysSummaryLines,
+  buildDashboardStrip,
+  buildTodaysSummaryResult,
   COLLECTOR_HOME_TITLE,
   indicatorBadgeClassName,
   itemLabel,
@@ -55,10 +55,10 @@ export function CollectorHomePage(): JSX.Element {
 
   const headerSummary = buildCollectorHomeHeaderSummary(home);
   const sections = prepareCollectorHomeSections(home.sections);
-  const summaryLines = buildTodaysSummaryLines(home.sections);
+  const summary = buildTodaysSummaryResult(home.sections);
   const hasDailyActions = home.todays_actions.length > 0;
   const topActions = home.todays_actions.slice(0, 3);
-  const portfolioStrip = buildPortfolioStrip(home);
+  const dashboardStrip = buildDashboardStrip(home);
   const advisorUrl = home.advisor_primary_cta_url || "/automation-center";
   const advisorReady = Boolean(home.advisor_plan_ready);
 
@@ -72,22 +72,20 @@ export function CollectorHomePage(): JSX.Element {
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-4 py-6">
-          {portfolioStrip.length > 0 ? (
-            <div
-              className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"
-              data-testid="collector-home-portfolio-strip"
-            >
-              {portfolioStrip.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
-                >
-                  <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
-                  <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
-                </div>
-              ))}
-            </div>
-          ) : null}
+          <div
+            className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"
+            data-testid="collector-home-dashboard-strip"
+          >
+            {dashboardStrip.map((metric) => (
+              <div
+                key={metric.label}
+                className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
+              >
+                <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
+                <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
+              </div>
+            ))}
+          </div>
 
           <section
             aria-labelledby="collector-home-advisor-summary"
@@ -100,7 +98,7 @@ export function CollectorHomePage(): JSX.Element {
             <p className="mt-1 text-sm text-blue-100">
               {advisorReady
                 ? "Your daily action plan is ready when generated."
-                : "Advisor plan not generated yet."}
+                : "Your personalized daily action plan will appear here once advisor data has been generated."}
             </p>
             <p className="mt-2">
               <Link
@@ -131,14 +129,24 @@ export function CollectorHomePage(): JSX.Element {
                 ))}
               </ul>
             ) : (
-              <ul
-                className="mt-2 space-y-0.5 text-sm text-blue-100"
-                data-testid="collector-home-todays-summary"
-              >
-                {summaryLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
+              <>
+                <ul
+                  className="mt-2 space-y-0.5 text-sm text-blue-100"
+                  data-testid="collector-home-todays-summary"
+                >
+                  {summary.lines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                {summary.allCountsZero ? (
+                  <p
+                    className="mt-2 text-sm text-blue-200/90"
+                    data-testid="collector-home-monitoring-message"
+                  >
+                    ComicOS is monitoring your collection. New opportunities will appear automatically.
+                  </p>
+                ) : null}
+              </>
             )}
           </section>
           <div
@@ -169,7 +177,7 @@ export function CollectorHomePage(): JSX.Element {
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 flex-1 text-sm text-blue-700">{sec.body}</p>
+                  <p className="mt-2 line-clamp-2 flex-1 text-sm text-blue-700">{sec.body}</p>
                 )}
                 <p className="mt-auto pt-3 text-sm">
                   <Link

@@ -41,46 +41,46 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
   { body: string; button: string; to: string }
 > = {
   buy_alerts: {
-    body: "Review undervalued comics and cross-marketplace buy opportunities identified by ComicOS.",
-    button: "Review Buy Opportunities",
+    body: "Review buy recommendations and marketplace opportunities.",
+    button: "Open Buy Opportunities",
     to: "/buy-opportunities",
   },
   sell_alerts: {
-    body: "See sell candidates, drafts, active listings, and profit in one place.",
+    body: "See sell candidates, drafts, listings, and profit in one place.",
     button: "Open Sell Command Center",
     to: "/sell-command-center",
   },
   grade_alerts: {
-    body: "Open grading tools to review books that may be worth grading.",
-    button: "Review Grade Candidates",
+    body: "Review books that may be worth grading before you sell.",
+    button: "Open Grade Candidates",
     to: "/grade-before-sell",
   },
   foc_alerts: {
-    body: "Review upcoming Final Order Cutoff decisions and preorder opportunities.",
-    button: "Review FOC & Preorders",
+    body: "Track Final Order Cutoff deadlines and preorder decisions.",
+    button: "Open FOC Dashboard",
     to: "/foc-dashboard",
   },
   storage_issues: {
-    body: "Locate books, boxes, and storage locations across your collection.",
+    body: "Locate books, boxes, and storage across your collection.",
     button: "Find a Book",
     to: "/storage-dashboard",
   },
   future_pull_list: {
-    body: "Review upcoming releases and books related to your collection interests.",
-    button: "Review Upcoming Releases",
+    body: "See upcoming releases tied to your collection interests.",
+    button: "Open Upcoming Releases",
     to: "/future-pull-list",
   },
 };
 
 /** Links when section is OK but empty (items loaded, none to show). */
 export const SECTION_EMPTY_ACTIONS: Record<string, { label: string; to: string }> = {
-  buy_alerts: { label: "Review Buy Opportunities", to: "/buy-opportunities" },
+  buy_alerts: { label: "Open Buy Opportunities", to: "/buy-opportunities" },
   sell_alerts: { label: "Open Sell Command Center", to: "/sell-command-center" },
-  grade_alerts: { label: "Review Grade Candidates", to: "/grade-before-sell" },
-  foc_alerts: { label: "Review FOC & Preorders", to: "/foc-dashboard" },
+  grade_alerts: { label: "Open Grade Candidates", to: "/grade-before-sell" },
+  foc_alerts: { label: "Open FOC Dashboard", to: "/foc-dashboard" },
   storage_issues: { label: "Find a Book", to: "/storage-dashboard" },
-  marketplace_deals: { label: "Review Buy Opportunities", to: "/buy-opportunities" },
-  future_pull_list: { label: "Review Upcoming Releases", to: "/future-pull-list" },
+  marketplace_deals: { label: "Open Buy Opportunities", to: "/buy-opportunities" },
+  future_pull_list: { label: "Open Upcoming Releases", to: "/future-pull-list" },
 };
 
 export type CollectorHomeDisplaySection = {
@@ -93,34 +93,69 @@ export type CollectorHomeDisplaySection = {
   showItems: boolean;
   indicatorText: string;
   indicatorShowCheck: boolean;
-  indicatorTone: "has" | "empty" | "stale" | "unknown" | "error";
+  indicatorTone: "has" | "empty" | "stale" | "unknown" | "error" | "static";
 };
 
-export function sectionIndicatorDisplay(sec: P85CollectorHomeRead["sections"][number]): {
+/** Semantic badges for launcher-style cards (never generic "Review"). */
+const STATIC_SECTION_BADGE: Record<string, string> = {
+  portfolio: "Portfolio",
+  storage_issues: "Search",
+  future_pull_list: "Upcoming",
+  foc_alerts: "FOC",
+};
+
+export function sectionIndicatorDisplay(
+  sec: P85CollectorHomeRead["sections"][number],
+  options?: { staticBadgeKey?: string },
+): {
   text: string;
   showCheck: boolean;
   tone: CollectorHomeDisplaySection["indicatorTone"];
 } {
   const status = (sec.indicator_status ?? "UNKNOWN") as SectionIndicatorStatus;
   const count = sec.count;
+  const staticKey = options?.staticBadgeKey ?? sec.key;
 
   switch (status) {
     case "HAS_ITEMS":
       return {
         showCheck: true,
         tone: "has",
-        text: count !== null && count !== undefined && count > 0 ? `${count} available` : "Available",
+        text:
+          count !== null && count !== undefined && count > 0
+            ? `${count} Available`
+            : "Available",
       };
     case "EMPTY":
-      return { showCheck: false, tone: "empty", text: "No alerts" };
+      return { showCheck: false, tone: "empty", text: "No Alerts" };
     case "STALE":
       return { showCheck: false, tone: "stale", text: "Needs refresh" };
     case "ERROR":
       return { showCheck: false, tone: "error", text: "Unavailable" };
     case "UNKNOWN":
     default:
+      if (STATIC_SECTION_BADGE[staticKey]) {
+        return {
+          showCheck: false,
+          tone: "static",
+          text: STATIC_SECTION_BADGE[staticKey],
+        };
+      }
       return { showCheck: false, tone: "unknown", text: "Review" };
   }
+}
+
+export function formatSectionTitleWithCount(
+  baseTitle: string,
+  sec: P85CollectorHomeRead["sections"][number] | { count?: number | null; key?: string },
+): string {
+  if (sec.key === "portfolio") {
+    return baseTitle;
+  }
+  if (sec.count === null || sec.count === undefined) {
+    return baseTitle;
+  }
+  return `${baseTitle} (${sec.count})`;
 }
 
 export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): string {
@@ -155,55 +190,78 @@ export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): str
   return "Your daily comic collecting launch pad.";
 }
 
-export type PortfolioStripMetric = {
+export type DashboardStripMetric = {
   label: string;
   value: string;
 };
 
-/** Lightweight strip from cached collector-home fields only (no extra API calls). */
-export function buildPortfolioStrip(home: P85CollectorHomeRead): PortfolioStripMetric[] {
-  const metrics: PortfolioStripMetric[] = [];
+const DASHBOARD_STRIP_LABELS = [
+  "Collection Value",
+  "Books Owned",
+  "Active Listings",
+  "Open Alerts",
+] as const;
+
+function countOpenAlerts(sections: P85CollectorHomeRead["sections"]): string {
+  const collapsed = collapseBuySectionsForSummary(sections);
+  let sum = 0;
+  let anyKnown = false;
+  for (const sec of collapsed) {
+    if (sec.key === "discovery_alerts" || sec.key === "listing_management") {
+      continue;
+    }
+    if (sec.indicator_status === "ERROR") {
+      continue;
+    }
+    if (sec.count === null || sec.count === undefined) {
+      continue;
+    }
+    anyKnown = true;
+    sum += Math.max(0, Number(sec.count) || 0);
+  }
+  return anyKnown ? String(sum) : "—";
+}
+
+/** Always four columns; uses cached collector-home fields only. */
+export function buildDashboardStrip(home: P85CollectorHomeRead): DashboardStripMetric[] {
   const pm = home.portfolio_movement ?? {};
   const valueRaw = pm.current_value;
   const value =
     valueRaw !== null && valueRaw !== undefined && valueRaw !== "" ? Number(valueRaw) : null;
-  if (value !== null && !Number.isNaN(value) && pm.status === "OK") {
-    metrics.push({
-      label: "Collection Value",
-      value: `$${Math.round(value).toLocaleString()}`,
-    });
+  const collectionValue =
+    value !== null && !Number.isNaN(value) && pm.status === "OK"
+      ? `$${Math.round(value).toLocaleString()}`
+      : "—";
+
+  const booksRaw = pm.books_owned ?? pm.book_count;
+  let booksOwned = "—";
+  if (booksRaw !== null && booksRaw !== undefined && booksRaw !== "") {
+    const books = Number(booksRaw);
+    if (!Number.isNaN(books) && pm.status === "OK") {
+      booksOwned = String(Math.round(books));
+    }
   }
 
   const listingSection = home.sections.find((s) => s.key === "listing_management");
   const listingMeta = listingSection?.items?.[0] as { active_listings?: number } | undefined;
-  if (typeof listingMeta?.active_listings === "number") {
-    metrics.push({
-      label: "Active Listings",
-      value: String(listingMeta.active_listings),
-    });
-  }
+  const activeListings =
+    typeof listingMeta?.active_listings === "number"
+      ? String(listingMeta.active_listings)
+      : "—";
 
-  const booksRaw = pm.books_owned ?? pm.book_count;
-  if (booksRaw !== null && booksRaw !== undefined && booksRaw !== "") {
-    const books = Number(booksRaw);
-    if (!Number.isNaN(books) && pm.status === "OK") {
-      metrics.push({ label: "Books Owned", value: String(Math.round(books)) });
-    }
-  }
+  const openAlerts = countOpenAlerts(home.sections);
 
-  const gainRaw = pm.unrealized_gain ?? pm.net_profit ?? pm.total_unrealized_gain;
-  if (gainRaw !== null && gainRaw !== undefined && gainRaw !== "") {
-    const gain = Number(gainRaw);
-    if (!Number.isNaN(gain) && pm.status === "OK") {
-      const sign = gain >= 0 ? "+" : "";
-      metrics.push({
-        label: "Net Profit / Unrealized Gain",
-        value: `${sign}$${Math.round(Math.abs(gain)).toLocaleString()}`,
-      });
-    }
-  }
+  return [
+    { label: DASHBOARD_STRIP_LABELS[0], value: collectionValue },
+    { label: DASHBOARD_STRIP_LABELS[1], value: booksOwned },
+    { label: DASHBOARD_STRIP_LABELS[2], value: activeListings },
+    { label: DASHBOARD_STRIP_LABELS[3], value: openAlerts },
+  ];
+}
 
-  return metrics;
+/** @deprecated use buildDashboardStrip */
+export function buildPortfolioStrip(home: P85CollectorHomeRead): DashboardStripMetric[] {
+  return buildDashboardStrip(home);
 }
 
 const TODAY_SUMMARY_KEYS: { key: string; label: string }[] = [
@@ -229,21 +287,45 @@ function sectionCountForSummary(
 }
 
 /** Compact count lines when no advisor action rows exist. */
-export function buildTodaysSummaryLines(sections: P85CollectorHomeRead["sections"]): string[] {
+export type TodaysSummaryResult = {
+  lines: string[];
+  allCountsZero: boolean;
+  allCountsUnknown: boolean;
+};
+
+export function buildTodaysSummaryResult(
+  sections: P85CollectorHomeRead["sections"],
+): TodaysSummaryResult {
   const lines: string[] = [];
   let anyKnown = false;
+  let allZero = true;
   for (const { key, label } of TODAY_SUMMARY_KEYS) {
     const count = sectionCountForSummary(sections, key);
     if (count === null) {
       continue;
     }
     anyKnown = true;
+    if (count > 0) {
+      allZero = false;
+    }
     lines.push(`${label}: ${count}`);
   }
   if (!anyKnown) {
-    return ["Open dashboards to review current opportunities."];
+    return {
+      lines: ["No alerts currently require attention."],
+      allCountsZero: false,
+      allCountsUnknown: true,
+    };
   }
-  return lines;
+  return {
+    lines,
+    allCountsZero: allZero,
+    allCountsUnknown: false,
+  };
+}
+
+export function buildTodaysSummaryLines(sections: P85CollectorHomeRead["sections"]): string[] {
+  return buildTodaysSummaryResult(sections).lines;
 }
 
 /** @deprecated use buildTodaysSummaryLines */
@@ -325,7 +407,7 @@ function applyMergedBuyDisplay(
     mergedRaw = pickStrongerSectionIndicator(mergedRaw, extraIndicator);
   }
   const indicator = sectionIndicatorDisplay(mergedRaw);
-  buy.title = SECTION_LABELS.buy_alerts;
+  buy.title = formatSectionTitleWithCount(SECTION_LABELS.buy_alerts, mergedRaw);
   buy.indicatorText = indicator.text;
   buy.indicatorShowCheck = indicator.showCheck;
   buy.indicatorTone = indicator.tone;
@@ -364,7 +446,8 @@ export function sortCollectorHomeSectionsForDisplay(
 }
 
 function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): CollectorHomeDisplaySection {
-  const title = SECTION_LABELS[sec.key] ?? sec.title;
+  const baseTitle = SECTION_LABELS[sec.key] ?? sec.title;
+  const title = formatSectionTitleWithCount(baseTitle, sec);
   const emptyAction = SECTION_EMPTY_ACTIONS[sec.key] ?? {
     label: "Learn more",
     to: "/discovery-dashboard",
@@ -459,21 +542,23 @@ function buildPortfolioHomeSection(): CollectorHomeDisplaySection {
     key: "portfolio",
     title: "Portfolio",
     items: [],
-    body: "Review collection value, gains, losses, and top books.",
+    body: "Collection value, gains, losses, and top books.",
     actionLabel: "Open Portfolio",
     actionTo: "/dashboard",
     showItems: false,
-    indicatorText: "Review",
+    indicatorText: "Portfolio",
     indicatorShowCheck: false,
-    indicatorTone: "unknown",
+    indicatorTone: "static",
   };
 }
 
-function insertPortfolioSection(sections: CollectorHomeDisplaySection[]): CollectorHomeDisplaySection[] {
-  const portfolio = buildPortfolioHomeSection();
-  const firstNonHas = sections.findIndex((s) => s.indicatorTone !== "has");
-  const insertAt = firstNonHas === -1 ? sections.length : firstNonHas;
-  return [...sections.slice(0, insertAt), portfolio, ...sections.slice(insertAt)];
+function finalizeCollectorHomeSections(
+  sections: CollectorHomeDisplaySection[],
+): CollectorHomeDisplaySection[] {
+  return [...sections, buildPortfolioHomeSection()]
+    .map((section, index) => ({ section, index }))
+    .sort(compareDisplaySections)
+    .map(({ section }) => section);
 }
 
 /** Merge discovery into buy display; collapse duplicate buy cards. */
@@ -512,28 +597,48 @@ export function prepareCollectorHomeSections(
     applyMergedBuyDisplay(buyCard, sections, discovery);
   }
 
-  return insertPortfolioSection(
+  return finalizeCollectorHomeSections(
     prepared
       .filter((s) => s.key !== "discovery_alerts" && s.key !== "marketplace_deals")
       .map((section, index) => ({ section, index }))
-      .sort((a, b) => {
-        const rankDiff = displaySectionSortRank(a.section) - displaySectionSortRank(b.section);
-        if (rankDiff !== 0) {
-          return rankDiff;
-        }
-        return a.index - b.index;
-      })
+      .sort(compareDisplaySections)
       .map(({ section }) => section),
   );
 }
 
+const STATIC_CARD_SORT_KEYS = new Set(["portfolio", "storage_issues"]);
+
+function titleCountForSort(title: string): number {
+  const match = title.match(/\((\d+)\)\s*$/);
+  return match ? Number(match[1]) : -1;
+}
+
+function compareDisplaySections(
+  a: { section: CollectorHomeDisplaySection; index: number },
+  b: { section: CollectorHomeDisplaySection; index: number },
+): number {
+  const rankDiff = displaySectionSortRank(a.section) - displaySectionSortRank(b.section);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
+  const countDiff = titleCountForSort(b.section.title) - titleCountForSort(a.section.title);
+  if (countDiff !== 0) {
+    return countDiff;
+  }
+  return a.index - b.index;
+}
+
 function displaySectionSortRank(section: CollectorHomeDisplaySection): number {
+  if (STATIC_CARD_SORT_KEYS.has(section.key)) {
+    return 50;
+  }
   switch (section.indicatorTone) {
     case "has":
       return INDICATOR_SORT_RANK.HAS_ITEMS;
     case "stale":
       return INDICATOR_SORT_RANK.STALE;
     case "unknown":
+    case "static":
       return INDICATOR_SORT_RANK.UNKNOWN;
     case "empty":
       return INDICATOR_SORT_RANK.EMPTY;
@@ -562,6 +667,8 @@ export function indicatorBadgeClassName(tone: CollectorHomeDisplaySection["indic
       return "bg-red-50 text-red-800 ring-red-200";
     case "empty":
       return "bg-slate-100 text-slate-700 ring-slate-200";
+    case "static":
+      return "bg-blue-50 text-blue-900 ring-blue-200";
     case "unknown":
     default:
       return "bg-amber-50 text-amber-900 ring-amber-200";

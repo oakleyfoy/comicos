@@ -7796,7 +7796,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               type="button"
               disabled={page === 1}
               onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-blue-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:opacity-100"
             >
               Previous
             </button>
@@ -7807,7 +7807,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               type="button"
               disabled={page >= pageCount}
               onClick={() => setPage((currentPage) => Math.min(pageCount, currentPage + 1))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-blue-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:opacity-100"
             >
               Next
             </button>

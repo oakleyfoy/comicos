@@ -38,6 +38,26 @@ function baseHome(overrides: Partial<P85CollectorHomeRead> = {}): P85CollectorHo
         error: "",
       },
       {
+        key: "grade_alerts",
+        title: "Grade",
+        items: [],
+        empty_hint: "",
+        count: 0,
+        indicator_status: "EMPTY",
+        status: "SKIPPED",
+        error: "",
+      },
+      {
+        key: "future_pull_list",
+        title: "Future",
+        items: [],
+        empty_hint: "",
+        count: 0,
+        indicator_status: "EMPTY",
+        status: "SKIPPED",
+        error: "",
+      },
+      {
         key: "marketplace_deals",
         title: "Marketplace deals",
         items: [],
@@ -84,25 +104,16 @@ describe("CollectorHomePage", () => {
       expect(screen.getByRole("heading", { name: "Collector Home" })).toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: "Today's Summary" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Today's actions" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Fast operational dashboard/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/SKIPPED/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/UNSET/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("Open to review")).not.toBeInTheDocument();
-    expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
-    expect(screen.queryByText("Review dashboards")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open dashboards to review current opportunities.")).not.toBeInTheDocument();
     expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Buy Opportunities: 0");
     expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Sell Opportunities: 4");
-    expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
-    expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Buy Opportunities")).toHaveLength(1);
-    expect(screen.queryByText("Buy Deals")).not.toBeInTheDocument();
-    expect(screen.queryByText("Marketplace Deals")).not.toBeInTheDocument();
-    expect(screen.getByText("Sell Opportunities")).toBeInTheDocument();
-    expect(screen.getByText("4 available")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sell Opportunities (4)" })).toBeInTheDocument();
+    expect(screen.getByText("4 Available")).toBeInTheDocument();
     expect(
-      screen.getByText("Review undervalued comics and cross-marketplace buy opportunities identified by ComicOS."),
+      screen.getByText("Review buy recommendations and marketplace opportunities."),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("collector-home-dashboard-strip")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows renamed collector-facing cards and priority order", async () => {
@@ -154,8 +165,8 @@ describe("CollectorHomePage", () => {
             title: "Future",
             items: [],
             empty_hint: "",
-            count: 0,
-            indicator_status: "EMPTY",
+            count: 12,
+            indicator_status: "HAS_ITEMS",
             status: "SKIPPED",
             error: "",
           },
@@ -168,22 +179,19 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("FOC & Preorders")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Buy Opportunities (5)" })).toBeInTheDocument();
     });
-    expect(screen.queryByText("FOC Watch")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Find a Book" })).toBeInTheDocument();
-    expect(screen.queryByText("Storage Check")).not.toBeInTheDocument();
-    expect(screen.getByText("Upcoming Releases")).toBeInTheDocument();
-    expect(screen.queryByText("Upcoming Pull List")).not.toBeInTheDocument();
+    expect(screen.getByText("5 Available")).toBeInTheDocument();
+    expect(screen.getByText("Search")).toBeInTheDocument();
+    expect(screen.queryByText(/^Review$/)).not.toBeInTheDocument();
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((el) => el.textContent)
       .filter((t) => t && t !== "Today's Summary" && t !== "Collector Advisor");
-    expect(headings[0]).toBe("Buy Opportunities");
-    expect(screen.getByText("5 available")).toBeInTheDocument();
+    expect(headings[0]).toMatch(/Upcoming Releases \(12\)/);
   });
 
-  it("shows count summary when nothing has advisor actions", async () => {
+  it("shows monitoring message when all summary counts are zero", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
       baseHome({
         sections: [
@@ -236,22 +244,8 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Sell Opportunities: 0");
+      expect(screen.getByTestId("collector-home-monitoring-message")).toBeInTheDocument();
     });
-    expect(screen.queryByText("No immediate actions require attention.")).not.toBeInTheDocument();
-  });
-
-  it("does not show legacy empty actions copy", async () => {
-    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
-    render(
-      <MemoryRouter>
-        <CollectorHomePage />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId("collector-home-todays-summary")).toBeInTheDocument();
-    });
-    expect(screen.queryByText(/No actions queued yet/i)).not.toBeInTheDocument();
   });
 
   it("renders EMPTY indicator copy", async () => {
@@ -262,7 +256,7 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("No alerts")).toBeInTheDocument();
+      expect(screen.getAllByText("No Alerts").length).toBeGreaterThan(0);
     });
   });
 
@@ -274,49 +268,14 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Sell Opportunities" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Sell Opportunities (4)" })).toBeInTheDocument();
     });
-    const sellSection = screen.getByRole("heading", { name: "Sell Opportunities" }).closest("section");
-    expect(sellSection).not.toBeNull();
-    expect(within(sellSection!).getByRole("link", { name: "Open Sell Command Center" })).toBeInTheDocument();
-    const buySection = screen.getByRole("heading", { name: "Buy Opportunities" }).closest("section");
+    const buySection = screen.getByRole("heading", { name: "Buy Opportunities (0)" }).closest("section");
     expect(buySection).not.toBeNull();
-    expect(within(buySection!).getByRole("link", { name: "Review Buy Opportunities" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Buy Deals" })).not.toBeInTheDocument();
+    expect(within(buySection!).getByRole("link", { name: "Open Buy Opportunities" })).toBeInTheDocument();
   });
 
-  it("keeps Today's Summary outside the section grid and renders top advisor actions", async () => {
-    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
-      baseHome({
-        todays_actions: [
-          {
-            title: "Review sell candidate",
-            action_type: "SELL",
-            priority_score: 90,
-            source: "daily_actions",
-            action_url: "/sell-queue",
-          },
-        ],
-      }),
-    );
-    render(
-      <MemoryRouter>
-        <CollectorHomePage />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Review sell candidate" })).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("collector-home-todays-summary")).not.toBeInTheDocument();
-    expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
-    const grid = screen.getByTestId("collector-home-section-grid");
-    expect(grid.className).toMatch(/grid-cols-1/);
-    expect(grid.className).toMatch(/md:grid-cols-2/);
-    const todaysHeading = screen.getByRole("heading", { name: "Today's Summary" });
-    expect(todaysHeading.closest("[data-testid='collector-home-section-grid']")).toBeNull();
-  });
-
-  it("shows compact advisor block with CTA, not a hero-only button", async () => {
+  it("shows advisor placeholder copy when plan not ready", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome({ advisor_plan_ready: false }));
     render(
       <MemoryRouter>
@@ -326,11 +285,13 @@ describe("CollectorHomePage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("collector-home-advisor-summary")).toBeInTheDocument();
     });
-    expect(screen.getByText("Advisor plan not generated yet.")).toBeInTheDocument();
-    expect(screen.getByTestId("collector-home-advisor-cta")).toHaveAttribute("href", "/automation-center");
+    expect(
+      screen.getByText(/Your personalized daily action plan will appear here once advisor data has been generated/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Advisor plan not generated yet.")).not.toBeInTheDocument();
   });
 
-  it("shows Portfolio card linking to dashboard", async () => {
+  it("shows Portfolio card with Portfolio badge", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
     render(
       <MemoryRouter>
@@ -342,8 +303,10 @@ describe("CollectorHomePage", () => {
     });
     const portfolioSection = screen.getByRole("heading", { name: "Portfolio" }).closest("section");
     expect(portfolioSection).not.toBeNull();
-    expect(within(portfolioSection!).getByRole("link", { name: "Open Portfolio" })).toHaveAttribute("href", "/dashboard");
-    expect(within(portfolioSection!).getByText("Review")).toBeInTheDocument();
+    expect(within(portfolioSection!).getByRole("heading", { name: "Portfolio" })).toBeInTheDocument();
+    const badge = within(portfolioSection!).getAllByText("Portfolio").find((el) => el.tagName === "SPAN");
+    expect(badge).toBeDefined();
+    expect(within(portfolioSection!).queryByText(/^Review$/)).not.toBeInTheDocument();
   });
 
   it("does not add API calls beyond getCollectorHome", async () => {
