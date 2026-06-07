@@ -45,6 +45,8 @@ class P79StorageLocationListResponse(BaseModel):
     total_items: int
     limit: int = 100
     offset: int = 0
+    status: str = "OK"
+    message: str = ""
 
 
 class P79StorageBoxCreate(BaseModel):
@@ -153,3 +155,5 @@ class P79StorageDashboardRead(BaseModel):
     recent_assignments: list[P79StorageAssignmentRead] = Field(default_factory=list)
     locations: list[P79StorageLocationRead] = Field(default_factory=list)
     boxes: list[P79StorageBoxRead] = Field(default_factory=list)
+    status: str = "OK"
+    message: str = ""

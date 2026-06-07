@@ -12414,7 +12414,11 @@ export interface P78ListingDraftRead {
 
 export interface P78ListingDraftListResponse {
   items: P78ListingDraftRead[];
-  pagination: MarketApiV1Pagination;
+  total_items: number;
+  limit: number;
+  offset: number;
+  status?: string;
+  message?: string;
 }
 
 export interface P78ListingDraftCreate {
@@ -12496,6 +12500,8 @@ export interface P78SellingAnalyticsRead {
   average_days_to_sell?: number | null;
   sell_recommendation_accuracy_pct?: number | null;
   snapshot_id?: number | null;
+  status?: string;
+  message?: string;
 }
 
 export interface P78SellingDashboardRead {
@@ -12504,6 +12510,8 @@ export interface P78SellingDashboardRead {
   sold_listings: P78ListingRead[];
   draft_listings: Record<string, unknown>[];
   recent_sales: P78SaleRecordRead[];
+  status?: string;
+  message?: string;
 }
 
 export interface P78SellingCertificationRead {
@@ -12748,8 +12756,13 @@ export interface P82MarketplaceAcquisitionOpportunityRead {
 
 export interface P82MarketplaceAcquisitionListResponse {
   items: P82MarketplaceAcquisitionOpportunityRead[];
-  pagination: MarketApiV1Pagination;
+  pagination?: MarketApiV1Pagination;
+  total_items?: number;
+  limit?: number;
+  offset?: number;
   unread_count?: number;
+  status?: string;
+  message?: string;
 }
 
 export interface P82MarketplaceAcquisitionDashboardRead {
@@ -12789,6 +12802,8 @@ export interface P83CollectionValuationDashboardRead {
     reduce_exposure: string[];
     increase_exposure: string[];
   };
+  status?: string;
+  message?: string;
 }
 
 export interface P84CollectorNotificationRead {
@@ -12835,6 +12850,8 @@ export interface P84CollectorCommandCenterRead {
   portfolio_movement: Record<string, unknown>;
   storage_warnings: Record<string, unknown>[];
   grading_candidates: Record<string, unknown>[];
+  status?: string;
+  message?: string;
 }
 
 export interface P82P84CollectorExpansionCertificationRead {
@@ -15440,6 +15457,15 @@ export interface P72GradingBatchRead {
   updated_at: string;
 }
 
+export interface P72GradingQueueListResponse {
+  items: P72GradingQueueEntryRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+  status?: string;
+  message?: string;
+}
+
 export interface P72GradingQueueEntryRead {
   id: number;
   inventory_copy_id: number;
@@ -15763,6 +15789,8 @@ export interface GradingDashboardRead {
   decision_engine?: P72GradingDecisionDashboardRead | null;
   operations_engine?: P72GradingOperationsDashboardRead | null;
   analytics_engine?: P72GradingAnalyticsDashboardRead | null;
+  status?: string;
+  message?: string;
 }
 
 export interface GradeValidationRead {
@@ -15917,6 +15945,8 @@ export interface GradingPlatformSummaryRead {
   calibration_summary: GradingPlatformCalibrationSummary;
   reliability_summary: GradingPlatformReliabilitySummary;
   top_grading_candidates: GradingIntelligenceRecommendationRead[];
+  status?: string;
+  message?: string;
 }
 
 export interface GradingPlatformCertificationRead {
@@ -17853,6 +17883,8 @@ export interface P79StorageLocationListResponse {
   total_items: number;
   limit: number;
   offset: number;
+  status?: string;
+  message?: string;
 }
 
 export interface P79StorageBoxRead {
@@ -18110,6 +18142,8 @@ export interface P79StorageDashboardRead {
   recent_assignments: P79StorageAssignmentRead[];
   locations: P79StorageLocationRead[];
   boxes: P79StorageBoxRead[];
+  status?: string;
+  message?: string;
 }
 
 export interface P74ReleaseIntelligenceAnalyticsDashboardRead {
@@ -28227,7 +28261,7 @@ export const apiClient = {
   },
 
   getGradingIntelligenceDashboard(): Promise<GradingDashboardRead> {
-    return requestScanV1<GradingDashboardRead>("/grading-intelligence/dashboard");
+    return requestNavPageV1<GradingDashboardRead>("/grading-intelligence/dashboard");
   },
 
   async getGradingIntelligenceCandidates(limit = 50): Promise<P72GradingDecisionCandidateRead[]> {
@@ -28249,10 +28283,27 @@ export const apiClient = {
     if (params?.search) q.set("search", params.search);
     if (params?.limit != null) q.set("limit", String(params.limit));
     const suffix = q.toString() ? `?${q.toString()}` : "";
-    const envelope = await fetchScanV1Envelope<{ items: P72GradingQueueEntryRead[] }>(
+    const body = await requestNavPageV1<{ items: P72GradingQueueEntryRead[] }>(
       `/grading-intelligence/queue${suffix}`,
     );
-    return envelope.data.items ?? [];
+    return body.items ?? [];
+  },
+
+  getGradingQueuePage(params?: {
+    status?: string;
+    batch_id?: number;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<P72GradingQueueListResponse> {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.batch_id != null) q.set("batch_id", String(params.batch_id));
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return requestNavPageV1<P72GradingQueueListResponse>(`/grading-intelligence/queue${suffix}`);
   },
 
   async getGradingBatches(limit = 50): Promise<P72GradingBatchRead[]> {
@@ -28311,19 +28362,19 @@ export const apiClient = {
   },
 
   getGradingPlatformSummary(): Promise<GradingPlatformSummaryRead> {
-    return requestScanV1<GradingPlatformSummaryRead>("/grading-platform/summary");
+    return requestNavPageV1<GradingPlatformSummaryRead>("/grading-platform/summary");
   },
 
   getGradingPlatformHealth(): Promise<GradingPlatformHealthRead> {
-    return requestScanV1<GradingPlatformHealthRead>("/grading-platform/health");
+    return requestNavPageV1<GradingPlatformHealthRead>("/grading-platform/health");
   },
 
   getGradingPlatformValidation(): Promise<GradingPlatformValidationRead> {
-    return requestScanV1<GradingPlatformValidationRead>("/grading-platform/validation");
+    return requestNavPageV1<GradingPlatformValidationRead>("/grading-platform/validation");
   },
 
   getGradingPlatformCertification(): Promise<GradingPlatformCertificationRead> {
-    return requestScanV1<GradingPlatformCertificationRead>("/grading-platform/certification");
+    return requestNavPageV1<GradingPlatformCertificationRead>("/grading-platform/certification");
   },
 
   getReleasePlatformSummary(): Promise<ReleasePlatformSummaryRead> {
@@ -29579,7 +29630,7 @@ export const apiClient = {
   },
 
   listStorageLocations(): Promise<P79StorageLocationListResponse> {
-    return requestScanV1<P79StorageLocationListResponse>("/storage/locations");
+    return requestNavPageV1<P79StorageLocationListResponse>("/storage/locations");
   },
 
   createStorageLocation(payload: {
@@ -29984,7 +30035,7 @@ export const apiClient = {
 
   listListingDrafts(params?: { status?: string; limit?: number; offset?: number }): Promise<P78ListingDraftListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<P78ListingDraftListResponse>(`/listing-drafts${q}`);
+    return requestNavPageV1<P78ListingDraftListResponse>(`/listing-drafts${q}`);
   },
 
   createListingDraft(payload: P78ListingDraftCreate): Promise<P78ListingDraftRead> {
@@ -30020,11 +30071,11 @@ export const apiClient = {
   },
 
   getSellingAnalytics(): Promise<P78SellingAnalyticsRead> {
-    return requestScanV1<P78SellingAnalyticsRead>("/selling-analytics");
+    return requestNavPageV1<P78SellingAnalyticsRead>("/selling-analytics");
   },
 
   getSellingDashboard(): Promise<P78SellingDashboardRead> {
-    return requestScanV1<P78SellingDashboardRead>("/selling-dashboard");
+    return requestNavPageV1<P78SellingDashboardRead>("/selling-dashboard");
   },
 
   getSellingCertification(): Promise<P78SellingCertificationRead> {
@@ -30190,10 +30241,9 @@ export const apiClient = {
   },
 
   getCollectorCommandCenter(): Promise<P84CollectorCommandCenterRead> {
-    return requestScanV1WithTimeout<P84CollectorCommandCenterRead>(
+    return requestNavPageV1<P84CollectorCommandCenterRead>(
       "/collector-command-center",
       undefined,
-      COLLECTOR_SURFACE_TIMEOUT_MS,
       "Command Center is taking too long to load.",
     );
   },

@@ -29,6 +29,8 @@ class GradingPlatformValidationRead(BaseModel):
     overall_status: str
     platform_certified: bool
     checks: list[GradingPlatformValidationCheckRead]
+    status: str = "OK"
+    message: str = ""
 
 
 class GradingPlatformHealthComponentRead(BaseModel):
@@ -46,6 +48,8 @@ class GradingPlatformHealthRead(BaseModel):
 
     overall_status: str
     components: list[GradingPlatformHealthComponentRead]
+    status: str = "OK"
+    message: str = ""
 
 
 class GradingPlatformConditionSummary(BaseModel):
@@ -109,6 +113,8 @@ class GradingPlatformSummaryRead(BaseModel):
     calibration_summary: GradingPlatformCalibrationSummary
     reliability_summary: GradingPlatformReliabilitySummary
     top_grading_candidates: list[GradingRecommendationRead] = Field(default_factory=list)
+    status: str = "OK"
+    message: str = ""
 
 
 class GradingPlatformCertificationRead(BaseModel):
@@ -120,3 +126,5 @@ class GradingPlatformCertificationRead(BaseModel):
     summary: str
     go_live_recommendation: str
     certification_notes: list[str] = Field(default_factory=list)
+    status: str = "OK"
+    message: str = ""

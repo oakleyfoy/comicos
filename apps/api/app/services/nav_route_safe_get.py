@@ -19,7 +19,33 @@ from app.schemas.p82_p84_collector_expansion import (
     CollectionValuationDashboardRead,
     MarketplaceAcquisitionListResponse,
 )
+from app.schemas.grading_intelligence import GradingDashboardRead
+from app.schemas.grading_platform import (
+    GradingPlatformCalibrationSummary,
+    GradingPlatformCertificationRead,
+    GradingPlatformConditionSummary,
+    GradingPlatformHealthRead,
+    GradingPlatformPredictionSummary,
+    GradingPlatformRecommendationSummary,
+    GradingPlatformReliabilitySummary,
+    GradingPlatformRoiSummary,
+    GradingPlatformSummaryRead,
+    GradingPlatformValidationRead,
+)
+from app.schemas.p72_grading_operations import P72GradingQueueListResponse
+from app.schemas.p78_marketplace import P78SellingAnalyticsRead, P78SellingDashboardRead
+from app.schemas.p78_sell_workflow import P78ListingDraftListResponse
+from app.schemas.storage_foundation import P79StorageDashboardRead, P79StorageLocationListResponse
 from app.services.collector_page_load_service import _forecast_from_valuation_snapshot, _short_error
+from app.services.grading_dashboard import build_grading_dashboard
+from app.services.grading_platform_health import get_grading_platform_health
+from app.services.grading_platform_summary import get_grading_platform_certification, get_grading_platform_summary
+from app.services.grading_platform_validation import validate_grading_platform
+from app.services.grading_queue_service import list_queue_entries
+from app.services.p78_listing_draft_service import list_listing_drafts
+from app.services.p78_selling_analytics_service import build_selling_analytics, build_selling_dashboard
+from app.services.storage_dashboard_service import build_storage_dashboard
+from app.services.storage_location_service import list_storage_locations
 from app.services.foc_dashboard import get_foc_dashboard
 from app.services.key_issue_dashboard import build_key_issue_dashboard
 from app.services.marketplace_acquisition_service import list_acquisition_opportunities
@@ -226,4 +252,275 @@ def safe_key_issues_dashboard(session: Session, *, owner_user_id: int) -> KeyIss
             status="ERROR",
             message=_short_error(exc),
             total_profiles=0,
+        )
+
+
+def _empty_storage_dashboard(*, status: str, message: str) -> P79StorageDashboardRead:
+    return P79StorageDashboardRead(
+        location_count=0,
+        box_count=0,
+        assigned_books=0,
+        unassigned_books=0,
+        total_slot_capacity=0,
+        occupied_slots=0,
+        available_slots=0,
+        location_utilization_pct=0.0,
+        shelf_utilization_pct=0.0,
+        box_utilization_pct=0.0,
+        status=status,
+        message=message,
+    )
+
+
+def safe_storage_dashboard(session: Session, *, owner_user_id: int) -> P79StorageDashboardRead:
+    try:
+        body = build_storage_dashboard(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_storage_dashboard failed for owner_user_id=%s", owner_user_id)
+        return _empty_storage_dashboard(status="ERROR", message=_short_error(exc))
+
+
+def safe_storage_locations_list(
+    session: Session,
+    *,
+    owner_user_id: int,
+    limit: int,
+    offset: int,
+) -> P79StorageLocationListResponse:
+    try:
+        items, total = list_storage_locations(session, owner_user_id=owner_user_id, limit=limit, offset=offset)
+        return P79StorageLocationListResponse(
+            items=items,
+            total_items=total,
+            limit=limit,
+            offset=offset,
+            status="OK",
+            message="",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_storage_locations_list failed for owner_user_id=%s", owner_user_id)
+        return P79StorageLocationListResponse(
+            items=[],
+            total_items=0,
+            limit=limit,
+            offset=offset,
+            status="ERROR",
+            message=_short_error(exc),
+        )
+
+
+def safe_grading_queue_list(
+    session: Session,
+    *,
+    owner_user_id: int,
+    status: str | None,
+    batch_id: int | None,
+    search: str | None,
+    limit: int,
+    offset: int,
+) -> P72GradingQueueListResponse:
+    try:
+        body = list_queue_entries(
+            session,
+            owner_user_id=owner_user_id,
+            status=status,
+            batch_id=batch_id,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_queue_list failed for owner_user_id=%s", owner_user_id)
+        return P72GradingQueueListResponse(
+            items=[],
+            total_items=0,
+            limit=limit,
+            offset=offset,
+            status="ERROR",
+            message=_short_error(exc),
+        )
+
+
+def _empty_grading_dashboard(*, status: str, message: str) -> GradingDashboardRead:
+    return GradingDashboardRead(
+        prediction_count=0,
+        recommendation_count=0,
+        roi_analysis_count=0,
+        average_confidence=0.0,
+        average_priority=0.0,
+        average_roi_percent=0.0,
+        status=status,
+        message=message,
+    )
+
+
+def safe_grading_intelligence_dashboard(session: Session, *, owner_user_id: int) -> GradingDashboardRead:
+    try:
+        body = build_grading_dashboard(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_intelligence_dashboard failed for owner_user_id=%s", owner_user_id)
+        return _empty_grading_dashboard(status="ERROR", message=_short_error(exc))
+
+
+def safe_listing_drafts_list(
+    session: Session,
+    *,
+    owner_user_id: int,
+    status: str | None,
+    limit: int,
+    offset: int,
+) -> P78ListingDraftListResponse:
+    try:
+        body = list_listing_drafts(
+            session,
+            owner_user_id=owner_user_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_listing_drafts_list failed for owner_user_id=%s", owner_user_id)
+        return P78ListingDraftListResponse(
+            items=[],
+            total_items=0,
+            limit=limit,
+            offset=offset,
+            status="ERROR",
+            message=_short_error(exc),
+        )
+
+
+def _empty_selling_analytics(*, status: str, message: str) -> P78SellingAnalyticsRead:
+    return P78SellingAnalyticsRead(
+        revenue=0.0,
+        profit=0.0,
+        roi_pct=0.0,
+        listings_created=0,
+        listings_sold=0,
+        sell_conversion_rate_pct=0.0,
+        average_days_to_sell=None,
+        status=status,
+        message=message,
+    )
+
+
+def safe_selling_analytics(session: Session, *, owner_user_id: int) -> P78SellingAnalyticsRead:
+    try:
+        body = build_selling_analytics(session, owner_user_id=owner_user_id, persist=False)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_selling_analytics failed for owner_user_id=%s", owner_user_id)
+        return _empty_selling_analytics(status="ERROR", message=_short_error(exc))
+
+
+def safe_selling_dashboard(session: Session, *, owner_user_id: int) -> P78SellingDashboardRead:
+    try:
+        body = build_selling_dashboard(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_selling_dashboard failed for owner_user_id=%s", owner_user_id)
+        return P78SellingDashboardRead(
+            analytics=_empty_selling_analytics(status="ERROR", message=_short_error(exc)),
+            status="ERROR",
+            message=_short_error(exc),
+        )
+
+
+def _empty_grading_platform_summary(*, status: str, message: str) -> GradingPlatformSummaryRead:
+    return GradingPlatformSummaryRead(
+        condition_summary=GradingPlatformConditionSummary(
+            analysis_count=0,
+            profile_count=0,
+            average_condition_score=0.0,
+            average_quality_score=0.0,
+        ),
+        prediction_summary=GradingPlatformPredictionSummary(prediction_count=0, average_confidence=0.0),
+        recommendation_summary=GradingPlatformRecommendationSummary(recommendation_count=0, average_priority=0.0),
+        roi_summary=GradingPlatformRoiSummary(roi_analysis_count=0, average_roi_percent=0.0),
+        calibration_summary=GradingPlatformCalibrationSummary(
+            validation_count=0,
+            calibration_metric_count=0,
+            average_accuracy_score=0.0,
+        ),
+        reliability_summary=GradingPlatformReliabilitySummary(
+            reliability_metric_count=0,
+            drift_event_count=0,
+            average_reliability_score=0.0,
+        ),
+        status=status,
+        message=message,
+    )
+
+
+def safe_grading_platform_summary(session: Session, *, owner_user_id: int) -> GradingPlatformSummaryRead:
+    try:
+        body = get_grading_platform_summary(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_platform_summary failed for owner_user_id=%s", owner_user_id)
+        return _empty_grading_platform_summary(status="ERROR", message=_short_error(exc))
+
+
+def safe_grading_platform_health(session: Session, *, owner_user_id: int) -> GradingPlatformHealthRead:
+    try:
+        body = get_grading_platform_health(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_platform_health failed for owner_user_id=%s", owner_user_id)
+        return GradingPlatformHealthRead(overall_status="ERROR", components=[], status="ERROR", message=_short_error(exc))
+
+
+def safe_grading_platform_validation(session: Session, *, owner_user_id: int) -> GradingPlatformValidationRead:
+    try:
+        body = validate_grading_platform(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_platform_validation failed for owner_user_id=%s", owner_user_id)
+        return GradingPlatformValidationRead(
+            overall_status="ERROR",
+            platform_certified=False,
+            checks=[],
+            status="ERROR",
+            message=_short_error(exc),
+        )
+
+
+def safe_grading_platform_certification(session: Session, *, owner_user_id: int) -> GradingPlatformCertificationRead:
+    try:
+        body = get_grading_platform_certification(session, owner_user_id=owner_user_id)
+        body.status = "OK"
+        body.message = ""
+        return body
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("safe_grading_platform_certification failed for owner_user_id=%s", owner_user_id)
+        return GradingPlatformCertificationRead(
+            platform_certified=False,
+            validation_status="ERROR",
+            health_status="ERROR",
+            summary="Unavailable",
+            go_live_recommendation="HOLD",
+            status="ERROR",
+            message=_short_error(exc),
         )

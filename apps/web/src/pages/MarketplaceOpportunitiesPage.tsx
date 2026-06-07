@@ -5,16 +5,21 @@ import { ApiError, apiClient, type P82MarketplaceAcquisitionOpportunityRead } fr
 import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
 import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { CollectorErrorState } from "../components/CollectorErrorState";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 
 export function MarketplaceOpportunitiesPage(): JSX.Element {
   const [items, setItems] = useState<P82MarketplaceAcquisitionOpportunityRead[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<string | undefined>();
+  const [loadMessage, setLoadMessage] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const body = await apiClient.listMarketplaceAcquisitionOpportunities({ refresh: false, limit: 50 });
-      setItems(body.items);
+      setItems(body.items ?? []);
+      setLoadStatus(body.status);
+      setLoadMessage(body.message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load opportunities.");
     }
@@ -34,8 +39,9 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+        <NavPageLoadBanner status={loadStatus} message={loadMessage} />
         {error ? <CollectorErrorState message={error} onRetry={() => void load()} /> : null}
-        {items.length === 0 && !error ? (
+        {items.length === 0 && !error && loadStatus !== "ERROR" ? (
           <CollectorEmptyState
             title="No marketplace opportunities yet"
             description="Refresh deals from your inventory FMV spread or scan an eBay listing."

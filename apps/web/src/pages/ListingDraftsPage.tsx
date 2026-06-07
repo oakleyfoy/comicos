@@ -2,17 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P78ListingDraftRead } from "../api/client";
 import { SellWorkflowNav } from "../components/sell/p78/SellWorkflowNav";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function ListingDraftsPage(): JSX.Element {
   const [items, setItems] = useState<P78ListingDraftRead[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<string | undefined>();
+  const [loadMessage, setLoadMessage] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const body = await apiClient.listListingDrafts({ limit: 50, offset: 0 });
       setItems(body.items);
+      setLoadStatus(body.status);
+      setLoadMessage(body.message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load drafts.");
     }
@@ -32,6 +37,7 @@ export function ListingDraftsPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+        <NavPageLoadBanner status={loadStatus} message={loadMessage} />
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
         {items.length === 0 ? (
           <p className="text-slate-500">No listing drafts yet. Create one from the sell queue.</p>

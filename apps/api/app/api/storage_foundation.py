@@ -72,10 +72,14 @@ def v1_storage_locations_list(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    items, total = list_storage_locations(
-        session, owner_user_id=int(current_user.id), limit=limit, offset=offset
+    from app.services.nav_route_safe_get import safe_storage_locations_list
+
+    body = safe_storage_locations_list(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=limit,
+        offset=offset,
     )
-    body = P79StorageLocationListResponse(items=items, total_items=total, limit=limit, offset=offset)
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
 
@@ -227,7 +231,9 @@ def v1_storage_dashboard(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = build_storage_dashboard(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_storage_dashboard
+
+    body = safe_storage_dashboard(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 

@@ -51,6 +51,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collection Gaps", to: "/collection-gaps" },
       { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
       { label: "Key Issues", to: "/key-issues" },
+      { label: "Gmail Imports", to: "/imports/email" },
+      { label: "Order Import", to: "/orders/import" },
+      { label: "Manual & AI Import", to: "/imports" },
     ],
   },
   {
@@ -129,7 +132,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Integrations", to: "/settings/integrations", hiddenFromNav: true },
-      { label: "Imports", to: "/imports", hiddenFromNav: true },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
     ],

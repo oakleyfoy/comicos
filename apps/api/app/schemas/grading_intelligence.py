@@ -170,6 +170,8 @@ class GradingDashboardRead(BaseModel):
     decision_engine: P72GradingDecisionDashboardRead | None = None
     operations_engine: P72GradingOperationsDashboardRead | None = None
     analytics_engine: P72GradingAnalyticsDashboardRead | None = None
+    status: str = "OK"
+    message: str = ""
 
 
 class GradePredictionRunResponse(BaseModel):

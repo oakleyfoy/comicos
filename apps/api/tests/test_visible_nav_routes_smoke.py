@@ -34,8 +34,13 @@ def test_visible_nav_primary_apis_return_200(client: TestClient, session: Sessio
     failures: list[str] = []
     for path in _api_paths():
         resp = client.get(path, headers=headers)
+        body_preview = resp.text[:400]
         if resp.status_code != 200:
-            failures.append(f"{path} -> {resp.status_code} {resp.text[:200]}")
+            failures.append(f"{path} -> {resp.status_code} {body_preview}")
+            continue
+        lowered = body_preview.lower()
+        if "internal server error" in lowered or "pg8000" in lowered or "does not exist" in lowered and "relation" in lowered:
+            failures.append(f"{path} -> 200 but leaked error payload {body_preview}")
     assert not failures, "nav API smoke failures:\n" + "\n".join(failures)
 
 
@@ -57,6 +62,16 @@ def test_manifest_covers_priority_routes() -> None:
         "/key-issues",
         "/sell-queue",
         "/storage-dashboard",
+        "/storage-locations",
+        "/grading-queue",
+        "/grading-intelligence",
+        "/grading-platform",
+        "/listing-drafts",
+        "/listings",
+        "/selling-analytics",
+        "/imports",
+        "/imports/email",
+        "/orders/import",
         "/discovery-feed",
         "/mobile-scan",
     }

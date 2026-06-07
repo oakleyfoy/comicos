@@ -76,6 +76,8 @@ class P78ListingDraftListResponse(BaseModel):
     total_items: int
     limit: int
     offset: int
+    status: str = "OK"
+    message: str = ""
 
 
 class P78ListingDraftCreate(BaseModel):

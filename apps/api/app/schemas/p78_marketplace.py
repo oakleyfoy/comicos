@@ -104,6 +104,8 @@ class P78SellingAnalyticsRead(BaseModel):
     average_days_to_sell: float | None
     sell_recommendation_accuracy_pct: float | None = None
     snapshot_id: int | None = None
+    status: str = "OK"
+    message: str = ""
 
 
 class P78SellingDashboardRead(BaseModel):
@@ -112,6 +114,8 @@ class P78SellingDashboardRead(BaseModel):
     sold_listings: list[P78ListingRead] = Field(default_factory=list)
     draft_listings: list[dict] = Field(default_factory=list)
     recent_sales: list[P78SaleRecordRead] = Field(default_factory=list)
+    status: str = "OK"
+    message: str = ""
 
 
 class P78SellingCertificationCheckRead(BaseModel):

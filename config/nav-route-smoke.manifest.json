@@ -19,6 +19,9 @@
     { "path": "/collection-gaps", "apis": ["/api/v1/collection-gaps/summary"] },
     { "path": "/collection-valuation-dashboard", "apis": ["/api/v1/collection-valuation/dashboard"] },
     { "path": "/key-issues", "apis": ["/api/v1/key-issues/dashboard"] },
+    { "path": "/imports", "apis": ["/imports"] },
+    { "path": "/imports/email", "apis": ["/gmail/status", "/gmail/imports"] },
+    { "path": "/orders/import", "apis": ["/imports"] },
     { "path": "/storage-dashboard", "apis": ["/api/v1/storage/dashboard"] },
     { "path": "/storage-locations", "apis": ["/api/v1/storage/locations"] },
     { "path": "/storage-assignment", "apis": ["/api/v1/storage/dashboard"] },
@@ -26,12 +29,20 @@
     { "path": "/storage-box-contents", "apis": ["/api/v1/storage/dashboard"] },
     { "path": "/storage-audit", "apis": ["/api/v1/storage/audits"] },
     { "path": "/grading-queue", "apis": ["/api/v1/grading-intelligence/queue"] },
-    { "path": "/grading-intelligence", "apis": ["/api/v1/grading-intelligence/recommendations"] },
+    { "path": "/grading-intelligence", "apis": ["/api/v1/grading-intelligence/dashboard"] },
     { "path": "/grade-before-sell", "apis": ["/api/v1/grade-before-sell/summary"] },
-    { "path": "/grading-platform", "apis": ["/api/v1/grading-platform/certification"] },
+    {
+      "path": "/grading-platform",
+      "apis": [
+        "/api/v1/grading-platform/summary",
+        "/api/v1/grading-platform/health",
+        "/api/v1/grading-platform/validation",
+        "/api/v1/grading-platform/certification"
+      ]
+    },
     { "path": "/sell-queue", "apis": ["/api/v1/sell-queue"] },
     { "path": "/listing-drafts", "apis": ["/api/v1/listing-drafts"] },
-    { "path": "/listings", "apis": ["/api/v1/listing-drafts"] },
+    { "path": "/listings", "apis": ["/api/v1/selling-dashboard"] },
     { "path": "/selling-analytics", "apis": ["/api/v1/selling-analytics"] },
     { "path": "/discovery-dashboard", "apis": ["/api/v1/discovery/dashboard"] },
     { "path": "/discovery-opportunities", "apis": ["/api/v1/discovery/opportunities"] },

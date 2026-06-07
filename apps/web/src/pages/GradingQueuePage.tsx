@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ApiError, apiClient, type P72GradingQueueEntryRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 const STATUS_FILTERS = [
@@ -23,17 +24,21 @@ export function GradingQueuePage(): JSX.Element {
   const [status, setStatus] = useState<string>("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<string | undefined>();
+  const [loadMessage, setLoadMessage] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const rows = await apiClient.getGradingQueue({
+      const body = await apiClient.getGradingQueuePage({
         status: status || undefined,
         search: search.trim() || undefined,
       });
-      setItems(rows);
+      setItems(body.items ?? []);
+      setLoadStatus(body.status);
+      setLoadMessage(body.message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load grading queue.");
     } finally {
@@ -52,6 +57,7 @@ export function GradingQueuePage(): JSX.Element {
         title="Grading Queue"
         description="Filter, search, and track per-book grading status (P72-02)."
       />
+      <NavPageLoadBanner status={loadStatus} message={loadMessage} />
       <div className="mb-4 flex flex-wrap gap-3 text-sm">
         <Link className="text-indigo-600 hover:underline" to="/grading-operations">
           Operations dashboard

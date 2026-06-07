@@ -24,7 +24,9 @@ def v1_grading_platform_summary(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = get_grading_platform_summary(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_grading_platform_summary
+
+    body = safe_grading_platform_summary(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -34,7 +36,9 @@ def v1_grading_platform_health(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = get_grading_platform_health(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_grading_platform_health
+
+    body = safe_grading_platform_health(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -44,7 +48,9 @@ def v1_grading_platform_validation(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = validate_grading_platform(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_grading_platform_validation
+
+    body = safe_grading_platform_validation(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -54,5 +60,7 @@ def v1_grading_platform_certification(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = get_grading_platform_certification(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_grading_platform_certification
+
+    body = safe_grading_platform_certification(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))

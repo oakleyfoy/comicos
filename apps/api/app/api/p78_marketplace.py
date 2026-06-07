@@ -139,8 +139,13 @@ def v1_selling_analytics(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P78SellingAnalyticsRead = build_selling_analytics(session, owner_user_id=int(current_user.id), persist=True)
-    session.commit()
+    from app.services.nav_route_safe_get import safe_selling_analytics
+
+    body: P78SellingAnalyticsRead = safe_selling_analytics(session, owner_user_id=int(current_user.id))
+    try:
+        session.commit()
+    except Exception:  # noqa: BLE001
+        session.rollback()
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
@@ -150,8 +155,13 @@ def v1_selling_dashboard(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P78SellingDashboardRead = build_selling_dashboard(session, owner_user_id=int(current_user.id))
-    session.commit()
+    from app.services.nav_route_safe_get import safe_selling_dashboard
+
+    body: P78SellingDashboardRead = safe_selling_dashboard(session, owner_user_id=int(current_user.id))
+    try:
+        session.commit()
+    except Exception:  # noqa: BLE001
+        session.rollback()
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 

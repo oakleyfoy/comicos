@@ -10,6 +10,7 @@ import {
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 function statusTone(status: string): string {
@@ -119,6 +120,7 @@ export function GradingPlatformPage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      {summary ? <NavPageLoadBanner status={summary.status} message={summary.message} /> : null}
       {loading ? <p className="text-sm text-slate-600">Loading grading platform…</p> : null}
 
       {summary && health && validation && certification ? (

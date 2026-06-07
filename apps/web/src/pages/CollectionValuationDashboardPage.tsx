@@ -3,18 +3,24 @@ import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P83CollectionValuationDashboardRead } from "../api/client";
 import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function CollectionValuationDashboardPage(): JSX.Element {
   const [dash, setDash] = useState<P83CollectionValuationDashboardRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoading(true);
     try {
       setDash(await apiClient.getCollectionValuationDashboard());
     } catch (err) {
+      setDash(null);
       setError(err instanceof ApiError ? err.message : "Failed to load valuation dashboard.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -22,10 +28,18 @@ export function CollectionValuationDashboardPage(): JSX.Element {
     void load();
   }, [load]);
 
-  if (!dash) {
+  if (loading && !dash) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
+      </div>
+    );
+  }
+
+  if (!dash) {
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
+        <StatusBanner tone="error">{error ?? "Valuation dashboard unavailable."}</StatusBanner>
       </div>
     );
   }
@@ -57,6 +71,7 @@ export function CollectionValuationDashboardPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6 text-sm">
+        <NavPageLoadBanner status={dash.status} message={dash.message} />
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
         <p>
           Current value ${dash.forecast.current_value.toFixed(2)} · Risk {dash.risk.risk_category} (

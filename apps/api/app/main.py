@@ -1489,7 +1489,15 @@ async def _request_validation_exception_handler(request: Request, exc: RequestVa
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     import logging
 
-    logging.getLogger(__name__).exception("Unhandled error on %s", request.url.path)
+    from app.services.safe_page_response import build_safe_get_envelope, is_safe_get_path
+
+    path = request.url.path
+    logging.getLogger(__name__).exception("Unhandled error on %s", path)
+    if request.method == "GET" and is_safe_get_path(path):
+        return JSONResponse(
+            status_code=200,
+            content=build_safe_get_envelope(path=path, owner_user_id=None, exc=exc),
+        )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

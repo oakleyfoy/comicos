@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P78SellingDashboardRead } from "../api/client";
 import { SellWorkflowNav } from "../components/sell/p78/SellWorkflowNav";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 function ListingRow({ title, status, price, extra }: { title: string; status: string; price: number; extra?: string }) {
@@ -22,14 +23,19 @@ function ListingRow({ title, status, price, extra }: { title: string; status: st
 export function ListingsPage(): JSX.Element {
   const [dash, setDash] = useState<P78SellingDashboardRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoading(true);
     try {
       setDash(await apiClient.getSellingDashboard());
     } catch (err) {
+      setDash(null);
       setError(err instanceof ApiError ? err.message : "Failed to load listings.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -50,10 +56,18 @@ export function ListingsPage(): JSX.Element {
     }
   };
 
-  if (!dash) {
+  if (loading && !dash) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
+      </div>
+    );
+  }
+
+  if (!dash) {
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
+        <StatusBanner tone="error">{error ?? "Listings unavailable."}</StatusBanner>
       </div>
     );
   }
@@ -78,6 +92,7 @@ export function ListingsPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
+        <NavPageLoadBanner status={dash.status ?? dash.analytics.status} message={dash.message ?? dash.analytics.message} />
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
         <section>

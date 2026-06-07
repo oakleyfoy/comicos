@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ApiError, apiClient, type GradingDashboardRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 function StatCard({ label, value }: { label: string; value: string }): JSX.Element {
@@ -59,6 +60,7 @@ export function GradingIntelligencePage(): JSX.Element {
       />
 
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      {dashboard ? <NavPageLoadBanner status={dashboard.status} message={dashboard.message} /> : null}
       {loading ? <p className="text-sm text-slate-600">Loading grading intelligence…</p> : null}
 
       {dashboard ? (

@@ -162,7 +162,9 @@ def v1_p72_grading_queue(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = list_queue_entries(
+    from app.services.nav_route_safe_get import safe_grading_queue_list
+
+    body = safe_grading_queue_list(
         session,
         owner_user_id=int(current_user.id),
         status=status,
@@ -334,7 +336,9 @@ def v1_grading_dashboard(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body = build_grading_dashboard(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import safe_grading_intelligence_dashboard
+
+    body = safe_grading_intelligence_dashboard(session, owner_user_id=int(current_user.id))
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 

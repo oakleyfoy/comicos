@@ -2,18 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P78SellingAnalyticsRead } from "../api/client";
 import { SellWorkflowNav } from "../components/sell/p78/SellWorkflowNav";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function SellingAnalyticsPage(): JSX.Element {
   const [analytics, setAnalytics] = useState<P78SellingAnalyticsRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoading(true);
     try {
       setAnalytics(await apiClient.getSellingAnalytics());
     } catch (err) {
+      setAnalytics(null);
       setError(err instanceof ApiError ? err.message : "Failed to load selling analytics.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -21,10 +27,18 @@ export function SellingAnalyticsPage(): JSX.Element {
     void load();
   }, [load]);
 
-  if (!analytics) {
+  if (loading && !analytics) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
+        <StatusBanner tone="error">{error ?? "Selling analytics unavailable."}</StatusBanner>
       </div>
     );
   }
@@ -39,6 +53,7 @@ export function SellingAnalyticsPage(): JSX.Element {
         </div>
       </header>
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
+        <NavPageLoadBanner status={analytics.status} message={analytics.message} />
         {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">

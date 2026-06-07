@@ -99,6 +99,8 @@ class P72GradingQueueListResponse(BaseModel):
     total_items: int
     limit: int
     offset: int = 0
+    status: str = "OK"
+    message: str = ""
 
 
 class P72GradingQueueEnqueuePayload(BaseModel):

@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 import { ApiError, apiClient, type P79StorageLocationRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function StorageLocationsPage(): JSX.Element {
   const [locations, setLocations] = useState<P79StorageLocationRead[]>([]);
+  const [loadStatus, setLoadStatus] = useState<string | undefined>();
+  const [loadMessage, setLoadMessage] = useState<string | undefined>();
   const [name, setName] = useState("");
   const [kind, setKind] = useState("LOCATION");
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +21,8 @@ export function StorageLocationsPage(): JSX.Element {
     try {
       const body = await apiClient.listStorageLocations();
       setLocations(body.items);
+      setLoadStatus(body.status);
+      setLoadMessage(body.message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load locations.");
     } finally {
@@ -64,6 +69,7 @@ export function StorageLocationsPage(): JSX.Element {
         title="Storage Locations"
         description="Physical hierarchy: location → room → rack → shelf → box → slot (P79-01)."
       />
+      <NavPageLoadBanner status={loadStatus} message={loadMessage} />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       <section className="mb-6 flex flex-wrap gap-2">
         <input

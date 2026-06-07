@@ -73,7 +73,9 @@ def v1_list_listing_drafts(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P78ListingDraftListResponse = list_listing_drafts(
+    from app.services.nav_route_safe_get import safe_listing_drafts_list
+
+    body: P78ListingDraftListResponse = safe_listing_drafts_list(
         session,
         owner_user_id=int(current_user.id),
         status=status,

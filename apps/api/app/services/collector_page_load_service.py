@@ -50,8 +50,10 @@ _CACHED_ACTION_SCAN_LIMIT = 1200
 
 
 def _short_error(exc: BaseException) -> str:
-    message = str(exc).strip()
-    return message[:240] if message else exc.__class__.__name__
+    from app.services.safe_page_response import classify_page_error
+
+    _, message = classify_page_error(exc)
+    return message
 
 
 def fast_list_daily_actions(
