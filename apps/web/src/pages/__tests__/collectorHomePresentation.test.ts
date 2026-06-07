@@ -73,7 +73,7 @@ describe("collectorHomePresentation", () => {
     expect(sections.filter((s) => s.key === "buy_alerts")).toHaveLength(1);
     expect(sections.some((s) => s.key === "marketplace_deals")).toBe(false);
     expect(sections.find((s) => s.key === "buy_alerts")?.indicatorText).toBe("5 available");
-    expect(sections.find((s) => s.key === "buy_alerts")?.actionLabel).toBe("Review Buy Opportunities");
+    expect(sections.find((s) => s.key === "buy_alerts")?.actionLabel).toBe("Open Marketplace Command Center");
   });
 
   it("maps SKIPPED sections to launcher copy without SKIPPED in output", () => {

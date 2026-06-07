@@ -41,6 +41,12 @@ class MarketplaceAcquisitionOpportunity(SQLModel, table=True):
     recommendation: str = Field(default="PASS", max_length=16, nullable=False, index=True)
     reasons_json: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     status: str = Field(default="ACTIVE", max_length=16, nullable=False, index=True)
+    best_listing_id: int | None = Field(
+        default=None,
+        foreign_key="p88_marketplace_listing.id",
+        nullable=True,
+        index=True,
+    )
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 

@@ -72,6 +72,11 @@ export type BuyOpportunityDisplayCard = {
   listingIds: number[];
   isTopOpportunity: boolean;
   recommendation: string;
+  marketplaceLabel: string | null;
+  activeListingCount: number;
+  hasVerifiedListings: boolean;
+  bestMarketplaceLabel: string | null;
+  savingsVsHighest: number | null;
 };
 
 const RECOMMENDATION_BADGE: Record<string, string> = {
@@ -253,13 +258,29 @@ export function buildOpportunityReasons(
   return generated.slice(0, 3);
 }
 
+function marketplaceLabelFor(opportunity: P82MarketplaceAcquisitionOpportunityRead): string | null {
+  if (opportunity.best_marketplace_name) {
+    return opportunity.best_marketplace_name;
+  }
+  if (opportunity.has_verified_listings && opportunity.listing_marketplace) {
+    return opportunity.listing_marketplace;
+  }
+  return opportunity.marketplace || null;
+}
+
 function buildCardFromListings(listings: P82MarketplaceAcquisitionOpportunityRead[]): BuyOpportunityDisplayCard {
   const sortedByPrice = [...listings].sort((a, b) => a.asking_price - b.asking_price);
   const primary = sortedByPrice[0];
-  const bestPrice = primary.asking_price;
-  const otherListingsCount = sortedByPrice.length - 1;
+  const livePrice =
+    primary.has_verified_listings && primary.best_active_price != null
+      ? primary.best_active_price
+      : primary.asking_price;
+  const bestPrice = livePrice;
+  const activeListingCount = primary.active_listing_count ?? 0;
+  const otherListingsCount = Math.max(0, activeListingCount - 1) || sortedByPrice.length - 1;
   const upside = formatUpsideDisplay(bestPrice, primary.estimated_fmv);
   const variant = primary.variant?.trim();
+  const marketplaceLabel = marketplaceLabelFor(primary);
 
   return {
     groupKey: groupKey(primary),
@@ -277,6 +298,14 @@ function buildCardFromListings(listings: P82MarketplaceAcquisitionOpportunityRea
     listingIds: sortedByPrice.map((l) => l.id),
     isTopOpportunity: false,
     recommendation: primary.recommendation,
+    marketplaceLabel,
+    activeListingCount,
+    hasVerifiedListings: Boolean(primary.has_verified_listings),
+    bestMarketplaceLabel: marketplaceLabel,
+    savingsVsHighest:
+      primary.savings_vs_highest != null && primary.savings_vs_highest > 0
+        ? primary.savings_vs_highest
+        : null,
   };
 }
 

@@ -44,6 +44,12 @@ function baseOpp(
 describe("MarketplaceOpportunityDetailPage listing safety", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(apiClient, "listBuyOpportunitySources").mockResolvedValue({ items: [] });
+    vi.spyOn(apiClient, "listBuyOpportunityMarketplaceListings").mockResolvedValue({ items: [] });
+    vi.spyOn(apiClient, "getBuyOpportunityMarketplaceComparison").mockResolvedValue({
+      comparison: { best_marketplace: null, best_marketplace_name: null, best_price: null, best_total_cost: null, savings_vs_highest: null, rankings: [] },
+      best_buy: { marketplace: null, marketplace_name: null, price: null, shipping: null, total_cost: null, reason: "", listing_confidence: null },
+    });
   });
 
   afterEach(() => {
@@ -92,5 +98,111 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
     expect(
       screen.queryByText("No live marketplace listing is available for this opportunity yet."),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows marketplace listings section for verified active listings", async () => {
+    vi.spyOn(apiClient, "getMarketplaceAcquisitionOpportunity").mockResolvedValue(
+      baseOpp({
+        external_listing_id: "123456789012",
+        listing_url: "https://www.ebay.com/itm/123456789012",
+        has_verified_listings: true,
+        active_listing_count: 1,
+        best_active_price: 3.2,
+      }),
+    );
+    vi.spyOn(apiClient, "listBuyOpportunityMarketplaceListings").mockResolvedValue({
+      items: [
+        {
+          id: 10,
+          marketplace: "EBAY",
+          item_id: "123456789012",
+          title: "Test Comic #1",
+          listing_url: "https://www.ebay.com/itm/123456789012",
+          image_url: "",
+          price: 3.2,
+          shipping_cost: 4.95,
+          condition: "VF/NM",
+          seller_name: "comicshop123",
+          listing_type: "FIXED_PRICE",
+          end_time: null,
+          is_active: true,
+          health_status: "ACTIVE",
+          health_badges: ["Verified Today"],
+          last_verified_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      total_items: 1,
+    });
+    render(
+      <MemoryRouter initialEntries={["/marketplace-opportunity/1"]}>
+        <Routes>
+          <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Marketplace listings")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Seller: comicshop123")).toBeInTheDocument();
+    expect(screen.getAllByText("Verified Today").length).toBeGreaterThan(0);
+  });
+
+  it("renders marketplace comparison table with best badge", async () => {
+    vi.spyOn(apiClient, "getMarketplaceAcquisitionOpportunity").mockResolvedValue(baseOpp());
+    vi.spyOn(apiClient, "getBuyOpportunityMarketplaceComparison").mockResolvedValue({
+      comparison: {
+        best_marketplace: "EBAY",
+        best_marketplace_name: "eBay",
+        best_price: 8.99,
+        best_total_cost: 8.99,
+        savings_vs_highest: 4,
+        rankings: [
+          {
+            marketplace: "EBAY",
+            marketplace_name: "eBay",
+            price: 8.99,
+            shipping: 0,
+            overall_cost: 8.99,
+            availability_status: "ACTIVE",
+            listing_confidence: "HIGH",
+            listing_count: 3,
+            is_best: true,
+          },
+          {
+            marketplace: "MIDTOWN",
+            marketplace_name: "Midtown Comics",
+            price: 12.99,
+            shipping: 0,
+            overall_cost: 12.99,
+            availability_status: "ACTIVE",
+            listing_confidence: "LOW",
+            listing_count: 1,
+            is_best: false,
+          },
+        ],
+      },
+      best_buy: {
+        marketplace: "EBAY",
+        marketplace_name: "eBay",
+        price: 8.99,
+        shipping: 0,
+        total_cost: 8.99,
+        reason: "Lowest total cost available.",
+        listing_confidence: "HIGH",
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/marketplace-opportunity/1"]}>
+        <Routes>
+          <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Marketplace comparison")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Lowest Total Cost")).toBeInTheDocument();
   });
 });

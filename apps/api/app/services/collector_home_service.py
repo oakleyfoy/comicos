@@ -21,6 +21,7 @@ from app.models.p82_p84_collector_expansion import (
     CollectionValuationSnapshot,
     MarketplaceAcquisitionOpportunity,
 )
+from app.models.p88_marketplace_listing import P88MarketplaceListing
 from app.schemas.p85_production_hardening import (
     P85CollectorHomeRead,
     P85CollectorHomeSectionRead,
@@ -143,14 +144,15 @@ def _section_skipped(
     empty_hint: str,
     reason: str,
     indicator: _SectionIndicator | None = None,
+    items: list[dict] | None = None,
 ) -> P85CollectorHomeSectionRead:
     ind = indicator or _indicator_unknown()
     section = P85CollectorHomeSectionRead(
         key=key,
         title=title,
-        items=[],
+        items=items or [],
         empty_hint=empty_hint,
-        count=0,
+        count=len(items or []),
         status="SKIPPED",
         error=reason[:240],
     )
@@ -393,11 +395,34 @@ def _foc_alert_items(session: Session, *, owner_user_id: int) -> list[dict]:
     ]
 
 
+def _count_cross_market_buy_deals(session: Session, *, owner_user_id: int) -> int:
+    """Opportunities with verified listings (lightweight SQL; no live search)."""
+    opp_ids = session.exec(
+        select(MarketplaceAcquisitionOpportunity.id)
+        .where(MarketplaceAcquisitionOpportunity.owner_user_id == owner_user_id)
+        .where(MarketplaceAcquisitionOpportunity.status == "ACTIVE")
+        .where(MarketplaceAcquisitionOpportunity.recommendation.in_(("STRONG_BUY", "GOOD_BUY")))
+    ).all()
+    if not opp_ids:
+        return 0
+    listed = session.exec(
+        select(func.count(func.distinct(P88MarketplaceListing.opportunity_id)))
+        .where(P88MarketplaceListing.owner_user_id == owner_user_id)
+        .where(P88MarketplaceListing.opportunity_id.in_(opp_ids))  # type: ignore[attr-defined]
+        .where(P88MarketplaceListing.is_active.is_(True))
+        .where(P88MarketplaceListing.health_status == "ACTIVE")
+    ).one()
+    if isinstance(listed, tuple):
+        listed = listed[0]
+    return int(listed or 0)
+
+
 def _count_marketplace_opportunities(
     session: Session,
     *,
     owner_user_id: int,
     recommendations: tuple[str, ...],
+    include_new_alerts: bool = False,
 ) -> _SectionIndicator:
     base = (
         select(func.count())
@@ -407,6 +432,19 @@ def _count_marketplace_opportunities(
         .where(MarketplaceAcquisitionOpportunity.recommendation.in_(recommendations))
     )
     n = int(session.exec(base).one() or 0)
+    if include_new_alerts:
+        from app.models.p88_marketplace_monitoring import MarketplaceAlert
+
+        alert_n = int(
+            session.exec(
+                select(func.count())
+                .select_from(MarketplaceAlert)
+                .where(MarketplaceAlert.owner_user_id == owner_user_id)
+                .where(MarketplaceAlert.status == "NEW")
+            ).one()
+            or 0
+        )
+        n += alert_n
     latest = session.exec(
         select(MarketplaceAcquisitionOpportunity.updated_at)
         .where(MarketplaceAcquisitionOpportunity.owner_user_id == owner_user_id)
@@ -561,7 +599,9 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     uid = owner_user_id
     ind_buy = _timed_indicator(
         "buy_alerts",
-        lambda: _count_marketplace_opportunities(session, owner_user_id=uid, recommendations=("STRONG_BUY",)),
+        lambda: _count_marketplace_opportunities(
+            session, owner_user_id=uid, recommendations=("STRONG_BUY",), include_new_alerts=True
+        ),
     )
     ind_sell = _timed_indicator("sell_alerts", lambda: _count_hold_sell_recommendations(session, owner_user_id=uid))
     ind_grade = _timed_indicator("grade_alerts", lambda: _count_grade_candidates(session, owner_user_id=uid))
@@ -569,11 +609,27 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     ind_deals = _timed_indicator(
         "marketplace_deals",
         lambda: _count_marketplace_opportunities(
-            session, owner_user_id=uid, recommendations=("STRONG_BUY", "GOOD_BUY")
+            session,
+            owner_user_id=uid,
+            recommendations=("STRONG_BUY", "GOOD_BUY"),
+            include_new_alerts=True,
         ),
     )
     ind_future = _timed_indicator("future_pull_list", lambda: _count_future_pull_list(session, owner_user_id=uid))
     ind_discovery = _timed_indicator("discovery_alerts", lambda: _count_discovery_alerts(session, owner_user_id=uid))
+    cross_market = _timed_payload(
+        "cross_market_buy_deals",
+        lambda: _count_cross_market_buy_deals(session, owner_user_id=uid),
+    )
+    cross_market_count = int(cross_market or 0)
+    buy_cross_items: list[dict] = []
+    if cross_market_count > 0:
+        buy_cross_items = [
+            {
+                "cross_market_count": cross_market_count,
+                "summary": "Best marketplace deals identified across supported marketplaces.",
+            }
+        ]
 
     sections = [
         _section_skipped(
@@ -582,6 +638,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
             empty_hint="Open Marketplace Opportunities for buy alerts.",
             reason=skipped,
             indicator=ind_buy,
+            items=buy_cross_items,
         ),
         _section_skipped(
             "sell_alerts",

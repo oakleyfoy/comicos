@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   ApiError,
@@ -37,24 +38,34 @@ export function IntegrationsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
+  const [ebayStatus, setEbayStatus] = useState<Awaited<ReturnType<typeof apiClient.getEbayMarketplaceIntegrationStatus>> | null>(
+    null,
+  );
 
   async function loadStatus(): Promise<void> {
-    const [status, syncStatus] = await Promise.all([
+    const [status, syncStatus, ebay] = await Promise.all([
       apiClient.getGmailStatus(),
       apiClient.getGmailSyncSummary(),
+      apiClient.getEbayMarketplaceIntegrationStatus().catch(() => null),
     ]);
     setGmailStatus(status);
     setGmailSyncStatus(syncStatus);
+    setEbayStatus(ebay);
   }
 
   useEffect(() => {
     let ignore = false;
 
-    void Promise.all([apiClient.getGmailStatus(), apiClient.getGmailSyncSummary()])
-      .then(([status, syncStatus]) => {
+    void Promise.all([
+      apiClient.getGmailStatus(),
+      apiClient.getGmailSyncSummary(),
+      apiClient.getEbayMarketplaceIntegrationStatus().catch(() => null),
+    ])
+      .then(([status, syncStatus, ebay]) => {
         if (!ignore) {
           setGmailStatus(status);
           setGmailSyncStatus(syncStatus);
+          setEbayStatus(ebay);
         }
       })
       .catch((loadError) => {
@@ -287,6 +298,44 @@ export function IntegrationsPage() {
               </button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
+        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Marketplace Integration</p>
+        <h2 className="mt-1 text-2xl font-semibold text-slate-900">eBay Integration</h2>
+        <div className="mt-4 space-y-2 text-sm text-slate-300">
+          <span
+            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(ebayStatus?.status === "Configured")}`}
+          >
+            {ebayStatus?.status ?? (isLoading ? "Loading…" : "Not Configured")}
+          </span>
+          <p>
+            Environment:{" "}
+            <span className="font-medium text-slate-900">{ebayStatus?.environment ?? "—"}</span>
+          </p>
+          <p>
+            Client ID:{" "}
+            <span className="font-medium text-slate-900">
+              {ebayStatus?.client_id_present ? "Present" : "Missing"}
+            </span>
+          </p>
+          <p>
+            Client secret:{" "}
+            <span className="font-medium text-slate-900">
+              {ebayStatus?.client_secret_present ? "Present" : "Missing"}
+            </span>
+          </p>
+          {ebayStatus?.detail ? <p className="text-slate-400">{ebayStatus.detail}</p> : null}
+          <p className="text-xs text-slate-500">
+            Status reflects server environment variables only. Remote connectivity is not tested from this page.
+          </p>
+          <Link
+            to="/ops/marketplace-search"
+            className="inline-block text-sm font-medium text-red-400 hover:text-red-300 hover:underline"
+          >
+            Marketplace Search Dashboard (ops)
+          </Link>
         </div>
       </section>
     </AppShell>

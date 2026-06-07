@@ -1,50 +1,42 @@
-from __future__ import annotations
+"""P88 marketplace registry tests (P88-04 capabilities)."""
 
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
-from app.db.session import get_engine
-from app.models.marketplace import MarketplaceDefinition
-from app.services.marketplace_registry import disable_marketplace, enable_marketplace, list_marketplaces, register_marketplace
-from app.services.marketplace_seed import ensure_marketplace_definitions
-
-
-def test_marketplace_registry_lists_seed_definitions_deterministically(client: TestClient) -> None:
-    with Session(get_engine()) as session:
-        ensure_marketplace_definitions(session)
-        listing = list_marketplaces(session, limit=20, offset=0)
-
-        assert [row.marketplace_code for row in listing.items] == ["EBAY", "HIPCOMIC", "SHOPIFY", "WHATNOT"]
-        assert all(row.enabled is False for row in listing.items)
-        assert all(row.capabilities for row in listing.items)
+from app.services.marketplace.marketplace_registry import (
+    detect_marketplace_from_url,
+    list_supported_marketplace_codes,
+    marketplace_definition,
+    marketplace_display_name,
+    normalize_marketplace_url,
+)
 
 
-def test_marketplace_registry_rejects_duplicate_codes(client: TestClient) -> None:
-    with Session(get_engine()) as session:
-        register_marketplace(
-            session,
-            marketplace_code="CUSTOM",
-            marketplace_name="Custom Market",
-            description="Test registry entry",
-            capabilities=[("listing.publish", "Listing Publish")],
-        )
-
-        try:
-            register_marketplace(session, marketplace_code="custom", marketplace_name="Duplicate Market")
-        except HTTPException as exc:
-            assert exc.status_code == 409
-        else:  # pragma: no cover - defensive
-            raise AssertionError("Expected duplicate marketplace code rejection.")
+def test_detect_marketplace_from_url() -> None:
+    assert detect_marketplace_from_url("https://www.ebay.com/itm/123") == "EBAY"
+    assert detect_marketplace_from_url("https://whatnot.com/live/abc") == "WHATNOT"
+    assert detect_marketplace_from_url("https://example.com/x") == "OTHER"
 
 
-def test_marketplace_registry_enable_disable_updates_state(client: TestClient) -> None:
-    with Session(get_engine()) as session:
-        created = register_marketplace(session, marketplace_code="DISABLE_ME", marketplace_name="Disable Me")
-        enabled = enable_marketplace(session, marketplace_id=created.id)
-        disabled = disable_marketplace(session, marketplace_id=created.id)
+def test_normalize_marketplace_url() -> None:
+    assert (
+        normalize_marketplace_url("https://www.ebay.com/itm/123/")
+        == "https://ebay.com/itm/123"
+    )
 
-        row = session.exec(select(MarketplaceDefinition).where(MarketplaceDefinition.id == created.id)).one()
-        assert enabled.enabled is True
-        assert disabled.enabled is False
-        assert row.enabled is False
+
+def test_marketplace_display_name() -> None:
+    assert marketplace_display_name("EBAY") == "eBay"
+
+
+def test_registry_capability_flags() -> None:
+    ebay = marketplace_definition("EBAY")
+    assert ebay.supports_search is True
+    assert ebay.supports_listing_lookup is True
+    assert ebay.supports_refresh is True
+    midtown = marketplace_definition("MIDTOWN")
+    assert midtown.supports_search is False
+
+
+def test_supported_marketplace_codes() -> None:
+    codes = list_supported_marketplace_codes()
+    assert "EBAY" in codes
+    assert "MYCOMICSHOP" in codes
+    assert "WHATNOT" not in codes

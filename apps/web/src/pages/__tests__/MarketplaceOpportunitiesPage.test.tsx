@@ -121,4 +121,54 @@ describe("MarketplaceOpportunitiesPage (Buy Opportunities)", () => {
       expect(screen.getByText("No buy opportunities found right now.")).toBeInTheDocument();
     });
   });
+
+  it("shows View Listings when verified marketplace listings exist", async () => {
+    vi.spyOn(apiClient, "listMarketplaceAcquisitionOpportunities").mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          marketplace: "EBAY",
+          external_listing_id: "888",
+          listing_url: "https://www.ebay.com/itm/888",
+          title: "Absolute Batman #20",
+          publisher: "DC",
+          series: "Absolute Batman",
+          issue: "20",
+          variant: "",
+          asking_price: 3.2,
+          estimated_fmv: 10,
+          discount_to_fmv: 0,
+          liquidity: 0,
+          velocity: 0,
+          grading_upside: 0,
+          ownership_status: "",
+          profile_match_score: 0,
+          opportunity_score: 90,
+          recommendation: "STRONG_BUY",
+          reasons: [],
+          status: "ACTIVE",
+          created_at: "",
+          updated_at: "",
+          has_verified_listings: true,
+          active_listing_count: 3,
+          best_active_price: 3.2,
+          listing_marketplace: "EBAY",
+        },
+      ],
+      status: "OK",
+      message: "",
+    });
+    render(
+      <MemoryRouter initialEntries={["/buy-opportunities"]}>
+        <Routes>
+          <Route path="/buy-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("View Listings")).toBeInTheDocument();
+    });
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Best marketplace")).toBeInTheDocument();
+  });
 });

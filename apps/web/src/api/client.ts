@@ -12777,6 +12777,17 @@ export interface P82MarketplaceAcquisitionOpportunityRead {
   status: string;
   created_at: string;
   updated_at: string;
+  best_listing_id?: number | null;
+  active_listing_count?: number;
+  best_active_price?: number | null;
+  listing_marketplace?: string | null;
+  has_verified_listings?: boolean;
+  best_marketplace?: string | null;
+  best_marketplace_name?: string | null;
+  best_market_price?: number | null;
+  savings_vs_highest?: number | null;
+  best_buy_reason?: string | null;
+  marketplace_count?: number;
 }
 
 export interface P82MarketplaceAcquisitionListResponse {
@@ -12799,6 +12810,318 @@ export interface P82MarketplaceAcquisitionDashboardRead {
   best_grading_upside: P82MarketplaceAcquisitionOpportunityRead[];
   best_profile_matches: P82MarketplaceAcquisitionOpportunityRead[];
   snapshot_id: number | null;
+}
+
+export interface P88MarketplaceOpportunitySourceRead {
+  id: number;
+  owner_user_id: number;
+  opportunity_id: number | null;
+  marketplace: string;
+  marketplace_display_name: string;
+  source_type: string;
+  source_url: string;
+  external_listing_id: string;
+  source_status: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P88MarketplaceImportUrlResponse {
+  message: string;
+  source: P88MarketplaceOpportunitySourceRead;
+}
+
+export interface P88MarketplaceSourceListResponse {
+  items: P88MarketplaceOpportunitySourceRead[];
+  pagination?: MarketApiV1Pagination;
+  total_items?: number;
+}
+
+export interface P88EbayIntegrationStatusRead {
+  status: "Configured" | "Not Configured";
+  environment: string;
+  client_id_present: boolean;
+  client_secret_present: boolean;
+  detail: string;
+}
+
+export interface P88MarketplaceListingRead {
+  id: number;
+  marketplace: string;
+  item_id: string;
+  title: string;
+  listing_url: string;
+  image_url: string;
+  price: number;
+  shipping_cost: number;
+  condition: string;
+  seller_name: string;
+  listing_type: string;
+  end_time: string | null;
+  is_active: boolean;
+  health_status: string;
+  health_badges: string[];
+  marketplace_name?: string;
+  availability_status?: string;
+  listing_confidence?: string;
+  currency?: string;
+  price_last_changed_at?: string | null;
+  last_verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P88MarketplaceListingListResponse {
+  items: P88MarketplaceListingRead[];
+  total_items?: number;
+  status?: string;
+}
+
+export interface P88MarketplaceSearchMarketplaceResponse {
+  listings_found: number;
+  new_listings: number;
+  updated_listings: number;
+  failed_searches: number;
+  searches_run: number;
+  errors: string[];
+}
+
+export interface P88MarketplaceSearchDashboardRead {
+  total_search_runs: number;
+  recent_searches_run: number;
+  success_rate_percent: number;
+  listings_found_total: number;
+  new_listings_total: number;
+  updated_listings_total: number;
+  failed_searches_total: number;
+  active_listings: number;
+  ended_listings: number;
+  recent_errors: string[];
+}
+
+export interface P88MarketplaceComparisonRowRead {
+  marketplace: string;
+  marketplace_name: string;
+  price: number | null;
+  shipping: number | null;
+  overall_cost: number | null;
+  availability_status: string;
+  listing_confidence: string;
+  listing_count: number;
+  is_best: boolean;
+}
+
+export interface P88MarketplaceComparisonRead {
+  best_marketplace: string | null;
+  best_marketplace_name: string | null;
+  best_price: number | null;
+  best_total_cost: number | null;
+  savings_vs_highest: number | null;
+  rankings: P88MarketplaceComparisonRowRead[];
+}
+
+export interface P88MarketplaceComparisonResponse {
+  comparison: P88MarketplaceComparisonRead;
+  best_buy: {
+    marketplace: string | null;
+    marketplace_name: string | null;
+    price: number | null;
+    shipping: number | null;
+    total_cost: number | null;
+    reason: string;
+    listing_confidence: string | null;
+  };
+}
+
+export interface P88MarketplaceCoverageRead {
+  listings_by_marketplace: {
+    marketplace: string;
+    marketplace_name: string;
+    listing_count: number;
+    supports_search: boolean;
+    supports_listing_lookup: boolean;
+    supports_price_tracking: boolean;
+    supports_refresh: boolean;
+  }[];
+  search_success_rate_percent: number;
+  supported_marketplaces: string[];
+  unsupported_marketplaces: string[];
+  total_listings: number;
+  registry_marketplace_count: number;
+}
+
+export interface P88MarketplaceDiagnosticsRead {
+  adapters: {
+    marketplace: string;
+    marketplace_name: string;
+    adapter_status: string;
+    marketplace_support_status: string;
+    supports_search: boolean;
+    supports_listing_lookup: boolean;
+    supports_price_tracking: boolean;
+    supports_refresh: boolean;
+    listing_count: number;
+    last_successful_search: string | null;
+    last_successful_refresh: string | null;
+  }[];
+  recent_errors: string[];
+  last_search_run_at: string | null;
+}
+
+export interface P88MarketplaceCommandCenterRead {
+  status?: string;
+  kpis: {
+    active_opportunities: number;
+    marketplace_alerts: number;
+    price_drops: number;
+    watchlist_matches: number;
+    collection_gaps: number;
+    upcoming_releases: number;
+  };
+  best_deals_today: {
+    opportunity_id: number;
+    title: string;
+    marketplace: string | null;
+    marketplace_name: string | null;
+    price: number;
+    fmv: number;
+    upside_percent: number | null;
+    savings_vs_highest: number | null;
+    opportunity_score: number;
+    recommendation: string;
+  }[];
+  price_drops: {
+    opportunity_id: number | null;
+    listing_id: number | null;
+    title: string;
+    marketplace: string;
+    marketplace_name: string;
+    old_price: number;
+    new_price: number;
+    drop_percent: number;
+  }[];
+  collection_gaps: {
+    gap_id: number;
+    title: string;
+    reason: string;
+    gap_type: string;
+    priority: string;
+  }[];
+  watchlist_matches: {
+    alert_id: number;
+    saved_search_name: string;
+    title: string;
+    marketplace: string | null;
+    marketplace_name: string | null;
+    price: number | null;
+    message: string;
+    alert_type: string;
+  }[];
+  upcoming_releases: {
+    item_id: number;
+    title: string;
+    release_date: string | null;
+    foc_date: string | null;
+    recommendation: string;
+    personalized_score: number;
+  }[];
+  top_recommendations: {
+    opportunity_id: number;
+    title: string;
+    cover_image_url: string;
+    score: number;
+    reason_summary: string;
+    best_marketplace_name: string | null;
+    best_price: number | null;
+    recommendation: string;
+  }[];
+  marketplace_activity: {
+    activity_type: string;
+    title: string;
+    message: string;
+    created_at: string;
+  }[];
+  quick_actions: { label: string; route: string; action_type: string }[];
+  briefing_summary: {
+    best_deal_title: string | null;
+    largest_price_drop_title: string | null;
+    top_recommendation_title: string | null;
+    watchlist_match_title: string | null;
+  };
+  generated_at: string;
+}
+
+export interface P88MarketplaceSavedSearchRead {
+  id: number;
+  name: string;
+  marketplace: string;
+  query: string;
+  series: string;
+  issue_number: string;
+  publisher: string;
+  variant: string;
+  max_price: number | null;
+  min_discount_to_fmv: number | null;
+  condition_filter: string;
+  is_active: boolean;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P88MarketplaceSavedSearchListResponse {
+  items: P88MarketplaceSavedSearchRead[];
+  total_items?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface P88MarketplaceMonitoringRunRead {
+  id: number;
+  saved_search_id: number | null;
+  searches_run: number;
+  listings_found: number;
+  new_listings: number;
+  price_drops: number;
+  below_fmv_alerts: number;
+  watchlist_matches: number;
+  errors: string[];
+  created_at: string;
+}
+
+export interface P88MarketplaceMonitoringRunListResponse {
+  items: P88MarketplaceMonitoringRunRead[];
+  total_items?: number;
+}
+
+export interface P88MarketplaceAlertRead {
+  id: number;
+  saved_search_id: number | null;
+  opportunity_id: number | null;
+  listing_id: number | null;
+  alert_type: string;
+  title: string;
+  message: string;
+  severity: string;
+  status: string;
+  marketplace: string | null;
+  listing_url: string | null;
+  external_item_id: string | null;
+  price: number | null;
+  shipping_cost: number | null;
+  estimated_fmv: number | null;
+  created_at: string;
+  acknowledged_at: string | null;
+}
+
+export interface P88MarketplaceAlertListResponse {
+  items: P88MarketplaceAlertRead[];
+  total_items?: number;
+  limit?: number;
+  offset?: number;
 }
 
 export interface P83CollectionForecastRead {
@@ -30325,6 +30648,106 @@ export const apiClient = {
   getMarketplaceAcquisitionDashboard(params?: { refresh?: boolean }): Promise<P82MarketplaceAcquisitionDashboardRead> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, boolean | undefined>) : "";
     return requestScanV1<P82MarketplaceAcquisitionDashboardRead>(`/marketplace-acquisition/dashboard${q}`);
+  },
+
+  importBuyOpportunityUrl(body: { url: string; notes?: string; opportunity_id?: number }): Promise<P88MarketplaceImportUrlResponse> {
+    return requestNavPageV1<P88MarketplaceImportUrlResponse>("/buy-opportunities/import-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+
+  listBuyOpportunitySources(params?: { opportunity_id?: number; limit?: number }): Promise<P88MarketplaceSourceListResponse> {
+    const q =
+      params && Object.keys(params).length
+        ? buildQueryString(params as Record<string, number | undefined>)
+        : "";
+    return requestNavPageV1<P88MarketplaceSourceListResponse>(`/buy-opportunities/sources${q}`);
+  },
+
+  getEbayMarketplaceIntegrationStatus(): Promise<P88EbayIntegrationStatusRead> {
+    return requestNavPageV1<P88EbayIntegrationStatusRead>("/marketplace/integration/ebay");
+  },
+
+  searchBuyOpportunityMarketplace(body?: { opportunity_ids?: number[] }): Promise<P88MarketplaceSearchMarketplaceResponse> {
+    return requestNavPageV1<P88MarketplaceSearchMarketplaceResponse>("/buy-opportunities/search-marketplace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+  },
+
+  listBuyOpportunityMarketplaceListings(opportunityId: number): Promise<P88MarketplaceListingListResponse> {
+    return requestNavPageV1<P88MarketplaceListingListResponse>(`/buy-opportunities/${opportunityId}/listings`);
+  },
+
+  getAdminMarketplaceSearchDashboard(): Promise<P88MarketplaceSearchDashboardRead> {
+    return requestNavPageV1<P88MarketplaceSearchDashboardRead>("/admin/marketplace-search-dashboard");
+  },
+
+  getBuyOpportunityMarketplaceComparison(opportunityId: number): Promise<P88MarketplaceComparisonResponse> {
+    return requestNavPageV1<P88MarketplaceComparisonResponse>(
+      `/buy-opportunities/${opportunityId}/marketplace-comparison`,
+    );
+  },
+
+  getAdminMarketplaceCoverage(): Promise<P88MarketplaceCoverageRead> {
+    return requestNavPageV1<P88MarketplaceCoverageRead>("/admin/marketplace-coverage");
+  },
+
+  getAdminMarketplaceDiagnostics(): Promise<P88MarketplaceDiagnosticsRead> {
+    return requestNavPageV1<P88MarketplaceDiagnosticsRead>("/admin/marketplace-diagnostics");
+  },
+
+  getMarketplaceCommandCenter(): Promise<P88MarketplaceCommandCenterRead> {
+    return requestNavPageV1<P88MarketplaceCommandCenterRead>("/marketplace-command-center");
+  },
+
+  listMarketplaceSavedSearches(): Promise<P88MarketplaceSavedSearchListResponse> {
+    return requestNavPageV1<P88MarketplaceSavedSearchListResponse>("/marketplace-monitoring/saved-searches");
+  },
+
+  createMarketplaceSavedSearch(body: {
+    name: string;
+    marketplace?: string;
+    query?: string;
+    series?: string;
+    issue_number?: string;
+    publisher?: string;
+    variant?: string;
+    max_price?: number;
+    min_discount_to_fmv?: number;
+    condition_filter?: string;
+    is_active?: boolean;
+  }): Promise<P88MarketplaceSavedSearchRead> {
+    return requestNavPageV1<P88MarketplaceSavedSearchRead>("/marketplace-monitoring/saved-searches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+
+  runMarketplaceSavedSearch(savedSearchId: number): Promise<{ saved_search: P88MarketplaceSavedSearchRead; run: P88MarketplaceMonitoringRunRead }> {
+    return requestNavPageV1(`/marketplace-monitoring/saved-searches/${savedSearchId}/run`, { method: "POST" });
+  },
+
+  listMarketplaceMonitoringAlerts(params?: { status?: string }): Promise<P88MarketplaceAlertListResponse> {
+    const q = params?.status ? `?status=${encodeURIComponent(params.status)}` : "";
+    return requestNavPageV1<P88MarketplaceAlertListResponse>(`/marketplace-monitoring/alerts${q}`);
+  },
+
+  listMarketplaceMonitoringRuns(params?: { limit?: number }): Promise<P88MarketplaceMonitoringRunListResponse> {
+    const q = params?.limit ? `?limit=${params.limit}` : "";
+    return requestNavPageV1<P88MarketplaceMonitoringRunListResponse>(`/marketplace-monitoring/runs${q}`);
+  },
+
+  updateMarketplaceAlert(alertId: number, body: { status: "ACKNOWLEDGED" | "DISMISSED" }): Promise<P88MarketplaceAlertRead> {
+    return requestNavPageV1<P88MarketplaceAlertRead>(`/marketplace-monitoring/alerts/${alertId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
   },
 
   getCollectionValuationDashboard(): Promise<P83CollectionValuationDashboardRead> {

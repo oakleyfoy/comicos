@@ -51,6 +51,29 @@ export function BuyOpportunityCard({ card }: Props): JSX.Element {
         </div>
       </dl>
 
+      {card.hasVerifiedListings ? (
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-blue-600">Best marketplace</dt>
+            <dd className="font-medium">{card.bestMarketplaceLabel ?? "eBay"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-blue-600">Best price</dt>
+            <dd className="font-medium">${card.bestPrice.toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-blue-600">Listings</dt>
+            <dd className="font-medium">{card.activeListingCount}</dd>
+          </div>
+          {card.savingsVsHighest != null ? (
+            <div className="sm:col-span-3">
+              <dt className="text-xs uppercase tracking-wide text-blue-600">Savings vs highest</dt>
+              <dd className="font-medium">${card.savingsVsHighest.toFixed(2)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
       {card.reasons.length > 0 ? (
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-blue-800">
           {card.reasons.map((reason) => (
@@ -70,7 +93,7 @@ export function BuyOpportunityCard({ card }: Props): JSX.Element {
           to={`/marketplace-opportunity/${card.primaryId}`}
           className="inline-block rounded-md border border-blue-800 px-3 py-1.5 font-medium text-blue-900 hover:bg-blue-50"
         >
-          View Opportunity
+          {card.hasVerifiedListings ? "View Listings" : "View Opportunity"}
         </Link>
       </p>
     </article>

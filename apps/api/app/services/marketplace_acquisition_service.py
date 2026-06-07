@@ -16,6 +16,7 @@ from app.schemas.p82_p84_collector_expansion import (
     MarketplaceAcquisitionOpportunityRead,
     MarketplaceAcquisitionScanPayload,
 )
+from app.services.marketplace.marketplace_listing_service import listing_summary_for_opportunity
 from app.services.p77_personalization_engine import load_personalization_context, personalize_score
 
 
@@ -29,7 +30,12 @@ def _rec(score: float) -> str:
     return "PASS"
 
 
-def _to_read(row: MarketplaceAcquisitionOpportunity) -> MarketplaceAcquisitionOpportunityRead:
+def _to_read(
+    row: MarketplaceAcquisitionOpportunity,
+    *,
+    summary: dict[str, object] | None = None,
+) -> MarketplaceAcquisitionOpportunityRead:
+    s = summary or {}
     return MarketplaceAcquisitionOpportunityRead(
         id=int(row.id or 0),
         marketplace=row.marketplace,
@@ -54,6 +60,17 @@ def _to_read(row: MarketplaceAcquisitionOpportunity) -> MarketplaceAcquisitionOp
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        best_listing_id=row.best_listing_id,
+        active_listing_count=int(s.get("active_listing_count") or 0),
+        best_active_price=s.get("best_active_price"),  # type: ignore[arg-type]
+        listing_marketplace=s.get("listing_marketplace"),  # type: ignore[arg-type]
+        has_verified_listings=bool(s.get("has_verified_listings")),
+        best_marketplace=s.get("best_marketplace"),  # type: ignore[arg-type]
+        best_marketplace_name=s.get("best_marketplace_name"),  # type: ignore[arg-type]
+        best_market_price=s.get("best_market_price"),  # type: ignore[arg-type]
+        savings_vs_highest=s.get("savings_vs_highest"),  # type: ignore[arg-type]
+        best_buy_reason=s.get("best_buy_reason"),  # type: ignore[arg-type]
+        marketplace_count=int(s.get("marketplace_count") or 0),
     )
 
 
@@ -242,7 +259,18 @@ def list_acquisition_opportunities(
     rows = list(session.exec(stmt.order_by(MarketplaceAcquisitionOpportunity.opportunity_score.desc())).all())
     lim = max(1, min(limit, 200))
     off = max(0, offset)
-    page = [_to_read(r) for r in rows[off : off + lim]]
+    page_rows = rows[off : off + lim]
+    page = [
+        _to_read(
+            r,
+            summary=listing_summary_for_opportunity(
+                session,
+                owner_user_id=owner_user_id,
+                opportunity_id=int(r.id or 0),
+            ),
+        )
+        for r in page_rows
+    ]
     return MarketplaceAcquisitionListResponse(items=page, total_items=len(rows), limit=lim, offset=off)
 
 
@@ -250,7 +278,14 @@ def get_acquisition_opportunity(session: Session, *, owner_user_id: int, opportu
     row = session.get(MarketplaceAcquisitionOpportunity, opportunity_id)
     if row is None or row.owner_user_id != owner_user_id:
         raise HTTPException(status_code=404, detail="Opportunity not found.")
-    return _to_read(row)
+    return _to_read(
+        row,
+        summary=listing_summary_for_opportunity(
+            session,
+            owner_user_id=owner_user_id,
+            opportunity_id=int(row.id or 0),
+        ),
+    )
 
 
 def build_acquisition_dashboard(session: Session, *, owner_user_id: int, refresh: bool = True) -> MarketplaceAcquisitionDashboardRead:

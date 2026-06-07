@@ -848,6 +848,9 @@ from app.models.p82_p84_collector_expansion import (
     MarketplaceAcquisitionOpportunity,
     MarketplaceAcquisitionSnapshot,
 )
+from app.models.p88_marketplace_foundation import MarketplaceOpportunitySource
+from app.models.p88_marketplace_listing import P88MarketplaceListing, MarketplaceSearchRun
+from app.models.p88_marketplace_monitoring import MarketplaceAlert, MarketplaceMonitoringRun, MarketplaceSavedSearch
 from app.models.convention_mode import (
     ConventionActivity,
     ConventionBooth,

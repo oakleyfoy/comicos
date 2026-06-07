@@ -41,7 +41,7 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
   { body: string; button: string; to: string }
 > = {
   buy_alerts: {
-    body: "Review undervalued comics and marketplace deals identified by ComicOS.",
+    body: "Review undervalued comics and cross-marketplace buy opportunities identified by ComicOS.",
     button: "Review Buy Opportunities",
     to: "/buy-opportunities",
   },
@@ -289,8 +289,17 @@ function applyMergedBuyDisplay(
   const launcher = SECTION_SKIPPED_LAUNCHER.buy_alerts;
   if (!buy.showItems) {
     buy.body = launcher.body;
-    buy.actionLabel = launcher.button;
-    buy.actionTo = launcher.to;
+    const hasOpps =
+      (mergedRaw.count ?? 0) > 0 ||
+      mergedRaw.has_items === true ||
+      mergedRaw.indicator_status === "HAS_ITEMS";
+    if (hasOpps) {
+      buy.actionLabel = "Open Marketplace Command Center";
+      buy.actionTo = "/marketplace-command-center";
+    } else {
+      buy.actionLabel = launcher.button;
+      buy.actionTo = launcher.to;
+    }
   }
 }
 
@@ -345,10 +354,19 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
       button: emptyAction.label,
       to: emptyAction.to,
     };
+    let body = fallback.body;
+    if (sec.key === "buy_alerts" && sec.items.length > 0) {
+      const meta = sec.items[0] as { cross_market_count?: number; summary?: string };
+      if (typeof meta.cross_market_count === "number" && meta.cross_market_count > 0) {
+        body =
+          meta.summary ??
+          "Best marketplace deals identified across supported marketplaces.";
+      }
+    }
     return {
       ...base,
       items: [],
-      body: fallback.body,
+      body,
       actionLabel: fallback.button,
       actionTo: fallback.to,
       showItems: false,

@@ -44,6 +44,17 @@ class MarketplaceAcquisitionOpportunityRead(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    best_listing_id: int | None = None
+    active_listing_count: int = 0
+    best_active_price: float | None = None
+    listing_marketplace: str | None = None
+    has_verified_listings: bool = False
+    best_marketplace: str | None = None
+    best_marketplace_name: str | None = None
+    best_market_price: float | None = None
+    savings_vs_highest: float | None = None
+    best_buy_reason: str | None = None
+    marketplace_count: int = 0
 
 
 class MarketplaceAcquisitionListResponse(BaseModel):

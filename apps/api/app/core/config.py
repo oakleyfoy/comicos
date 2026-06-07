@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parents[2]
@@ -145,8 +145,11 @@ class Settings(BaseSettings):
 
     p68_market_pricing_enabled: bool = Field(default=True, alias="P68_MARKET_PRICING_ENABLED")
     p68_ebay_provider_enabled: bool = Field(default=False, alias="P68_EBAY_PROVIDER_ENABLED")
-    ebay_api_client_id: str = Field(default="", alias="EBAY_API_CLIENT_ID")
-    ebay_api_client_secret: str = Field(default="", alias="EBAY_API_CLIENT_SECRET")
+    ebay_api_client_id: str = Field(default="", validation_alias=AliasChoices("EBAY_API_CLIENT_ID", "EBAY_CLIENT_ID"))
+    ebay_api_client_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("EBAY_API_CLIENT_SECRET", "EBAY_CLIENT_SECRET"),
+    )
     ebay_environment: str = Field(default="production", alias="EBAY_ENVIRONMENT")
     ebay_account_deletion_compliance_enabled: bool = Field(
         default=True,
@@ -176,6 +179,7 @@ class Settings(BaseSettings):
         env_file=(REPO_ROOT / ".env", API_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     @property

@@ -1263,6 +1263,11 @@ from app.api.p78_sell_workflow import attach_p78_sell_workflow_layer
 from app.api.p78_marketplace import attach_p78_marketplace_layer
 from app.api.p81_discovery import attach_p81_discovery_layer
 from app.api.p82_p84_collector_expansion import attach_p82_p84_collector_expansion_layer
+from app.api.p88_marketplace_foundation import attach_p88_marketplace_foundation_layer
+from app.api.p88_marketplace_monitoring import attach_p88_marketplace_monitoring_layer
+from app.api.p88_marketplace_command_center import attach_p88_marketplace_command_center_layer
+from app.api.p88_marketplace_comparison import attach_p88_marketplace_comparison_layer
+from app.api.p88_marketplace_live import attach_p88_marketplace_live_layer
 from app.api.p85_platform import attach_p85_platform_layer
 from app.api.release_lifecycle import attach_release_lifecycle_layer
 from app.api.agents import attach_agents_layer
@@ -1438,6 +1443,11 @@ attach_p78_sell_workflow_layer(app)
 attach_p78_marketplace_layer(app)
 attach_p81_discovery_layer(app)
 attach_p82_p84_collector_expansion_layer(app)
+attach_p88_marketplace_foundation_layer(app)
+attach_p88_marketplace_live_layer(app)
+attach_p88_marketplace_comparison_layer(app)
+attach_p88_marketplace_command_center_layer(app)
+attach_p88_marketplace_monitoring_layer(app)
 attach_p85_platform_layer(app)
 attach_release_lifecycle_layer(app)
 attach_agents_layer(app)

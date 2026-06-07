@@ -13,6 +13,12 @@ if str(API_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
+from app.models.p88_marketplace_listing import MarketplaceSearchRun, P88MarketplaceListing  # noqa: F401
+from app.models.p88_marketplace_monitoring import (  # noqa: F401
+    MarketplaceAlert,
+    MarketplaceMonitoringRun,
+    MarketplaceSavedSearch,
+)
 from app.tasks import queue as rq_queue_module
 
 

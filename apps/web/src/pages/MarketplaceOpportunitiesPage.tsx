@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiClient, type P82MarketplaceAcquisitionOpportunityRead } from "../api/client";
+import { BuyMarketplaceNav } from "../components/buy/BuyMarketplaceNav";
 import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { PatriotPageLayout } from "../components/PatriotPageLayout";
 import { BuyOpportunityCard } from "../features/buyOpportunities/BuyOpportunityCard";
 import { buildBuyOpportunityDisplayCards } from "../features/buyOpportunities/buyOpportunityPresentation";
+import { ImportMarketplaceUrlModal } from "../features/buyOpportunities/ImportMarketplaceUrlModal";
 
 export function MarketplaceOpportunitiesPage(): JSX.Element {
   const [items, setItems] = useState<P82MarketplaceAcquisitionOpportunityRead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<string | undefined>();
   const [loadMessage, setLoadMessage] = useState<string | undefined>();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -40,10 +44,23 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
       title="Buy Opportunities"
       description="Comics identified by ComicOS as strong purchase opportunities based on value, demand, release intelligence, and collector signals."
       showExpansionNav
+      headerExtra={<BuyMarketplaceNav />}
       error={error}
       onRetry={() => void load()}
+      headerActions={
+        <button
+          type="button"
+          className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-blue-50"
+          onClick={() => setImportOpen(true)}
+        >
+          Import Marketplace URL
+        </button>
+      }
     >
       <NavPageLoadBanner status={loadStatus} message={loadMessage} />
+      {importSuccess ? (
+        <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{importSuccess}</p>
+      ) : null}
       {showEmpty ? (
         <CollectorEmptyState
           title="No buy opportunities found right now."
@@ -61,6 +78,11 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
           ))}
         </ul>
       ) : null}
+      <ImportMarketplaceUrlModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onSuccess={() => setImportSuccess("Marketplace imported successfully.")}
+      />
     </PatriotPageLayout>
   );
 }

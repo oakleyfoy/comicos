@@ -13,7 +13,35 @@ from app.services.collection_valuation_service import build_collection_forecast,
 from app.services.marketplace_acquisition_service import build_acquisition_dashboard, list_acquisition_opportunities
 from app.services.p77_personalization_engine import load_personalization_context
 from app.services.p78_sell_queue_service import build_sell_queue
+from app.services.marketplace_command_center_service import build_marketplace_command_center_briefing_section
 from app.services.p81_discovery_personalization_service import list_future_pull_list, list_personalized_discovery
+
+
+def _best_buy_notification_titles(session: Session, *, owner_user_id: int, limit: int = 5) -> list[str]:
+    from app.models.p82_p84_collector_expansion import CollectorNotification
+
+    rows = session.exec(
+        select(CollectorNotification)
+        .where(CollectorNotification.owner_user_id == owner_user_id)
+        .where(CollectorNotification.notification_type == "BEST_BUY_FOUND")
+        .where(CollectorNotification.status != "DISMISSED")
+        .order_by(CollectorNotification.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [row.title for row in rows]
+
+
+def _marketplace_alert_titles(session: Session, *, owner_user_id: int, limit: int = 5) -> list[str]:
+    from app.models.p88_marketplace_monitoring import MarketplaceAlert
+
+    rows = session.exec(
+        select(MarketplaceAlert)
+        .where(MarketplaceAlert.owner_user_id == owner_user_id)
+        .where(MarketplaceAlert.status == "NEW")
+        .order_by(MarketplaceAlert.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [row.title for row in rows]
 
 
 def _to_read(row: CollectorBriefing) -> CollectorBriefingRead:
@@ -55,14 +83,20 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     sections = {
         "discovery_opportunities": [d.opportunity.title for d in discovery.items[:5]],
         "marketplace_deals": [d.title for d in deals.items if d.recommendation in {"STRONG_BUY", "GOOD_BUY"}][:5],
+        "marketplace_alerts": _marketplace_alert_titles(session, owner_user_id=owner_user_id),
+        "best_buy_found": _best_buy_notification_titles(session, owner_user_id=owner_user_id),
+        "marketplace_command_center": build_marketplace_command_center_briefing_section(
+            session, owner_user_id=owner_user_id
+        ),
         "foc_reminders": [p.title for p in foc.items[:5]],
         "sell_alerts": [s.title for s in sell.items[:5]],
         "portfolio_movement": {"current_value": forecast.current_value},
         "budget_warnings": [ctx.budget_state] if ctx.budget_state != "GREEN" else [],
     }
     actions = []
-    if sections["marketplace_deals"]:
-        actions.append("Review top marketplace deals")
+    if sections["marketplace_deals"] or sections["marketplace_alerts"] or sections["best_buy_found"]:
+        actions.append("Open Marketplace Command Center for today's best buys")
+        actions.append("Review marketplace alerts and buy opportunities")
     if sections["foc_reminders"]:
         actions.append("Confirm FOC / future pull items")
     if sections["sell_alerts"]:
@@ -98,6 +132,11 @@ def generate_weekly_briefing(session: Session, *, owner_user_id: int, briefing_d
         "upcoming_releases": [p.title for p in acq.watch[:5]],
         "risk_summary": {"category": risk.risk_category, "score": risk.risk_score},
         "roi_changes": {"note": "Weekly ROI tracked via sell queue and acquisition spread"},
+        "best_buy_found": _best_buy_notification_titles(session, owner_user_id=owner_user_id),
+        "marketplace_alerts": _marketplace_alert_titles(session, owner_user_id=owner_user_id),
+        "marketplace_command_center": build_marketplace_command_center_briefing_section(
+            session, owner_user_id=owner_user_id
+        ),
     }
     actions = [
         "Rebalance portfolio using optimization view",

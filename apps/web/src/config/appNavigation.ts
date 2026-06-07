@@ -37,6 +37,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Purchase Budget", to: "/purchase-budget", hiddenFromNav: true },
       { label: "Acquisition Opportunities", to: "/acquisition-opportunities", hiddenFromNav: true },
       { label: "Buy Opportunities", to: "/buy-opportunities" },
+      { label: "Marketplace Monitoring", to: "/marketplace-monitoring" },
+      { label: "Marketplace Command Center", to: "/marketplace-command-center" },
       { label: "Discovery Feed", to: "/discovery-feed", hiddenFromNav: true },
       { label: "Future Pull List", to: "/future-pull-list" },
     ],
@@ -184,6 +186,9 @@ export function findGroupIdForPath(pathname: string): string | null {
   }
   if (pathname.startsWith("/collector-") || pathname === "/daily-actions") {
     return "home";
+  }
+  if (pathname === "/marketplace-command-center" || pathname.startsWith("/marketplace-command-center/")) {
+    return "buy";
   }
   if (pathname === "/operations-reliability") {
     return "reports";

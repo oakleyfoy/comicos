@@ -9,6 +9,9 @@ import { DealerStorefrontPage } from "./pages/DealerStorefrontPage";
 import { EmailImportsPage } from "./pages/EmailImportsPage";
 import { InventoryDetailPage } from "./pages/InventoryDetailPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
+import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
+import { MarketplaceCoverageDashboardPage } from "./pages/MarketplaceCoverageDashboardPage";
 import { ImportsPage } from "./pages/ImportsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
@@ -78,6 +81,7 @@ import { FuturePullListPage } from "./pages/FuturePullListPage";
 import { DiscoveryWatchlistsPage } from "./pages/DiscoveryWatchlistsPage";
 import { DiscoveryAlertsPage } from "./pages/DiscoveryAlertsPage";
 import { DiscoveryAnalyticsPage } from "./pages/DiscoveryAnalyticsPage";
+import { MarketplaceMonitoringPage } from "./pages/MarketplaceMonitoringPage";
 import { MarketplaceOpportunitiesPage } from "./pages/MarketplaceOpportunitiesPage";
 import { MarketplaceOpportunityDetailPage } from "./pages/MarketplaceOpportunityDetailPage";
 import { MarketplaceAcquisitionDashboardPage } from "./pages/MarketplaceAcquisitionDashboardPage";
@@ -292,6 +296,8 @@ export default function App() {
         <Route path="/discovery-analytics" element={<DiscoveryAnalyticsPage />} />
         <Route path="/marketplace-opportunities" element={<MarketplaceOpportunitiesPage />} />
         <Route path="/buy-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        <Route path="/marketplace-monitoring" element={<MarketplaceMonitoringPage />} />
+        <Route path="/marketplace-command-center" element={<MarketplaceCommandCenterPage />} />
         <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
         <Route path="/marketplace-acquisition-dashboard" element={<MarketplaceAcquisitionDashboardPage />} />
         <Route path="/collection-forecast" element={<CollectionForecastPage />} />
@@ -424,6 +430,8 @@ export default function App() {
       </Route>
       <Route element={<OpsProtectedRoute />}>
         <Route path="/ops" element={<OperationsPage />} />
+        <Route path="/ops/marketplace-search" element={<MarketplaceSearchDashboardPage />} />
+        <Route path="/ops/marketplace-coverage" element={<MarketplaceCoverageDashboardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

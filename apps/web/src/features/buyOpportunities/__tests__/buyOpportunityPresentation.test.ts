@@ -138,4 +138,21 @@ describe("buyOpportunityPresentation", () => {
       ).toBe(false);
     });
   });
+
+  it("uses live listing price and marketplace counts when verified", () => {
+    const cards = buildBuyOpportunityDisplayCards([
+      opp({
+        id: 1,
+        has_verified_listings: true,
+        active_listing_count: 3,
+        best_active_price: 3.2,
+        listing_marketplace: "EBAY",
+        asking_price: 9.99,
+      }),
+    ]);
+    expect(cards[0].bestPrice).toBe(3.2);
+    expect(cards[0].activeListingCount).toBe(3);
+    expect(cards[0].hasVerifiedListings).toBe(true);
+    expect(cards[0].marketplaceLabel).toBe("EBAY");
+  });
 });
