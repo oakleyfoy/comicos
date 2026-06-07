@@ -17183,6 +17183,10 @@ export interface P89SellCandidateRead {
   pricing_confidence?: string | null;
   sales_velocity?: string | null;
   sales_velocity_label?: string | null;
+  listing_draft_id?: number | null;
+  has_listing_draft?: boolean;
+  managed_listing_id?: number | null;
+  managed_listing_status?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -17298,6 +17302,64 @@ export interface P89ListingDraftListResponse {
   total_items: number;
   limit: number;
   offset: number;
+}
+
+export type P89ManagedListingStatus = "DRAFT" | "ACTIVE" | "SOLD" | "EXPIRED" | "ARCHIVED" | "CANCELLED";
+
+export interface P89ManagedListingProfitRead {
+  gross_sale: number;
+  total_costs: number;
+  net_profit: number | null;
+  profit_margin: number | null;
+  cost_basis: number | null;
+  cost_basis_known: boolean;
+}
+
+export interface P89ManagedListingRead {
+  id: number;
+  owner_user_id: number;
+  inventory_copy_id: number;
+  listing_draft_id: number | null;
+  marketplace: P89ListingDraftMarketplace;
+  listing_url: string;
+  external_listing_id: string;
+  title: string;
+  comic_title: string;
+  asking_price: number | null;
+  shipping_price: number | null;
+  minimum_price: number | null;
+  status: P89ManagedListingStatus;
+  listed_at: string | null;
+  sold_at: string | null;
+  expired_at: string | null;
+  archived_at: string | null;
+  sale_price: number | null;
+  shipping_charged: number | null;
+  marketplace_fees: number | null;
+  shipping_cost: number | null;
+  net_profit: number | null;
+  notes: string;
+  profit: P89ManagedListingProfitRead | null;
+  status_history: { status: string; at: string }[];
+  inventory_auto_updated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P89ManagedListingListResponse {
+  items: P89ManagedListingRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
+export interface P89ManagedListingPortfolioSummaryRead {
+  realized_sales_total: number;
+  total_net_profit: number;
+  active_listing_value: number;
+  sold_this_month_count: number;
+  sold_this_month_net_profit: number;
+  active_listings_count: number;
 }
 
 export type ExitCandidateReason =
@@ -30677,6 +30739,108 @@ export const apiClient = {
 
   markListingDraftReviewed(draftId: number): Promise<P89ListingDraftRead> {
     return requestScanV1<P89ListingDraftRead>(`/listing-drafts/${draftId}/mark-reviewed`, { method: "POST" });
+  },
+
+  listManagedListings(params?: {
+    status?: string;
+    marketplace?: string;
+    inventory_copy_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<P89ManagedListingListResponse> {
+    const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
+    return requestScanV1<{ items: P89ManagedListingRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/listing-management${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
+  },
+
+  getManagedListingPortfolioSummary(): Promise<P89ManagedListingPortfolioSummaryRead> {
+    return requestScanV1<P89ManagedListingPortfolioSummaryRead>("/listing-management/portfolio-summary");
+  },
+
+  createManagedListing(payload: {
+    inventory_copy_id?: number;
+    listing_draft_id?: number;
+    marketplace?: P89ListingDraftMarketplace;
+    title?: string;
+    asking_price?: number;
+    shipping_price?: number;
+    minimum_price?: number;
+    listing_url?: string;
+    external_listing_id?: string;
+    notes?: string;
+  }): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>("/listing-management", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getManagedListing(listingId: number): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}`);
+  },
+
+  patchManagedListing(
+    listingId: number,
+    payload: Partial<{
+      listing_url: string;
+      external_listing_id: string;
+      asking_price: number;
+      shipping_price: number;
+      minimum_price: number;
+      notes: string;
+      title: string;
+      marketplace: P89ListingDraftMarketplace;
+    }>,
+  ): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  markManagedListingActive(listingId: number): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}/mark-active`, { method: "POST" });
+  },
+
+  markManagedListingSold(
+    listingId: number,
+    payload: {
+      sale_price: number;
+      shipping_charged?: number;
+      marketplace_fees?: number;
+      shipping_cost?: number;
+      sold_at?: string;
+    },
+  ): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}/mark-sold`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  markManagedListingExpired(listingId: number): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}/mark-expired`, { method: "POST" });
+  },
+
+  archiveManagedListing(listingId: number): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}/archive`, { method: "POST" });
+  },
+
+  cancelManagedListing(listingId: number): Promise<P89ManagedListingRead> {
+    return requestScanV1<P89ManagedListingRead>(`/listing-management/${listingId}/cancel`, { method: "POST" });
+  },
+
+  markInventorySoldForListing(listingId: number): Promise<{ inventory_copy_id: number; order_status: string }> {
+    return requestScanV1<{ inventory_copy_id: number; order_status: string }>(
+      `/listing-management/${listingId}/mark-inventory-sold`,
+      { method: "POST" },
+    );
   },
 
   createP78ListingDraft(payload: P78ListingDraftCreate): Promise<P78ListingDraftRead> {

@@ -1204,6 +1204,7 @@ from app.api.purchase_budget import attach_purchase_budget_layer
 from app.api.sell_candidate import attach_sell_candidate_layer
 from app.api.p89_market_pricing_api import attach_p89_market_pricing_layer
 from app.api.p89_listing_draft_api import attach_p89_listing_draft_layer
+from app.api.p89_listing_management_api import attach_p89_listing_management_layer
 from app.api.portfolio_certification import attach_portfolio_certification_layer
 from app.api.want_lists import attach_want_list_layer
 from app.api.collection_gaps import attach_collection_gap_layer
@@ -1381,6 +1382,7 @@ attach_purchase_budget_layer(app)
 attach_sell_candidate_layer(app)
 attach_p89_market_pricing_layer(app)
 attach_p89_listing_draft_layer(app)
+attach_p89_listing_management_layer(app)
 attach_portfolio_certification_layer(app)
 attach_want_list_layer(app)
 attach_collection_gap_layer(app)

@@ -37,6 +37,10 @@ class P89SellCandidateRead(BaseModel):
     pricing_confidence: str | None = None
     sales_velocity: str | None = None
     sales_velocity_label: str | None = None
+    listing_draft_id: int | None = None
+    has_listing_draft: bool = False
+    managed_listing_id: int | None = None
+    managed_listing_status: str | None = None
     created_at: datetime
     updated_at: datetime
 

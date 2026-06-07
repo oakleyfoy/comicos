@@ -69,6 +69,17 @@ export function ListingDraftReviewPage(): JSX.Element {
     setMessage("Marked as reviewed.");
   }
 
+  async function createManagedListing() {
+    if (!draft) return;
+    setMessage(null);
+    try {
+      const row = await apiClient.createManagedListing({ listing_draft_id: draft.id });
+      void navigate(`/listing-management/${row.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Unable to create managed listing.");
+    }
+  }
+
   async function archiveDraft() {
     if (!draft) return;
     await apiClient.patchListingDraft(draft.id, { status: "ARCHIVED" });
@@ -188,6 +199,9 @@ export function ListingDraftReviewPage(): JSX.Element {
         </button>
         <button type="button" className="rounded-md border border-white/40 px-3 py-1.5 text-sm text-white" onClick={() => void copyText(draft.full_listing_text).then(() => setMessage("Full listing copied."))}>
           Copy Full Listing
+        </button>
+        <button type="button" className="rounded-md border border-white/40 px-3 py-1.5 text-sm text-white" onClick={() => void createManagedListing()}>
+          Create Managed Listing
         </button>
         <button type="button" className="rounded-md border border-emerald-300 px-3 py-1.5 text-sm text-emerald-100" onClick={() => void markReviewed()}>
           Mark Reviewed

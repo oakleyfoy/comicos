@@ -14,6 +14,7 @@ from app.services.marketplace_acquisition_service import build_acquisition_dashb
 from app.services.p77_personalization_engine import load_personalization_context
 from app.services.sell_candidate_service import build_sell_candidate_briefing_highlights
 from app.services.listing_draft_service import build_listing_draft_briefing
+from app.services.listing_management_service import build_selling_activity_briefing
 from app.services.p89_market_pricing_service import build_market_pricing_briefing_summary
 from app.services.marketplace_command_center_service import build_marketplace_command_center_briefing_section
 from app.services.p81_discovery_personalization_service import list_future_pull_list, list_personalized_discovery
@@ -84,6 +85,7 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     sell_highlights = build_sell_candidate_briefing_highlights(session, owner_user_id=owner_user_id)
     market_pricing_summary = build_market_pricing_briefing_summary(session, owner_user_id=owner_user_id)
     listing_drafts = build_listing_draft_briefing(session, owner_user_id=owner_user_id)
+    selling_activity = build_selling_activity_briefing(session, owner_user_id=owner_user_id)
     sections = {
         "discovery_opportunities": [d.opportunity.title for d in discovery.items[:5]],
         "marketplace_deals": [d.title for d in deals.items if d.recommendation in {"STRONG_BUY", "GOOD_BUY"}][:5],
@@ -96,6 +98,7 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
         "sell_opportunities": sell_highlights,
         "market_pricing_summary": market_pricing_summary,
         "listing_drafts": listing_drafts,
+        "selling_activity": selling_activity,
         "sell_alerts": [
             t
             for t in (

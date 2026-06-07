@@ -71,6 +71,8 @@ import { CollectorAnalyticsPage } from "./pages/CollectorAnalyticsPage";
 import { SellQueuePage } from "./pages/SellQueuePage";
 import { ListingDraftsPage } from "./pages/ListingDraftsPage";
 import { ListingDraftReviewPage } from "./pages/ListingDraftReviewPage";
+import { ListingManagementPage } from "./pages/ListingManagementPage";
+import { ListingManagementDetailPage } from "./pages/ListingManagementDetailPage";
 import { ListingsPage } from "./pages/ListingsPage";
 import { SellingAnalyticsPage } from "./pages/SellingAnalyticsPage";
 import { BundleOpportunitiesPage } from "./pages/BundleOpportunitiesPage";
@@ -286,6 +288,8 @@ export default function App() {
         <Route path="/sell-queue" element={<SellQueuePage />} />
         <Route path="/listing-drafts" element={<ListingDraftsPage />} />
         <Route path="/listing-drafts/:id" element={<ListingDraftReviewPage />} />
+        <Route path="/listing-management" element={<ListingManagementPage />} />
+        <Route path="/listing-management/:id" element={<ListingManagementDetailPage />} />
         <Route path="/bundle-opportunities" element={<BundleOpportunitiesPage />} />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/selling-analytics" element={<SellingAnalyticsPage />} />

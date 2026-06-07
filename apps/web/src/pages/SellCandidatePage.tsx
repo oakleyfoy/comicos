@@ -124,9 +124,11 @@ export function SellCandidatePage(): JSX.Element {
                         card={card}
                         onGenerateDraft={(c) => void onGenerateListingDraft(c)}
                         reviewDraftUrl={
-                          draftLinkForCandidate === card.sellCandidateId && draftLinkId
-                            ? `/listing-drafts/${draftLinkId}`
-                            : undefined
+                          card.listingDraftId
+                            ? `/listing-drafts/${card.listingDraftId}`
+                            : draftLinkForCandidate === card.sellCandidateId && draftLinkId
+                              ? `/listing-drafts/${draftLinkId}`
+                              : undefined
                         }
                       />
                     </li>

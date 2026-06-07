@@ -414,6 +414,7 @@ from app.models.sell_candidate import SellCandidateRecommendation
 from app.models.p89_sell_candidate import P89SellCandidate
 from app.models.p89_market_price_snapshot import P89MarketPriceSnapshot
 from app.models.p89_listing_draft import P89ListingDraft
+from app.models.p89_managed_listing import P89ManagedListing
 from app.models.portfolio_certification import PortfolioCertificationRun
 from app.models.acquisition_certification import AcquisitionCertificationRun
 from app.models.exit_candidate import ExitCandidate

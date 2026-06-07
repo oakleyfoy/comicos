@@ -451,6 +451,22 @@ def _to_read(session: Session, *, row: P89SellCandidate):
             issue_number=issue,
             variant="",
         )
+    from app.models.p89_listing_draft import P89ListingDraft
+    from app.services.listing_management_service import latest_managed_listing_for_copy
+
+    draft_row = session.exec(
+        select(P89ListingDraft)
+        .where(P89ListingDraft.owner_user_id == row.owner_user_id)
+        .where(P89ListingDraft.inventory_copy_id == row.inventory_copy_id)
+        .where(P89ListingDraft.status != "ARCHIVED")
+        .order_by(P89ListingDraft.updated_at.desc())
+        .limit(1)
+    ).first()
+    managed = latest_managed_listing_for_copy(
+        session,
+        owner_user_id=int(row.owner_user_id),
+        inventory_copy_id=int(row.inventory_copy_id),
+    )
     return P89SellCandidateRead(
         id=int(row.id or 0),
         owner_user_id=int(row.owner_user_id),
@@ -479,6 +495,10 @@ def _to_read(session: Session, *, row: P89SellCandidate):
         pricing_confidence=pricing.pricing_confidence if pricing else None,
         sales_velocity=pricing.sales_velocity if pricing else None,
         sales_velocity_label=velocity_display_label(pricing.sales_velocity) if pricing else None,
+        listing_draft_id=int(draft_row.id) if draft_row and draft_row.id else None,
+        has_listing_draft=draft_row is not None,
+        managed_listing_id=int(managed.id) if managed and managed.id else None,
+        managed_listing_status=managed.status if managed else None,
     )
 
 

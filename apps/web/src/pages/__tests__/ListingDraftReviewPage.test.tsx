@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as clientModule from "../../api/client";
 import { ListingDraftReviewPage } from "../ListingDraftReviewPage";
@@ -33,6 +33,10 @@ const draft: clientModule.P89ListingDraftRead = {
 };
 
 describe("ListingDraftReviewPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders editable fields and copy actions", async () => {
     vi.spyOn(clientModule.apiClient, "getListingDraft").mockResolvedValue(draft);
     Object.assign(navigator, {
@@ -49,10 +53,59 @@ describe("ListingDraftReviewPage", () => {
       expect(screen.getByDisplayValue("Amazing Spider-Man #300")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Copy Title" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Managed Listing" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark Reviewed" })).toBeInTheDocument();
     fireEvent.change(screen.getByDisplayValue("Amazing Spider-Man #300"), {
       target: { value: "Updated Title" },
     });
     expect(screen.getByDisplayValue("Updated Title")).toBeInTheDocument();
+  });
+
+  it("creates managed listing from draft", async () => {
+    vi.spyOn(clientModule.apiClient, "getListingDraft").mockResolvedValue(draft);
+    const createSpy = vi.spyOn(clientModule.apiClient, "createManagedListing").mockResolvedValue({
+      id: 99,
+      owner_user_id: 1,
+      inventory_copy_id: 10,
+      listing_draft_id: 5,
+      marketplace: "EBAY",
+      listing_url: "",
+      external_listing_id: "",
+      title: draft.title,
+      comic_title: draft.comic_title,
+      asking_price: 425,
+      shipping_price: null,
+      minimum_price: 380,
+      status: "DRAFT",
+      listed_at: null,
+      sold_at: null,
+      expired_at: null,
+      archived_at: null,
+      sale_price: null,
+      shipping_charged: null,
+      marketplace_fees: null,
+      shipping_cost: null,
+      net_profit: null,
+      notes: "",
+      profit: null,
+      status_history: [],
+      inventory_auto_updated: false,
+      created_at: draft.created_at,
+      updated_at: draft.updated_at,
+    });
+    render(
+      <MemoryRouter initialEntries={["/listing-drafts/5"]}>
+        <Routes>
+          <Route path="/listing-drafts/:id" element={<ListingDraftReviewPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create Managed Listing" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Managed Listing" }));
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith({ listing_draft_id: 5 });
+    });
   });
 });

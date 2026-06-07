@@ -18,6 +18,10 @@ export type SellCandidateDisplayCard = {
   pricingConfidence: string | null;
   inventoryCopyId: number;
   sellCandidateId: number;
+  hasListingDraft: boolean;
+  listingDraftId: number | null;
+  managedListingStatus: string | null;
+  managedListingId: number | null;
 };
 
 const REC_LABELS: Record<P89SellCandidateRead["recommendation"], string> = {
@@ -53,6 +57,10 @@ export function toSellCandidateDisplayCard(item: P89SellCandidateRead): SellCand
     pricingConfidence: item.pricing_confidence ?? null,
     inventoryCopyId: item.inventory_copy_id,
     sellCandidateId: item.id,
+    hasListingDraft: Boolean(item.has_listing_draft),
+    listingDraftId: item.listing_draft_id ?? null,
+    managedListingStatus: item.managed_listing_status ?? null,
+    managedListingId: item.managed_listing_id ?? null,
   };
 }
 

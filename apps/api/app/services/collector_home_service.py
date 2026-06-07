@@ -12,6 +12,11 @@ from sqlmodel import Session, select
 
 from app.models.grade_before_sell import GradeBeforeSellRecommendation
 from app.services.listing_draft_service import count_drafts_awaiting_review
+from app.services.listing_management_service import (
+    count_active_managed_listings,
+    count_sold_managed_listings_since,
+)
+from app.models.p89_managed_listing import P89ManagedListing
 from app.models.p89_listing_draft import P89ListingDraft
 from app.models.p89_sell_candidate import P89SellCandidate
 from app.services.sell_candidate_service import count_active_sell_candidates
@@ -458,6 +463,50 @@ def _count_marketplace_opportunities(
     return _indicator_from_count(n, updated_at=latest)
 
 
+def _count_listing_management_home(session: Session, *, owner_user_id: int) -> _SectionIndicator:
+    active = count_active_managed_listings(session, owner_user_id=owner_user_id)
+    draft_managed = int(
+        session.exec(
+            select(func.count())
+            .select_from(P89ManagedListing)
+            .where(P89ManagedListing.owner_user_id == owner_user_id)
+            .where(P89ManagedListing.status == "DRAFT")
+        ).one()
+        or 0
+    )
+    drafts_review = count_drafts_awaiting_review(session, owner_user_id=owner_user_id)
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    sold_week = count_sold_managed_listings_since(session, owner_user_id=owner_user_id, since=since)
+    n = active + draft_managed + sold_week
+    latest = session.exec(
+        select(P89ManagedListing.updated_at)
+        .where(P89ManagedListing.owner_user_id == owner_user_id)
+        .order_by(P89ManagedListing.updated_at.desc())
+        .limit(1)
+    ).first()
+    indicator = _indicator_from_count(n, updated_at=latest)
+    return _SectionIndicator(
+        indicator.count,
+        indicator.has_items,
+        indicator.freshness_label,
+        indicator.indicator_status,
+    )
+
+
+def _listing_management_home_items(session: Session, *, owner_user_id: int) -> list[dict]:
+    active = count_active_managed_listings(session, owner_user_id=owner_user_id)
+    drafts_review = count_drafts_awaiting_review(session, owner_user_id=owner_user_id)
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    sold_week = count_sold_managed_listings_since(session, owner_user_id=owner_user_id, since=since)
+    return [
+        {
+            "active_listings": active,
+            "drafts_awaiting_review": drafts_review,
+            "sold_this_week": sold_week,
+        }
+    ]
+
+
 def _count_listing_drafts_awaiting_review(session: Session, *, owner_user_id: int) -> _SectionIndicator:
     n = count_drafts_awaiting_review(session, owner_user_id=owner_user_id)
     latest = session.exec(
@@ -634,6 +683,9 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     ind_listing_drafts = _timed_indicator(
         "listing_drafts", lambda: _count_listing_drafts_awaiting_review(session, owner_user_id=uid)
     )
+    ind_listing_management = _timed_indicator(
+        "listing_management", lambda: _count_listing_management_home(session, owner_user_id=uid)
+    )
     ind_grade = _timed_indicator("grade_alerts", lambda: _count_grade_candidates(session, owner_user_id=uid))
     ind_storage = _timed_indicator("storage_issues", lambda: _indicator_storage(session, owner_user_id=uid))
     ind_deals = _timed_indicator(
@@ -683,6 +735,14 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
             empty_hint="Open Listing Drafts to review copy-ready marketplace drafts.",
             reason=skipped,
             indicator=ind_listing_drafts,
+        ),
+        _section_skipped(
+            "listing_management",
+            "Listing management",
+            empty_hint="Open Listing Management to track active listings and sales.",
+            reason=skipped,
+            indicator=ind_listing_management,
+            items=_listing_management_home_items(session, owner_user_id=owner_user_id),
         ),
         _section_skipped(
             "grade_alerts",

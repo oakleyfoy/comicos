@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { apiClient, type P89MarketPricingPortfolioTotalsRead } from "../api/client";
+import { apiClient, type P89ManagedListingPortfolioSummaryRead, type P89MarketPricingPortfolioTotalsRead } from "../api/client";
 import {
   p67Api,
   p68Api,
@@ -41,12 +41,13 @@ export function PortfolioAnalyticsPage(): JSX.Element {
   const [investor, setInvestor] = useState<P67InvestorLatest | null>(null);
   const [pricing, setPricing] = useState<P68SnapshotRow[]>([]);
   const [marketPricingTotals, setMarketPricingTotals] = useState<P89MarketPricingPortfolioTotalsRead | null>(null);
+  const [listingSales, setListingSales] = useState<P89ManagedListingPortfolioSummaryRead | null>(null);
 
   const loadLatest = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [p, c, r, g, i, pr, mkt] = await Promise.all([
+      const [p, c, r, g, i, pr, mkt, salesSummary] = await Promise.all([
         p67Api.portfolioLatest(),
         p67Api.collectionLatest(),
         p67Api.recommendationLatest(),
@@ -54,6 +55,7 @@ export function PortfolioAnalyticsPage(): JSX.Element {
         p67Api.investorLatest(),
         p68Api.latestSnapshots(),
         apiClient.getMarketPricingPortfolioTotals().catch(() => null),
+        apiClient.getManagedListingPortfolioSummary().catch(() => null),
       ]);
       setPortfolio(p);
       setCollection(c);
@@ -62,6 +64,7 @@ export function PortfolioAnalyticsPage(): JSX.Element {
       setInvestor(i);
       setPricing(pr.items ?? []);
       setMarketPricingTotals(mkt);
+      setListingSales(salesSummary);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load portfolio analytics");
     } finally {
@@ -117,6 +120,33 @@ export function PortfolioAnalyticsPage(): JSX.Element {
 
       {!loading ? (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <Section title="Realized sales (P89)">
+            {listingSales ? (
+              <dl className="grid grid-cols-1 gap-3 text-sm text-white sm:grid-cols-2">
+                <div>
+                  <dt className="text-slate-400">Realized sales</dt>
+                  <dd className="text-lg font-semibold">{money(listingSales.realized_sales_total)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Total net profit</dt>
+                  <dd className="text-lg font-semibold">{money(listingSales.total_net_profit)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Active listing value</dt>
+                  <dd>{money(listingSales.active_listing_value)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Sold this month</dt>
+                  <dd>
+                    {listingSales.sold_this_month_count} · {money(listingSales.sold_this_month_net_profit)} profit
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-slate-400">No managed listing sales yet.</p>
+            )}
+          </Section>
+
           <Section title="Market pricing (P89)">
             {marketPricingTotals ? (
               <dl className="grid grid-cols-1 gap-3 text-sm text-white sm:grid-cols-3">

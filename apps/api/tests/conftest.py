@@ -15,6 +15,7 @@ from app.db.session import get_engine
 from app.main import app
 from app.models.p89_sell_candidate import P89SellCandidate  # noqa: F401
 from app.models.p89_listing_draft import P89ListingDraft  # noqa: F401
+from app.models.p89_managed_listing import P89ManagedListing  # noqa: F401
 from app.models.p89_market_price_snapshot import P89MarketPriceSnapshot  # noqa: F401
 from app.models.p88_marketplace_monitoring import (  # noqa: F401
     MarketplaceAlert,

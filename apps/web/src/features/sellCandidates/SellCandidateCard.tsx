@@ -89,6 +89,14 @@ export function SellCandidateCard({ card, onGenerateDraft, reviewDraftUrl }: Pro
               ))}
             </ul>
           ) : null}
+          {card.hasListingDraft ? (
+            <p className="mt-2 text-sm font-medium text-emerald-800">Listing Draft Created</p>
+          ) : null}
+          {card.managedListingStatus ? (
+            <p className="mt-1 text-sm text-blue-900">
+              Listing Status: <span className="font-medium">{card.managedListingStatus}</span>
+            </p>
+          ) : null}
           {onGenerateDraft &&
           (card.recommendation === "SELL_NOW" || card.recommendation === "GRADE_FIRST") ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
