@@ -1206,6 +1206,9 @@ from app.api.p89_market_pricing_api import attach_p89_market_pricing_layer
 from app.api.p89_listing_draft_api import attach_p89_listing_draft_layer
 from app.api.p89_listing_management_api import attach_p89_listing_management_layer
 from app.api.p89_sell_command_center_api import attach_p89_sell_command_center_layer
+from app.api.p90_automation_api import attach_p90_automation_layer
+from app.api.p90_collector_advisor_api import attach_p90_collector_advisor_layer
+from app.api.p90_fmv_v2_api import attach_p90_fmv_v2_layer
 from app.api.portfolio_certification import attach_portfolio_certification_layer
 from app.api.want_lists import attach_want_list_layer
 from app.api.collection_gaps import attach_collection_gap_layer
@@ -1316,6 +1319,9 @@ attach_scan_historical_comparison_layer(app)
 attach_scan_authentication_layer(app)
 attach_scan_intelligence_feed_layer(app)
 attach_automation_batch_layer(app)
+attach_p90_automation_layer(app)
+attach_p90_collector_advisor_layer(app)
+attach_p90_fmv_v2_layer(app)
 attach_automation_notifications_layer(app)
 attach_automation_ops_layer(app)
 attach_automation_analytics_layer(app)

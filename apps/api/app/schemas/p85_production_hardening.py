@@ -83,4 +83,7 @@ class P85CollectorHomeRead(BaseModel):
     sections: list[P85CollectorHomeSectionRead] = Field(default_factory=list)
     budget_status: dict = Field(default_factory=dict)
     portfolio_movement: dict = Field(default_factory=dict)
+    advisor_plan_ready: bool = False
+    advisor_total_actions: int | None = None
+    advisor_primary_cta_url: str = "/automation-center"
     generated_at: str = ""

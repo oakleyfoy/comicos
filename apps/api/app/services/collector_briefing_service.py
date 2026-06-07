@@ -16,6 +16,9 @@ from app.services.sell_candidate_service import build_sell_candidate_briefing_hi
 from app.services.listing_draft_service import build_listing_draft_briefing
 from app.services.listing_management_service import build_selling_activity_briefing
 from app.services.sell_command_center_service import build_sell_command_center_briefing_section
+from app.services.collector_alert_service import build_automation_briefing_summary
+from app.services.collector_advisor_service import build_collector_advisor_briefing_summary
+from app.services.portfolio_fmv_v2_service import build_fmv_v2_briefing_summary
 from app.services.p89_market_pricing_service import build_market_pricing_briefing_summary
 from app.services.marketplace_command_center_service import build_marketplace_command_center_briefing_section
 from app.services.p81_discovery_personalization_service import list_future_pull_list, list_personalized_discovery
@@ -88,6 +91,9 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     listing_drafts = build_listing_draft_briefing(session, owner_user_id=owner_user_id)
     selling_activity = build_selling_activity_briefing(session, owner_user_id=owner_user_id)
     sell_command_center_summary = build_sell_command_center_briefing_section(session, owner_user_id=owner_user_id)
+    automation_summary = build_automation_briefing_summary(session, owner_user_id=owner_user_id)
+    collector_advisor_summary = build_collector_advisor_briefing_summary(session, owner_user_id=owner_user_id)
+    fmv_intelligence_summary = build_fmv_v2_briefing_summary(session, owner_user_id=owner_user_id)
     sections = {
         "discovery_opportunities": [d.opportunity.title for d in discovery.items[:5]],
         "marketplace_deals": [d.title for d in deals.items if d.recommendation in {"STRONG_BUY", "GOOD_BUY"}][:5],
@@ -102,6 +108,9 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
         "listing_drafts": listing_drafts,
         "selling_activity": selling_activity,
         "sell_command_center_summary": sell_command_center_summary,
+        "automation_summary": automation_summary,
+        "collector_advisor_summary": collector_advisor_summary,
+        "fmv_intelligence_summary": fmv_intelligence_summary,
         "sell_alerts": [
             t
             for t in (
@@ -122,6 +131,10 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
         actions.append("Confirm FOC / future pull items")
     if sections["sell_alerts"]:
         actions.append("Review Sell Candidates for exit opportunities")
+    if automation_summary.get("new_alerts"):
+        actions.append("Open Automation Center for today's top actions")
+    if collector_advisor_summary.get("total_actions"):
+        actions.append("Open Collector Advisor for your daily action plan")
     if not actions:
         actions.append("Scan discovery feed for new releases")
     row = CollectorBriefing(
@@ -147,6 +160,9 @@ def generate_weekly_briefing(session: Session, *, owner_user_id: int, briefing_d
     acq = build_acquisition_dashboard(session, owner_user_id=owner_user_id, refresh=True)
     ctx = load_personalization_context(session, owner_user_id=owner_user_id)
     sell_cc = build_sell_command_center_briefing_section(session, owner_user_id=owner_user_id)
+    automation_summary = build_automation_briefing_summary(session, owner_user_id=owner_user_id)
+    collector_advisor_summary = build_collector_advisor_briefing_summary(session, owner_user_id=owner_user_id)
+    fmv_intelligence_summary = build_fmv_v2_briefing_summary(session, owner_user_id=owner_user_id)
     sections = {
         "fmv_changes": {"current_value": forecast.current_value, "horizon_90": forecast.horizons[1].forecast_value if len(forecast.horizons) > 1 else forecast.current_value},
         "budget_usage": {"state": ctx.budget_state, "monthly_budget": ctx.monthly_budget},
@@ -160,6 +176,9 @@ def generate_weekly_briefing(session: Session, *, owner_user_id: int, briefing_d
             session, owner_user_id=owner_user_id
         ),
         "sell_command_center_summary": sell_cc,
+        "automation_summary": automation_summary,
+        "collector_advisor_summary": collector_advisor_summary,
+        "fmv_intelligence_summary": fmv_intelligence_summary,
     }
     actions = [
         "Rebalance portfolio using optimization view",

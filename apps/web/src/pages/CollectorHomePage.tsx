@@ -67,6 +67,18 @@ export function CollectorHomePage(): JSX.Element {
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-4 py-6">
+          <div className="mb-6">
+            <Link
+              to={home.advisor_primary_cta_url || "/automation-center"}
+              className="inline-flex rounded-lg bg-red-700 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-red-600"
+              data-testid="collector-home-advisor-cta"
+            >
+              Open Collector Advisor
+            </Link>
+            {home.advisor_plan_ready && home.advisor_total_actions != null ? (
+              <p className="mt-2 text-sm text-blue-200">{home.advisor_total_actions} cached actions in today&apos;s plan</p>
+            ) : null}
+          </div>
           <section aria-labelledby="collector-home-todays-actions" className="mb-5">
             <h2
               id="collector-home-todays-actions"

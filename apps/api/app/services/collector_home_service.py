@@ -31,6 +31,7 @@ from app.models.p82_p84_collector_expansion import (
 )
 from app.models.p88_marketplace_listing import P88MarketplaceListing
 from app.schemas.p85_production_hardening import (
+    P85CollectorHomeActionRead,
     P85CollectorHomeRead,
     P85CollectorHomeSectionRead,
 )
@@ -289,6 +290,9 @@ def _static_safe_collector_home() -> P85CollectorHomeRead:
             "risk_category": None,
             "risk_score": None,
         },
+        advisor_plan_ready=False,
+        advisor_total_actions=None,
+        advisor_primary_cta_url="/automation-center",
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -354,7 +358,7 @@ def _portfolio_movement(session: Session, *, owner_user_id: int) -> dict:
             "risk_category": None,
             "risk_score": None,
         }
-    return {
+    out = {
         "status": "OK",
         "error": "",
         "current_value": float(valuation.current_value) if valuation else None,
@@ -368,6 +372,30 @@ def _portfolio_movement(session: Session, *, owner_user_id: int) -> dict:
             else ""
         ),
     }
+    from app.models.p90_fmv_snapshot import P90FmvSnapshot
+
+    latest_fmv_date = session.exec(
+        select(func.max(P90FmvSnapshot.snapshot_date)).where(P90FmvSnapshot.owner_user_id == owner_user_id)
+    ).one()
+    if latest_fmv_date is not None:
+        rows = list(
+            session.exec(
+                select(P90FmvSnapshot)
+                .where(P90FmvSnapshot.owner_user_id == owner_user_id)
+                .where(P90FmvSnapshot.snapshot_date == latest_fmv_date)
+            ).all()
+        )
+        if rows:
+            avg_trend = sum(float(r.trend_score) for r in rows) / len(rows)
+            if avg_trend >= 8:
+                trend = "UP"
+            elif avg_trend <= -8:
+                trend = "DOWN"
+            else:
+                trend = "FLAT"
+            out["fmv_v2_portfolio_trend"] = trend
+            out["fmv_v2_high_confidence_count"] = sum(1 for r in rows if r.valuation_confidence == "HIGH")
+    return out
 
 
 def _foc_alert_items(session: Session, *, owner_user_id: int) -> list[dict]:
@@ -648,6 +676,55 @@ def _count_discovery_alerts(session: Session, *, owner_user_id: int) -> _Section
     return _indicator_from_count(n, updated_at=latest)
 
 
+def _advisor_home_meta(session: Session, *, owner_user_id: int) -> tuple[bool, int | None]:
+    from app.services.collector_advisor_service import latest_advisor_snapshot
+
+    snap = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
+    if snap is None:
+        return False, None
+    return True, int(snap.total_actions)
+
+
+def _todays_top_actions_from_advisor(session: Session, *, owner_user_id: int) -> tuple[list[P85CollectorHomeActionRead], str, str]:
+    """Read cached advisor snapshot only — no advisor generation on home load."""
+    from app.services.collector_advisor_service import latest_advisor_snapshot
+
+    snap = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
+    if snap is None or not snap.todays_actions:
+        return [], "OK", "Open Collector Advisor for your daily action plan."
+    actions = [
+        P85CollectorHomeActionRead(
+            title=str(item.get("title") or "Advisor action"),
+            action_type=str(item.get("category") or "ADVISOR"),
+            priority_score=float(item.get("priority_score") or 0.0),
+            source="p90_collector_advisor",
+            action_url=str(item.get("action_route") or "/automation-center"),
+        )
+        for item in (snap.todays_actions or [])[:3]
+    ]
+    return actions, "OK", ""
+
+
+def _todays_top_actions_from_alerts(session: Session, *, owner_user_id: int) -> tuple[list[P85CollectorHomeActionRead], str, str]:
+    """Lightweight read of cached P90 alerts — no automation engine on home load."""
+    from app.services.collector_action_queue_service import build_action_queue
+
+    items = build_action_queue(session, owner_user_id=owner_user_id, limit=8)
+    if not items:
+        return [], "OK", ""
+    actions = [
+        P85CollectorHomeActionRead(
+            title=item.title,
+            action_type=item.action_type,
+            priority_score=item.priority_score,
+            source="p90_automation",
+            action_url=item.action_route or "/automation-center",
+        )
+        for item in items
+    ]
+    return actions, "OK", ""
+
+
 def build_collector_home(session: Session, *, owner_user_id: int) -> P85CollectorHomeRead:
     started = time.monotonic()
     skipped = "Temporarily skipped on Collector Home; open the dedicated page for full data."
@@ -793,13 +870,27 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     elapsed = time.monotonic() - started
     logger.info("collector_home total elapsed_ms=%s owner=%s", round(elapsed * 1000, 1), owner_user_id)
 
+    action_block = _timed_payload(
+        "todays_actions",
+        lambda: _todays_top_actions_from_advisor(session, owner_user_id=owner_user_id),
+    )
+    if action_block is None:
+        home_actions, todays_status, todays_error = [], "SKIPPED", f"Skipped: actions exceeded {_SECTION_MAX_SECONDS:.1f}s."
+    else:
+        home_actions, todays_status, todays_error = action_block
+
+    advisor_ready, advisor_total = _advisor_home_meta(session, owner_user_id=owner_user_id)
+
     return P85CollectorHomeRead(
         headline="Fast operational dashboard",
-        todays_actions=[],
-        todays_actions_status="SKIPPED",
-        todays_actions_error="Open Daily Actions for the full list.",
+        todays_actions=home_actions,
+        todays_actions_status=todays_status,
+        todays_actions_error=todays_error,
         sections=sections,
         budget_status=budget_status,
         portfolio_movement=portfolio_movement,
+        advisor_plan_ready=advisor_ready,
+        advisor_total_actions=advisor_total,
+        advisor_primary_cta_url="/automation-center",
         generated_at=datetime.now(timezone.utc).isoformat(),
     )

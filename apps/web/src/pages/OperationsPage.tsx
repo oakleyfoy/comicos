@@ -5925,13 +5925,24 @@ export function OperationsPage() {
           ["Comp readiness", "#market-comp-eligibility"],
           ["Grouped comps", "#market-comps"],
           ["FMV snapshots", "#market-fmv"],
+          ["FMV V2 diagnostics", "/ops/fmv-diagnostics"],
           ["Trends", "#market-trends"],
           ["Match suggestions", "#market-match-suggestions"],
-        ].map(([label, hash]) => (
-          <a key={hash} className="rounded-full border border-white/15 px-2 py-1 hover:border-emerald-300/55" href={hash}>
-            {label}
-          </a>
-        ))}
+        ].map(([label, hash]) =>
+          hash.startsWith("/") ? (
+            <Link
+              key={hash}
+              to={hash}
+              className="rounded-full border border-white/15 px-2 py-1 hover:border-emerald-300/55"
+            >
+              {label}
+            </Link>
+          ) : (
+            <a key={hash} className="rounded-full border border-white/15 px-2 py-1 hover:border-emerald-300/55" href={hash}>
+              {label}
+            </a>
+          ),
+        )}
       </nav>
 
       <details

@@ -23,6 +23,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Home",
     links: [
       { label: "Collector Home", to: "/collector-home", prominent: true },
+      { label: "Collector Advisor", to: "/automation-center" },
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Command Center", to: "/collector-command-center" },
       { label: "Notifications", to: "/notifications" },
@@ -54,6 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Manual & AI Import", to: "/imports" },
       { label: "Collection Gaps", to: "/collection-gaps" },
       { label: "Market & FMV", to: "/dashboard/market" },
+      { label: "FMV Intelligence", to: "/fmv-intelligence" },
       { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
       { label: "Key Issues", to: "/key-issues" },
       { label: "Want Lists", to: "/want-lists", hiddenFromNav: true },

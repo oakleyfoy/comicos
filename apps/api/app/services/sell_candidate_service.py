@@ -441,16 +441,18 @@ def _to_read(session: Session, *, row: P89SellCandidate):
     title = series or "Unknown"
     pricing = None
     if copy is not None:
-        from app.services.p89_market_pricing_service import lookup_latest_snapshot
+        from app.services.fmv_v2_service import lookup_fmv_v2_display
         from app.services.sales_velocity_service import velocity_display_label
 
-        pricing = lookup_latest_snapshot(
+        display = lookup_fmv_v2_display(
             session,
             owner_user_id=int(row.owner_user_id),
             series=title,
             issue_number=issue,
             variant="",
         )
+        if display is not None:
+            pricing = display
     from app.models.p89_listing_draft import P89ListingDraft
     from app.services.listing_management_service import latest_managed_listing_for_copy
 
@@ -489,10 +491,10 @@ def _to_read(session: Session, *, row: P89SellCandidate):
         created_at=row.created_at,
         updated_at=row.updated_at,
         is_top_opportunity=False,
-        quick_sale_price=float(pricing.quick_sale_price) if pricing else None,
-        market_price=float(pricing.market_price) if pricing else None,
-        premium_price=float(pricing.premium_price) if pricing else None,
-        pricing_confidence=pricing.pricing_confidence if pricing else None,
+        quick_sale_price=pricing.quick_sale_value if pricing else None,
+        market_price=pricing.market_value if pricing else None,
+        premium_price=pricing.premium_value if pricing else None,
+        pricing_confidence=pricing.valuation_confidence if pricing else None,
         sales_velocity=pricing.sales_velocity if pricing else None,
         sales_velocity_label=velocity_display_label(pricing.sales_velocity) if pricing else None,
         listing_draft_id=int(draft_row.id) if draft_row and draft_row.id else None,

@@ -124,6 +124,9 @@ export function sectionIndicatorDisplay(sec: P85CollectorHomeRead["sections"][nu
 }
 
 export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): string {
+  if (home.advisor_plan_ready && home.advisor_total_actions != null && home.advisor_total_actions > 0) {
+    return `${home.advisor_total_actions} actions ready — open Collector Advisor for your daily plan.`;
+  }
   const parts: string[] = [];
   const portfolioRaw = home.portfolio_movement?.current_value;
   const portfolio =
@@ -149,7 +152,7 @@ export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): str
   if (parts.length > 0) {
     return parts.join(" · ");
   }
-  return "Your daily comic collecting command center";
+  return "Your daily comic collecting launch pad — open Collector Advisor when you are ready to act.";
 }
 
 export function homeHasSectionItemsReady(sections: P85CollectorHomeRead["sections"]): boolean {

@@ -13,6 +13,9 @@ if str(API_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
+from app.models.p90_collector_alert import P90AutomationRun, P90CollectorAlert  # noqa: F401
+from app.models.p90_fmv_snapshot import P90FmvSnapshot  # noqa: F401
+from app.models.p90_collector_advisor_snapshot import P90CollectorAdvisorSnapshot  # noqa: F401
 from app.models.p89_sell_candidate import P89SellCandidate  # noqa: F401
 from app.models.p89_listing_draft import P89ListingDraft  # noqa: F401
 from app.models.p89_managed_listing import P89ManagedListing  # noqa: F401

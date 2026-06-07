@@ -44,6 +44,9 @@ class MarketplaceAcquisitionOpportunityRead(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    fmv_v2_market_value: float | None = None
+    fmv_v2_confidence: str | None = None
+    effective_discount_to_fmv: float | None = None
     best_listing_id: int | None = None
     active_listing_count: int = 0
     best_active_price: float | None = None

@@ -34,8 +34,30 @@ def _to_read(
     row: MarketplaceAcquisitionOpportunity,
     *,
     summary: dict[str, object] | None = None,
+    session: Session | None = None,
+    owner_user_id: int | None = None,
 ) -> MarketplaceAcquisitionOpportunityRead:
     s = summary or {}
+    effective_fmv = float(row.estimated_fmv)
+    effective_discount = float(row.discount_to_fmv)
+    fmv_v2_market: float | None = None
+    fmv_v2_conf: str | None = None
+    if session is not None and owner_user_id is not None:
+        from app.services.fmv_v2_service import lookup_fmv_v2_display
+
+        v2 = lookup_fmv_v2_display(
+            session,
+            owner_user_id=owner_user_id,
+            series=row.series,
+            issue_number=row.issue,
+            variant=row.variant,
+        )
+        if v2 is not None and v2.market_value > 0:
+            fmv_v2_market = v2.market_value
+            fmv_v2_conf = v2.valuation_confidence
+            effective_fmv = v2.market_value
+            if effective_fmv > 0:
+                effective_discount = round((effective_fmv - float(row.asking_price)) / effective_fmv * 100.0, 1)
     return MarketplaceAcquisitionOpportunityRead(
         id=int(row.id or 0),
         marketplace=row.marketplace,
@@ -71,6 +93,9 @@ def _to_read(
         savings_vs_highest=s.get("savings_vs_highest"),  # type: ignore[arg-type]
         best_buy_reason=s.get("best_buy_reason"),  # type: ignore[arg-type]
         marketplace_count=int(s.get("marketplace_count") or 0),
+        fmv_v2_market_value=fmv_v2_market,
+        fmv_v2_confidence=fmv_v2_conf,
+        effective_discount_to_fmv=effective_discount if fmv_v2_market is not None else None,
     )
 
 
@@ -268,6 +293,8 @@ def list_acquisition_opportunities(
                 owner_user_id=owner_user_id,
                 opportunity_id=int(r.id or 0),
             ),
+            session=session,
+            owner_user_id=owner_user_id,
         )
         for r in page_rows
     ]
@@ -285,6 +312,8 @@ def get_acquisition_opportunity(session: Session, *, owner_user_id: int, opportu
             owner_user_id=owner_user_id,
             opportunity_id=int(row.id or 0),
         ),
+        session=session,
+        owner_user_id=owner_user_id,
     )
 
 
@@ -301,7 +330,11 @@ def build_acquisition_dashboard(session: Session, *, owner_user_id: int, refresh
     )
     session.add(snap)
     session.flush()
-    by_spread = sorted(items, key=lambda x: x.discount_to_fmv, reverse=True)
+    by_spread = sorted(
+        items,
+        key=lambda x: float(x.effective_discount_to_fmv if x.effective_discount_to_fmv is not None else x.discount_to_fmv),
+        reverse=True,
+    )
     by_grade = sorted(items, key=lambda x: x.grading_upside, reverse=True)
     by_prof = sorted(items, key=lambda x: x.profile_match_score, reverse=True)
     return MarketplaceAcquisitionDashboardRead(

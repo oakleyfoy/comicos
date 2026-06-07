@@ -56,6 +56,7 @@ import {
   type CollectionHistoricalTimelineGrouping,
   type InventoryScanQaPanelRead,
   type ScanSessionRoutingRead,
+  type P90FmvV2CopyRead,
 } from "../api/client";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
@@ -984,6 +985,8 @@ export function InventoryDetailPage() {
   const [marketFmv, setMarketFmv] = useState<MarketFmvSnapshotListResponse | null>(null);
   const [marketFmvLoading, setMarketFmvLoading] = useState(false);
   const [marketFmvError, setMarketFmvError] = useState<string | null>(null);
+  const [fmvV2, setFmvV2] = useState<P90FmvV2CopyRead | null>(null);
+  const [fmvV2Loading, setFmvV2Loading] = useState(false);
   const [liquiditySnapshots, setLiquiditySnapshots] = useState<InventoryLiquiditySnapshotRead[]>([]);
   const [liquidityLoading, setLiquidityLoading] = useState(false);
   const [liquidityError, setLiquidityError] = useState<string | null>(null);
@@ -1203,6 +1206,35 @@ export function InventoryDetailPage() {
       ignore = true;
     };
   }, [detail?.metadata_identity_key]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!detail?.inventory_copy_id) {
+      setFmvV2(null);
+      setFmvV2Loading(false);
+      return undefined;
+    }
+    void (async () => {
+      setFmvV2Loading(true);
+      try {
+        const response = await apiClient.getFmvV2ForInventory(detail.inventory_copy_id);
+        if (!ignore) {
+          setFmvV2(response);
+        }
+      } catch (loadErr) {
+        if (!ignore) {
+          setFmvV2(null);
+        }
+      } finally {
+        if (!ignore) {
+          setFmvV2Loading(false);
+        }
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [detail?.inventory_copy_id]);
 
   useEffect(() => {
     let ignore = false;
@@ -3503,6 +3535,64 @@ export function InventoryDetailPage() {
               ))}
             </div>
           </div>
+
+          <section className="mt-6 rounded-3xl border border-violet-400/25 bg-violet-950/15 p-5 shadow-xl shadow-black/15">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-violet-100/75">FMV Intelligence V2</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Market-driven valuation</h2>
+                <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                  Cached snapshot from marketplace and pricing intelligence. Legacy Current FMV above is unchanged for
+                  comparison.
+                </p>
+              </div>
+              <Link
+                to="/fmv-intelligence"
+                className="rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-violet-300/40 hover:text-white"
+              >
+                Open FMV Intelligence
+              </Link>
+            </div>
+            {fmvV2Loading ? (
+              <p className="mt-4 text-sm text-slate-400">Loading FMV V2 snapshot…</p>
+            ) : fmvV2 ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <article className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Quick sale</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(fmvV2.quick_sale_value)}</p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Market value</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(fmvV2.market_value)}</p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Premium value</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(fmvV2.premium_value)}</p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Confidence</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{fmvV2.valuation_confidence}</p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Trend</p>
+                  <p className="mt-2 text-xl font-semibold text-white">
+                    {fmvV2.trend_direction}{" "}
+                    <span className="text-base font-normal text-slate-400">({fmvV2.trend_score})</span>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Velocity {fmvV2.sales_velocity.replace(/_/g, " ")}</p>
+                </article>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">
+                No FMV V2 snapshot for this copy yet. Run the FMV V2 batch job to populate cached valuations.
+              </p>
+            )}
+            {fmvV2?.legacy_fmv != null ? (
+              <p className="mt-3 text-xs text-slate-500">
+                Legacy FMV at snapshot time: {formatCurrency(fmvV2.legacy_fmv)}
+              </p>
+            ) : null}
+          </section>
 
           {detail.inventory_fmv ? (
             <section className="mt-6 rounded-3xl border border-cyan-400/20 bg-cyan-950/15 p-5 shadow-xl shadow-black/15">

@@ -100,6 +100,9 @@ import { DailyBriefingPage } from "./pages/DailyBriefingPage";
 import { WeeklyBriefingPage } from "./pages/WeeklyBriefingPage";
 import { CollectorCommandCenterPage } from "./pages/CollectorCommandCenterPage";
 import { CollectorHomePage } from "./pages/CollectorHomePage";
+import { AutomationCenterPage } from "./pages/AutomationCenterPage";
+import { FmvIntelligencePage } from "./pages/FmvIntelligencePage";
+import { FmvDiagnosticsPage } from "./pages/FmvDiagnosticsPage";
 import { PlatformCertificationPage } from "./pages/PlatformCertificationPage";
 import { WorkflowHealthPage } from "./pages/WorkflowHealthPage";
 import { QuickSalesPage } from "./pages/QuickSalesPage";
@@ -319,6 +322,8 @@ export default function App() {
         <Route path="/weekly-briefing" element={<WeeklyBriefingPage />} />
         <Route path="/collector-command-center" element={<CollectorCommandCenterPage />} />
         <Route path="/collector-home" element={<CollectorHomePage />} />
+        <Route path="/automation-center" element={<AutomationCenterPage />} />
+        <Route path="/fmv-intelligence" element={<FmvIntelligencePage />} />
         <Route path="/platform-certification" element={<PlatformCertificationPage />} />
         <Route path="/workflow-health" element={<WorkflowHealthPage />} />
         <Route path="/storage-box-contents" element={<StorageBoxContentsPage />} />
@@ -442,6 +447,7 @@ export default function App() {
         <Route path="/ops" element={<OperationsPage />} />
         <Route path="/ops/marketplace-search" element={<MarketplaceSearchDashboardPage />} />
         <Route path="/ops/marketplace-coverage" element={<MarketplaceCoverageDashboardPage />} />
+        <Route path="/ops/fmv-diagnostics" element={<FmvDiagnosticsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

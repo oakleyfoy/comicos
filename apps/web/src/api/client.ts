@@ -13236,6 +13236,9 @@ export interface P85CollectorHomeRead {
   }[];
   budget_status: Record<string, unknown>;
   portfolio_movement: Record<string, unknown>;
+  advisor_plan_ready?: boolean;
+  advisor_total_actions?: number | null;
+  advisor_primary_cta_url?: string;
   generated_at: string;
 }
 
@@ -17470,6 +17473,159 @@ export interface P89SellCommandCenterRead {
     net_profit_this_month: number;
   };
   generated_at: string;
+}
+
+export interface P90CollectorAlertRead {
+  id: number;
+  alert_type: string;
+  severity: string;
+  priority_score: number;
+  title: string;
+  summary: string;
+  source_system: string;
+  entity_type: string;
+  entity_id: number;
+  status: string;
+  confidence: string;
+  reason: string;
+  action_route: string;
+  created_at: string;
+  updated_at: string;
+  acknowledged_at: string | null;
+  dismissed_at: string | null;
+}
+
+export interface P90ActionQueueItemRead {
+  rank: number;
+  title: string;
+  detail: string;
+  action_type: string;
+  priority_score: number;
+  confidence: string;
+  action_route: string;
+  alert_id: number;
+}
+
+export interface P90AutomationDashboardRead {
+  status: string;
+  todays_actions: P90ActionQueueItemRead[];
+  buy_alerts: P90CollectorAlertRead[];
+  sell_alerts: P90CollectorAlertRead[];
+  grade_alerts: P90CollectorAlertRead[];
+  collection_gaps: P90CollectorAlertRead[];
+  release_alerts: P90CollectorAlertRead[];
+  generated_at: string;
+}
+
+export interface P90AdvisorActionRead {
+  category: string;
+  comic: string;
+  reason: string;
+  confidence: string;
+  priority_score: number;
+  potential_upside?: number | null;
+  profit_potential?: number | null;
+  value_increase?: number | null;
+  action_route: string;
+  source_system: string;
+  display_label: string;
+}
+
+export interface P90AdvisorTodayActionRead {
+  rank: number;
+  category: string;
+  title: string;
+  detail: string;
+  priority_score: number;
+  action_route: string;
+}
+
+export interface P90AdvisorActivityRead {
+  activity_type: string;
+  title: string;
+  detail: string;
+  occurred_at?: string | null;
+}
+
+export interface P90PortfolioImpactRead {
+  potential_profit: number;
+  potential_savings: number;
+  potential_value_gain: number;
+  portfolio_impact_total: number;
+  portfolio_score: number;
+}
+
+export interface P90CollectorAdvisorSnapshotRead {
+  id: number;
+  snapshot_date: string;
+  buy_actions: P90AdvisorActionRead[];
+  sell_actions: P90AdvisorActionRead[];
+  grade_actions: P90AdvisorActionRead[];
+  watch_actions: P90AdvisorActionRead[];
+  todays_actions: P90AdvisorTodayActionRead[];
+  recent_activity: P90AdvisorActivityRead[];
+  market_alerts: P90AdvisorActivityRead[];
+  total_actions: number;
+  portfolio_impact: P90PortfolioImpactRead;
+  created_at: string;
+}
+
+export interface P90CollectorAdvisorDashboardRead {
+  status: string;
+  plan: P90CollectorAdvisorSnapshotRead | null;
+  generated_at: string;
+}
+
+export interface P90FmvSnapshotRead {
+  id: number;
+  series: string;
+  issue_number: string;
+  variant: string;
+  quick_sale_value: number;
+  market_value: number;
+  premium_value: number;
+  valuation_confidence: string;
+  trend_direction: string;
+  trend_score: number;
+  sales_velocity: string;
+  listing_count: number;
+  marketplace_count: number;
+  valuation_source: string;
+  snapshot_date: string;
+  created_at: string;
+}
+
+export interface P90FmvIntelligenceDashboardRead {
+  status: string;
+  portfolio: Record<string, number | string>;
+  highest_value: P90FmvSnapshotRead[];
+  largest_movers: P90FmvSnapshotRead[];
+  strongest_uptrends: P90FmvSnapshotRead[];
+  strongest_downtrends: P90FmvSnapshotRead[];
+  highest_confidence: P90FmvSnapshotRead[];
+  lowest_confidence: P90FmvSnapshotRead[];
+  generated_at: string;
+}
+
+export interface P90FmvDiagnosticsRead {
+  snapshot_count: number;
+  identity_coverage: number;
+  confidence_distribution: Record<string, number>;
+  source_distribution: Record<string, number>;
+  trend_distribution: Record<string, number>;
+  generated_at: string;
+}
+
+export interface P90FmvV2CopyRead {
+  inventory_copy_id: number;
+  legacy_fmv: number | null;
+  quick_sale_value: number;
+  market_value: number;
+  premium_value: number;
+  valuation_confidence: string;
+  trend_direction: string;
+  trend_score: number;
+  sales_velocity: string;
 }
 
 export type ExitCandidateReason =
@@ -30875,6 +31031,33 @@ export const apiClient = {
 
   getSellCommandCenter(): Promise<P89SellCommandCenterRead> {
     return requestScanV1<P89SellCommandCenterRead>("/sell-command-center");
+  },
+
+  getAutomationDashboard(): Promise<P90AutomationDashboardRead> {
+    return requestScanV1<P90AutomationDashboardRead>("/automation/dashboard");
+  },
+
+  getCollectorAdvisor(): Promise<P90CollectorAdvisorDashboardRead> {
+    return requestScanV1<P90CollectorAdvisorDashboardRead>("/collector-advisor");
+  },
+
+  getFmvIntelligence(): Promise<P90FmvIntelligenceDashboardRead> {
+    return requestScanV1<P90FmvIntelligenceDashboardRead>("/fmv-intelligence");
+  },
+
+  getFmvDiagnostics(): Promise<P90FmvDiagnosticsRead> {
+    return requestScanV1<P90FmvDiagnosticsRead>("/ops/fmv-diagnostics");
+  },
+
+  getFmvV2ForInventory(inventoryCopyId: number): Promise<P90FmvV2CopyRead> {
+    return requestScanV1<P90FmvV2CopyRead>(`/fmv-intelligence/inventory/${inventoryCopyId}`);
+  },
+
+  patchAutomationAlert(alertId: number, payload: { status: string }): Promise<P90CollectorAlertRead> {
+    return requestScanV1<P90CollectorAlertRead>(`/automation/alerts/${alertId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
   },
 
   createManagedListing(payload: {
