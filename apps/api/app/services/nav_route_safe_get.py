@@ -274,10 +274,16 @@ def safe_foc_dashboard(session: Session, *, owner_user_id: int, **filters) -> Fo
 
 
 def safe_key_issues_dashboard(session: Session, *, owner_user_id: int) -> KeyIssueDashboardRead:
+    from app.services.key_issue_dashboard import build_key_issue_dashboard_fast
+
     try:
-        body = build_key_issue_dashboard(session, owner_user_id=owner_user_id, limit=_KEY_ISSUE_LIMIT)
-        body.status = "OK"
-        body.message = ""
+        body = build_key_issue_dashboard_fast(session, owner_user_id=owner_user_id, limit=_KEY_ISSUE_LIMIT)
+        if body.total_profiles == 0 and not body.top_key_issues:
+            body.status = "EMPTY"
+            body.message = "No key issue profiles yet. Use Refresh to detect key issues from your catalog."
+        else:
+            body.status = "OK"
+            body.message = ""
         return body
     except Exception as exc:  # noqa: BLE001
         logger.warning("safe_key_issues_dashboard failed: %s", exc, exc_info=True)

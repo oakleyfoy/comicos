@@ -6733,6 +6733,26 @@ export async function fetchMarketV1Envelope<T>(pathSuffix: string, init?: Reques
   return request<MarketApiV1Envelope<T>>(`${MARKET_API_V1_PREFIX}${suffix}`, init);
 }
 
+async function requestWithTimeout<T>(
+  path: string,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await request<T>(path, { ...init, signal: controller.signal });
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(timeoutMessage, 408);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function requestMarketV1<T>(path: string, init?: RequestInit): Promise<T> {
   const envelope = await fetchMarketV1Envelope<T>(path, init);
   return envelope.data;
@@ -16088,6 +16108,8 @@ export interface KeyIssueProfileRead {
 }
 
 export interface KeyIssueDashboardRead {
+  status?: string;
+  message?: string;
   top_key_issues: KeyIssueProfileRead[];
   first_appearances: KeyIssueProfileRead[];
   origins: KeyIssueProfileRead[];
@@ -19174,7 +19196,12 @@ export const apiClient = {
   },
 
   getOpsDashboard(): Promise<OpsDashboardResponse> {
-    return request<OpsDashboardResponse>("/ops/dashboard");
+    return requestWithTimeout<OpsDashboardResponse>(
+      "/ops/dashboard",
+      undefined,
+      NAV_PAGE_TIMEOUT_MS,
+      "Ingestion monitoring is taking too long to load. Try again shortly.",
+    );
   },
 
   postOpsOcrPipelineRecover(): Promise<OpsOcrPipelineRecoverResponse> {
@@ -30276,6 +30303,15 @@ export const apiClient = {
       undefined,
       COLLECTOR_SURFACE_TIMEOUT_MS,
       "Workflow health is taking too long to load.",
+    );
+  },
+
+  postPlatformWorkflowHealthRefresh(): Promise<P85WorkflowHealthRead> {
+    return requestScanV1WithTimeout<P85WorkflowHealthRead>(
+      "/platform/workflow-health/refresh",
+      { method: "POST" },
+      EXECUTIVE_DASHBOARD_TIMEOUT_MS,
+      "Full workflow health check is taking too long. Try again shortly.",
     );
   },
 

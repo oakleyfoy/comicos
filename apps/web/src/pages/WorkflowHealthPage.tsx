@@ -8,6 +8,7 @@ export function WorkflowHealthPage(): JSX.Element {
   const [health, setHealth] = useState<P85WorkflowHealthRead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -15,9 +16,22 @@ export function WorkflowHealthPage(): JSX.Element {
     try {
       setHealth(await apiClient.getPlatformWorkflowHealth());
     } catch (err) {
+      setHealth(null);
       setError(err instanceof ApiError ? err.message : "Workflow health check failed.");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const runFullCheck = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      setHealth(await apiClient.postPlatformWorkflowHealthRefresh());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Full workflow health check failed.");
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
@@ -36,6 +50,16 @@ export function WorkflowHealthPage(): JSX.Element {
       onRetry={() => void load()}
       loading={loading && !health}
       maxWidthClass="max-w-3xl"
+      headerActions={
+        <button
+          type="button"
+          className="rounded-lg border border-white/40 bg-white/10 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          disabled={loading || refreshing}
+          onClick={() => void runFullCheck()}
+        >
+          {refreshing ? "Running full check…" : "Run full check"}
+        </button>
+      }
     >
       {health ? (
         <ul className="space-y-3">

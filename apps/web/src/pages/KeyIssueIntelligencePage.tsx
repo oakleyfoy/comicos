@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ApiError, apiClient, type KeyIssueDashboardRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
@@ -35,29 +36,45 @@ function IssueList({ items }: { items: KeyIssueDashboardRead["top_key_issues"] }
 export function KeyIssueIntelligencePage(): JSX.Element {
   const [dashboard, setDashboard] = useState<KeyIssueDashboardRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<string | undefined>();
+  const [loadMessage, setLoadMessage] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const body = await apiClient.getKeyIssuesDashboard();
+      setDashboard(body);
+      setLoadStatus(body.status);
+      setLoadMessage(body.message);
+    } catch (err) {
+      setDashboard(null);
+      setLoadStatus(undefined);
+      setLoadMessage(undefined);
+      setError(err instanceof ApiError ? err.message : "Unable to load key issue intelligence.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const body = await apiClient.getKeyIssuesDashboard();
-        if (!cancelled) setDashboard(body);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Unable to load key issue intelligence.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [load]);
+
+  async function runRefresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await apiClient.postKeyIssuesRefresh();
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Unable to refresh key issue intelligence.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <AppShell>
@@ -65,8 +82,19 @@ export function KeyIssueIntelligencePage(): JSX.Element {
         eyebrow="Key issues"
         title="Key Issue Intelligence"
         description="Why an issue matters — first appearances, origins, milestones, anniversaries, and universe launches (P51-02)."
+        actions={
+          <button
+            type="button"
+            className="rounded-lg bg-patriot-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            disabled={loading || refreshing}
+            onClick={() => void runRefresh()}
+          >
+            {refreshing ? "Refreshing…" : "Refresh detection"}
+          </button>
+        }
       />
 
+      <NavPageLoadBanner status={loadStatus} message={loadMessage} />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       {loading ? <p className="text-sm text-slate-600">Loading key issue intelligence…</p> : null}
 

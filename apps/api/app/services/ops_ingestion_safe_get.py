@@ -52,7 +52,7 @@ def _empty_pipeline_health() -> OpsPipelineHealth:
 
 def safe_ops_dashboard(session: Session, settings: Settings) -> OpsDashboardResponse:
     try:
-        body = build_ops_dashboard(session, settings)
+        body = build_ops_dashboard(session, settings, include_pipeline_health=False)
         body.status = "OK"
         body.message = ""
         return body

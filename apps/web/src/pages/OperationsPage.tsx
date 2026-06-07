@@ -1914,14 +1914,44 @@ export function OperationsPage() {
   useEffect(() => {
     let ignore = false;
 
-    async function loadDashboardAndAliases() {
+    async function loadIngestionDashboard() {
       setIsLoading(true);
-      setInventoryFmvLoading(true);
       setError(null);
+      try {
+        const dashboardResponse = await apiClient.getOpsDashboard();
+        if (!ignore) {
+          setDashboard(dashboardResponse);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setDashboard(null);
+          setError(
+            loadError instanceof ApiError
+              ? loadError.message
+              : "Unable to load operations dashboard.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadIngestionDashboard();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadOpsWorkbenchData() {
+      setInventoryFmvLoading(true);
       setInventoryFmvError(null);
       try {
-        const [dashboardResponse, aliases, portfolioSummary, fmvCoverage, lowConfidence, stale, noMarketData] = await Promise.all([
-          apiClient.getOpsDashboard(),
+        const [aliases, portfolioSummary, fmvCoverage, lowConfidence, stale, noMarketData] = await Promise.all([
           apiClient.listMetadataAliases(),
           apiClient.getOpsPortfolioValueSummary(),
           apiClient.getOpsInventoryFmvList({ page: 1, page_size: 25 }),
@@ -1930,7 +1960,6 @@ export function OperationsPage() {
           apiClient.getOpsInventoryFmvList({ page: 1, page_size: 12, valuation_scope: "no_market_data" }),
         ]);
         if (!ignore) {
-          setDashboard(dashboardResponse);
           setMetadataAliases(aliases);
           setPortfolioValueSummary(portfolioSummary);
           setInventoryFmvCoverage(fmvCoverage);
@@ -1946,21 +1975,15 @@ export function OperationsPage() {
               ? loadError.message
               : "Unable to load FMV coverage dashboard.",
           );
-          setError(
-            loadError instanceof ApiError
-              ? loadError.message
-              : "Unable to load operations dashboard.",
-          );
         }
       } finally {
         if (!ignore) {
-          setIsLoading(false);
           setInventoryFmvLoading(false);
         }
       }
     }
 
-    void loadDashboardAndAliases();
+    void loadOpsWorkbenchData();
     return () => {
       ignore = true;
     };
@@ -5475,8 +5498,8 @@ export function OperationsPage() {
     return (
       <AppShell>
         <LoadingState
-          title="Loading operations dashboard"
-          description="Refreshing Gmail syncs, parse jobs, imports, queue health, and operational events."
+          title="Loading ingestion monitoring"
+          description="Loading cached Gmail sync, parse job, import, and queue snapshots."
         />
       </AppShell>
     );

@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from app.core.config import Settings
 from app.services.ops_access import is_ops_admin_user
 from app.models import DraftImport, GmailAccount, OpsEvent, User
+from app.schemas.ocr_pipeline_health import OpsBatchFailureSummary, OpsPipelineHealth, OpsReplayFailureSummary
 from app.schemas.ops import (
     OpsDashboardResponse,
     OpsDraftImportRow,
@@ -287,7 +288,35 @@ def _derived_confirm_success_events(
     return derived_rows
 
 
-def build_ops_dashboard(session: Session, settings: Settings) -> OpsDashboardResponse:
+def _empty_pipeline_health_snapshot() -> OpsPipelineHealth:
+    now = datetime.now(timezone.utc)
+    empty_replay = OpsReplayFailureSummary(failed_items_total_recent=0, failed_recent_run_ids=[])
+    empty_batch = OpsBatchFailureSummary(batches_with_failed_items=0, failed_items_total_recent=0)
+    return OpsPipelineHealth(
+        window_hours=24,
+        cutoff_utc=now,
+        failed_ocr_results=0,
+        ocr_tesseract_timeouts=0,
+        corrupt_image_failures=0,
+        retry_exhausted_batch_items=0,
+        replay_failed_items_total=0,
+        stale_cover_ocr_processing=0,
+        stale_batch_items=0,
+        stale_replay_running_items=0,
+        stale_batch_rows=[],
+        stale_cover_ocr_rows=[],
+        stale_replay_rows=[],
+        replay_failures_recent=empty_replay,
+        batch_failures=empty_batch,
+    )
+
+
+def build_ops_dashboard(
+    session: Session,
+    settings: Settings,
+    *,
+    include_pipeline_health: bool = True,
+) -> OpsDashboardResponse:
     recent_gmail_sync_jobs = _serialize_jobs(session, _collect_recent_jobs(GMAIL_SYNC_JOB_TYPE))
     recent_ai_parse_jobs = _serialize_jobs(
         session, _collect_recent_jobs(AI_PARSE_IMPORT_JOB_TYPE)
@@ -391,7 +420,11 @@ def build_ops_dashboard(session: Session, settings: Settings) -> OpsDashboardRes
         duplicate_skip_events=_serialize_events(session, duplicate_skip_events),
         confirm_events=serialized_confirm_events,
         queue_health=[_queue_snapshot(queue_name) for queue_name in get_worker_queue_names()],
-        pipeline_health=build_pipeline_health_snapshot(session, settings),
+        pipeline_health=(
+            build_pipeline_health_snapshot(session, settings)
+            if include_pipeline_health
+            else _empty_pipeline_health_snapshot()
+        ),
         recent_cover_pipeline_jobs=_serialize_jobs(
             session,
             _collect_recent_jobs_for_types(

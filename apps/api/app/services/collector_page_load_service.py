@@ -421,6 +421,20 @@ def safe_command_center_fallback(message: str) -> CollectorCommandCenterRead:
     return CollectorCommandCenterRead(status="ERROR", message=message[:240])
 
 
+_workflow_health_cache: dict[int, tuple[float, P85WorkflowHealthRead]] = {}
+_WORKFLOW_HEALTH_CACHE_TTL_SECONDS = 45.0
+
+
+def get_fast_workflow_health_cached(session: Session, *, owner_user_id: int) -> P85WorkflowHealthRead:
+    now = time.monotonic()
+    cached = _workflow_health_cache.get(owner_user_id)
+    if cached is not None and now - cached[0] < _WORKFLOW_HEALTH_CACHE_TTL_SECONDS:
+        return cached[1]
+    body = fast_build_workflow_health(session, owner_user_id=owner_user_id)
+    _workflow_health_cache[owner_user_id] = (now, body)
+    return body
+
+
 def fast_build_workflow_health(session: Session, *, owner_user_id: int) -> P85WorkflowHealthRead:
     issues: list[P85WorkflowIssueRead] = []
     empty_workflows: list[str] = []
@@ -448,15 +462,15 @@ def fast_build_workflow_health(session: Session, *, owner_user_id: int) -> P85Wo
                 )
             )
 
-        action_rows = latest_by_key_bounded_scan(
-            session,
-            model=DailyCollectorAction,
-            owner_user_id=owner_user_id,
-            owner_field="owner_user_id",
-            key_fn=lambda row: (row.action_type, row.title.strip().lower()),
-            scan_limit=200,
+        has_daily_actions = (
+            session.exec(
+                select(DailyCollectorAction.id)
+                .where(DailyCollectorAction.owner_user_id == owner_user_id)
+                .limit(1)
+            ).first()
+            is not None
         )
-        if not action_rows:
+        if not has_daily_actions:
             empty_workflows.append("daily_actions")
             issues.append(
                 P85WorkflowIssueRead(

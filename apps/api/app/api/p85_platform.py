@@ -20,7 +20,11 @@ from app.schemas.p85_production_hardening import (
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
 from app.services.collector_home_service import build_collector_home
 from app.services.platform_production_certification import build_production_dashboard, run_platform_production_certification
-from app.services.collector_page_load_service import fast_build_workflow_health, safe_workflow_health_fallback
+from app.services.collector_page_load_service import (
+    get_fast_workflow_health_cached,
+    safe_workflow_health_fallback,
+)
+from app.services.workflow_health_service import build_workflow_health
 
 p85_platform_router = APIRouter(tags=["Platform API v1 (P85)"])
 logger = logging.getLogger(__name__)
@@ -74,7 +78,21 @@ def v1_platform_workflow_health(
     assert current_user.id is not None
     owner_user_id = int(current_user.id)
     try:
-        body: P85WorkflowHealthRead = fast_build_workflow_health(session, owner_user_id=owner_user_id)
+        body: P85WorkflowHealthRead = get_fast_workflow_health_cached(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        body = safe_workflow_health_fallback(str(exc))
+    return wrap_object(body, owner_user_id=owner_user_id)
+
+
+@p85_platform_router.post("/api/v1/platform/workflow-health/refresh", response_model=ScanApiV1Envelope)
+def v1_platform_workflow_health_refresh(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    owner_user_id = int(current_user.id)
+    try:
+        body: P85WorkflowHealthRead = build_workflow_health(session, owner_user_id=owner_user_id)
     except Exception as exc:  # noqa: BLE001
         body = safe_workflow_health_fallback(str(exc))
     return wrap_object(body, owner_user_id=owner_user_id)
