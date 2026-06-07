@@ -61,4 +61,64 @@ describe("MarketplaceOpportunitiesPage (Buy Opportunities)", () => {
     expect(link?.to).toBe("/buy-opportunities");
     expect(buyGroup?.links.some((l) => l.label === "Marketplace Opportunities")).toBe(false);
   });
+
+  it("renders structured cards without raw GOOD_BUY", async () => {
+    vi.spyOn(apiClient, "listMarketplaceAcquisitionOpportunities").mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          marketplace: "ebay",
+          external_listing_id: "x1",
+          listing_url: "",
+          title: "Energon Universe #2026SPECIAL1",
+          publisher: "",
+          series: "Energon Universe",
+          issue: "2026SPECIAL1",
+          variant: "",
+          asking_price: 3.2,
+          estimated_fmv: 10,
+          discount_to_fmv: 0,
+          liquidity: 0,
+          velocity: 0,
+          grading_upside: 0,
+          ownership_status: "",
+          profile_match_score: 0,
+          opportunity_score: 81,
+          recommendation: "GOOD_BUY",
+          reasons: [],
+          status: "OPEN",
+          created_at: "",
+          updated_at: "",
+        },
+      ],
+      status: "OK",
+      message: "",
+    });
+    render(
+      <MemoryRouter initialEntries={["/buy-opportunities"]}>
+        <Routes>
+          <Route path="/buy-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Strong Buy")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/GOOD_BUY/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/\+213%/)).toBeInTheDocument();
+    expect(screen.getByText("Top Opportunity")).toBeInTheDocument();
+  });
+
+  it("shows empty state copy when list is empty", async () => {
+    render(
+      <MemoryRouter initialEntries={["/buy-opportunities"]}>
+        <Routes>
+          <Route path="/buy-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("No buy opportunities found right now.")).toBeInTheDocument();
+    });
+  });
 });

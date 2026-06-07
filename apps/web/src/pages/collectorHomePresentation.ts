@@ -10,7 +10,7 @@ export const SECTION_LABELS: Record<string, string> = {
   grade_alerts: "Grade Candidates",
   foc_alerts: "FOC & Preorders",
   storage_issues: "Find a Book",
-  marketplace_deals: "Buy Deals",
+  marketplace_deals: "Buy Opportunities",
   future_pull_list: "Upcoming Releases",
 };
 
@@ -21,7 +21,7 @@ export const SECTION_OPPORTUNITY_PHRASE: Record<string, string> = {
   grade_alerts: "grade candidates",
   foc_alerts: "FOC and preorder opportunities",
   storage_issues: "books to locate",
-  marketplace_deals: "buy deals",
+  marketplace_deals: "buy opportunities",
   future_pull_list: "upcoming releases",
 };
 
@@ -41,7 +41,7 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
   { body: string; button: string; to: string }
 > = {
   buy_alerts: {
-    body: "Open the buy dashboard to review current recommendations.",
+    body: "Review undervalued comics and marketplace deals identified by ComicOS.",
     button: "Review Buy Opportunities",
     to: "/buy-opportunities",
   },
@@ -65,11 +65,6 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
     button: "Find a Book",
     to: "/storage-dashboard",
   },
-  marketplace_deals: {
-    body: "Review marketplace deals and undervalued comics identified by ComicOS.",
-    button: "Review Buy Deals",
-    to: "/buy-opportunities",
-  },
   future_pull_list: {
     body: "Review upcoming releases and books related to your collection interests.",
     button: "Review Upcoming Releases",
@@ -84,7 +79,7 @@ export const SECTION_EMPTY_ACTIONS: Record<string, { label: string; to: string }
   grade_alerts: { label: "Review Grade Candidates", to: "/grade-before-sell" },
   foc_alerts: { label: "Review FOC & Preorders", to: "/foc-dashboard" },
   storage_issues: { label: "Find a Book", to: "/storage-dashboard" },
-  marketplace_deals: { label: "Review Buy Deals", to: "/buy-opportunities" },
+  marketplace_deals: { label: "Review Buy Opportunities", to: "/buy-opportunities" },
   future_pull_list: { label: "Review Upcoming Releases", to: "/future-pull-list" },
 };
 
@@ -165,7 +160,24 @@ export function homeHasSectionItemsReady(sections: P85CollectorHomeRead["section
 
 /** Compact line under Today's Actions when there are no daily action rows. */
 export function buildTodaysActionsCompactSummary(sections: P85CollectorHomeRead["sections"]): string {
-  const actionable = sections.filter((s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS");
+  const collapsed = collapseBuySectionsForSummary(sections);
+  const actionable = collapsed
+    .filter((s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS")
+    .map((section, index) => ({ section, index }))
+    .sort((a, b) => {
+      const rankDiff =
+        indicatorStatusSortRank(a.section.indicator_status) -
+        indicatorStatusSortRank(b.section.indicator_status);
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+      const countDiff = (Number(b.section.count) || 0) - (Number(a.section.count) || 0);
+      if (countDiff !== 0) {
+        return countDiff;
+      }
+      return a.index - b.index;
+    })
+    .map(({ section }) => section);
   if (actionable.length === 0) {
     return "No immediate actions require attention.";
   }
@@ -212,6 +224,74 @@ const INDICATOR_SORT_RANK: Record<SectionIndicatorStatus, number> = {
 export function indicatorStatusSortRank(status: string | null | undefined): number {
   const key = (status ?? "UNKNOWN") as SectionIndicatorStatus;
   return INDICATOR_SORT_RANK[key] ?? INDICATOR_SORT_RANK.UNKNOWN;
+}
+
+const BUY_HOME_SECTION_KEYS = ["buy_alerts", "marketplace_deals"] as const;
+
+function pickStrongerSectionIndicator(
+  a: P85CollectorHomeRead["sections"][number],
+  b: P85CollectorHomeRead["sections"][number],
+): P85CollectorHomeRead["sections"][number] {
+  const rankA = indicatorStatusSortRank(a.indicator_status);
+  const rankB = indicatorStatusSortRank(b.indicator_status);
+  if (rankA !== rankB) {
+    return rankA < rankB ? a : b;
+  }
+  if (a.indicator_status === "HAS_ITEMS" && b.indicator_status === "HAS_ITEMS") {
+    const countA = Math.max(0, Number(a.count) || 0);
+    const countB = Math.max(0, Number(b.count) || 0);
+    return countB > countA ? b : a;
+  }
+  return a;
+}
+
+/** One buy card on Collector Home; backend may still send buy_alerts + marketplace_deals. */
+function collapseBuySectionsForSummary(
+  sections: P85CollectorHomeRead["sections"],
+): P85CollectorHomeRead["sections"] {
+  const buyParts = sections.filter((s) =>
+    (BUY_HOME_SECTION_KEYS as readonly string[]).includes(s.key),
+  );
+  if (buyParts.length === 0) {
+    return sections;
+  }
+  const mergedIndicator = buyParts.reduce(pickStrongerSectionIndicator);
+  const withoutBuy = sections.filter(
+    (s) => !(BUY_HOME_SECTION_KEYS as readonly string[]).includes(s.key),
+  );
+  return [...withoutBuy, { ...mergedIndicator, key: "buy_alerts" }];
+}
+
+function applyMergedBuyDisplay(
+  buy: CollectorHomeDisplaySection,
+  rawSections: P85CollectorHomeRead["sections"],
+  extraIndicator?: P85CollectorHomeRead["sections"][number],
+): void {
+  const buyParts = rawSections.filter((s) =>
+    (BUY_HOME_SECTION_KEYS as readonly string[]).includes(s.key),
+  );
+  if (buyParts.length === 0 && !extraIndicator?.indicator_status) {
+    return;
+  }
+  let mergedRaw =
+    buyParts.length > 0
+      ? buyParts.reduce(pickStrongerSectionIndicator)
+      : (extraIndicator as P85CollectorHomeRead["sections"][number]);
+  if (extraIndicator?.indicator_status && buyParts.length > 0) {
+    mergedRaw = pickStrongerSectionIndicator(mergedRaw, extraIndicator);
+  }
+  const indicator = sectionIndicatorDisplay(mergedRaw);
+  buy.title = SECTION_LABELS.buy_alerts;
+  buy.indicatorText = indicator.text;
+  buy.indicatorShowCheck = indicator.showCheck;
+  buy.indicatorTone = indicator.tone;
+
+  const launcher = SECTION_SKIPPED_LAUNCHER.buy_alerts;
+  if (!buy.showItems) {
+    buy.body = launcher.body;
+    buy.actionLabel = launcher.button;
+    buy.actionTo = launcher.to;
+  }
 }
 
 export function sortCollectorHomeSectionsForDisplay(
@@ -297,25 +377,7 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
   };
 }
 
-function mergeIndicatorPreferHasItems(
-  target: CollectorHomeDisplaySection,
-  source: P85CollectorHomeRead["sections"][number] | undefined,
-): void {
-  if (!source?.indicator_status) {
-    return;
-  }
-  const sourceDisplay = sectionIndicatorDisplay(source);
-  if (target.indicatorTone === "has") {
-    return;
-  }
-  if (source.indicator_status === "HAS_ITEMS") {
-    target.indicatorText = sourceDisplay.text;
-    target.indicatorShowCheck = sourceDisplay.showCheck;
-    target.indicatorTone = sourceDisplay.tone;
-  }
-}
-
-/** Merge discovery alerts into marketplace/buy display; hide discovery card. */
+/** Merge discovery into buy display; collapse duplicate buy cards. */
 export function prepareCollectorHomeSections(
   sections: P85CollectorHomeRead["sections"],
 ): CollectorHomeDisplaySection[] {
@@ -323,33 +385,62 @@ export function prepareCollectorHomeSections(
   const sorted = sortCollectorHomeSectionsForDisplay(sections);
   const prepared = sorted.map(sectionDisplay);
 
-  if (discovery) {
-    if (discovery.items.length > 0) {
-      const marketplace = prepared.find((s) => s.key === "marketplace_deals");
-      if (marketplace) {
-        marketplace.items = [...marketplace.items, ...discovery.items];
-        marketplace.showItems = marketplace.items.length > 0;
-        if (marketplace.showItems) {
-          marketplace.body = "";
-        }
-      } else {
-        const buy = prepared.find((s) => s.key === "buy_alerts");
-        if (buy) {
-          buy.items = [...buy.items, ...discovery.items];
-          buy.showItems = buy.items.length > 0;
-          if (buy.showItems) {
-            buy.body = "";
-          }
-        }
-      }
+  const buy = prepared.find((s) => s.key === "buy_alerts");
+  const marketplace = prepared.find((s) => s.key === "marketplace_deals");
+
+  if (buy && marketplace) {
+    buy.items = [...buy.items, ...marketplace.items];
+    buy.showItems = buy.items.length > 0;
+    if (buy.showItems) {
+      buy.body = "";
     }
-    const marketplace = prepared.find((s) => s.key === "marketplace_deals");
-    if (marketplace) {
-      mergeIndicatorPreferHasItems(marketplace, discovery);
-    }
+  } else if (marketplace && !buy) {
+    marketplace.key = "buy_alerts";
+    marketplace.title = SECTION_LABELS.buy_alerts;
   }
 
-  return prepared;
+  const buyCard = prepared.find((s) => s.key === "buy_alerts") ?? marketplace;
+  if (discovery && buyCard) {
+    if (discovery.items.length > 0) {
+      buyCard.items = [...buyCard.items, ...discovery.items];
+      buyCard.showItems = buyCard.items.length > 0;
+      if (buyCard.showItems) {
+        buyCard.body = "";
+      }
+    }
+  }
+  if (buyCard) {
+    applyMergedBuyDisplay(buyCard, sections, discovery);
+  }
+
+  return prepared
+    .filter((s) => s.key !== "discovery_alerts" && s.key !== "marketplace_deals")
+    .map((section, index) => ({ section, index }))
+    .sort((a, b) => {
+      const rankDiff = displaySectionSortRank(a.section) - displaySectionSortRank(b.section);
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+      return a.index - b.index;
+    })
+    .map(({ section }) => section);
+}
+
+function displaySectionSortRank(section: CollectorHomeDisplaySection): number {
+  switch (section.indicatorTone) {
+    case "has":
+      return INDICATOR_SORT_RANK.HAS_ITEMS;
+    case "stale":
+      return INDICATOR_SORT_RANK.STALE;
+    case "unknown":
+      return INDICATOR_SORT_RANK.UNKNOWN;
+    case "empty":
+      return INDICATOR_SORT_RANK.EMPTY;
+    case "error":
+      return INDICATOR_SORT_RANK.ERROR;
+    default:
+      return INDICATOR_SORT_RANK.UNKNOWN;
+  }
 }
 
 export function itemLabel(item: Record<string, unknown>): string {

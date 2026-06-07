@@ -19,9 +19,9 @@ function baseHome(overrides: Partial<P85CollectorHomeRead> = {}): P85CollectorHo
         key: "buy_alerts",
         title: "Buy alerts",
         items: [],
-        empty_hint: "Open Marketplace Opportunities for buy alerts.",
+        empty_hint: "Open Buy Opportunities for buy alerts.",
         count: 0,
-        indicator_status: "UNKNOWN",
+        indicator_status: "EMPTY",
         status: "SKIPPED",
         error: "",
       },
@@ -41,7 +41,7 @@ function baseHome(overrides: Partial<P85CollectorHomeRead> = {}): P85CollectorHo
         key: "marketplace_deals",
         title: "Marketplace deals",
         items: [],
-        empty_hint: "Open Marketplace Opportunities for deals.",
+        empty_hint: "",
         count: 0,
         indicator_status: "EMPTY",
         status: "SKIPPED",
@@ -94,12 +94,13 @@ describe("CollectorHomePage", () => {
     );
     expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
     expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
-    expect(screen.getByText("Buy Deals")).toBeInTheDocument();
-    expect(screen.getByText("Buy Opportunities")).toBeInTheDocument();
+    expect(screen.getAllByText("Buy Opportunities")).toHaveLength(1);
+    expect(screen.queryByText("Buy Deals")).not.toBeInTheDocument();
+    expect(screen.queryByText("Marketplace Deals")).not.toBeInTheDocument();
     expect(screen.getByText("Sell Opportunities")).toBeInTheDocument();
     expect(screen.getByText("4 available")).toBeInTheDocument();
     expect(
-      screen.getByText("Review marketplace deals and undervalued comics identified by ComicOS."),
+      screen.getByText("Review undervalued comics and marketplace deals identified by ComicOS."),
     ).toBeInTheDocument();
   });
 
@@ -177,7 +178,8 @@ describe("CollectorHomePage", () => {
       .getAllByRole("heading", { level: 2 })
       .map((el) => el.textContent)
       .filter((t) => t && t !== "Today's actions");
-    expect(headings[0]).toBe("Buy Deals");
+    expect(headings[0]).toBe("Buy Opportunities");
+    expect(screen.getByText("5 available")).toBeInTheDocument();
   });
 
   it("shows no-immediate-actions summary when nothing has items", async () => {
@@ -234,7 +236,7 @@ describe("CollectorHomePage", () => {
     });
   });
 
-  it("renders launcher buttons for skipped sell and marketplace sections", async () => {
+  it("renders launcher buttons for skipped sell and buy sections", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
     render(
       <MemoryRouter>
@@ -247,8 +249,10 @@ describe("CollectorHomePage", () => {
     const sellSection = screen.getByRole("heading", { name: "Sell Opportunities" }).closest("section");
     expect(sellSection).not.toBeNull();
     expect(within(sellSection!).getByRole("link", { name: "Review Sell Queue" })).toBeInTheDocument();
-    const dealsSection = screen.getByRole("heading", { name: "Buy Deals" }).closest("section");
-    expect(within(dealsSection!).getByRole("link", { name: "Review Buy Deals" })).toBeInTheDocument();
+    const buySection = screen.getByRole("heading", { name: "Buy Opportunities" }).closest("section");
+    expect(buySection).not.toBeNull();
+    expect(within(buySection!).getByRole("link", { name: "Review Buy Opportunities" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Buy Deals" })).not.toBeInTheDocument();
   });
 
   it("keeps Today’s Actions outside the section grid and renders action items", async () => {

@@ -20,11 +20,11 @@ describe("collectorHomePresentation", () => {
     expect(buildCollectorHomeHeaderSummary(home)).toBe("Your daily comic collecting command center");
   });
 
-  it("merges discovery into marketplace and drops discovery card", () => {
+  it("merges discovery into buy opportunities and drops discovery card", () => {
     const sections = prepareCollectorHomeSections([
       {
-        key: "marketplace_deals",
-        title: "Marketplace deals",
+        key: "buy_alerts",
+        title: "Buy",
         items: [{ title: "Deal A" }],
         empty_hint: "",
         count: 1,
@@ -42,8 +42,38 @@ describe("collectorHomePresentation", () => {
       },
     ]);
     expect(sections.some((s) => s.key === "discovery_alerts")).toBe(false);
-    const deals = sections.find((s) => s.key === "marketplace_deals");
-    expect(deals?.items).toHaveLength(2);
+    const buy = sections.find((s) => s.key === "buy_alerts");
+    expect(buy?.items).toHaveLength(2);
+    expect(buy?.title).toBe("Buy Opportunities");
+  });
+
+  it("collapses buy_alerts and marketplace_deals into one card with strongest indicator", () => {
+    const sections = prepareCollectorHomeSections([
+      {
+        key: "buy_alerts",
+        title: "Buy",
+        items: [],
+        empty_hint: "",
+        count: 0,
+        indicator_status: "EMPTY",
+        status: "SKIPPED",
+        error: "",
+      },
+      {
+        key: "marketplace_deals",
+        title: "Deals",
+        items: [],
+        empty_hint: "",
+        count: 5,
+        indicator_status: "HAS_ITEMS",
+        status: "SKIPPED",
+        error: "",
+      },
+    ]);
+    expect(sections.filter((s) => s.key === "buy_alerts")).toHaveLength(1);
+    expect(sections.some((s) => s.key === "marketplace_deals")).toBe(false);
+    expect(sections.find((s) => s.key === "buy_alerts")?.indicatorText).toBe("5 available");
+    expect(sections.find((s) => s.key === "buy_alerts")?.actionLabel).toBe("Review Buy Opportunities");
   });
 
   it("maps SKIPPED sections to launcher copy without SKIPPED in output", () => {
@@ -83,13 +113,13 @@ describe("collectorHomePresentation", () => {
       buildTodaysActionsCompactSummary([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
       ]),
-    ).toBe("Buy Deals has 5 opportunities ready for review.");
+    ).toBe("Buy Opportunities has 5 opportunities ready for review.");
     expect(
       buildTodaysActionsCompactSummary([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
       ]),
-    ).toBe("5 buy deals and 2 sell opportunities are ready for review.");
+    ).toBe("5 buy opportunities and 2 sell opportunities are ready for review.");
     expect(
       buildTodaysActionsCompactSummary([
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: null } as never,
@@ -110,6 +140,15 @@ describe("collectorHomePresentation", () => {
       "grade_alerts",
       "buy_alerts",
     ]);
+  });
+
+  it("dedupes buy sections in today summary when both report HAS_ITEMS", () => {
+    expect(
+      buildTodaysActionsCompactSummary([
+        { key: "buy_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
+        { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
+      ]),
+    ).toBe("Buy Opportunities has 5 opportunities ready for review.");
   });
 
   it("uses collector-facing section labels", () => {
