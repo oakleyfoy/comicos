@@ -6,7 +6,8 @@ import { AppShell } from "../components/AppShell";
 import { CollectorErrorState } from "../components/CollectorErrorState";
 import {
   buildCollectorHomeHeaderSummary,
-  buildTodaysActionsCompactSummary,
+  buildPortfolioStrip,
+  buildTodaysSummaryLines,
   COLLECTOR_HOME_TITLE,
   indicatorBadgeClassName,
   itemLabel,
@@ -54,8 +55,12 @@ export function CollectorHomePage(): JSX.Element {
 
   const headerSummary = buildCollectorHomeHeaderSummary(home);
   const sections = prepareCollectorHomeSections(home.sections);
-  const todaysCompactSummary = buildTodaysActionsCompactSummary(home.sections);
+  const summaryLines = buildTodaysSummaryLines(home.sections);
   const hasDailyActions = home.todays_actions.length > 0;
+  const topActions = home.todays_actions.slice(0, 3);
+  const portfolioStrip = buildPortfolioStrip(home);
+  const advisorUrl = home.advisor_primary_cta_url || "/automation-center";
+  const advisorReady = Boolean(home.advisor_plan_ready);
 
   return (
     <AppShell>
@@ -67,28 +72,57 @@ export function CollectorHomePage(): JSX.Element {
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-4 py-6">
-          <div className="mb-6">
-            <Link
-              to={home.advisor_primary_cta_url || "/automation-center"}
-              className="inline-flex rounded-lg bg-red-700 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-red-600"
-              data-testid="collector-home-advisor-cta"
+          {portfolioStrip.length > 0 ? (
+            <div
+              className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"
+              data-testid="collector-home-portfolio-strip"
             >
-              Open Collector Advisor
-            </Link>
-            {home.advisor_plan_ready && home.advisor_total_actions != null ? (
-              <p className="mt-2 text-sm text-blue-200">{home.advisor_total_actions} cached actions in today&apos;s plan</p>
-            ) : null}
-          </div>
-          <section aria-labelledby="collector-home-todays-actions" className="mb-5">
+              {portfolioStrip.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
+                >
+                  <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <section
+            aria-labelledby="collector-home-advisor-summary"
+            className="mb-5 rounded-lg border border-blue-800/80 bg-white/5 px-4 py-3"
+            data-testid="collector-home-advisor-summary"
+          >
+            <h2 id="collector-home-advisor-summary" className="text-sm font-semibold text-white">
+              Collector Advisor
+            </h2>
+            <p className="mt-1 text-sm text-blue-100">
+              {advisorReady
+                ? "Your daily action plan is ready when generated."
+                : "Advisor plan not generated yet."}
+            </p>
+            <p className="mt-2">
+              <Link
+                to={advisorUrl}
+                className="inline-flex rounded-md border border-red-600/80 bg-red-900/40 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-800/50"
+                data-testid="collector-home-advisor-cta"
+              >
+                Open Collector Advisor
+              </Link>
+            </p>
+          </section>
+
+          <section aria-labelledby="collector-home-todays-summary-heading" className="mb-5">
             <h2
-              id="collector-home-todays-actions"
+              id="collector-home-todays-summary-heading"
               className="text-sm font-semibold uppercase tracking-wide text-red-200"
             >
-              Today&apos;s actions
+              Today&apos;s Summary
             </h2>
             {hasDailyActions ? (
               <ul className="mt-2 space-y-1.5 text-sm">
-                {home.todays_actions.map((a, i) => (
+                {topActions.map((a, i) => (
                   <li key={`${a.title}-${i}`} className="rounded border border-blue-700/80 bg-white/5 px-3 py-1.5">
                     <Link to={a.action_url || "/daily-actions"} className="text-red-200 hover:text-white hover:underline">
                       {a.title}
@@ -97,9 +131,14 @@ export function CollectorHomePage(): JSX.Element {
                 ))}
               </ul>
             ) : (
-              <p className="mt-1 text-sm text-blue-100" data-testid="collector-home-todays-summary">
-                {todaysCompactSummary}
-              </p>
+              <ul
+                className="mt-2 space-y-0.5 text-sm text-blue-100"
+                data-testid="collector-home-todays-summary"
+              >
+                {summaryLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             )}
           </section>
           <div

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { P85CollectorHomeRead } from "../../api/client";
 import {
   buildCollectorHomeHeaderSummary,
+  buildPortfolioStrip,
   buildTodaysActionsCompactSummary,
+  buildTodaysSummaryLines,
   homeHasSectionItemsReady,
   prepareCollectorHomeSections,
   sectionIndicatorDisplay,
@@ -17,7 +19,7 @@ describe("collectorHomePresentation", () => {
       budget_status: { status: "SKIPPED", state: "UNSET", monthly_budget: null },
       portfolio_movement: { status: "SKIPPED", current_value: 0 },
     } as P85CollectorHomeRead;
-    expect(buildCollectorHomeHeaderSummary(home)).toBe("Your daily comic collecting command center");
+    expect(buildCollectorHomeHeaderSummary(home)).toBe("Your daily comic collecting launch pad.");
   });
 
   it("merges discovery into buy opportunities and drops discovery card", () => {
@@ -88,16 +90,19 @@ describe("collectorHomePresentation", () => {
         error: "Temporarily skipped on Collector Home",
       },
     ]);
-    expect(sections).toHaveLength(1);
-    expect(sections[0].body).toBe(SECTION_SKIPPED_LAUNCHER.sell_alerts.body);
-    expect(sections[0].actionLabel).toBe("Open Sell Command Center");
-    expect(JSON.stringify(sections[0])).not.toMatch(/SKIPPED/i);
+    expect(sections.some((s) => s.key === "portfolio")).toBe(true);
+    const sell = sections.find((s) => s.key === "sell_alerts");
+    expect(sell?.body).toBe(SECTION_SKIPPED_LAUNCHER.sell_alerts.body);
+    expect(sell?.actionLabel).toBe("Open Sell Command Center");
+    expect(JSON.stringify(sell)).not.toMatch(/SKIPPED/i);
   });
 
   it("maps indicator_status to user-facing labels", () => {
     expect(sectionIndicatorDisplay({ indicator_status: "HAS_ITEMS", count: 3 } as never).text).toBe("3 available");
-    expect(sectionIndicatorDisplay({ indicator_status: "EMPTY", count: 0 } as never).text).toBe("No current alerts");
-    expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null } as never).text).toBe("Open to review");
+    expect(sectionIndicatorDisplay({ indicator_status: "EMPTY", count: 0 } as never).text).toBe("No alerts");
+    expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null } as never).text).toBe("Review");
+    expect(sectionIndicatorDisplay({ indicator_status: "STALE", count: null } as never).text).toBe("Needs refresh");
+    expect(sectionIndicatorDisplay({ indicator_status: "ERROR", count: null } as never).text).toBe("Unavailable");
     expect(sectionIndicatorDisplay({ indicator_status: "HAS_ITEMS", count: 3 } as never).showCheck).toBe(true);
   });
 
@@ -107,24 +112,31 @@ describe("collectorHomePresentation", () => {
     ).toBe(true);
   });
 
-  it("builds compact today summary from section indicators", () => {
-    expect(buildTodaysActionsCompactSummary([])).toBe("No immediate actions require attention.");
+  it("builds today summary count lines from section indicators", () => {
+    expect(buildTodaysSummaryLines([])).toEqual(["Open dashboards to review current opportunities."]);
     expect(
-      buildTodaysActionsCompactSummary([
+      buildTodaysSummaryLines([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
       ]),
-    ).toBe("Buy Opportunities has 5 opportunities ready for review.");
+    ).toEqual(["Buy Opportunities: 5"]);
     expect(
-      buildTodaysActionsCompactSummary([
+      buildTodaysSummaryLines([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
+        { key: "grade_alerts", indicator_status: "EMPTY", count: 0 } as never,
+        { key: "future_pull_list", indicator_status: "EMPTY", count: 0 } as never,
       ]),
-    ).toBe("5 buy opportunities and 2 sell opportunities are ready for review.");
+    ).toEqual([
+      "Buy Opportunities: 5",
+      "Sell Opportunities: 2",
+      "Grade Candidates: 0",
+      "Upcoming Releases: 0",
+    ]);
     expect(
       buildTodaysActionsCompactSummary([
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: null } as never,
       ]),
-    ).toBe("Some dashboards have items ready for review.");
+    ).toBe("Open dashboards to review current opportunities.");
   });
 
   it("sorts HAS_ITEMS sections before EMPTY while preserving order within rank", () => {
@@ -142,21 +154,43 @@ describe("collectorHomePresentation", () => {
     ]);
   });
 
-  it("dedupes buy sections in today summary when both report HAS_ITEMS", () => {
+  it("dedupes buy sections in today summary when both report counts", () => {
     expect(
-      buildTodaysActionsCompactSummary([
+      buildTodaysSummaryLines([
         { key: "buy_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
       ]),
-    ).toBe("Buy Opportunities has 5 opportunities ready for review.");
+    ).toEqual(["Buy Opportunities: 5"]);
   });
 
-  it("uses collector-facing section labels", () => {
+  it("uses collector-facing section labels and includes portfolio card", () => {
     const prepared = prepareCollectorHomeSections([
       { key: "foc_alerts", title: "FOC alerts", items: [], empty_hint: "", status: "SKIPPED", error: "" },
       { key: "storage_issues", title: "Storage", items: [], empty_hint: "", status: "SKIPPED", error: "" },
       { key: "future_pull_list", title: "Future", items: [], empty_hint: "", status: "SKIPPED", error: "" },
     ]);
-    expect(prepared.map((s) => s.title)).toEqual(["FOC & Preorders", "Find a Book", "Upcoming Releases"]);
+    expect(prepared.map((s) => s.title)).toContain("Portfolio");
+    expect(prepared.find((s) => s.key === "portfolio")?.actionTo).toBe("/dashboard");
+  });
+
+  it("builds portfolio strip from cached home fields only", () => {
+    const metrics = buildPortfolioStrip({
+      portfolio_movement: { status: "OK", current_value: 1200 },
+      sections: [
+        {
+          key: "listing_management",
+          title: "Listings",
+          items: [{ active_listings: 3 }],
+          empty_hint: "",
+          count: 3,
+          status: "SKIPPED",
+          error: "",
+        },
+      ],
+    } as P85CollectorHomeRead);
+    expect(metrics).toEqual([
+      { label: "Collection Value", value: "$1,200" },
+      { label: "Active Listings", value: "3" },
+    ]);
   });
 });

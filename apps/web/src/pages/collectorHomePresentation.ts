@@ -112,14 +112,14 @@ export function sectionIndicatorDisplay(sec: P85CollectorHomeRead["sections"][nu
         text: count !== null && count !== undefined && count > 0 ? `${count} available` : "Available",
       };
     case "EMPTY":
-      return { showCheck: false, tone: "empty", text: "No current alerts" };
+      return { showCheck: false, tone: "empty", text: "No alerts" };
     case "STALE":
       return { showCheck: false, tone: "stale", text: "Needs refresh" };
     case "ERROR":
-      return { showCheck: false, tone: "error", text: "Unable to check" };
+      return { showCheck: false, tone: "error", text: "Unavailable" };
     case "UNKNOWN":
     default:
-      return { showCheck: false, tone: "unknown", text: "Open to review" };
+      return { showCheck: false, tone: "unknown", text: "Review" };
   }
 }
 
@@ -152,68 +152,109 @@ export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): str
   if (parts.length > 0) {
     return parts.join(" · ");
   }
-  return "Your daily comic collecting launch pad — open Collector Advisor when you are ready to act.";
+  return "Your daily comic collecting launch pad.";
+}
+
+export type PortfolioStripMetric = {
+  label: string;
+  value: string;
+};
+
+/** Lightweight strip from cached collector-home fields only (no extra API calls). */
+export function buildPortfolioStrip(home: P85CollectorHomeRead): PortfolioStripMetric[] {
+  const metrics: PortfolioStripMetric[] = [];
+  const pm = home.portfolio_movement ?? {};
+  const valueRaw = pm.current_value;
+  const value =
+    valueRaw !== null && valueRaw !== undefined && valueRaw !== "" ? Number(valueRaw) : null;
+  if (value !== null && !Number.isNaN(value) && pm.status === "OK") {
+    metrics.push({
+      label: "Collection Value",
+      value: `$${Math.round(value).toLocaleString()}`,
+    });
+  }
+
+  const listingSection = home.sections.find((s) => s.key === "listing_management");
+  const listingMeta = listingSection?.items?.[0] as { active_listings?: number } | undefined;
+  if (typeof listingMeta?.active_listings === "number") {
+    metrics.push({
+      label: "Active Listings",
+      value: String(listingMeta.active_listings),
+    });
+  }
+
+  const booksRaw = pm.books_owned ?? pm.book_count;
+  if (booksRaw !== null && booksRaw !== undefined && booksRaw !== "") {
+    const books = Number(booksRaw);
+    if (!Number.isNaN(books) && pm.status === "OK") {
+      metrics.push({ label: "Books Owned", value: String(Math.round(books)) });
+    }
+  }
+
+  const gainRaw = pm.unrealized_gain ?? pm.net_profit ?? pm.total_unrealized_gain;
+  if (gainRaw !== null && gainRaw !== undefined && gainRaw !== "") {
+    const gain = Number(gainRaw);
+    if (!Number.isNaN(gain) && pm.status === "OK") {
+      const sign = gain >= 0 ? "+" : "";
+      metrics.push({
+        label: "Net Profit / Unrealized Gain",
+        value: `${sign}$${Math.round(Math.abs(gain)).toLocaleString()}`,
+      });
+    }
+  }
+
+  return metrics;
+}
+
+const TODAY_SUMMARY_KEYS: { key: string; label: string }[] = [
+  { key: "buy_alerts", label: "Buy Opportunities" },
+  { key: "sell_alerts", label: "Sell Opportunities" },
+  { key: "grade_alerts", label: "Grade Candidates" },
+  { key: "future_pull_list", label: "Upcoming Releases" },
+];
+
+function sectionCountForSummary(
+  sections: P85CollectorHomeRead["sections"],
+  key: string,
+): number | null {
+  const collapsed = collapseBuySectionsForSummary(sections);
+  const sec = collapsed.find((s) => s.key === key);
+  if (!sec || sec.indicator_status === "ERROR") {
+    return null;
+  }
+  if (sec.count === null || sec.count === undefined) {
+    return null;
+  }
+  return Math.max(0, Number(sec.count) || 0);
+}
+
+/** Compact count lines when no advisor action rows exist. */
+export function buildTodaysSummaryLines(sections: P85CollectorHomeRead["sections"]): string[] {
+  const lines: string[] = [];
+  let anyKnown = false;
+  for (const { key, label } of TODAY_SUMMARY_KEYS) {
+    const count = sectionCountForSummary(sections, key);
+    if (count === null) {
+      continue;
+    }
+    anyKnown = true;
+    lines.push(`${label}: ${count}`);
+  }
+  if (!anyKnown) {
+    return ["Open dashboards to review current opportunities."];
+  }
+  return lines;
+}
+
+/** @deprecated use buildTodaysSummaryLines */
+export function buildTodaysActionsCompactSummary(sections: P85CollectorHomeRead["sections"]): string {
+  return buildTodaysSummaryLines(sections).join(" · ");
 }
 
 export function homeHasSectionItemsReady(sections: P85CollectorHomeRead["sections"]): boolean {
   return sections.some(
     (s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS",
   );
-}
-
-/** Compact line under Today's Actions when there are no daily action rows. */
-export function buildTodaysActionsCompactSummary(sections: P85CollectorHomeRead["sections"]): string {
-  const collapsed = collapseBuySectionsForSummary(sections);
-  const actionable = collapsed
-    .filter((s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS")
-    .map((section, index) => ({ section, index }))
-    .sort((a, b) => {
-      const rankDiff =
-        indicatorStatusSortRank(a.section.indicator_status) -
-        indicatorStatusSortRank(b.section.indicator_status);
-      if (rankDiff !== 0) {
-        return rankDiff;
-      }
-      const countDiff = (Number(b.section.count) || 0) - (Number(a.section.count) || 0);
-      if (countDiff !== 0) {
-        return countDiff;
-      }
-      return a.index - b.index;
-    })
-    .map(({ section }) => section);
-  if (actionable.length === 0) {
-    return "No immediate actions require attention.";
-  }
-  const hasNullCount = actionable.some((s) => s.count === null || s.count === undefined);
-  if (hasNullCount) {
-    return "Some dashboards have items ready for review.";
-  }
-
-  const withCounts = actionable
-    .map((s) => ({
-      key: s.key,
-      count: Math.max(0, Number(s.count) || 0),
-    }))
-    .filter((row) => row.count > 0);
-
-  if (withCounts.length === 0) {
-    return "Some dashboards have items ready for review.";
-  }
-
-  if (withCounts.length === 1) {
-    const row = withCounts[0];
-    const label = SECTION_LABELS[row.key] ?? "Dashboard";
-    return `${label} has ${row.count} opportunities ready for review.`;
-  }
-
-  const parts = withCounts.map((row) => {
-    const phrase = SECTION_OPPORTUNITY_PHRASE[row.key] ?? "opportunities";
-    return `${row.count} ${phrase}`;
-  });
-  if (parts.length === 2) {
-    return `${parts[0]} and ${parts[1]} are ready for review.`;
-  }
-  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]} are ready for review.`;
 }
 
 const INDICATOR_SORT_RANK: Record<SectionIndicatorStatus, number> = {
@@ -413,6 +454,28 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
   };
 }
 
+function buildPortfolioHomeSection(): CollectorHomeDisplaySection {
+  return {
+    key: "portfolio",
+    title: "Portfolio",
+    items: [],
+    body: "Review collection value, gains, losses, and top books.",
+    actionLabel: "Open Portfolio",
+    actionTo: "/dashboard",
+    showItems: false,
+    indicatorText: "Review",
+    indicatorShowCheck: false,
+    indicatorTone: "unknown",
+  };
+}
+
+function insertPortfolioSection(sections: CollectorHomeDisplaySection[]): CollectorHomeDisplaySection[] {
+  const portfolio = buildPortfolioHomeSection();
+  const firstNonHas = sections.findIndex((s) => s.indicatorTone !== "has");
+  const insertAt = firstNonHas === -1 ? sections.length : firstNonHas;
+  return [...sections.slice(0, insertAt), portfolio, ...sections.slice(insertAt)];
+}
+
 /** Merge discovery into buy display; collapse duplicate buy cards. */
 export function prepareCollectorHomeSections(
   sections: P85CollectorHomeRead["sections"],
@@ -449,17 +512,19 @@ export function prepareCollectorHomeSections(
     applyMergedBuyDisplay(buyCard, sections, discovery);
   }
 
-  return prepared
-    .filter((s) => s.key !== "discovery_alerts" && s.key !== "marketplace_deals")
-    .map((section, index) => ({ section, index }))
-    .sort((a, b) => {
-      const rankDiff = displaySectionSortRank(a.section) - displaySectionSortRank(b.section);
-      if (rankDiff !== 0) {
-        return rankDiff;
-      }
-      return a.index - b.index;
-    })
-    .map(({ section }) => section);
+  return insertPortfolioSection(
+    prepared
+      .filter((s) => s.key !== "discovery_alerts" && s.key !== "marketplace_deals")
+      .map((section, index) => ({ section, index }))
+      .sort((a, b) => {
+        const rankDiff = displaySectionSortRank(a.section) - displaySectionSortRank(b.section);
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+        return a.index - b.index;
+      })
+      .map(({ section }) => section),
+  );
 }
 
 function displaySectionSortRank(section: CollectorHomeDisplaySection): number {

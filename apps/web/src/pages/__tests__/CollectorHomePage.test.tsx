@@ -83,15 +83,16 @@ describe("CollectorHomePage", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Collector Home" })).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Today's actions" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today's Summary" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Today's actions" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fast operational dashboard/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/SKIPPED/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/UNSET/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Open to review")).not.toBeInTheDocument();
     expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
     expect(screen.queryByText("Review dashboards")).not.toBeInTheDocument();
-    expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent(
-      "Sell Opportunities has 4 opportunities ready for review.",
-    );
+    expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Buy Opportunities: 0");
+    expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Sell Opportunities: 4");
     expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
     expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
     expect(screen.getAllByText("Buy Opportunities")).toHaveLength(1);
@@ -100,7 +101,7 @@ describe("CollectorHomePage", () => {
     expect(screen.getByText("Sell Opportunities")).toBeInTheDocument();
     expect(screen.getByText("4 available")).toBeInTheDocument();
     expect(
-      screen.getByText("Review undervalued comics and marketplace deals identified by ComicOS."),
+      screen.getByText("Review undervalued comics and cross-marketplace buy opportunities identified by ComicOS."),
     ).toBeInTheDocument();
   });
 
@@ -177,18 +178,48 @@ describe("CollectorHomePage", () => {
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((el) => el.textContent)
-      .filter((t) => t && t !== "Today's actions");
+      .filter((t) => t && t !== "Today's Summary" && t !== "Collector Advisor");
     expect(headings[0]).toBe("Buy Opportunities");
     expect(screen.getByText("5 available")).toBeInTheDocument();
   });
 
-  it("shows no-immediate-actions summary when nothing has items", async () => {
+  it("shows count summary when nothing has advisor actions", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
       baseHome({
         sections: [
           {
             key: "sell_alerts",
             title: "Sell alerts",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "buy_alerts",
+            title: "Buy",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "grade_alerts",
+            title: "Grade",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "future_pull_list",
+            title: "Future",
             items: [],
             empty_hint: "",
             count: 0,
@@ -205,10 +236,9 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent(
-        "No immediate actions require attention.",
-      );
+      expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent("Sell Opportunities: 0");
     });
+    expect(screen.queryByText("No immediate actions require attention.")).not.toBeInTheDocument();
   });
 
   it("does not show legacy empty actions copy", async () => {
@@ -232,7 +262,7 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("No current alerts")).toBeInTheDocument();
+      expect(screen.getByText("No alerts")).toBeInTheDocument();
     });
   });
 
@@ -255,7 +285,7 @@ describe("CollectorHomePage", () => {
     expect(screen.queryByRole("heading", { name: "Buy Deals" })).not.toBeInTheDocument();
   });
 
-  it("keeps Today’s Actions outside the section grid and renders action items", async () => {
+  it("keeps Today's Summary outside the section grid and renders top advisor actions", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
       baseHome({
         todays_actions: [
@@ -282,7 +312,50 @@ describe("CollectorHomePage", () => {
     const grid = screen.getByTestId("collector-home-section-grid");
     expect(grid.className).toMatch(/grid-cols-1/);
     expect(grid.className).toMatch(/md:grid-cols-2/);
-    const todaysHeading = screen.getByRole("heading", { name: "Today's actions" });
+    const todaysHeading = screen.getByRole("heading", { name: "Today's Summary" });
     expect(todaysHeading.closest("[data-testid='collector-home-section-grid']")).toBeNull();
+  });
+
+  it("shows compact advisor block with CTA, not a hero-only button", async () => {
+    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome({ advisor_plan_ready: false }));
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("collector-home-advisor-summary")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Advisor plan not generated yet.")).toBeInTheDocument();
+    expect(screen.getByTestId("collector-home-advisor-cta")).toHaveAttribute("href", "/automation-center");
+  });
+
+  it("shows Portfolio card linking to dashboard", async () => {
+    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Portfolio" })).toBeInTheDocument();
+    });
+    const portfolioSection = screen.getByRole("heading", { name: "Portfolio" }).closest("section");
+    expect(portfolioSection).not.toBeNull();
+    expect(within(portfolioSection!).getByRole("link", { name: "Open Portfolio" })).toHaveAttribute("href", "/dashboard");
+    expect(within(portfolioSection!).getByText("Review")).toBeInTheDocument();
+  });
+
+  it("does not add API calls beyond getCollectorHome", async () => {
+    const spy = vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Collector Home" })).toBeInTheDocument();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

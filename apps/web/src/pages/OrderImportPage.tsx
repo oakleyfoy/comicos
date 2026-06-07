@@ -4,8 +4,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   ApiError,
   apiClient,
-  CREATOR_METADATA_WARNING_FRAGMENT,
-  RELEASE_DATE_METADATA_WARNING_FRAGMENT,
   resolveCoverImageOcrHeadline,
   type AiDraftOrderItem,
   type AiParseOrderResponse,
@@ -16,10 +14,18 @@ import {
   type ImportParseJobStatus,
   type InventoryCoverImage,
 } from "../api/client";
+import { MetadataReviewDraftCard } from "../components/MetadataReviewDraftCard";
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import {
+  creatorAliasRowKey,
+  hasCreatorMetadataWarningNotes,
+  hasMalformedReleaseDateNote,
+  zipCreatorSlots,
+  CREATOR_ROLE_LABELS,
+} from "./metadataReviewPresentation";
 
 interface OrderItemDraft {
   publisher: string;
@@ -320,77 +326,6 @@ function needsSeriesAliasHelp(item: AiDraftOrderItem): boolean {
   return Boolean(item.raw_title?.trim());
 }
 
-function hasMalformedReleaseDateNote(item: AiDraftOrderItem): boolean {
-  return (
-    item.metadata_review_notes?.some((note) =>
-      note.includes(RELEASE_DATE_METADATA_WARNING_FRAGMENT),
-    ) ?? false
-  );
-}
-
-type CreatorRoleId = "writers" | "artists" | "cover_artists";
-
-const CREATOR_ROLE_LABELS: Record<CreatorRoleId, string> = {
-  writers: "Writers",
-  artists: "Artists",
-  cover_artists: "Cover artists",
-};
-
-function zipCreatorSlots(
-  item: AiDraftOrderItem,
-  role: CreatorRoleId,
-): Array<{ slot: number; raw: string; canonical: string }> {
-  const rawMap = {
-    writers: item.raw_writers,
-    artists: item.raw_artists,
-    cover_artists: item.raw_cover_artists,
-  } as const;
-  const canonMap = {
-    writers: item.canonical_writers,
-    artists: item.canonical_artists,
-    cover_artists: item.canonical_cover_artists,
-  } as const;
-  const displayMap = {
-    writers: item.writers,
-    artists: item.artists,
-    cover_artists: item.cover_artists,
-  } as const;
-
-  const fb = displayMap[role] ?? [];
-  const rawSource = rawMap[role];
-  const canonSource = canonMap[role];
-
-  const rawVals =
-    rawSource !== undefined && rawSource !== null && rawSource.length > 0
-      ? rawSource.map((segment) => (segment ?? "").trim())
-      : fb.map((segment) => (segment ?? "").trim());
-
-  const canonVals =
-    canonSource !== undefined && canonSource !== null && canonSource.length > 0
-      ? canonSource.map((segment) => (segment ?? "").trim())
-      : fb.map((segment) => (segment ?? "").trim());
-
-  const count = Math.max(rawVals.length, canonVals.length);
-  const pairs: Array<{ slot: number; raw: string; canonical: string }> = [];
-  for (let slot = 0; slot < count; slot += 1) {
-    const raw = rawVals[slot] ?? "";
-    const canonical = canonVals[slot] ?? raw;
-    if (!raw.trim() && !canonical.trim()) {
-      continue;
-    }
-    pairs.push({ slot, raw, canonical });
-  }
-  return pairs;
-}
-
-function creatorAliasRowKey(
-  itemLineIndex: number,
-  role: CreatorRoleId,
-  slot: number,
-): string {
-  return `${itemLineIndex}|${role}|${slot}`;
-}
-
 function buildCreatorAliasInputSeeds(draft: AiParseOrderResponse): Record<string, string> {
   const seeds: Record<string, string> = {};
   draft.items.forEach((item, index) => {
@@ -404,21 +339,6 @@ function buildCreatorAliasInputSeeds(draft: AiParseOrderResponse): Record<string
     });
   });
   return seeds;
-}
-
-function hasCreatorMetadataWarningNotes(item: AiDraftOrderItem): boolean {
-  return (
-    item.metadata_review_notes?.some((note) =>
-      note.includes(CREATOR_METADATA_WARNING_FRAGMENT),
-    ) ?? false
-  );
-}
-
-function formatCreatorBullets(rows: Array<{ raw: string; canonical: string }>): string {
-  if (!rows.length) {
-    return "Not provided";
-  }
-  return rows.map(({ raw, canonical }) => `${raw} → ${canonical}`).join("; ");
 }
 
 function metadataReviewPassesFilters(
@@ -1556,6 +1476,33 @@ export function OrderImportPage() {
     }
   }
 
+  async function clearMetadataReviewForItem(
+    itemIndex: number,
+    mode: "accept" | "ignore",
+  ): Promise<void> {
+    setDraftPayload((current) => {
+      if (!current) {
+        return current;
+      }
+      const items = current.items.map((draftItem, idx) =>
+        idx === itemIndex
+          ? {
+              ...draftItem,
+              metadata_review_required: false,
+              metadata_review_notes: mode === "ignore" ? draftItem.metadata_review_notes : [],
+            }
+          : draftItem,
+      );
+      return { ...current, items };
+    });
+    setMetadataAliasSuccess(
+      mode === "accept"
+        ? "Marked as reviewed. Save draft to persist this change."
+        : "Warning ignored for this session. Save draft to persist.",
+    );
+    setMetadataAliasError(null);
+  }
+
   async function handleCreateMetadataAlias(
     index: number,
     item: AiDraftOrderItem,
@@ -2574,11 +2521,8 @@ export function OrderImportPage() {
               <div>
                 <h2 className="text-xl font-semibold text-white">Needs Metadata Review</h2>
                 <p className="mt-2 text-sm text-amber-100/80">
-                  These items were preserved or normalized deterministically but still deserve human
-                  review. Writer, artist, and cover-artist raw strings are paired with deterministic
-                  canonical outputs for troubleshooting. Creator aliases you save from Ops apply only
-                  to future drafts (no automatic merges or rewinds). Save draft changes to refresh this
-                  section after edits.
+                  Each flagged item starts with a Review Required summary (issue, severity, and recommended
+                  action). Open Advanced Details only when you need raw canonical troubleshooting data.
                 </p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:flex-wrap">
@@ -2640,201 +2584,29 @@ export function OrderImportPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 space-y-4">
-              {displayedMetadataReviewItems.map(({ index, item }) => {
-                const releaseWarn = hasMalformedReleaseDateNote(item);
-                const creatorWarn = hasCreatorMetadataWarningNotes(item);
-                const creatorWarnOnlyAccent = creatorWarn && !releaseWarn;
-                return (
-                  <article
-                    key={`metadata-review-${index}`}
-                    className={`rounded-2xl bg-slate-950/70 p-4 ${
-                      releaseWarn
-                        ? "border-2 border-rose-400/40 shadow-lg shadow-rose-950/20"
-                        : creatorWarnOnlyAccent
-                          ? "border-2 border-fuchsia-400/35 shadow-lg shadow-fuchsia-950/20"
-                          : "border border-white/10"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Item {index + 1}</p>
-                        <p className="text-sm text-slate-400">
-                          {displayValue(item.title)} #{displayValue(item.issue_number)}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {releaseWarn ? (
-                          <span className="inline-flex rounded-full border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-100">
-                            Release date warning
-                          </span>
-                        ) : null}
-                        {creatorWarn ? (
-                          <span className="inline-flex rounded-full border border-fuchsia-400/35 bg-fuchsia-500/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-fuchsia-100">
-                            Creator metadata warning
-                          </span>
-                        ) : null}
-                        {!releaseWarn && !creatorWarn ? (
-                          <span className="text-xs uppercase tracking-[0.16em] text-amber-200">
-                            Review flagged
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
+            <div className="mt-4 space-y-6">
+              {displayedMetadataReviewItems.map(({ index, item }) => (
+                <div key={`metadata-review-${index}`} className="space-y-4">
+                  <p className="text-sm font-semibold text-white">
+                    Item {index + 1}
+                    <span className="ml-2 font-normal text-slate-400">
+                      {displayValue(item.title)} #{displayValue(item.issue_number)}
+                    </span>
+                  </p>
+                  <MetadataReviewDraftCard
+                    index={index}
+                    item={item}
+                    actionsDisabled={isSavingDraft || isSubmitting}
+                    onLooksGood={() => void clearMetadataReviewForItem(index, "accept")}
+                    onIgnoreWarning={() => void clearMetadataReviewForItem(index, "ignore")}
+                    onCreateAlias={() => {
+                      document
+                        .getElementById(`metadata-review-aliases-${index}`)
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  />
 
-                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        Raw Parsed Metadata
-                      </p>
-                      <dl className="mt-3 space-y-2 text-sm text-slate-300">
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-slate-500">Publisher</dt>
-                          <dd className="text-right">{displayValue(item.raw_publisher)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-slate-500">Title</dt>
-                          <dd className="text-right">{displayValue(item.raw_title)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-slate-500">Release</dt>
-                          <dd className="text-right">{displayValue(item.raw_release_date)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-slate-500">Issue</dt>
-                          <dd className="text-right">{displayValue(item.raw_issue_number)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-slate-500">Variant</dt>
-                          <dd className="text-right">{displayValue(item.raw_variant_text)}</dd>
-                        </div>
-                      </dl>
-                    </div>
-
-                    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100">
-                        Canonical Metadata
-                      </p>
-                      <dl className="mt-3 space-y-2 text-sm text-slate-200">
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Publisher</dt>
-                          <dd className="text-right">{displayValue(item.canonical_publisher)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Title</dt>
-                          <dd className="text-right">{displayValue(item.canonical_title)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Release Year</dt>
-                          <dd className="text-right">
-                            {item.parsed_release_year ? String(item.parsed_release_year) : "Not parsed"}
-                          </dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Exact Release Date</dt>
-                          <dd className="text-right">
-                            {displayValue(item.parsed_release_date)}
-                          </dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Issue</dt>
-                          <dd className="text-right">{displayValue(item.canonical_issue_number)}</dd>
-                        </div>
-                        <div className="flex items-start justify-between gap-3">
-                          <dt className="text-cyan-100/70">Variant</dt>
-                          <dd className="text-right">
-                            {displayValue(item.canonical_variant_text)}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/20 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
-                      Creators · raw → canonical slots
-                    </p>
-                    <dl className="mt-3 space-y-3 text-sm text-slate-200">
-                      {(["writers", "artists", "cover_artists"] as const).map((role) => (
-                        <div key={role} className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
-                          <dt className="shrink-0 text-fuchsia-100/75">{CREATOR_ROLE_LABELS[role]}</dt>
-                          <dd className="text-right font-mono text-xs text-fuchsia-50/95 sm:text-right">
-                            {formatCreatorBullets(
-                              zipCreatorSlots(item, role).map(({ raw, canonical }) => ({
-                                raw,
-                                canonical,
-                              })),
-                            )}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      Metadata Identity Key
-                    </p>
-                    <p className="mt-2 break-all font-mono text-xs text-slate-200">
-                      {item.metadata_identity_key ?? "Unavailable"}
-                    </p>
-                  </div>
-
-                  {item.metadata_review_notes?.length ? (
-                    <div
-                      className={`mt-4 rounded-2xl border p-4 ${
-                        releaseWarn && creatorWarn
-                          ? "border-rose-400/35 bg-gradient-to-br from-rose-950/40 to-fuchsia-950/20"
-                          : releaseWarn
-                            ? "border-rose-400/35 bg-rose-950/30"
-                            : creatorWarn
-                              ? "border-fuchsia-400/35 bg-fuchsia-950/25"
-                              : "border-white/10 bg-slate-900/60"
-                      }`}
-                    >
-                      <p
-                        className={`text-xs font-semibold uppercase tracking-[0.16em] ${
-                          releaseWarn && creatorWarn
-                            ? "text-rose-100"
-                            : releaseWarn
-                              ? "text-rose-200"
-                              : creatorWarn
-                                ? "text-fuchsia-100"
-                                : "text-amber-200"
-                        }`}
-                      >
-                        Metadata Warnings
-                      </p>
-                      <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
-                        {item.metadata_review_notes.map((note, noteIndex) => {
-                          const mentionsRelease =
-                            note.includes(RELEASE_DATE_METADATA_WARNING_FRAGMENT);
-                          const mentionsCreator =
-                            note.includes(CREATOR_METADATA_WARNING_FRAGMENT);
-
-                          let liClass = "text-amber-50 marker:text-amber-200";
-                          if (mentionsRelease && mentionsCreator) {
-                            liClass =
-                              "font-semibold text-fuchsia-50 marker:text-fuchsia-200 underline decoration-fuchsia-400/35 underline-offset-2";
-                          } else if (mentionsRelease) {
-                            liClass = "font-semibold text-rose-50 marker:text-rose-300";
-                          } else if (mentionsCreator) {
-                            liClass = "font-semibold text-fuchsia-50 marker:text-fuchsia-300";
-                          }
-
-                          return (
-                            <li
-                              key={`mrn-${index}-${noteIndex}-${note.slice(0, 48)}`}
-                              className={liClass}
-                            >
-                              {note}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ) : null}
-
+                  <div id={`metadata-review-aliases-${index}`} className="space-y-4">
                   {isOpsAdmin && needsPublisherAliasHelp(item) ? (
                     <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100">
@@ -2972,9 +2744,9 @@ export function OrderImportPage() {
                         })
                     : null}
 
-                </article>
-                );
-              })}
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         ) : null}
