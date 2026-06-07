@@ -10,7 +10,7 @@ export const SECTION_LABELS: Record<string, string> = {
   grade_alerts: "Grade Candidates",
   foc_alerts: "FOC & Preorders",
   storage_issues: "Find a Book",
-  marketplace_deals: "Marketplace Deals",
+  marketplace_deals: "Buy Deals",
   future_pull_list: "Upcoming Releases",
 };
 
@@ -21,7 +21,7 @@ export const SECTION_OPPORTUNITY_PHRASE: Record<string, string> = {
   grade_alerts: "grade candidates",
   foc_alerts: "FOC and preorder opportunities",
   storage_issues: "books to locate",
-  marketplace_deals: "marketplace opportunities",
+  marketplace_deals: "buy deals",
   future_pull_list: "upcoming releases",
 };
 
@@ -30,7 +30,7 @@ export const SECTION_EMPTY_MESSAGES: Record<string, string> = {
   sell_alerts: "No sell alerts right now",
   grade_alerts: "No grade candidates right now",
   storage_issues: "No location issues found right now",
-  marketplace_deals: "No marketplace deal alerts right now",
+  marketplace_deals: "No buy deals right now",
   future_pull_list: "No upcoming release alerts right now",
   foc_alerts: "Review upcoming Final Order Cutoff decisions and preorder opportunities.",
 };
@@ -43,7 +43,7 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
   buy_alerts: {
     body: "Open the buy dashboard to review current recommendations.",
     button: "Review Buy Opportunities",
-    to: "/marketplace-opportunities",
+    to: "/buy-opportunities",
   },
   sell_alerts: {
     body: "Open the sell queue to review books that may be ready to sell.",
@@ -66,9 +66,9 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
     to: "/storage-dashboard",
   },
   marketplace_deals: {
-    body: "Open marketplace acquisition tools to review deal opportunities.",
-    button: "Review Marketplace Deals",
-    to: "/marketplace-opportunities",
+    body: "Review marketplace deals and undervalued comics identified by ComicOS.",
+    button: "Review Buy Deals",
+    to: "/buy-opportunities",
   },
   future_pull_list: {
     body: "Review upcoming releases and books related to your collection interests.",
@@ -79,12 +79,12 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
 
 /** Links when section is OK but empty (items loaded, none to show). */
 export const SECTION_EMPTY_ACTIONS: Record<string, { label: string; to: string }> = {
-  buy_alerts: { label: "Review Buy Opportunities", to: "/marketplace-opportunities" },
+  buy_alerts: { label: "Review Buy Opportunities", to: "/buy-opportunities" },
   sell_alerts: { label: "Review Sell Queue", to: "/sell-queue" },
   grade_alerts: { label: "Review Grade Candidates", to: "/grade-before-sell" },
   foc_alerts: { label: "Review FOC & Preorders", to: "/foc-dashboard" },
   storage_issues: { label: "Find a Book", to: "/storage-dashboard" },
-  marketplace_deals: { label: "Review Marketplace Deals", to: "/marketplace-opportunities" },
+  marketplace_deals: { label: "Review Buy Deals", to: "/buy-opportunities" },
   future_pull_list: { label: "Review Upcoming Releases", to: "/future-pull-list" },
 };
 

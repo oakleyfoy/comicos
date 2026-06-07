@@ -25,6 +25,7 @@ describe("nav route smoke manifest", () => {
       "/pull-lists",
       "/foc-dashboard",
       "/marketplace-opportunities",
+      "/buy-opportunities",
       "/future-pull-list",
       "/dashboard",
       "/collection-gaps",

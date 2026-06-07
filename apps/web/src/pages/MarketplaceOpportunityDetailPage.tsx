@@ -37,8 +37,8 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
       loading={loading && !opp}
       maxWidthClass="max-w-3xl"
       headerExtra={
-        <Link to="/marketplace-opportunities" className="text-blue-100 hover:text-white hover:underline">
-          ← Opportunities
+        <Link to="/buy-opportunities" className="text-blue-100 hover:text-white hover:underline">
+          ← Buy Opportunities
         </Link>
       }
     >

@@ -83,13 +83,13 @@ describe("collectorHomePresentation", () => {
       buildTodaysActionsCompactSummary([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
       ]),
-    ).toBe("Marketplace Deals has 5 opportunities ready for review.");
+    ).toBe("Buy Deals has 5 opportunities ready for review.");
     expect(
       buildTodaysActionsCompactSummary([
         { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
       ]),
-    ).toBe("5 marketplace opportunities and 2 sell opportunities are ready for review.");
+    ).toBe("5 buy deals and 2 sell opportunities are ready for review.");
     expect(
       buildTodaysActionsCompactSummary([
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: null } as never,

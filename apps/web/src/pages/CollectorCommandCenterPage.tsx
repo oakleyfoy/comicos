@@ -127,8 +127,8 @@ export function CollectorCommandCenterPage(): JSX.Element {
           <SectionCard title="Marketplace deals">
             {cc.marketplace_deals.length === 0 ? (
               <p className="text-blue-700">
-                <Link to="/marketplace-opportunities" className="font-medium text-red-700 hover:underline">
-                  Marketplace opportunities
+                <Link to="/buy-opportunities" className="font-medium text-red-700 hover:underline">
+                  Buy opportunities
                 </Link>
               </p>
             ) : (

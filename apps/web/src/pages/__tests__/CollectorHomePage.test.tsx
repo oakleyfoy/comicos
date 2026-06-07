@@ -94,12 +94,12 @@ describe("CollectorHomePage", () => {
     );
     expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
     expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
-    expect(screen.getByText("Marketplace Deals")).toBeInTheDocument();
+    expect(screen.getByText("Buy Deals")).toBeInTheDocument();
     expect(screen.getByText("Buy Opportunities")).toBeInTheDocument();
     expect(screen.getByText("Sell Opportunities")).toBeInTheDocument();
     expect(screen.getByText("4 available")).toBeInTheDocument();
     expect(
-      screen.getByText("Open marketplace acquisition tools to review deal opportunities."),
+      screen.getByText("Review marketplace deals and undervalued comics identified by ComicOS."),
     ).toBeInTheDocument();
   });
 
@@ -177,7 +177,7 @@ describe("CollectorHomePage", () => {
       .getAllByRole("heading", { level: 2 })
       .map((el) => el.textContent)
       .filter((t) => t && t !== "Today's actions");
-    expect(headings[0]).toBe("Marketplace Deals");
+    expect(headings[0]).toBe("Buy Deals");
   });
 
   it("shows no-immediate-actions summary when nothing has items", async () => {
@@ -247,8 +247,8 @@ describe("CollectorHomePage", () => {
     const sellSection = screen.getByRole("heading", { name: "Sell Opportunities" }).closest("section");
     expect(sellSection).not.toBeNull();
     expect(within(sellSection!).getByRole("link", { name: "Review Sell Queue" })).toBeInTheDocument();
-    const dealsSection = screen.getByRole("heading", { name: "Marketplace Deals" }).closest("section");
-    expect(within(dealsSection!).getByRole("link", { name: "Review Marketplace Deals" })).toBeInTheDocument();
+    const dealsSection = screen.getByRole("heading", { name: "Buy Deals" }).closest("section");
+    expect(within(dealsSection!).getByRole("link", { name: "Review Buy Deals" })).toBeInTheDocument();
   });
 
   it("keeps Today’s Actions outside the section grid and renders action items", async () => {

@@ -30,8 +30,9 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
 
   return (
     <PatriotPageLayout
-      eyebrow="P82 · Marketplace"
-      title="Marketplace opportunities"
+      eyebrow="Buy"
+      title="Buy Opportunities"
+      description="Comics identified by ComicOS as strong purchase opportunities based on value, demand, release intelligence, and collector signals."
       showExpansionNav
       error={error}
       onRetry={() => void load()}
@@ -39,8 +40,8 @@ export function MarketplaceOpportunitiesPage(): JSX.Element {
       <NavPageLoadBanner status={loadStatus} message={loadMessage} />
       {items.length === 0 && !error && loadStatus !== "ERROR" ? (
         <CollectorEmptyState
-          title="No marketplace opportunities yet"
-          description="Refresh deals from your inventory FMV spread or scan an eBay listing."
+          title="No buy opportunities yet"
+          description="ComicOS will list comics here when value, demand, and collector signals align."
           actionLabel="Acquisition dashboard"
           actionTo="/marketplace-acquisition-dashboard"
         />

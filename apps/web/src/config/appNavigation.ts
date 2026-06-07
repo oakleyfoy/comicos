@@ -36,7 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "FOC Dashboard", to: "/foc-dashboard" },
       { label: "Purchase Budget", to: "/purchase-budget", hiddenFromNav: true },
       { label: "Acquisition Opportunities", to: "/acquisition-opportunities", hiddenFromNav: true },
-      { label: "Marketplace Opportunities", to: "/marketplace-opportunities" },
+      { label: "Buy Opportunities", to: "/buy-opportunities" },
       { label: "Discovery Feed", to: "/discovery-feed", hiddenFromNav: true },
       { label: "Future Pull List", to: "/future-pull-list" },
     ],

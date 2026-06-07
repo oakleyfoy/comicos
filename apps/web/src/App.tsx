@@ -291,6 +291,7 @@ export default function App() {
         <Route path="/discovery-alerts" element={<DiscoveryAlertsPage />} />
         <Route path="/discovery-analytics" element={<DiscoveryAnalyticsPage />} />
         <Route path="/marketplace-opportunities" element={<MarketplaceOpportunitiesPage />} />
+        <Route path="/buy-opportunities" element={<MarketplaceOpportunitiesPage />} />
         <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
         <Route path="/marketplace-acquisition-dashboard" element={<MarketplaceAcquisitionDashboardPage />} />
         <Route path="/collection-forecast" element={<CollectionForecastPage />} />
