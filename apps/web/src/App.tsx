@@ -73,6 +73,7 @@ import { ListingDraftsPage } from "./pages/ListingDraftsPage";
 import { ListingDraftReviewPage } from "./pages/ListingDraftReviewPage";
 import { ListingManagementPage } from "./pages/ListingManagementPage";
 import { ListingManagementDetailPage } from "./pages/ListingManagementDetailPage";
+import { SellCommandCenterPage } from "./pages/SellCommandCenterPage";
 import { ListingsPage } from "./pages/ListingsPage";
 import { SellingAnalyticsPage } from "./pages/SellingAnalyticsPage";
 import { BundleOpportunitiesPage } from "./pages/BundleOpportunitiesPage";
@@ -343,6 +344,7 @@ export default function App() {
         <Route path="/intelligence" element={<IntelligencePage />} />
         <Route path="/key-issues" element={<KeyIssueIntelligencePage />} />
         <Route path="/market-user-intelligence" element={<MarketUserIntelligencePage />} />
+        <Route path="/sell-command-center" element={<SellCommandCenterPage />} />
         <Route path="/sell-candidates" element={<SellCandidatePage />} />
         <Route path="/market-pricing" element={<MarketPricingPage />} />
         <Route path="/want-lists" element={<WantListPage />} />

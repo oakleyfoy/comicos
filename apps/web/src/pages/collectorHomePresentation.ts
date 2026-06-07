@@ -46,9 +46,9 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
     to: "/buy-opportunities",
   },
   sell_alerts: {
-    body: "Open the sell queue to review books that may be ready to sell.",
-    button: "Review Sell Queue",
-    to: "/sell-queue",
+    body: "See sell candidates, drafts, active listings, and profit in one place.",
+    button: "Open Sell Command Center",
+    to: "/sell-command-center",
   },
   grade_alerts: {
     body: "Open grading tools to review books that may be worth grading.",
@@ -75,7 +75,7 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
 /** Links when section is OK but empty (items loaded, none to show). */
 export const SECTION_EMPTY_ACTIONS: Record<string, { label: string; to: string }> = {
   buy_alerts: { label: "Review Buy Opportunities", to: "/buy-opportunities" },
-  sell_alerts: { label: "Review Sell Queue", to: "/sell-queue" },
+  sell_alerts: { label: "Open Sell Command Center", to: "/sell-command-center" },
   grade_alerts: { label: "Review Grade Candidates", to: "/grade-before-sell" },
   foc_alerts: { label: "Review FOC & Preorders", to: "/foc-dashboard" },
   storage_issues: { label: "Find a Book", to: "/storage-dashboard" },
@@ -354,7 +354,22 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
       button: emptyAction.label,
       to: emptyAction.to,
     };
+    let actionLabel = fallback.button;
+    let actionTo = fallback.to;
+    if (sec.key === "sell_alerts") {
+      const hasOpps =
+        sec.indicator_status === "HAS_ITEMS" ||
+        (sec.count ?? 0) > 0 ||
+        sec.has_items === true;
+      if (hasOpps) {
+        actionLabel = "Open Sell Command Center";
+        actionTo = "/sell-command-center";
+      }
+    }
     let body = fallback.body;
+    if (sec.key === "sell_alerts" && (sec.indicator_status === "HAS_ITEMS" || (sec.count ?? 0) > 0)) {
+      body = "Review ranked sell actions, drafts, and listings from ComicOS.";
+    }
     if (sec.key === "buy_alerts" && sec.items.length > 0) {
       const meta = sec.items[0] as { cross_market_count?: number; summary?: string };
       if (typeof meta.cross_market_count === "number" && meta.cross_market_count > 0) {
@@ -367,8 +382,8 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
       ...base,
       items: [],
       body,
-      actionLabel: fallback.button,
-      actionTo: fallback.to,
+      actionLabel,
+      actionTo,
       showItems: false,
     };
   }

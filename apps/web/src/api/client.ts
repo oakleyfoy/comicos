@@ -17362,6 +17362,116 @@ export interface P89ManagedListingPortfolioSummaryRead {
   active_listings_count: number;
 }
 
+export interface P89SellCommandCenterKpiRead {
+  sell_now_count: number;
+  grade_first_count: number;
+  drafts_awaiting_review: number;
+  active_listings: number;
+  sold_this_month: number;
+  estimated_net_profit: number;
+}
+
+export interface P89SellCommandCenterRead {
+  status: string;
+  kpis: P89SellCommandCenterKpiRead;
+  daily_actions: {
+    rank: number;
+    title: string;
+    detail: string;
+    action_label: string;
+    route: string;
+    urgency_score: number;
+  }[];
+  sell_now: {
+    sell_candidate_id: number;
+    comic_title: string;
+    sell_score: number | null;
+    estimated_sale_value: number;
+    estimated_profit: number;
+    confidence: string;
+    reason_summary: string;
+    cta_label: string;
+    cta_route: string;
+  }[];
+  grade_first: {
+    sell_candidate_id: number;
+    comic_title: string;
+    grade_first_score: number | null;
+    estimated_sale_value: number;
+    potential_upside: number | null;
+    confidence: string;
+    reason_summary: string;
+    cta_label: string;
+    cta_route: string;
+  }[];
+  hold_or_monitor: {
+    sell_candidate_id: number;
+    comic_title: string;
+    hold_score: number | null;
+    market_price: number | null;
+    trend_direction: string | null;
+    reason_summary: string;
+    cta_label: string;
+    cta_route: string;
+  }[];
+  drafts_needing_review: {
+    draft_id: number;
+    comic_title: string;
+    marketplace: string;
+    suggested_price: number | null;
+    created_at: string;
+    cta_route: string;
+  }[];
+  active_listings: {
+    listing_id: number;
+    comic_title: string;
+    marketplace: string;
+    asking_price: number | null;
+    listed_at: string | null;
+    days_listed: number | null;
+    minimum_price: number | null;
+    needs_review: boolean;
+    cta_route: string;
+  }[];
+  sold_recently: {
+    listing_id: number;
+    comic_title: string;
+    sale_price: number | null;
+    net_profit: number | null;
+    profit_known: boolean;
+    sold_at: string | null;
+    cta_route: string;
+  }[];
+  expired_or_stale: {
+    listing_id: number | null;
+    draft_id: number | null;
+    comic_title: string;
+    status: string;
+    marketplace: string;
+    reason: string;
+    cta_route: string;
+  }[];
+  profit_summary: {
+    period_label: string;
+    gross_sales: number;
+    fees: number;
+    shipping_costs: number;
+    net_profit: number;
+    average_profit_per_sale: number;
+    sold_count: number;
+  };
+  quick_actions: { label: string; route: string; action_type: string }[];
+  briefing_summary: {
+    top_sell_candidate: string | null;
+    top_grade_first_candidate: string | null;
+    drafts_awaiting_review: number;
+    active_listings: number;
+    sold_this_month: number;
+    net_profit_this_month: number;
+  };
+  generated_at: string;
+}
+
 export type ExitCandidateReason =
   | "DUPLICATE"
   | "PROFITABLE"
@@ -30761,6 +30871,10 @@ export const apiClient = {
 
   getManagedListingPortfolioSummary(): Promise<P89ManagedListingPortfolioSummaryRead> {
     return requestScanV1<P89ManagedListingPortfolioSummaryRead>("/listing-management/portfolio-summary");
+  },
+
+  getSellCommandCenter(): Promise<P89SellCommandCenterRead> {
+    return requestScanV1<P89SellCommandCenterRead>("/sell-command-center");
   },
 
   createManagedListing(payload: {

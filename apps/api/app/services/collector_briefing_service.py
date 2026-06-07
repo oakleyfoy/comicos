@@ -15,6 +15,7 @@ from app.services.p77_personalization_engine import load_personalization_context
 from app.services.sell_candidate_service import build_sell_candidate_briefing_highlights
 from app.services.listing_draft_service import build_listing_draft_briefing
 from app.services.listing_management_service import build_selling_activity_briefing
+from app.services.sell_command_center_service import build_sell_command_center_briefing_section
 from app.services.p89_market_pricing_service import build_market_pricing_briefing_summary
 from app.services.marketplace_command_center_service import build_marketplace_command_center_briefing_section
 from app.services.p81_discovery_personalization_service import list_future_pull_list, list_personalized_discovery
@@ -86,6 +87,7 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     market_pricing_summary = build_market_pricing_briefing_summary(session, owner_user_id=owner_user_id)
     listing_drafts = build_listing_draft_briefing(session, owner_user_id=owner_user_id)
     selling_activity = build_selling_activity_briefing(session, owner_user_id=owner_user_id)
+    sell_command_center_summary = build_sell_command_center_briefing_section(session, owner_user_id=owner_user_id)
     sections = {
         "discovery_opportunities": [d.opportunity.title for d in discovery.items[:5]],
         "marketplace_deals": [d.title for d in deals.items if d.recommendation in {"STRONG_BUY", "GOOD_BUY"}][:5],
@@ -99,6 +101,7 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
         "market_pricing_summary": market_pricing_summary,
         "listing_drafts": listing_drafts,
         "selling_activity": selling_activity,
+        "sell_command_center_summary": sell_command_center_summary,
         "sell_alerts": [
             t
             for t in (
@@ -143,6 +146,7 @@ def generate_weekly_briefing(session: Session, *, owner_user_id: int, briefing_d
     risk = build_collection_risk(session, owner_user_id=owner_user_id, persist=True)
     acq = build_acquisition_dashboard(session, owner_user_id=owner_user_id, refresh=True)
     ctx = load_personalization_context(session, owner_user_id=owner_user_id)
+    sell_cc = build_sell_command_center_briefing_section(session, owner_user_id=owner_user_id)
     sections = {
         "fmv_changes": {"current_value": forecast.current_value, "horizon_90": forecast.horizons[1].forecast_value if len(forecast.horizons) > 1 else forecast.current_value},
         "budget_usage": {"state": ctx.budget_state, "monthly_budget": ctx.monthly_budget},
@@ -155,6 +159,7 @@ def generate_weekly_briefing(session: Session, *, owner_user_id: int, briefing_d
         "marketplace_command_center": build_marketplace_command_center_briefing_section(
             session, owner_user_id=owner_user_id
         ),
+        "sell_command_center_summary": sell_cc,
     }
     actions = [
         "Rebalance portfolio using optimization view",

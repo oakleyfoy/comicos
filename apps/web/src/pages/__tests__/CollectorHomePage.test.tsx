@@ -248,7 +248,7 @@ describe("CollectorHomePage", () => {
     });
     const sellSection = screen.getByRole("heading", { name: "Sell Opportunities" }).closest("section");
     expect(sellSection).not.toBeNull();
-    expect(within(sellSection!).getByRole("link", { name: "Review Sell Queue" })).toBeInTheDocument();
+    expect(within(sellSection!).getByRole("link", { name: "Open Sell Command Center" })).toBeInTheDocument();
     const buySection = screen.getByRole("heading", { name: "Buy Opportunities" }).closest("section");
     expect(buySection).not.toBeNull();
     expect(within(buySection!).getByRole("link", { name: "Review Buy Opportunities" })).toBeInTheDocument();

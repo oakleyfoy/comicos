@@ -90,7 +90,7 @@ describe("collectorHomePresentation", () => {
     ]);
     expect(sections).toHaveLength(1);
     expect(sections[0].body).toBe(SECTION_SKIPPED_LAUNCHER.sell_alerts.body);
-    expect(sections[0].actionLabel).toBe("Review Sell Queue");
+    expect(sections[0].actionLabel).toBe("Open Sell Command Center");
     expect(JSON.stringify(sections[0])).not.toMatch(/SKIPPED/i);
   });
 
