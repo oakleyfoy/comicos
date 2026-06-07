@@ -2,6 +2,8 @@ import type { P85CollectorHomeRead } from "../api/client";
 
 export const COLLECTOR_HOME_TITLE = "Collector Home";
 
+export type SectionIndicatorStatus = "HAS_ITEMS" | "EMPTY" | "STALE" | "UNKNOWN" | "ERROR";
+
 export const SECTION_LABELS: Record<string, string> = {
   buy_alerts: "Buy Opportunities",
   sell_alerts: "Sell Opportunities",
@@ -83,7 +85,37 @@ export type CollectorHomeDisplaySection = {
   actionLabel: string;
   actionTo: string;
   showItems: boolean;
+  indicatorText: string;
+  indicatorShowCheck: boolean;
+  indicatorTone: "has" | "empty" | "stale" | "unknown" | "error";
 };
+
+export function sectionIndicatorDisplay(sec: P85CollectorHomeRead["sections"][number]): {
+  text: string;
+  showCheck: boolean;
+  tone: CollectorHomeDisplaySection["indicatorTone"];
+} {
+  const status = (sec.indicator_status ?? "UNKNOWN") as SectionIndicatorStatus;
+  const count = sec.count;
+
+  switch (status) {
+    case "HAS_ITEMS":
+      return {
+        showCheck: true,
+        tone: "has",
+        text: count !== null && count !== undefined && count > 0 ? `${count} available` : "Available",
+      };
+    case "EMPTY":
+      return { showCheck: false, tone: "empty", text: "No current alerts" };
+    case "STALE":
+      return { showCheck: false, tone: "stale", text: "Needs refresh" };
+    case "ERROR":
+      return { showCheck: false, tone: "error", text: "Unable to check" };
+    case "UNKNOWN":
+    default:
+      return { showCheck: false, tone: "unknown", text: "Open to review" };
+  }
+}
 
 export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): string {
   const parts: string[] = [];
@@ -114,6 +146,12 @@ export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): str
   return "Your daily comic collecting command center";
 }
 
+export function homeHasSectionItemsReady(sections: P85CollectorHomeRead["sections"]): boolean {
+  return sections.some(
+    (s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS",
+  );
+}
+
 function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): CollectorHomeDisplaySection {
   const title = SECTION_LABELS[sec.key] ?? sec.title;
   const emptyAction = SECTION_EMPTY_ACTIONS[sec.key] ?? {
@@ -122,11 +160,19 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
   };
   const launcher = SECTION_SKIPPED_LAUNCHER[sec.key];
   const emptyMessage = SECTION_EMPTY_MESSAGES[sec.key] ?? "Nothing to show right now.";
+  const indicator = sectionIndicatorDisplay(sec);
+
+  const base = {
+    key: sec.key,
+    title,
+    indicatorText: indicator.text,
+    indicatorShowCheck: indicator.showCheck,
+    indicatorTone: indicator.tone,
+  };
 
   if (sec.status === "ERROR") {
     return {
-      key: sec.key,
-      title,
+      ...base,
       items: [],
       body: "Unable to load this section right now.",
       actionLabel: emptyAction.label,
@@ -142,8 +188,7 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
       to: emptyAction.to,
     };
     return {
-      key: sec.key,
-      title,
+      ...base,
       items: [],
       body: fallback.body,
       actionLabel: fallback.button,
@@ -152,11 +197,10 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
     };
   }
 
-  const hasItems = sec.count > 0 && sec.items.length > 0;
+  const hasItems = sec.items.length > 0;
   if (hasItems) {
     return {
-      key: sec.key,
-      title,
+      ...base,
       items: sec.items,
       body: "",
       actionLabel: emptyAction.label,
@@ -166,14 +210,31 @@ function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): Collecto
   }
 
   return {
-    key: sec.key,
-    title,
+    ...base,
     items: [],
     body: emptyMessage,
     actionLabel: emptyAction.label,
     actionTo: emptyAction.to,
     showItems: false,
   };
+}
+
+function mergeIndicatorPreferHasItems(
+  target: CollectorHomeDisplaySection,
+  source: P85CollectorHomeRead["sections"][number] | undefined,
+): void {
+  if (!source?.indicator_status) {
+    return;
+  }
+  const sourceDisplay = sectionIndicatorDisplay(source);
+  if (target.indicatorTone === "has") {
+    return;
+  }
+  if (source.indicator_status === "HAS_ITEMS") {
+    target.indicatorText = sourceDisplay.text;
+    target.indicatorShowCheck = sourceDisplay.showCheck;
+    target.indicatorTone = sourceDisplay.tone;
+  }
 }
 
 /** Merge discovery alerts into marketplace/buy display; hide discovery card. */
@@ -184,23 +245,29 @@ export function prepareCollectorHomeSections(
   const rest = sections.filter((s) => s.key !== "discovery_alerts");
   const prepared = rest.map(sectionDisplay);
 
-  if (discovery && discovery.items.length > 0) {
-    const marketplace = prepared.find((s) => s.key === "marketplace_deals");
-    if (marketplace) {
-      marketplace.items = [...marketplace.items, ...discovery.items];
-      marketplace.showItems = marketplace.items.length > 0;
-      if (marketplace.showItems) {
-        marketplace.body = "";
-      }
-    } else {
-      const buy = prepared.find((s) => s.key === "buy_alerts");
-      if (buy) {
-        buy.items = [...buy.items, ...discovery.items];
-        buy.showItems = buy.items.length > 0;
-        if (buy.showItems) {
-          buy.body = "";
+  if (discovery) {
+    if (discovery.items.length > 0) {
+      const marketplace = prepared.find((s) => s.key === "marketplace_deals");
+      if (marketplace) {
+        marketplace.items = [...marketplace.items, ...discovery.items];
+        marketplace.showItems = marketplace.items.length > 0;
+        if (marketplace.showItems) {
+          marketplace.body = "";
+        }
+      } else {
+        const buy = prepared.find((s) => s.key === "buy_alerts");
+        if (buy) {
+          buy.items = [...buy.items, ...discovery.items];
+          buy.showItems = buy.items.length > 0;
+          if (buy.showItems) {
+            buy.body = "";
+          }
         }
       }
+    }
+    const marketplace = prepared.find((s) => s.key === "marketplace_deals");
+    if (marketplace) {
+      mergeIndicatorPreferHasItems(marketplace, discovery);
     }
   }
 
@@ -213,4 +280,20 @@ export function itemLabel(item: Record<string, unknown>): string {
     return String(title);
   }
   return "Item";
+}
+
+export function indicatorBadgeClassName(tone: CollectorHomeDisplaySection["indicatorTone"]): string {
+  switch (tone) {
+    case "has":
+      return "bg-emerald-50 text-emerald-800 ring-emerald-200";
+    case "stale":
+      return "bg-amber-50 text-amber-900 ring-amber-200";
+    case "error":
+      return "bg-red-50 text-red-800 ring-red-200";
+    case "empty":
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+    case "unknown":
+    default:
+      return "bg-slate-100 text-slate-600 ring-slate-200";
+  }
 }

@@ -67,7 +67,10 @@ class P85CollectorHomeSectionRead(BaseModel):
     title: str
     items: list[dict] = Field(default_factory=list)
     empty_hint: str = ""
-    count: int = 0
+    count: int | None = None
+    has_items: bool | None = None
+    freshness_label: str | None = None
+    indicator_status: str | None = None
     status: str = "OK"
     error: str = ""
 

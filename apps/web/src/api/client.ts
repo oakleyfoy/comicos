@@ -12904,7 +12904,10 @@ export interface P85CollectorHomeRead {
     title: string;
     items: Record<string, unknown>[];
     empty_hint: string;
-    count: number;
+    count: number | null;
+    has_items?: boolean | null;
+    freshness_label?: string | null;
+    indicator_status?: string | null;
     status: string;
     error: string;
   }[];

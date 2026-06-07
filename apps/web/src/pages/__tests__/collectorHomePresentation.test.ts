@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { P85CollectorHomeRead } from "../../api/client";
 import {
   buildCollectorHomeHeaderSummary,
+  homeHasSectionItemsReady,
   prepareCollectorHomeSections,
+  sectionIndicatorDisplay,
   SECTION_SKIPPED_LAUNCHER,
 } from "../collectorHomePresentation";
 
@@ -58,5 +60,18 @@ describe("collectorHomePresentation", () => {
     expect(sections[0].body).toBe(SECTION_SKIPPED_LAUNCHER.sell_alerts.body);
     expect(sections[0].actionLabel).toBe("Review Sell Queue");
     expect(JSON.stringify(sections[0])).not.toMatch(/SKIPPED/i);
+  });
+
+  it("maps indicator_status to user-facing labels", () => {
+    expect(sectionIndicatorDisplay({ indicator_status: "HAS_ITEMS", count: 3 } as never).text).toBe("3 available");
+    expect(sectionIndicatorDisplay({ indicator_status: "EMPTY", count: 0 } as never).text).toBe("No current alerts");
+    expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null } as never).text).toBe("Open to review");
+    expect(sectionIndicatorDisplay({ indicator_status: "HAS_ITEMS", count: 3 } as never).showCheck).toBe(true);
+  });
+
+  it("detects sections with HAS_ITEMS for optional today hint", () => {
+    expect(
+      homeHasSectionItemsReady([{ key: "sell_alerts", indicator_status: "HAS_ITEMS" } as never]),
+    ).toBe(true);
   });
 });
