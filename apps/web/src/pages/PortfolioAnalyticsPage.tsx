@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { apiClient, type P89MarketPricingPortfolioTotalsRead } from "../api/client";
 import {
   p67Api,
   p68Api,
@@ -39,18 +40,20 @@ export function PortfolioAnalyticsPage(): JSX.Element {
   const [grading, setGrading] = useState<P67GradingLatest | null>(null);
   const [investor, setInvestor] = useState<P67InvestorLatest | null>(null);
   const [pricing, setPricing] = useState<P68SnapshotRow[]>([]);
+  const [marketPricingTotals, setMarketPricingTotals] = useState<P89MarketPricingPortfolioTotalsRead | null>(null);
 
   const loadLatest = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [p, c, r, g, i, pr] = await Promise.all([
+      const [p, c, r, g, i, pr, mkt] = await Promise.all([
         p67Api.portfolioLatest(),
         p67Api.collectionLatest(),
         p67Api.recommendationLatest(),
         p67Api.gradingLatest(),
         p67Api.investorLatest(),
         p68Api.latestSnapshots(),
+        apiClient.getMarketPricingPortfolioTotals().catch(() => null),
       ]);
       setPortfolio(p);
       setCollection(c);
@@ -58,6 +61,7 @@ export function PortfolioAnalyticsPage(): JSX.Element {
       setGrading(g);
       setInvestor(i);
       setPricing(pr.items ?? []);
+      setMarketPricingTotals(mkt);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load portfolio analytics");
     } finally {
@@ -113,6 +117,27 @@ export function PortfolioAnalyticsPage(): JSX.Element {
 
       {!loading ? (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <Section title="Market pricing (P89)">
+            {marketPricingTotals ? (
+              <dl className="grid grid-cols-1 gap-3 text-sm text-white sm:grid-cols-3">
+                <div>
+                  <dt className="text-slate-400">Quick liquidation total</dt>
+                  <dd className="text-lg font-semibold">{money(marketPricingTotals.quick_liquidation_total)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Market value total</dt>
+                  <dd className="text-lg font-semibold">{money(marketPricingTotals.market_value_total)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Premium value total</dt>
+                  <dd className="text-lg font-semibold">{money(marketPricingTotals.premium_value_total)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-slate-400">No cached market pricing totals yet.</p>
+            )}
+          </Section>
+
           <Section title="Investor Dashboard">
             {hasInvestorData ? (
               <dl className="grid grid-cols-2 gap-3 text-sm text-white">

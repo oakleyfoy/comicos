@@ -17151,7 +17151,41 @@ export interface WantListRead {
   items: WantListItemRead[];
 }
 
+export type P89SellRecommendation = "SELL_NOW" | "HOLD" | "GRADE_FIRST" | "MONITOR";
+export type P89SellConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+/** @deprecated P54 legacy shape; prefer P89SellCandidateRead for /sell-candidates */
 export type SellCandidateAction = "STRONG_SELL" | "SELL" | "HOLD" | "REVIEW";
+
+export interface P89SellCandidateRead {
+  id: number;
+  owner_user_id: number;
+  inventory_copy_id: number;
+  recommendation: P89SellRecommendation;
+  sell_score: number;
+  hold_score: number;
+  grade_first_score: number;
+  monitor_score: number;
+  confidence: P89SellConfidence;
+  estimated_sale_value: number;
+  estimated_profit: number;
+  reason_summary: string;
+  reasons: string[];
+  status: string;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  cover_image_url: string;
+  is_top_opportunity: boolean;
+  quick_sale_price?: number | null;
+  market_price?: number | null;
+  premium_price?: number | null;
+  pricing_confidence?: string | null;
+  sales_velocity?: string | null;
+  sales_velocity_label?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface SellCandidateRecommendationRead {
   id: number;
@@ -17170,7 +17204,7 @@ export interface SellCandidateRecommendationRead {
 }
 
 export interface SellCandidateListResponse {
-  items: SellCandidateRecommendationRead[];
+  items: P89SellCandidateRead[];
   total_items: number;
   limit: number;
   offset: number;
@@ -17178,15 +17212,92 @@ export interface SellCandidateListResponse {
 
 export interface SellCandidateSummaryRead {
   total_candidates: number;
-  strong_sell_count: number;
-  sell_count: number;
+  sell_now_count: number;
   hold_count: number;
-  review_count: number;
+  grade_first_count: number;
+  monitor_count: number;
   total_estimated_profit: number;
+  total_estimated_sale_value: number;
+  top_opportunity: P89SellCandidateRead | null;
 }
 
 export interface SellCandidateGenerateResponse {
   created_count: number;
+  updated_count: number;
+  candidates: number;
+}
+
+export type P89PricingConfidence = "HIGH" | "MEDIUM" | "LOW";
+export type P89SalesVelocity = "VERY_FAST" | "FAST" | "NORMAL" | "SLOW" | "VERY_SLOW";
+export type P89MarketTrend = "UP" | "FLAT" | "DOWN";
+
+export interface P89MarketPriceSnapshotRead {
+  id: number;
+  owner_user_id: number;
+  series: string;
+  issue_number: string;
+  variant: string;
+  display_title: string;
+  quick_sale_price: number;
+  market_price: number;
+  premium_price: number;
+  pricing_confidence: P89PricingConfidence;
+  sales_velocity: P89SalesVelocity;
+  sales_velocity_label: string;
+  listing_count: number;
+  sold_count: number;
+  price_low: number;
+  price_high: number;
+  price_average: number;
+  trend_direction: P89MarketTrend;
+  snapshot_date: string;
+  created_at: string | null;
+}
+
+export interface P89MarketPricingDashboardRead {
+  highest_value_books: P89MarketPriceSnapshotRead[];
+  fastest_selling_books: P89MarketPriceSnapshotRead[];
+  largest_price_increases: P89MarketPriceSnapshotRead[];
+  largest_price_decreases: P89MarketPriceSnapshotRead[];
+  highest_confidence_pricing: P89MarketPriceSnapshotRead[];
+}
+
+export interface P89MarketPricingPortfolioTotalsRead {
+  quick_liquidation_total: number;
+  market_value_total: number;
+  premium_value_total: number;
+}
+
+export type P89ListingDraftStatus = "DRAFT" | "REVIEWED" | "ARCHIVED";
+export type P89ListingDraftMarketplace = "EBAY" | "WHATNOT" | "MYCOMICSHOP" | "OTHER";
+
+export interface P89ListingDraftRead {
+  id: number;
+  owner_user_id: number;
+  inventory_copy_id: number;
+  sell_candidate_id: number | null;
+  market_price_snapshot_id: number | null;
+  marketplace: P89ListingDraftMarketplace;
+  title: string;
+  description: string;
+  condition_notes: string;
+  shipping_notes: string;
+  suggested_price: number | null;
+  minimum_price: number | null;
+  premium_price: number | null;
+  status: P89ListingDraftStatus;
+  comic_title: string;
+  pricing_unavailable: boolean;
+  full_listing_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P89ListingDraftListResponse {
+  items: P89ListingDraftRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
 }
 
 export type ExitCandidateReason =
@@ -29283,13 +29394,14 @@ export const apiClient = {
 
   getSellCandidates(params?: {
     recommendation?: string;
-    publisher?: string;
-    confidence?: number;
+    confidence?: string;
+    minimum_score?: number;
+    sort?: string;
     limit?: number;
     offset?: number;
   }): Promise<SellCandidateListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestScanV1<{ items: SellCandidateRecommendationRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+    return requestScanV1<{ items: P89SellCandidateRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
       `/sell-candidates${q}`,
     ).then((data) => ({
       items: data.items,
@@ -29307,6 +29419,24 @@ export const apiClient = {
     return requestScanV1<SellCandidateGenerateResponse>("/sell-candidates/generate", {
       method: "POST",
     });
+  },
+
+  getMarketPricingDashboard(): Promise<P89MarketPricingDashboardRead> {
+    return requestScanV1<P89MarketPricingDashboardRead>("/market-pricing/dashboard");
+  },
+
+  getMarketPricingPortfolioTotals(): Promise<P89MarketPricingPortfolioTotalsRead> {
+    return requestScanV1<P89MarketPricingPortfolioTotalsRead>("/market-pricing/portfolio-totals");
+  },
+
+  generateMarketPricingSnapshots(): Promise<{
+    snapshots_created: number;
+    updated: number;
+    high_confidence: number;
+    medium_confidence: number;
+    low_confidence: number;
+  }> {
+    return requestScanV1("/market-pricing/generate", { method: "POST" });
   },
 
   getWantLists(): Promise<WantListListRead> {
@@ -30498,27 +30628,73 @@ export const apiClient = {
     return requestScanV1<P78SellBundleListResponse>("/sell-queue/bundles");
   },
 
-  listListingDrafts(params?: { status?: string; limit?: number; offset?: number }): Promise<P78ListingDraftListResponse> {
+  listListingDrafts(params?: { status?: string; marketplace?: string; limit?: number; offset?: number }): Promise<P89ListingDraftListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, string | number | undefined>) : "";
-    return requestNavPageV1<P78ListingDraftListResponse>(`/listing-drafts${q}`);
+    return requestScanV1<{ items: P89ListingDraftRead[]; pagination: { total_count: number; limit: number; offset: number } }>(
+      `/listing-drafts${q}`,
+    ).then((data) => ({
+      items: data.items,
+      total_items: data.pagination.total_count,
+      limit: data.pagination.limit,
+      offset: data.pagination.offset,
+    }));
   },
 
-  createListingDraft(payload: P78ListingDraftCreate): Promise<P78ListingDraftRead> {
-    return requestScanV1<P78ListingDraftRead>("/listing-drafts", {
+  createListingDraft(payload: {
+    inventory_copy_id?: number;
+    marketplace?: P89ListingDraftMarketplace;
+    sell_candidate_id?: number;
+    market_price_snapshot_id?: number;
+  }): Promise<P89ListingDraftRead> {
+    return requestScanV1<P89ListingDraftRead>("/listing-drafts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getListingDraft(draftId: number): Promise<P89ListingDraftRead> {
+    return requestScanV1<P89ListingDraftRead>(`/listing-drafts/${draftId}`);
+  },
+
+  patchListingDraft(
+    draftId: number,
+    payload: Partial<{
+      title: string;
+      description: string;
+      condition_notes: string;
+      shipping_notes: string;
+      suggested_price: number;
+      minimum_price: number;
+      premium_price: number;
+      status: P89ListingDraftStatus;
+    }>,
+  ): Promise<P89ListingDraftRead> {
+    return requestScanV1<P89ListingDraftRead>(`/listing-drafts/${draftId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  markListingDraftReviewed(draftId: number): Promise<P89ListingDraftRead> {
+    return requestScanV1<P89ListingDraftRead>(`/listing-drafts/${draftId}/mark-reviewed`, { method: "POST" });
+  },
+
+  createP78ListingDraft(payload: P78ListingDraftCreate): Promise<P78ListingDraftRead> {
+    return requestScanV1<P78ListingDraftRead>("/p78/listing-drafts", {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   updateListingDraft(draftId: number, payload: P78ListingDraftUpdate): Promise<P78ListingDraftRead> {
-    return requestScanV1<P78ListingDraftRead>(`/listing-drafts/${draftId}`, {
+    return requestScanV1<P78ListingDraftRead>(`/p78/listing-drafts/${draftId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
   },
 
   getListingDraftPricing(draftId: number): Promise<P78ListingPricingRead> {
-    return requestScanV1<P78ListingPricingRead>(`/listing-drafts/${draftId}/pricing`);
+    return requestScanV1<P78ListingPricingRead>(`/p78/listing-drafts/${draftId}/pricing`);
   },
 
   listListings(params?: { lifecycle_status?: string; limit?: number; offset?: number }): Promise<P78ListingListResponse> {

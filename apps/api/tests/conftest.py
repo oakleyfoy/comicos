@@ -13,7 +13,9 @@ if str(API_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
-from app.models.p88_marketplace_listing import MarketplaceSearchRun, P88MarketplaceListing  # noqa: F401
+from app.models.p89_sell_candidate import P89SellCandidate  # noqa: F401
+from app.models.p89_listing_draft import P89ListingDraft  # noqa: F401
+from app.models.p89_market_price_snapshot import P89MarketPriceSnapshot  # noqa: F401
 from app.models.p88_marketplace_monitoring import (  # noqa: F401
     MarketplaceAlert,
     MarketplaceMonitoringRun,
@@ -91,6 +93,6 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
 
 
 @pytest.fixture
-def session() -> Session:
+def session(client: TestClient) -> Session:
     with Session(get_engine()) as db_session:
         yield db_session

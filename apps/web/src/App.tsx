@@ -70,6 +70,7 @@ import { CollectorQuantityIntelligencePage } from "./pages/CollectorQuantityInte
 import { CollectorAnalyticsPage } from "./pages/CollectorAnalyticsPage";
 import { SellQueuePage } from "./pages/SellQueuePage";
 import { ListingDraftsPage } from "./pages/ListingDraftsPage";
+import { ListingDraftReviewPage } from "./pages/ListingDraftReviewPage";
 import { ListingsPage } from "./pages/ListingsPage";
 import { SellingAnalyticsPage } from "./pages/SellingAnalyticsPage";
 import { BundleOpportunitiesPage } from "./pages/BundleOpportunitiesPage";
@@ -154,6 +155,7 @@ import { ReleasePlatformCertificationPage } from "./pages/ReleasePlatformCertifi
 import { KeyIssueIntelligencePage } from "./pages/KeyIssueIntelligencePage";
 import { MarketUserIntelligencePage } from "./pages/MarketUserIntelligencePage";
 import { SellCandidatePage } from "./pages/SellCandidatePage";
+import { MarketPricingPage } from "./pages/MarketPricingPage";
 import { WantListPage } from "./pages/WantListPage";
 import { CollectionGapPage } from "./pages/CollectionGapPage";
 import { CollectedRunsPage } from "./pages/CollectedRunsPage";
@@ -283,6 +285,7 @@ export default function App() {
         <Route path="/collector-analytics" element={<CollectorAnalyticsPage />} />
         <Route path="/sell-queue" element={<SellQueuePage />} />
         <Route path="/listing-drafts" element={<ListingDraftsPage />} />
+        <Route path="/listing-drafts/:id" element={<ListingDraftReviewPage />} />
         <Route path="/bundle-opportunities" element={<BundleOpportunitiesPage />} />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/selling-analytics" element={<SellingAnalyticsPage />} />
@@ -337,6 +340,7 @@ export default function App() {
         <Route path="/key-issues" element={<KeyIssueIntelligencePage />} />
         <Route path="/market-user-intelligence" element={<MarketUserIntelligencePage />} />
         <Route path="/sell-candidates" element={<SellCandidatePage />} />
+        <Route path="/market-pricing" element={<MarketPricingPage />} />
         <Route path="/want-lists" element={<WantListPage />} />
         <Route path="/collection-gaps" element={<CollectionGapPage />} />
         <Route path="/collected-runs" element={<CollectedRunsPage />} />

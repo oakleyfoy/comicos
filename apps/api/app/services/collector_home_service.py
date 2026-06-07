@@ -11,7 +11,10 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models.grade_before_sell import GradeBeforeSellRecommendation
-from app.models.hold_sell_intelligence import HoldSellRecommendation
+from app.services.listing_draft_service import count_drafts_awaiting_review
+from app.models.p89_listing_draft import P89ListingDraft
+from app.models.p89_sell_candidate import P89SellCandidate
+from app.services.sell_candidate_service import count_active_sell_candidates
 from app.models.p74_foc_purchase import P74FocAlert, P74FocRecommendationSnapshot
 from app.models.p77_collector_profile import P77CollectorBudget
 from app.models.p79_storage_analytics import P79StorageAnalyticsSnapshot
@@ -455,6 +458,30 @@ def _count_marketplace_opportunities(
     return _indicator_from_count(n, updated_at=latest)
 
 
+def _count_listing_drafts_awaiting_review(session: Session, *, owner_user_id: int) -> _SectionIndicator:
+    n = count_drafts_awaiting_review(session, owner_user_id=owner_user_id)
+    latest = session.exec(
+        select(P89ListingDraft.updated_at)
+        .where(P89ListingDraft.owner_user_id == owner_user_id)
+        .where(P89ListingDraft.status == "DRAFT")
+        .order_by(P89ListingDraft.updated_at.desc())
+        .limit(1)
+    ).first()
+    return _indicator_from_count(n, updated_at=latest)
+
+
+def _count_p89_sell_candidates(session: Session, *, owner_user_id: int) -> _SectionIndicator:
+    n = count_active_sell_candidates(session, owner_user_id=owner_user_id)
+    latest = session.exec(
+        select(P89SellCandidate.updated_at)
+        .where(P89SellCandidate.owner_user_id == owner_user_id)
+        .where(P89SellCandidate.status == "ACTIVE")
+        .order_by(P89SellCandidate.updated_at.desc())
+        .limit(1)
+    ).first()
+    return _indicator_from_count(n, updated_at=latest)
+
+
 def _count_hold_sell_recommendations(session: Session, *, owner_user_id: int) -> _SectionIndicator:
     n = int(
         session.exec(
@@ -603,7 +630,10 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
             session, owner_user_id=uid, recommendations=("STRONG_BUY",), include_new_alerts=True
         ),
     )
-    ind_sell = _timed_indicator("sell_alerts", lambda: _count_hold_sell_recommendations(session, owner_user_id=uid))
+    ind_sell = _timed_indicator("sell_alerts", lambda: _count_p89_sell_candidates(session, owner_user_id=uid))
+    ind_listing_drafts = _timed_indicator(
+        "listing_drafts", lambda: _count_listing_drafts_awaiting_review(session, owner_user_id=uid)
+    )
     ind_grade = _timed_indicator("grade_alerts", lambda: _count_grade_candidates(session, owner_user_id=uid))
     ind_storage = _timed_indicator("storage_issues", lambda: _indicator_storage(session, owner_user_id=uid))
     ind_deals = _timed_indicator(
@@ -642,10 +672,17 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
         ),
         _section_skipped(
             "sell_alerts",
-            "Sell alerts",
-            empty_hint="Open Sell Queue for sell recommendations.",
+            "Sell Opportunities",
+            empty_hint="Open Sell Candidates when ComicOS surfaces books to consider selling.",
             reason=skipped,
             indicator=ind_sell,
+        ),
+        _section_skipped(
+            "listing_drafts",
+            "Listing drafts",
+            empty_hint="Open Listing Drafts to review copy-ready marketplace drafts.",
+            reason=skipped,
+            indicator=ind_listing_drafts,
         ),
         _section_skipped(
             "grade_alerts",

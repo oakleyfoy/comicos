@@ -120,7 +120,7 @@ def test_listing_draft_and_pricing(client: TestClient, session: Session) -> None
     owner_id = int(session.exec(select(User).where(User.email == "p78-draft@example.com")).one().id or 0)
     copy_id = _seed_sell_copy(session, owner_user_id=owner_id, copies=1)
     create = client.post(
-        "/api/v1/listing-drafts",
+        "/api/v1/p78/listing-drafts",
         headers=auth_headers(token),
         json={"inventory_copy_id": copy_id, "status": "DRAFT"},
     )
@@ -131,12 +131,12 @@ def test_listing_draft_and_pricing(client: TestClient, session: Session) -> None
     assert draft["market_price"] > 0
     assert draft["premium_price"] > draft["market_price"]
 
-    pricing = client.get(f"/api/v1/listing-drafts/{draft['id']}/pricing", headers=auth_headers(token))
+    pricing = client.get(f"/api/v1/p78/listing-drafts/{draft['id']}/pricing", headers=auth_headers(token))
     assert pricing.status_code == 200
     assert pricing.json()["data"]["fmv"] >= 0
 
     update = client.put(
-        f"/api/v1/listing-drafts/{draft['id']}",
+        f"/api/v1/p78/listing-drafts/{draft['id']}",
         headers=auth_headers(token),
         json={"status": "READY", "title": "Absolute Batman #1 NM DC"},
     )

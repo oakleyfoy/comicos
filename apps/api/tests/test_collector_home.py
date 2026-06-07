@@ -171,7 +171,7 @@ def test_collector_home_indicator_lookup_error_does_not_fail_home(client: TestCl
     def _boom(*_args, **_kwargs):
         raise RuntimeError("count failed")
 
-    monkeypatch.setattr(collector_home_service, "_count_hold_sell_recommendations", _boom)
+    monkeypatch.setattr(collector_home_service, "_count_p89_sell_candidates", _boom)
     resp = client.get("/api/v1/collector-home", headers=auth_headers(token))
     assert resp.status_code == 200
     sell = next(s for s in resp.json()["data"]["sections"] if s["key"] == "sell_alerts")

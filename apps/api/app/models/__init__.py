@@ -411,6 +411,9 @@ from app.models.purchase_quantity import PurchaseQuantityRecommendation
 from app.models.purchase_variant import PurchaseVariantRecommendation
 from app.models.purchase_budget import PurchaseBudget, PurchaseBudgetAllocation
 from app.models.sell_candidate import SellCandidateRecommendation
+from app.models.p89_sell_candidate import P89SellCandidate
+from app.models.p89_market_price_snapshot import P89MarketPriceSnapshot
+from app.models.p89_listing_draft import P89ListingDraft
 from app.models.portfolio_certification import PortfolioCertificationRun
 from app.models.acquisition_certification import AcquisitionCertificationRun
 from app.models.exit_candidate import ExitCandidate
@@ -1391,6 +1394,9 @@ __all__ = [
     "PurchaseBudget",
     "PurchaseBudgetAllocation",
     "SellCandidateRecommendation",
+    "P89SellCandidate",
+    "P89MarketPriceSnapshot",
+    "P89ListingDraft",
     "PortfolioCertificationRun",
     "AcquisitionCertificationRun",
     "ExitCandidate",

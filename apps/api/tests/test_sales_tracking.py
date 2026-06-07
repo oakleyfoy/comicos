@@ -10,7 +10,7 @@ from test_p78_sell_workflow import _seed_sell_copy
 
 def _publish_and_sync(client: TestClient, token: str, copy_id: int, qty: int = 1) -> int:
     draft = client.post(
-        "/api/v1/listing-drafts",
+        "/api/v1/p78/listing-drafts",
         headers=auth_headers(token),
         json={"inventory_copy_id": copy_id, "status": "READY", "suggested_sell_quantity": qty},
     )

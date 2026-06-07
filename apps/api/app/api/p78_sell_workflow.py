@@ -64,7 +64,7 @@ def v1_sell_queue_bundles(
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
-@p78_sell_workflow_v1_router.get("/api/v1/listing-drafts", response_model=ScanApiV1Envelope)
+@p78_sell_workflow_v1_router.get("/api/v1/p78/listing-drafts", response_model=ScanApiV1Envelope)
 def v1_list_listing_drafts(
     status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
@@ -85,7 +85,7 @@ def v1_list_listing_drafts(
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
 
 
-@p78_sell_workflow_v1_router.post("/api/v1/listing-drafts", response_model=ScanApiV1Envelope, status_code=status.HTTP_201_CREATED)
+@p78_sell_workflow_v1_router.post("/api/v1/p78/listing-drafts", response_model=ScanApiV1Envelope, status_code=status.HTTP_201_CREATED)
 def v1_create_listing_draft(
     payload: P78ListingDraftCreate,
     session: Session = Depends(get_session),
@@ -97,7 +97,7 @@ def v1_create_listing_draft(
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
-@p78_sell_workflow_v1_router.put("/api/v1/listing-drafts/{draft_id}", response_model=ScanApiV1Envelope)
+@p78_sell_workflow_v1_router.put("/api/v1/p78/listing-drafts/{draft_id}", response_model=ScanApiV1Envelope)
 def v1_update_listing_draft(
     draft_id: int,
     payload: P78ListingDraftUpdate,
@@ -110,7 +110,7 @@ def v1_update_listing_draft(
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
-@p78_sell_workflow_v1_router.get("/api/v1/listing-drafts/{draft_id}/pricing", response_model=ScanApiV1Envelope)
+@p78_sell_workflow_v1_router.get("/api/v1/p78/listing-drafts/{draft_id}/pricing", response_model=ScanApiV1Envelope)
 def v1_listing_draft_pricing(
     draft_id: int,
     session: Session = Depends(get_session),

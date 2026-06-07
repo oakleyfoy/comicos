@@ -12,7 +12,9 @@ from app.services.collector_notification_service import list_collector_notificat
 from app.services.collection_valuation_service import build_collection_forecast, build_collection_risk
 from app.services.marketplace_acquisition_service import build_acquisition_dashboard, list_acquisition_opportunities
 from app.services.p77_personalization_engine import load_personalization_context
-from app.services.p78_sell_queue_service import build_sell_queue
+from app.services.sell_candidate_service import build_sell_candidate_briefing_highlights
+from app.services.listing_draft_service import build_listing_draft_briefing
+from app.services.p89_market_pricing_service import build_market_pricing_briefing_summary
 from app.services.marketplace_command_center_service import build_marketplace_command_center_briefing_section
 from app.services.p81_discovery_personalization_service import list_future_pull_list, list_personalized_discovery
 
@@ -77,9 +79,11 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     deals = list_acquisition_opportunities(session, owner_user_id=owner_user_id, limit=8, offset=0, refresh=False)
     discovery = list_personalized_discovery(session, owner_user_id=owner_user_id, limit=5, offset=0, refresh=False)
     foc = list_future_pull_list(session, owner_user_id=owner_user_id, limit=5, offset=0, refresh=False)
-    sell = build_sell_queue(session, owner_user_id=owner_user_id, limit=5, offset=0, refresh_upstream=False)
     forecast = build_collection_forecast(session, owner_user_id=owner_user_id, persist=False)
     ctx = load_personalization_context(session, owner_user_id=owner_user_id)
+    sell_highlights = build_sell_candidate_briefing_highlights(session, owner_user_id=owner_user_id)
+    market_pricing_summary = build_market_pricing_briefing_summary(session, owner_user_id=owner_user_id)
+    listing_drafts = build_listing_draft_briefing(session, owner_user_id=owner_user_id)
     sections = {
         "discovery_opportunities": [d.opportunity.title for d in discovery.items[:5]],
         "marketplace_deals": [d.title for d in deals.items if d.recommendation in {"STRONG_BUY", "GOOD_BUY"}][:5],
@@ -89,7 +93,18 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
             session, owner_user_id=owner_user_id
         ),
         "foc_reminders": [p.title for p in foc.items[:5]],
-        "sell_alerts": [s.title for s in sell.items[:5]],
+        "sell_opportunities": sell_highlights,
+        "market_pricing_summary": market_pricing_summary,
+        "listing_drafts": listing_drafts,
+        "sell_alerts": [
+            t
+            for t in (
+                sell_highlights.get("top_sell_candidate"),
+                sell_highlights.get("highest_profit_candidate"),
+                sell_highlights.get("highest_confidence_candidate"),
+            )
+            if t
+        ],
         "portfolio_movement": {"current_value": forecast.current_value},
         "budget_warnings": [ctx.budget_state] if ctx.budget_state != "GREEN" else [],
     }
@@ -100,7 +115,7 @@ def generate_daily_briefing(session: Session, *, owner_user_id: int, briefing_da
     if sections["foc_reminders"]:
         actions.append("Confirm FOC / future pull items")
     if sections["sell_alerts"]:
-        actions.append("Triage sell queue priorities")
+        actions.append("Review Sell Candidates for exit opportunities")
     if not actions:
         actions.append("Scan discovery feed for new releases")
     row = CollectorBriefing(

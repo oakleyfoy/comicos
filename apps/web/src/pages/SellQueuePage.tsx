@@ -38,7 +38,7 @@ export function SellQueuePage(): JSX.Element {
   async function createDraft(copyId: number): Promise<void> {
     setCreating(copyId);
     try {
-      await apiClient.createListingDraft({ inventory_copy_id: copyId, status: "DRAFT" });
+      await apiClient.createP78ListingDraft({ inventory_copy_id: copyId, status: "DRAFT" });
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create draft.");

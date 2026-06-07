@@ -14,7 +14,7 @@ def test_publish_and_sync_listings(client: TestClient, session: Session) -> None
     owner_id = int(session.exec(select(User).where(User.email == "p78-sync@example.com")).one().id or 0)
     copy_id = _seed_sell_copy(session, owner_user_id=owner_id, copies=2)
     draft = client.post(
-        "/api/v1/listing-drafts",
+        "/api/v1/p78/listing-drafts",
         headers=auth_headers(token),
         json={"inventory_copy_id": copy_id, "status": "READY", "suggested_sell_quantity": 1},
     )
@@ -45,7 +45,7 @@ def test_inventory_reservation_on_publish(client: TestClient, session: Session) 
     owner_id = int(session.exec(select(User).where(User.email == "p78-reserve@example.com")).one().id or 0)
     copy_id = _seed_sell_copy(session, owner_user_id=owner_id, copies=5)
     draft = client.post(
-        "/api/v1/listing-drafts",
+        "/api/v1/p78/listing-drafts",
         headers=auth_headers(token),
         json={"inventory_copy_id": copy_id, "status": "READY", "suggested_sell_quantity": 3},
     )
