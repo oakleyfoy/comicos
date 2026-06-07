@@ -7,6 +7,7 @@ import {
   homeHasSectionItemsReady,
   prepareCollectorHomeSections,
   sectionIndicatorDisplay,
+  sortCollectorHomeSectionsForDisplay,
   SECTION_SKIPPED_LAUNCHER,
 } from "../collectorHomePresentation";
 
@@ -80,14 +81,43 @@ describe("collectorHomePresentation", () => {
     expect(buildTodaysActionsCompactSummary([])).toBe("No immediate actions require attention.");
     expect(
       buildTodaysActionsCompactSummary([
-        { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 4 } as never,
-        { key: "buy_alerts", indicator_status: "HAS_ITEMS", count: 12 } as never,
+        { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
       ]),
-    ).toBe("Review 16 opportunities across ComicOS.");
+    ).toBe("Marketplace Deals has 5 opportunities ready for review.");
+    expect(
+      buildTodaysActionsCompactSummary([
+        { key: "marketplace_deals", indicator_status: "HAS_ITEMS", count: 5 } as never,
+        { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 2 } as never,
+      ]),
+    ).toBe("5 marketplace opportunities and 2 sell opportunities are ready for review.");
     expect(
       buildTodaysActionsCompactSummary([
         { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: null } as never,
       ]),
     ).toBe("Some dashboards have items ready for review.");
+  });
+
+  it("sorts HAS_ITEMS sections before EMPTY while preserving order within rank", () => {
+    const sorted = sortCollectorHomeSectionsForDisplay([
+      { key: "buy_alerts", indicator_status: "EMPTY" } as never,
+      { key: "marketplace_deals", indicator_status: "HAS_ITEMS" } as never,
+      { key: "sell_alerts", indicator_status: "HAS_ITEMS" } as never,
+      { key: "grade_alerts", indicator_status: "UNKNOWN" } as never,
+    ]);
+    expect(sorted.map((s) => s.key)).toEqual([
+      "marketplace_deals",
+      "sell_alerts",
+      "grade_alerts",
+      "buy_alerts",
+    ]);
+  });
+
+  it("uses collector-facing section labels", () => {
+    const prepared = prepareCollectorHomeSections([
+      { key: "foc_alerts", title: "FOC alerts", items: [], empty_hint: "", status: "SKIPPED", error: "" },
+      { key: "storage_issues", title: "Storage", items: [], empty_hint: "", status: "SKIPPED", error: "" },
+      { key: "future_pull_list", title: "Future", items: [], empty_hint: "", status: "SKIPPED", error: "" },
+    ]);
+    expect(prepared.map((s) => s.title)).toEqual(["FOC & Preorders", "Find a Book", "Upcoming Releases"]);
   });
 });

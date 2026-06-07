@@ -8,20 +8,31 @@ export const SECTION_LABELS: Record<string, string> = {
   buy_alerts: "Buy Opportunities",
   sell_alerts: "Sell Opportunities",
   grade_alerts: "Grade Candidates",
-  foc_alerts: "FOC Watch",
-  storage_issues: "Storage Check",
+  foc_alerts: "FOC & Preorders",
+  storage_issues: "Find a Book",
   marketplace_deals: "Marketplace Deals",
-  future_pull_list: "Upcoming Pull List",
+  future_pull_list: "Upcoming Releases",
+};
+
+/** Lowercase phrases for multi-section Today’s Actions summary. */
+export const SECTION_OPPORTUNITY_PHRASE: Record<string, string> = {
+  buy_alerts: "buy opportunities",
+  sell_alerts: "sell opportunities",
+  grade_alerts: "grade candidates",
+  foc_alerts: "FOC and preorder opportunities",
+  storage_issues: "books to locate",
+  marketplace_deals: "marketplace opportunities",
+  future_pull_list: "upcoming releases",
 };
 
 export const SECTION_EMPTY_MESSAGES: Record<string, string> = {
   buy_alerts: "No buy alerts right now",
   sell_alerts: "No sell alerts right now",
   grade_alerts: "No grade candidates right now",
-  storage_issues: "No storage issues found",
+  storage_issues: "No location issues found right now",
   marketplace_deals: "No marketplace deal alerts right now",
   future_pull_list: "No upcoming release alerts right now",
-  foc_alerts: "No FOC alerts available yet",
+  foc_alerts: "Review upcoming Final Order Cutoff decisions and preorder opportunities.",
 };
 
 /** Friendly copy when backend marks section SKIPPED (full data on dedicated page). */
@@ -45,13 +56,13 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
     to: "/grade-before-sell",
   },
   foc_alerts: {
-    body: "Open the FOC dashboard to review this week's preorder decisions.",
-    button: "Review FOC Watch",
+    body: "Review upcoming Final Order Cutoff decisions and preorder opportunities.",
+    button: "Review FOC & Preorders",
     to: "/foc-dashboard",
   },
   storage_issues: {
-    body: "Open storage tools to review boxes, locations, and organization issues.",
-    button: "Review Storage",
+    body: "Locate books, boxes, and storage locations across your collection.",
+    button: "Find a Book",
     to: "/storage-dashboard",
   },
   marketplace_deals: {
@@ -60,7 +71,7 @@ export const SECTION_SKIPPED_LAUNCHER: Record<
     to: "/marketplace-opportunities",
   },
   future_pull_list: {
-    body: "Open upcoming releases to review future books tied to your collection.",
+    body: "Review upcoming releases and books related to your collection interests.",
     button: "Review Upcoming Releases",
     to: "/future-pull-list",
   },
@@ -71,8 +82,8 @@ export const SECTION_EMPTY_ACTIONS: Record<string, { label: string; to: string }
   buy_alerts: { label: "Review Buy Opportunities", to: "/marketplace-opportunities" },
   sell_alerts: { label: "Review Sell Queue", to: "/sell-queue" },
   grade_alerts: { label: "Review Grade Candidates", to: "/grade-before-sell" },
-  foc_alerts: { label: "Review FOC Watch", to: "/foc-dashboard" },
-  storage_issues: { label: "Review Storage", to: "/storage-dashboard" },
+  foc_alerts: { label: "Review FOC & Preorders", to: "/foc-dashboard" },
+  storage_issues: { label: "Find a Book", to: "/storage-dashboard" },
   marketplace_deals: { label: "Review Marketplace Deals", to: "/marketplace-opportunities" },
   future_pull_list: { label: "Review Upcoming Releases", to: "/future-pull-list" },
 };
@@ -162,11 +173,61 @@ export function buildTodaysActionsCompactSummary(sections: P85CollectorHomeRead[
   if (hasNullCount) {
     return "Some dashboards have items ready for review.";
   }
-  const totalCount = actionable.reduce((sum, s) => sum + Math.max(0, Number(s.count) || 0), 0);
-  if (totalCount <= 0) {
+
+  const withCounts = actionable
+    .map((s) => ({
+      key: s.key,
+      count: Math.max(0, Number(s.count) || 0),
+    }))
+    .filter((row) => row.count > 0);
+
+  if (withCounts.length === 0) {
     return "Some dashboards have items ready for review.";
   }
-  return `Review ${totalCount} opportunities across ComicOS.`;
+
+  if (withCounts.length === 1) {
+    const row = withCounts[0];
+    const label = SECTION_LABELS[row.key] ?? "Dashboard";
+    return `${label} has ${row.count} opportunities ready for review.`;
+  }
+
+  const parts = withCounts.map((row) => {
+    const phrase = SECTION_OPPORTUNITY_PHRASE[row.key] ?? "opportunities";
+    return `${row.count} ${phrase}`;
+  });
+  if (parts.length === 2) {
+    return `${parts[0]} and ${parts[1]} are ready for review.`;
+  }
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]} are ready for review.`;
+}
+
+const INDICATOR_SORT_RANK: Record<SectionIndicatorStatus, number> = {
+  HAS_ITEMS: 0,
+  STALE: 1,
+  UNKNOWN: 2,
+  EMPTY: 3,
+  ERROR: 4,
+};
+
+export function indicatorStatusSortRank(status: string | null | undefined): number {
+  const key = (status ?? "UNKNOWN") as SectionIndicatorStatus;
+  return INDICATOR_SORT_RANK[key] ?? INDICATOR_SORT_RANK.UNKNOWN;
+}
+
+export function sortCollectorHomeSectionsForDisplay(
+  sections: P85CollectorHomeRead["sections"],
+): P85CollectorHomeRead["sections"] {
+  const rest = sections.filter((s) => s.key !== "discovery_alerts");
+  return rest
+    .map((section, index) => ({ section, index }))
+    .sort((a, b) => {
+      const rankDiff = indicatorStatusSortRank(a.section.indicator_status) - indicatorStatusSortRank(b.section.indicator_status);
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+      return a.index - b.index;
+    })
+    .map(({ section }) => section);
 }
 
 function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): CollectorHomeDisplaySection {
@@ -259,8 +320,8 @@ export function prepareCollectorHomeSections(
   sections: P85CollectorHomeRead["sections"],
 ): CollectorHomeDisplaySection[] {
   const discovery = sections.find((s) => s.key === "discovery_alerts");
-  const rest = sections.filter((s) => s.key !== "discovery_alerts");
-  const prepared = rest.map(sectionDisplay);
+  const sorted = sortCollectorHomeSectionsForDisplay(sections);
+  const prepared = sorted.map(sectionDisplay);
 
   if (discovery) {
     if (discovery.items.length > 0) {
@@ -311,6 +372,6 @@ export function indicatorBadgeClassName(tone: CollectorHomeDisplaySection["indic
       return "bg-slate-100 text-slate-700 ring-slate-200";
     case "unknown":
     default:
-      return "bg-slate-100 text-slate-600 ring-slate-200";
+      return "bg-amber-50 text-amber-900 ring-amber-200";
   }
 }

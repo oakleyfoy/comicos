@@ -90,7 +90,7 @@ describe("CollectorHomePage", () => {
     expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
     expect(screen.queryByText("Review dashboards")).not.toBeInTheDocument();
     expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent(
-      "Review 4 opportunities across ComicOS.",
+      "Sell Opportunities has 4 opportunities ready for review.",
     );
     expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
     expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
@@ -101,6 +101,83 @@ describe("CollectorHomePage", () => {
     expect(
       screen.getByText("Open marketplace acquisition tools to review deal opportunities."),
     ).toBeInTheDocument();
+  });
+
+  it("shows renamed collector-facing cards and priority order", async () => {
+    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
+      baseHome({
+        sections: [
+          {
+            key: "buy_alerts",
+            title: "Buy",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "marketplace_deals",
+            title: "Deals",
+            items: [],
+            empty_hint: "",
+            count: 5,
+            indicator_status: "HAS_ITEMS",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "foc_alerts",
+            title: "FOC",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "storage_issues",
+            title: "Storage",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "UNKNOWN",
+            status: "SKIPPED",
+            error: "",
+          },
+          {
+            key: "future_pull_list",
+            title: "Future",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+        ],
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("FOC & Preorders")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("FOC Watch")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Find a Book" })).toBeInTheDocument();
+    expect(screen.queryByText("Storage Check")).not.toBeInTheDocument();
+    expect(screen.getByText("Upcoming Releases")).toBeInTheDocument();
+    expect(screen.queryByText("Upcoming Pull List")).not.toBeInTheDocument();
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((el) => el.textContent)
+      .filter((t) => t && t !== "Today's actions");
+    expect(headings[0]).toBe("Marketplace Deals");
   });
 
   it("shows no-immediate-actions summary when nothing has items", async () => {
