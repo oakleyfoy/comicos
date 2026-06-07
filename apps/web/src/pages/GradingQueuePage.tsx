@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P72GradingQueueEntryRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { ContextualPageLinks } from "../components/ContextualPageLinks";
 import { PageHeader } from "../components/PageHeader";
 import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
@@ -58,14 +58,15 @@ export function GradingQueuePage(): JSX.Element {
         description="Filter, search, and track per-book grading status (P72-02)."
       />
       <NavPageLoadBanner status={loadStatus} message={loadMessage} />
-      <div className="mb-4 flex flex-wrap gap-3 text-sm">
-        <Link className="text-indigo-600 hover:underline" to="/grading-operations">
-          Operations dashboard
-        </Link>
-        <Link className="text-indigo-600 hover:underline" to="/grading-batches">
-          Submission batches
-        </Link>
-      </div>
+      <ContextualPageLinks
+        links={[
+          { label: "Platform Status", to: "/grading-platform#platform-status" },
+          { label: "Validation & Certification", to: "/grading-platform#validation-certification" },
+          { label: "Grading Analytics", to: "/grading-analytics" },
+          { label: "Operations dashboard", to: "/grading-operations" },
+          { label: "Submission batches", to: "/grading-batches" },
+        ]}
+      />
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-sm text-slate-600">
           Status

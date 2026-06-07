@@ -115,10 +115,14 @@ class P68ObservationsListRead(BaseModel):
 
 
 class P68SnapshotsListRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[P68SnapshotRead]
     total: int
 
 
 class P68SnapshotsBuildRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     built: int
     items: list[P68SnapshotRead]

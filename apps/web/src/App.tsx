@@ -315,7 +315,7 @@ export default function App() {
         <Route path="/purchase-profile" element={<PurchaseProfilePage />} />
         <Route path="/purchase-quantities" element={<PurchaseQuantityPage />} />
         <Route path="/purchase-variants" element={<PurchaseVariantPage />} />
-        <Route path="/purchase-budget" element={<PurchaseBudgetPage />} />
+        <Route path="/purchase-budget" element={<Navigate to="/collector-budget" replace />} />
         <Route path="/spec-intelligence" element={<SpecIntelligencePage />} />
         <Route path="/spec-inputs" element={<SpecInputsPage />} />
         <Route path="/spec-baseline" element={<SpecBaselinePage />} />

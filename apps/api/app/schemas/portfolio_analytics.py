@@ -150,6 +150,8 @@ class P67InvestorDashboardSnapshotRead(_Orm):
 
 
 class P67PlatformBuildRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     steps: list[dict] = Field(default_factory=list)
     certification: dict = Field(default_factory=dict)
 

@@ -5,6 +5,7 @@
     { "path": "/collector-command-center", "apis": ["/api/v1/collector-command-center"] },
     { "path": "/notifications", "apis": ["/api/v1/notifications"] },
     { "path": "/daily-briefing", "apis": ["/api/v1/briefings/daily"] },
+    { "path": "/weekly-briefing", "apis": ["/api/v1/briefings/weekly"] },
     { "path": "/workflow-health", "apis": ["/api/v1/platform/workflow-health"] },
     { "path": "/pull-lists", "apis": ["/api/v1/pull-lists"] },
     { "path": "/foc-dashboard", "apis": ["/api/v1/foc-dashboard"] },

@@ -47,7 +47,7 @@ export function PatriotPageLayout({
               </div>
               {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
             </div>
-            {showExpansionNav ? <CollectorExpansionNav variant="patriot" /> : null}
+            {showExpansionNav ? <CollectorExpansionNav /> : null}
             {subNav}
             {headerExtra ? <div className="text-sm text-blue-100">{headerExtra}</div> : null}
           </div>

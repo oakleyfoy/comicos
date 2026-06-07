@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "../AppShell";
-import { NAV_EXPANDED_STORAGE_KEY } from "../../config/appNavigation";
+import { NAV_EXPANDED_STORAGE_KEY, NAV_SIDEBAR_SCROLL_KEY } from "../../config/appNavigation";
 
 const mockLogout = vi.fn();
 
@@ -31,55 +31,62 @@ function getMainNav() {
 describe("AppShell navigation", () => {
   afterEach(() => {
     cleanup();
+    sessionStorage.removeItem(NAV_SIDEBAR_SCROLL_KEY);
   });
 
   beforeEach(() => {
     localStorage.removeItem(NAV_EXPANDED_STORAGE_KEY);
+    sessionStorage.removeItem(NAV_SIDEBAR_SCROLL_KEY);
     mockLogout.mockReset();
   });
 
   it("shows Collector Home in nav and header shortcut", () => {
     renderShell();
     expect(screen.getAllByRole("link", { name: "Collector Home" }).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole("button", { name: "Home" })).toBeInTheDocument();
+    expect(within(getMainNav()).getByRole("button", { name: "Home" })).toBeInTheDocument();
   });
 
-  it("renders Primary group expanded with core links", () => {
-    renderShell();
+  it("renders workflow groups with core home links visible on collector home", () => {
+    renderShell("/collector-home");
     const nav = getMainNav();
-    expect(within(nav).getByRole("button", { name: "Primary" })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: "Daily Actions" })).toBeVisible();
-    expect(within(nav).getByRole("link", { name: "Unified Intelligence" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Today's Actions" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Command Center" })).toBeVisible();
   });
 
-  it("collapses and expands non-primary groups", () => {
+  it("does not show phase pages removed from the sidebar", () => {
     renderShell();
     const nav = getMainNav();
-    const collectionToggle = within(nav).getByRole("button", { name: "Collection" });
-    expect(within(nav).queryByRole("link", { name: "Want Lists" })).not.toBeInTheDocument();
-    fireEvent.click(collectionToggle);
-    expect(within(nav).getByRole("link", { name: "Want Lists" })).toBeVisible();
-    fireEvent.click(collectionToggle);
-    expect(within(nav).queryByRole("link", { name: "Want Lists" })).not.toBeInTheDocument();
+    for (const group of ["Grade", "Discovery", "Storage", "Buy", "Inventory"]) {
+      fireEvent.click(within(nav).getByRole("button", { name: group }));
+    }
+    expect(within(nav).queryByRole("link", { name: "Grading Platform" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Release Intelligence" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Box Contents" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Assignment" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Purchase Budget" })).not.toBeInTheDocument();
   });
 
   it("auto-expands the group for the active route", () => {
-    renderShell("/operations-reliability");
-    const nav = getMainNav();
-    expect(within(nav).getByRole("link", { name: "Operations Reliability" })).toBeVisible();
-    expect(within(nav).getByRole("link", { name: "Production Readiness" })).toBeVisible();
-  });
-
-  it("groups operations admin pages under Operations / Admin", () => {
     renderShell("/production-readiness");
     const nav = getMainNav();
-    const opsSection = within(nav).getByRole("button", { name: "Operations / Admin" }).closest("section");
-    expect(opsSection).not.toBeNull();
-    const links = within(opsSection as HTMLElement).getAllByRole("link");
-    const labels = links.map((node) => node.textContent);
-    expect(labels).toContain("Operations Reliability");
-    expect(labels).toContain("Production Readiness");
-    expect(labels).toContain("Operations");
+    expect(within(nav).getByRole("link", { name: "Production Readiness" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Portfolio Analytics" })).toBeVisible();
+  });
+
+  it("keeps Collector Budget under Settings", () => {
+    renderShell("/collector-budget");
+    const nav = getMainNav();
+    expect(within(nav).getByRole("link", { name: "Collector Budget" })).toBeVisible();
+  });
+
+  it("restores sidebar scroll position after navigation", () => {
+    sessionStorage.setItem(NAV_SIDEBAR_SCROLL_KEY, "240");
+    const { unmount } = renderShell("/collector-home");
+    const nav = getMainNav();
+    expect(nav.scrollTop).toBe(240);
+    unmount();
+    renderShell("/sell-queue");
+    expect(getMainNav().scrollTop).toBe(240);
   });
 
   it("does not duplicate nav link labels in the sidebar", () => {

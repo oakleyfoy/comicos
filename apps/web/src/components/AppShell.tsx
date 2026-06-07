@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -6,10 +6,34 @@ import { ComicOsMark } from "./ComicOsMark";
 import {
   DEFAULT_EXPANDED_GROUP_IDS,
   NAV_EXPANDED_STORAGE_KEY,
+  NAV_SIDEBAR_SCROLL_KEY,
   findGroupIdForPath,
   visibleNavGroups,
   type NavLinkItem,
 } from "../config/appNavigation";
+
+const SIDEBAR_SCROLL_SAVE_DEBOUNCE_MS = 120;
+
+function readSidebarScrollTop(): number {
+  try {
+    const raw = sessionStorage.getItem(NAV_SIDEBAR_SCROLL_KEY);
+    if (raw == null) {
+      return 0;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeSidebarScrollTop(scrollTop: number): void {
+  try {
+    sessionStorage.setItem(NAV_SIDEBAR_SCROLL_KEY, String(Math.max(0, Math.round(scrollTop))));
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 function loadExpandedGroupIds(): Set<string> {
   try {
@@ -61,8 +85,48 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => loadExpandedGroupIds());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const sidebarNavRef = useRef<HTMLElement | null>(null);
+  const sidebarScrollSaveTimerRef = useRef<number | null>(null);
 
   const groups = useMemo(() => visibleNavGroups(isOpsAdmin), [isOpsAdmin]);
+
+  const handleSidebarScroll = useCallback(() => {
+    const el = sidebarNavRef.current;
+    if (!el) {
+      return;
+    }
+    if (sidebarScrollSaveTimerRef.current != null) {
+      window.clearTimeout(sidebarScrollSaveTimerRef.current);
+    }
+    sidebarScrollSaveTimerRef.current = window.setTimeout(() => {
+      writeSidebarScrollTop(el.scrollTop);
+      sidebarScrollSaveTimerRef.current = null;
+    }, SIDEBAR_SCROLL_SAVE_DEBOUNCE_MS);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = sidebarNavRef.current;
+    if (!el) {
+      return;
+    }
+    const saved = readSidebarScrollTop();
+    const apply = () => {
+      if (sidebarNavRef.current) {
+        sidebarNavRef.current.scrollTop = saved;
+      }
+    };
+    apply();
+    const frame = window.requestAnimationFrame(apply);
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname, groups.length, mobileNavOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarScrollSaveTimerRef.current != null) {
+        window.clearTimeout(sidebarScrollSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   const ensureActiveGroupExpanded = useCallback(
     (pathname: string) => {
@@ -201,8 +265,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           } w-full shrink-0 lg:block lg:w-72 xl:w-80`}
         >
           <nav
+            ref={sidebarNavRef}
             aria-label="Main navigation"
             className="max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-1 lg:sticky lg:top-[4.25rem]"
+            onScroll={handleSidebarScroll}
           >
             {renderNavGroups()}
           </nav>

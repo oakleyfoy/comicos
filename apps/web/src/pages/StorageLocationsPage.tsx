@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P79StorageLocationRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { ContextualPageLinks } from "../components/ContextualPageLinks";
 import { PageHeader } from "../components/PageHeader";
 import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
@@ -70,6 +71,12 @@ export function StorageLocationsPage(): JSX.Element {
         description="Physical hierarchy: location → room → rack → shelf → box → slot (P79-01)."
       />
       <NavPageLoadBanner status={loadStatus} message={loadMessage} />
+      <ContextualPageLinks
+        links={[
+          { label: "Assign Inventory", to: "/storage-assignment" },
+          { label: "View Box Contents", to: "/storage-box-contents" },
+        ]}
+      />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
       <section className="mb-6 flex flex-wrap gap-2">
         <input

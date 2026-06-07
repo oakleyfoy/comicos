@@ -87,7 +87,7 @@ export function CollectorCommandCenterPage(): JSX.Element {
           {loadStatus && loadStatus !== "OK" && loadMessage ? (
             <p className="rounded-md border border-red-400/50 bg-white/10 px-3 py-2 text-sm text-red-100">{loadMessage}</p>
           ) : null}
-          <CollectorExpansionNav variant="patriot" />
+          <CollectorExpansionNav />
         </div>
       </header>
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">

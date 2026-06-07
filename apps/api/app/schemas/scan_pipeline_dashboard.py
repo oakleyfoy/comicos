@@ -58,6 +58,8 @@ class ScanPipelineDashboardSummaryRead(BaseModel):
 
 
 class ScanPipelineDashboardRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     summary: ScanPipelineDashboardSummaryRead
     active_sessions: list[ScanSessionSummaryRead] = Field(default_factory=list)
     recent_sessions: list[ScanSessionSummaryRead] = Field(default_factory=list)

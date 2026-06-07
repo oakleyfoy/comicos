@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P83CollectionRiskRead } from "../api/client";
-import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
 
 export function CollectionRiskPage(): JSX.Element {
   const [risk, setRisk] = useState<P83CollectionRiskRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
@@ -14,28 +14,28 @@ export function CollectionRiskPage(): JSX.Element {
         setRisk(await apiClient.getCollectionRisk());
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load risk.");
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-3xl space-y-3">
-          <h1 className="text-xl font-semibold">Collection risk</h1>
-          <CollectorExpansionNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-4 py-6 text-sm">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-        {risk ? (
-          <p>
+    <PatriotPageLayout
+      eyebrow="P83"
+      title="Collection risk"
+      showExpansionNav
+      error={error}
+      loading={loading && !risk}
+      maxWidthClass="max-w-3xl"
+    >
+      {risk ? (
+        <PatriotPanel>
+          <p className="text-blue-900">
             {risk.risk_category} — score {risk.risk_score.toFixed(1)}
           </p>
-        ) : (
-          <p className="text-slate-400">Loading…</p>
-        )}
-      </main>
-    </div>
+        </PatriotPanel>
+      ) : null}
+    </PatriotPageLayout>
   );
 }

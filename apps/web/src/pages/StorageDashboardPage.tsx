@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P79StorageDashboardRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { ContextualPageLinks } from "../components/ContextualPageLinks";
 import { PageHeader } from "../components/PageHeader";
 import { NavPageLoadBanner } from "../components/NavPageLoadBanner";
 import { StatusBanner } from "../components/StatusBanner";
@@ -40,6 +41,12 @@ export function StorageDashboardPage(): JSX.Element {
         description="Locations, boxes, assignments, and capacity (P79-01)."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      <ContextualPageLinks
+        links={[
+          { label: "Assign Inventory", to: "/storage-assignment" },
+          { label: "View Box Contents", to: "/storage-box-contents" },
+        ]}
+      />
       {d ? <NavPageLoadBanner status={d.status} message={d.message} /> : null}
       {loading ? <p className="text-sm text-slate-600">Loading…</p> : null}
       {d ? (

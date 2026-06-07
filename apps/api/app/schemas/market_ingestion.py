@@ -110,6 +110,8 @@ class MarketAcquisitionIngestionBatchRead(MarketAcquisitionIngestionBatchSummary
 class MarketAcquisitionIngestionBatchListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     items: list[MarketAcquisitionIngestionBatchSummaryRead]
     total_items: int
     limit: int
@@ -121,6 +123,8 @@ class MarketAcquisitionIngestionBatchListResponse(BaseModel):
 class MarketAcquisitionRawSourceListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     items: list[MarketAcquisitionRawSourceRead]
     total_items: int
     limit: int

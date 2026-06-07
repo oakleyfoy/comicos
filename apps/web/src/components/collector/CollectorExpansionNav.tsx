@@ -1,5 +1,7 @@
 import { NavLink } from "react-router-dom";
 
+import { patriotNavLinkActive, patriotNavLinkIdle } from "../patriotTheme";
+
 const LINKS = [
   { to: "/collector-command-center", label: "Command Center" },
   { to: "/marketplace-opportunities", label: "Marketplace Deals" },
@@ -10,22 +12,16 @@ const LINKS = [
   { to: "/weekly-briefing", label: "Weekly Briefing" },
 ];
 
-type NavVariant = "dark" | "patriot";
-
-export function CollectorExpansionNav({ variant = "patriot" }: { variant?: NavVariant }): JSX.Element {
-  const activeClass =
-    variant === "patriot"
-      ? "rounded bg-red-700 px-2 py-1 font-medium text-white shadow-sm"
-      : "rounded bg-violet-700/40 px-2 py-1 text-violet-100";
-  const idleClass =
-    variant === "patriot"
-      ? "rounded px-2 py-1 text-blue-100 hover:bg-white/10 hover:text-white"
-      : "rounded px-2 py-1 text-slate-400 hover:text-white";
-
+/** Red / white / blue sub-nav for collector expansion pages (on patriot header). */
+export function CollectorExpansionNav(): JSX.Element {
   return (
     <nav className="flex flex-wrap gap-2 text-sm">
       {LINKS.map((link) => (
-        <NavLink key={link.to} to={link.to} className={({ isActive }) => (isActive ? activeClass : idleClass)}>
+        <NavLink
+          key={link.to}
+          to={link.to}
+          className={({ isActive }) => (isActive ? patriotNavLinkActive : patriotNavLinkIdle)}
+        >
           {link.label}
         </NavLink>
       ))}

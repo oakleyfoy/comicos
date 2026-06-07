@@ -31,6 +31,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function PortfolioAnalyticsPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
   const [portfolio, setPortfolio] = useState<P67PortfolioLatest | null>(null);
   const [collection, setCollection] = useState<P67CollectionLatest | null>(null);
   const [recommendation, setRecommendation] = useState<P67RecommendationLatest | null>(null);
@@ -38,12 +40,10 @@ export function PortfolioAnalyticsPage(): JSX.Element {
   const [investor, setInvestor] = useState<P67InvestorLatest | null>(null);
   const [pricing, setPricing] = useState<P68SnapshotRow[]>([]);
 
-  const load = useCallback(async () => {
+  const loadLatest = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await p68Api.buildSnapshots();
-      await p67Api.buildPlatform();
       const [p, c, r, g, i, pr] = await Promise.all([
         p67Api.portfolioLatest(),
         p67Api.collectionLatest(),
@@ -65,48 +65,77 @@ export function PortfolioAnalyticsPage(): JSX.Element {
     }
   }, []);
 
+  const runRefreshBuild = useCallback(async () => {
+    setBuilding(true);
+    setBuildError(null);
+    const errors: string[] = [];
+    const [p68, p67] = await Promise.all([p68Api.buildSnapshots(), p67Api.buildPlatform()]);
+    if (!p68.ok) {
+      errors.push(p68.error ? `Market pricing: ${p68.error}` : "Market pricing build failed.");
+    }
+    if (!p67.ok) {
+      errors.push(p67.error ? `Platform: ${p67.error}` : "Platform analytics build failed.");
+    }
+    if (errors.length) {
+      setBuildError(errors.join(" "));
+    }
+    await loadLatest();
+    setBuilding(false);
+  }, [loadLatest]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadLatest();
+  }, [loadLatest]);
 
   const snap = portfolio?.snapshot;
+  const hasInvestorData = investor && investor.status !== "EMPTY";
 
   return (
     <AppShell>
       <PageHeader
         eyebrow="P67"
         title="Portfolio Analytics"
-        description="Investment view — consumes P61–P66 intelligence (read-only aggregates)."
+        description="Investment view — cached snapshots only on load; use Refresh build to recompute."
         actions={
-          <button type="button" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white" onClick={() => void load()}>
-            Refresh build
+          <button
+            type="button"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            disabled={building || loading}
+            onClick={() => void runRefreshBuild()}
+          >
+            {building ? "Building…" : "Refresh build"}
           </button>
         }
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {loading ? <p className="text-slate-400">Building snapshots…</p> : null}
+      {buildError ? <StatusBanner tone="error">{buildError}</StatusBanner> : null}
+      {loading ? <p className="text-slate-400">Loading cached analytics…</p> : null}
 
-      {!loading && investor ? (
+      {!loading ? (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Section title="Investor Dashboard">
-            <dl className="grid grid-cols-2 gap-3 text-sm text-white">
-              <div>
-                <dt className="text-slate-400">Collection value</dt>
-                <dd className="text-lg font-semibold">{money(investor.collection_value)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Cost basis</dt>
-                <dd>{money(investor.cost_basis)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Unrealized gain</dt>
-                <dd>{money(investor.unrealized_gain)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Portfolio health</dt>
-                <dd>{investor.portfolio_health_score.toFixed(1)}</dd>
-              </div>
-            </dl>
+            {hasInvestorData ? (
+              <dl className="grid grid-cols-2 gap-3 text-sm text-white">
+                <div>
+                  <dt className="text-slate-400">Collection value</dt>
+                  <dd className="text-lg font-semibold">{money(investor.collection_value)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Cost basis</dt>
+                  <dd>{money(investor.cost_basis)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Unrealized gain</dt>
+                  <dd>{money(investor.unrealized_gain)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Portfolio health</dt>
+                  <dd>{investor.portfolio_health_score.toFixed(1)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-slate-500">{investor?.message ?? "No investor dashboard snapshot yet."}</p>
+            )}
           </Section>
 
           <Section title="Portfolio Performance">
@@ -133,19 +162,21 @@ export function PortfolioAnalyticsPage(): JSX.Element {
           </Section>
 
           <Section title="Collection Analytics">
-            {collection ? (
+            {collection && collection.status !== "EMPTY" ? (
               <p className="text-sm text-white">
-                {collection.total_holdings} holdings · concentration {collection.concentration_score.toFixed(1)} · diversification{" "}
-                {String(collection.metadata_json.diversification_score ?? "—")}
+                {collection.total_holdings} holdings · concentration {collection.concentration_score.toFixed(1)} ·
+                diversification {String(collection.metadata_json.diversification_score ?? "—")}
               </p>
-            ) : null}
+            ) : (
+              <p className="text-sm text-slate-500">{collection?.message ?? "No collection analytics snapshot yet."}</p>
+            )}
           </Section>
 
           <Section title="Recommendation Performance">
             {recommendation?.snapshot ? (
               <p className="text-sm text-white">
-                Hit rate {recommendation.snapshot.hit_rate_pct}% · avg return {recommendation.snapshot.average_return_pct}% · confidence accuracy{" "}
-                {recommendation.snapshot.confidence_accuracy_pct}%
+                Hit rate {recommendation.snapshot.hit_rate_pct}% · avg return {recommendation.snapshot.average_return_pct}%
+                · confidence accuracy {recommendation.snapshot.confidence_accuracy_pct}%
               </p>
             ) : (
               <p className="text-slate-500">No recommendation scorecard yet.</p>
@@ -159,8 +190,8 @@ export function PortfolioAnalyticsPage(): JSX.Element {
                   <li key={`${row.title}-${row.primary_provider}`} className="rounded-lg border border-white/5 bg-slate-950/50 p-2">
                     <div className="font-medium">{row.title}</div>
                     <div className="text-xs text-slate-400">
-                      Computed FMV {money(row.blended_fmv)} · conf {(row.confidence * 100).toFixed(0)}% · sales {row.sales_count} ·{" "}
-                      {row.primary_provider || "—"}
+                      Computed FMV {money(row.blended_fmv)} · conf {(row.confidence * 100).toFixed(0)}% · sales {row.sales_count}{" "}
+                      · {row.primary_provider || "—"}
                       {row.primary_provider === "STUB" || row.metadata_json?.label_stub ? " (stub/manual — not live market)" : ""}
                     </div>
                     <div className="text-xs text-slate-500">
@@ -171,7 +202,7 @@ export function PortfolioAnalyticsPage(): JSX.Element {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-slate-500">No computed FMV snapshots yet. Internal sales and manual observations feed P68.</p>
+              <p className="text-sm text-slate-500">No computed FMV snapshots yet. Use Refresh build to generate P68 pricing.</p>
             )}
           </Section>
 

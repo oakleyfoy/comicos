@@ -259,7 +259,11 @@ def v1_ops_list_market_ingestion_batches(
     offset: int = Query(default=0, ge=0),
 ) -> MarketApiV1Envelope:
     ensure_ops_admin_access(current_user, settings)
-    lst = list_ingestion_batches_ops(session, owner_user_id=owner_user_id, limit=limit, offset=offset)
+    from app.services.ops_ingestion_safe_get import safe_list_market_ingestion_batches_ops
+
+    lst = safe_list_market_ingestion_batches_ops(
+        session, owner_user_id=owner_user_id, limit=limit, offset=offset
+    )
     return wrap_standard_list(lst, owner_user_id=owner_user_id)
 
 
@@ -271,7 +275,9 @@ def v1_ops_get_market_ingestion_batch(
     settings: Settings = Depends(get_settings),
 ) -> MarketApiV1Envelope:
     ensure_ops_admin_access(current_user, settings)
-    row = get_ingestion_batch_ops(session, batch_id=batch_id)
+    from app.services.ops_ingestion_safe_get import safe_get_market_ingestion_batch_ops
+
+    row = safe_get_market_ingestion_batch_ops(session, batch_id=batch_id)
     return wrap_object(row, owner_user_id=row.owner_user_id, checksum=row.batch_checksum)
 
 
@@ -287,7 +293,9 @@ def v1_ops_list_market_ingestion_raw(
     offset: int = Query(default=0, ge=0),
 ) -> MarketApiV1Envelope:
     ensure_ops_admin_access(current_user, settings)
-    lst = list_ingestion_raw_ops(
+    from app.services.ops_ingestion_safe_get import safe_list_market_ingestion_raw_ops
+
+    lst = safe_list_market_ingestion_raw_ops(
         session,
         owner_user_id=owner_user_id,
         ingestion_batch_id=ingestion_batch_id,

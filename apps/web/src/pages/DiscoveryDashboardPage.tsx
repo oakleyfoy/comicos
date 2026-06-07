@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P81PersonalizedDiscoveryDashboardRead } from "../api/client";
+import { ContextualPageLinks } from "../components/ContextualPageLinks";
 import { DiscoveryPageLayout, PatriotPanel } from "../components/discovery/p81/DiscoveryPageLayout";
 
 export function DiscoveryDashboardPage(): JSX.Element {
@@ -35,6 +36,7 @@ export function DiscoveryDashboardPage(): JSX.Element {
     >
       {dash ? (
         <>
+          <ContextualPageLinks links={[{ label: "Release Intelligence", to: "/release-intelligence" }]} />
           <PatriotPanel title="Counts">
             <p>
               Must buy {dash.counts.must_buy ?? 0} · High {dash.counts.high_priority ?? 0} · Alerts{" "}

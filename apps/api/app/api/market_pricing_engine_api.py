@@ -169,19 +169,44 @@ def observations(session: Session = Depends(get_session), current_user: User = D
 def snapshots_latest(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)) -> ScanApiV1Envelope:
     _guard()
     assert current_user.id is not None
-    rows = get_latest_p68_snapshots(session, owner_user_id=int(current_user.id))
-    body = [p68_snapshot_to_read(r) for r in rows]
-    return wrap_object(P68SnapshotsListRead(items=body, total=len(body)), owner_user_id=int(current_user.id))
+    from app.services.collector_page_load_service import _short_error
+
+    try:
+        rows = get_latest_p68_snapshots(session, owner_user_id=int(current_user.id))
+        body_items = [p68_snapshot_to_read(r) for r in rows]
+        status = "OK" if body_items else "EMPTY"
+        message = "" if body_items else "No market pricing snapshots yet."
+        payload = P68SnapshotsListRead(status=status, message=message, items=body_items, total=len(body_items))
+    except Exception as exc:  # noqa: BLE001
+        payload = P68SnapshotsListRead(
+            status="EMPTY",
+            message=_short_error(exc),
+            items=[],
+            total=0,
+        )
+    return wrap_object(payload, owner_user_id=int(current_user.id))
 
 
 @p68_pricing_router.post("/snapshots/build", response_model=ScanApiV1Envelope)
 def snapshots_build(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)) -> ScanApiV1Envelope:
     _guard()
     assert current_user.id is not None
-    snaps = build_market_price_snapshots(session, owner_user_id=int(current_user.id))
-    session.commit()
-    body = [p68_snapshot_to_read(s) for s in snaps]
-    return wrap_object(P68SnapshotsBuildRead(built=len(body), items=body), owner_user_id=int(current_user.id))
+    from app.services.collector_page_load_service import _short_error
+
+    try:
+        snaps = build_market_price_snapshots(session, owner_user_id=int(current_user.id))
+        session.commit()
+        body = [p68_snapshot_to_read(s) for s in snaps]
+        payload = P68SnapshotsBuildRead(status="OK", message="", built=len(body), items=body)
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        payload = P68SnapshotsBuildRead(
+            status="ERROR",
+            message=_short_error(exc),
+            built=0,
+            items=[],
+        )
+    return wrap_object(payload, owner_user_id=int(current_user.id))
 
 
 @p68_pricing_router.post("/refresh/run", response_model=ScanApiV1Envelope)

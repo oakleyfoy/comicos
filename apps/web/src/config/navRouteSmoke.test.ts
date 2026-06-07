@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { NAV_GROUPS, visibleNavGroups } from "./appNavigation";
+import { visibleNavGroups } from "./appNavigation";
 
 const manifestPath = join(dirname(fileURLToPath(import.meta.url)), "../../../../config/nav-route-smoke.manifest.json");
 
@@ -22,29 +22,37 @@ describe("nav route smoke manifest", () => {
       "/daily-actions",
       "/collector-command-center",
       "/notifications",
-      "/daily-briefing",
-      "/workflow-health",
       "/pull-lists",
       "/foc-dashboard",
       "/marketplace-opportunities",
       "/future-pull-list",
       "/dashboard",
+      "/collection-gaps",
       "/collection-valuation-dashboard",
       "/key-issues",
-      "/sell-queue",
-      "/storage-dashboard",
-      "/storage-locations",
-      "/grading-queue",
-      "/grading-intelligence",
-      "/grading-platform",
-      "/listing-drafts",
-      "/listings",
-      "/selling-analytics",
       "/imports",
       "/imports/email",
       "/orders/import",
-      "/discovery-feed",
+      "/sell-queue",
+      "/storage-dashboard",
+      "/storage-locations",
+      "/inventory-locator",
+      "/grading-queue",
+      "/grading-intelligence",
+      "/listing-drafts",
+      "/listings",
+      "/selling-analytics",
+      "/discovery-dashboard",
+      "/discovery-opportunities",
       "/mobile-scan",
+      "/portfolio-analytics",
+      "/daily-briefing",
+      "/weekly-briefing",
+      "/platform-certification",
+      "/production-readiness",
+      "/collector-profile",
+      "/collector-budget",
+      "/workflow-health",
     ];
     for (const path of priorityPaths) {
       expect(manifestPaths.has(path), `missing manifest entry for ${path}`).toBe(true);
@@ -63,6 +71,21 @@ describe("nav route smoke manifest", () => {
           `nav link ${link.label} (${link.to}) needs manifest entry or hiddenFromNav`,
         ).toBe(true);
       }
+    }
+  });
+
+  it("hides legacy phase pages from the sidebar", () => {
+    const labels = visibleNavGroups(true).flatMap((g) => g.links.map((l) => l.label));
+    const hidden = [
+      "Grading Platform",
+      "Release Intelligence",
+      "Box Contents",
+      "Assignment",
+      "Collection insights",
+      "Purchase Budget",
+    ];
+    for (const label of hidden) {
+      expect(labels, `${label} should not appear in sidebar`).not.toContain(label);
     }
   });
 });

@@ -125,25 +125,27 @@ export function GradingPlatformPage(): JSX.Element {
 
       {summary && health && validation && certification ? (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div id="platform-status" className="scroll-mt-24 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Overall Health" value={health.overall_status} />
             <StatCard label="Validation" value={validation.overall_status} />
             <StatCard label="Go-Live" value={certification.go_live_recommendation} />
             <StatCard label="Predictions" value={String(summary.prediction_summary.prediction_count)} />
           </div>
 
-          <Panel title="Certification Status">
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusBadge value={certification.summary} />
-              <StatusBadge value={certification.validation_status} />
-              <StatusBadge value={certification.health_status} />
-            </div>
-            <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              {certification.certification_notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          </Panel>
+          <div id="validation-certification" className="scroll-mt-24">
+            <Panel title="Certification Status">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge value={certification.summary} />
+                <StatusBadge value={certification.validation_status} />
+                <StatusBadge value={certification.health_status} />
+              </div>
+              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                {certification.certification_notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Condition Intelligence Status">

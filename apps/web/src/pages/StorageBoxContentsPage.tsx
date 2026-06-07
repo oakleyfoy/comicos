@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { ApiError, apiClient, type P79BoxContentsRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
@@ -6,9 +7,17 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function StorageBoxContentsPage(): JSX.Element {
-  const [boxId, setBoxId] = useState("");
+  const [searchParams] = useSearchParams();
+  const [boxId, setBoxId] = useState(() => searchParams.get("box") ?? "");
   const [contents, setContents] = useState<P79BoxContentsRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get("box");
+    if (fromQuery) {
+      setBoxId(fromQuery);
+    }
+  }, [searchParams]);
 
   async function load() {
     setError(null);

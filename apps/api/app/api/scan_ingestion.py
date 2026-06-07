@@ -178,7 +178,11 @@ def v1_ops_list_scan_batches(
     offset: int = Query(default=0, ge=0),
 ) -> ScanApiV1Envelope:
     ensure_ops_admin_access(current_user, settings)
-    rows = list_scan_ingestion_batches_ops(session, owner_user_id=owner_user_id, limit=limit, offset=offset)
+    from app.services.ops_ingestion_safe_get import safe_list_scan_ingestion_batches_ops
+
+    rows = safe_list_scan_ingestion_batches_ops(
+        session, owner_user_id=owner_user_id, limit=limit, offset=offset
+    )
     return wrap_standard_list(rows, owner_user_id=owner_user_id)
 
 
@@ -192,5 +196,9 @@ def v1_ops_list_scan_failures(
     offset: int = Query(default=0, ge=0),
 ) -> ScanApiV1Envelope:
     ensure_ops_admin_access(current_user, settings)
-    rows = list_scan_ingestion_failures_ops(session, owner_user_id=owner_user_id, limit=limit, offset=offset)
+    from app.services.ops_ingestion_safe_get import safe_list_scan_ingestion_failures_ops
+
+    rows = safe_list_scan_ingestion_failures_ops(
+        session, owner_user_id=owner_user_id, limit=limit, offset=offset
+    )
     return wrap_standard_list(rows, owner_user_id=owner_user_id)

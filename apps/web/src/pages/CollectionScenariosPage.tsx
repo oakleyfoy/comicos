@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 import { ApiError, apiClient } from "../api/client";
-import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
+import { patriotPrimaryButtonClass } from "../components/patriotTheme";
 
 const SCENARIOS = ["SELL_DUPLICATES", "GRADE_TOP_CANDIDATES", "MARKET_DROP", "MARKET_GAIN", "LIQUIDATE_SELL_QUEUE"];
 
@@ -21,29 +21,23 @@ export function CollectionScenariosPage(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-3xl space-y-3">
-          <h1 className="text-xl font-semibold">Portfolio scenarios</h1>
-          <CollectorExpansionNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 text-sm">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+    <PatriotPageLayout
+      eyebrow="P83"
+      title="Portfolio scenarios"
+      showExpansionNav
+      error={error}
+      maxWidthClass="max-w-3xl"
+    >
+      <PatriotPanel>
         <div className="flex flex-wrap gap-2">
           {SCENARIOS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="rounded bg-slate-800 px-3 py-1 hover:bg-slate-700"
-              onClick={() => void run(s)}
-            >
+            <button key={s} type="button" className={patriotPrimaryButtonClass} onClick={() => void run(s)}>
               {s}
             </button>
           ))}
         </div>
-        {result ? <p className="text-slate-300">{result}</p> : null}
-      </main>
-    </div>
+        {result ? <p className="mt-4 text-blue-900">{result}</p> : null}
+      </PatriotPanel>
+    </PatriotPageLayout>
   );
 }

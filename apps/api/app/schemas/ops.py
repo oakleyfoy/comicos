@@ -149,6 +149,8 @@ class OpsReconciliationSummary(BaseModel):
 
 
 class OpsDashboardResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     recent_gmail_sync_jobs: list[OpsJobRow]
     recent_ai_parse_jobs: list[OpsJobRow]
     gmail_sync_statuses: list[OpsGmailSyncRow]

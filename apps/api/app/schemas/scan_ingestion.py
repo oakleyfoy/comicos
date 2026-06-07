@@ -180,6 +180,8 @@ class ScanIngestionBatchRead(ScanIngestionBatchSummaryRead):
 class ScanIngestionBatchListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     items: list[ScanIngestionBatchSummaryRead]
     total_items: int
     limit: int
@@ -192,6 +194,8 @@ class ScanIngestionBatchListResponse(BaseModel):
 class ScanImageListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    status: str = "OK"
+    message: str = ""
     items: list[ScanImageSummaryRead]
     total_items: int
     limit: int

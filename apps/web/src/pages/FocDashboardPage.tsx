@@ -8,6 +8,7 @@ import {
   type PullListDecisionType,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { ContextualPageLinks } from "../components/ContextualPageLinks";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
@@ -172,6 +173,7 @@ export function FocDashboardPage(): JSX.Element {
         description="Upcoming FOC deadlines and pull-list actions for your weekly preorder workflow (read-only)."
       />
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      <ContextualPageLinks links={[{ label: "Release Intelligence", to: "/release-intelligence" }]} />
       <div className="mt-4 flex flex-wrap gap-3">
         <select
           value={decisionFilter}

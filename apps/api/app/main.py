@@ -1665,7 +1665,9 @@ def ops_dashboard(
     settings: Settings = Depends(get_settings),
 ) -> OpsDashboardResponse:
     ensure_ops_admin_access(current_user, settings)
-    return build_ops_dashboard(session, settings)
+    from app.services.ops_ingestion_safe_get import safe_ops_dashboard
+
+    return safe_ops_dashboard(session, settings)
 
 
 @app.get(
@@ -7331,7 +7333,9 @@ def ops_list_market_ingestion_batches_endpoint(
     offset: int = Query(default=0, ge=0),
 ) -> MarketAcquisitionIngestionBatchListResponse:
     ensure_ops_admin_access(current_user, settings)
-    return list_ingestion_batches_ops(
+    from app.services.ops_ingestion_safe_get import safe_list_market_ingestion_batches_ops
+
+    return safe_list_market_ingestion_batches_ops(
         session,
         owner_user_id=owner_user_id,
         limit=limit,
@@ -7347,7 +7351,9 @@ def ops_get_market_ingestion_batch_endpoint(
     settings: Settings = Depends(get_settings),
 ) -> MarketAcquisitionIngestionBatchRead:
     ensure_ops_admin_access(current_user, settings)
-    return get_ingestion_batch_ops(session, batch_id=batch_id)
+    from app.services.ops_ingestion_safe_get import safe_get_market_ingestion_batch_ops
+
+    return safe_get_market_ingestion_batch_ops(session, batch_id=batch_id)
 
 
 @app.get("/ops/market-ingestion/raw", response_model=MarketAcquisitionRawSourceListResponse)
@@ -7362,7 +7368,9 @@ def ops_list_market_ingestion_raw_endpoint(
     offset: int = Query(default=0, ge=0),
 ) -> MarketAcquisitionRawSourceListResponse:
     ensure_ops_admin_access(current_user, settings)
-    return list_ingestion_raw_ops(
+    from app.services.ops_ingestion_safe_get import safe_list_market_ingestion_raw_ops
+
+    return safe_list_market_ingestion_raw_ops(
         session,
         owner_user_id=owner_user_id,
         ingestion_batch_id=ingestion_batch_id,
@@ -9984,7 +9992,9 @@ def ops_scan_pipeline_dashboard_endpoint(
     settings: Settings = Depends(get_settings),
 ) -> ScanPipelineDashboardRead:
     ensure_ops_admin_access(current_user, settings)
-    return scan_pipeline_dashboard(session, owner_user_id=None)
+    from app.services.ops_ingestion_safe_get import safe_ops_scan_pipeline_dashboard
+
+    return safe_ops_scan_pipeline_dashboard(session)
 
 
 @app.get("/ops/scan-sessions", response_model=ScanSessionListResponse, include_in_schema=False)

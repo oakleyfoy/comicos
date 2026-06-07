@@ -13,6 +13,9 @@ export type NavGroup = {
   links: NavLinkItem[];
 };
 
+/** Session key for preserving sidebar scroll across route changes. */
+export const NAV_SIDEBAR_SCROLL_KEY = "comicos.sidebar.scrollTop";
+
 /** P85 workflow-oriented navigation (legacy phase pages live under logical groups). */
 export const NAV_GROUPS: NavGroup[] = [
   {
@@ -23,8 +26,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Command Center", to: "/collector-command-center" },
       { label: "Notifications", to: "/notifications" },
-      { label: "Daily Briefing", to: "/daily-briefing" },
-      { label: "Workflow Health", to: "/workflow-health" },
     ],
   },
   {
@@ -33,10 +34,10 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Pull Lists", to: "/pull-lists", prominent: true },
       { label: "FOC Dashboard", to: "/foc-dashboard" },
-      { label: "Purchase Budget", to: "/purchase-budget" },
+      { label: "Purchase Budget", to: "/purchase-budget", hiddenFromNav: true },
       { label: "Acquisition Opportunities", to: "/acquisition-opportunities", hiddenFromNav: true },
       { label: "Marketplace Opportunities", to: "/marketplace-opportunities" },
-      { label: "Discovery Feed", to: "/discovery-feed" },
+      { label: "Discovery Feed", to: "/discovery-feed", hiddenFromNav: true },
       { label: "Future Pull List", to: "/future-pull-list" },
     ],
   },
@@ -45,15 +46,15 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Inventory",
     links: [
       { label: "Portfolio", to: "/dashboard", prominent: true },
-      { label: "Collection insights", to: "/dashboard/collection" },
-      { label: "Market & FMV", to: "/dashboard/market" },
-      { label: "Want Lists", to: "/want-lists" },
-      { label: "Collection Gaps", to: "/collection-gaps" },
-      { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
-      { label: "Key Issues", to: "/key-issues" },
+      { label: "Collection insights", to: "/dashboard/collection", hiddenFromNav: true },
       { label: "Gmail Imports", to: "/imports/email" },
       { label: "Order Import", to: "/orders/import" },
       { label: "Manual & AI Import", to: "/imports" },
+      { label: "Collection Gaps", to: "/collection-gaps" },
+      { label: "Market & FMV", to: "/dashboard/market" },
+      { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
+      { label: "Key Issues", to: "/key-issues" },
+      { label: "Want Lists", to: "/want-lists", hiddenFromNav: true },
     ],
   },
   {
@@ -62,9 +63,9 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Storage Dashboard", to: "/storage-dashboard", prominent: true },
       { label: "Locations", to: "/storage-locations" },
-      { label: "Assignment", to: "/storage-assignment" },
+      { label: "Assignment", to: "/storage-assignment", hiddenFromNav: true },
       { label: "Inventory Locator", to: "/inventory-locator" },
-      { label: "Box Contents", to: "/storage-box-contents" },
+      { label: "Box Contents", to: "/storage-box-contents", hiddenFromNav: true },
       { label: "Storage Audit", to: "/storage-audit" },
     ],
   },
@@ -76,7 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Grading Intelligence", to: "/grading-intelligence" },
       { label: "Grading Operations", to: "/grading-operations", hiddenFromNav: true },
       { label: "Grade Before Sell", to: "/grade-before-sell" },
-      { label: "Grading Platform", to: "/grading-platform" },
+      { label: "Grading Platform", to: "/grading-platform", hiddenFromNav: true },
     ],
   },
   {
@@ -99,7 +100,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Opportunities", to: "/discovery-opportunities" },
       { label: "Watchlists", to: "/discovery-watchlists" },
       { label: "Discovery Alerts", to: "/discovery-alerts" },
-      { label: "Release Intelligence", to: "/release-intelligence" },
+      { label: "Release Intelligence", to: "/release-intelligence", hiddenFromNav: true },
       { label: "Future Releases", to: "/future-releases", hiddenFromNav: true },
     ],
   },
@@ -121,6 +122,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Portfolio Analytics", to: "/portfolio-analytics", prominent: true },
       { label: "Recommendation Analytics", to: "/recommendation-analytics" },
       { label: "Discovery Analytics", to: "/discovery-analytics" },
+      { label: "Daily Briefing", to: "/daily-briefing" },
+      { label: "Weekly Briefing", to: "/weekly-briefing" },
       { label: "Platform Certification", to: "/platform-certification" },
       { label: "Production Readiness", to: "/production-readiness" },
     ],
@@ -134,6 +137,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Integrations", to: "/settings/integrations", hiddenFromNav: true },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
+      { label: "Workflow Health", to: "/workflow-health" },
     ],
   },
 ];
@@ -153,6 +157,21 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname.startsWith("/dashboard")) {
     return "inventory";
   }
+  if (pathname === "/collection-gaps") {
+    return "inventory";
+  }
+  if (pathname === "/grading-platform" || pathname === "/grading-analytics") {
+    return "grade";
+  }
+  if (pathname === "/release-intelligence") {
+    return "discovery";
+  }
+  if (pathname === "/storage-box-contents" || pathname === "/storage-assignment") {
+    return "storage";
+  }
+  if (pathname === "/purchase-budget") {
+    return "settings";
+  }
   if (pathname.startsWith("/orders") || pathname.startsWith("/imports") || pathname.startsWith("/settings")) {
     return "settings";
   }
@@ -164,6 +183,9 @@ export function findGroupIdForPath(pathname: string): string | null {
   }
   if (pathname.startsWith("/collector-") || pathname === "/daily-actions") {
     return "home";
+  }
+  if (pathname === "/operations-reliability") {
+    return "reports";
   }
   return null;
 }

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P83CollectionForecastRead } from "../api/client";
-import { CollectorExpansionNav } from "../components/collector/CollectorExpansionNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
 
 export function CollectionForecastPage(): JSX.Element {
   const [forecast, setForecast] = useState<P83CollectionForecastRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
@@ -14,22 +14,24 @@ export function CollectionForecastPage(): JSX.Element {
         setForecast(await apiClient.getCollectionForecast());
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load forecast.");
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-3xl space-y-3">
-          <h1 className="text-xl font-semibold">Collection forecast</h1>
-          <CollectorExpansionNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-4 py-6 text-sm">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-        {forecast ? (
-          <ul className="space-y-2">
+    <PatriotPageLayout
+      eyebrow="P83"
+      title="Collection forecast"
+      showExpansionNav
+      error={error}
+      loading={loading && !forecast}
+      maxWidthClass="max-w-3xl"
+    >
+      {forecast ? (
+        <PatriotPanel title="Horizons">
+          <ul className="space-y-2 text-blue-900">
             {forecast.horizons.map((h) => (
               <li key={h.horizon}>
                 {h.horizon}: ${h.forecast_value.toFixed(2)} ({h.forecast_change >= 0 ? "+" : ""}
@@ -37,10 +39,8 @@ export function CollectionForecastPage(): JSX.Element {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-slate-400">Loading…</p>
-        )}
-      </main>
-    </div>
+        </PatriotPanel>
+      ) : null}
+    </PatriotPageLayout>
   );
 }

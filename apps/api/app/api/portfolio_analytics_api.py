@@ -130,10 +130,21 @@ def portfolio_platform_build_get(session: Session = Depends(get_session), curren
 def portfolio_platform_build_post(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)) -> ScanApiV1Envelope:
     _port_guard()
     assert current_user.id is not None
-    raw = run_p67_platform_build(session, owner_user_id=int(current_user.id))
-    cert = certify_p67_platform(session, owner_user_id=int(current_user.id))
-    session.commit()
-    body = P67PlatformBuildRead(steps=raw["steps"], certification=cert)
+    from app.services.collector_page_load_service import _short_error
+
+    try:
+        raw = run_p67_platform_build(session, owner_user_id=int(current_user.id))
+        cert = certify_p67_platform(session, owner_user_id=int(current_user.id))
+        session.commit()
+        body = P67PlatformBuildRead(status="OK", message="", steps=raw["steps"], certification=cert)
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        body = P67PlatformBuildRead(
+            status="ERROR",
+            message=_short_error(exc),
+            steps=[],
+            certification={},
+        )
     return wrap_object(body, owner_user_id=int(current_user.id))
 
 
