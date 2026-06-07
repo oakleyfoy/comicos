@@ -10,7 +10,9 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.portfolio_analytics import (
     P67CertificationRead,
+    P67CollectionAnalyticsLatestRead,
     P67CollectionAnalyticsSnapshotRead,
+    P67InvestorDashboardLatestRead,
     P67GradingOpportunityItemRead,
     P67GradingOpportunityListRead,
     P67GradingOpportunitySnapshotRead,
@@ -151,8 +153,20 @@ def collection_latest(session: Session = Depends(get_session), current_user: Use
     assert current_user.id is not None
     snap = get_latest_collection_analytics_snapshot(session, owner_user_id=int(current_user.id))
     if snap is None:
-        raise HTTPException(status_code=404, detail="No collection analytics snapshot")
-    return wrap_object(P67CollectionAnalyticsSnapshotRead.model_validate(snap), owner_user_id=int(current_user.id))
+        body = P67CollectionAnalyticsLatestRead(
+            status="EMPTY",
+            message="No collection analytics snapshot yet.",
+        )
+        return wrap_object(body, owner_user_id=int(current_user.id))
+    read = P67CollectionAnalyticsSnapshotRead.model_validate(snap)
+    body = P67CollectionAnalyticsLatestRead(
+        status="OK",
+        message="",
+        total_holdings=read.total_holdings,
+        concentration_score=read.concentration_score,
+        metadata_json=dict(read.metadata_json or {}),
+    )
+    return wrap_object(body, owner_user_id=int(current_user.id))
 
 
 @collection_router.post("/build", response_model=ScanApiV1Envelope)
@@ -218,8 +232,23 @@ def investor_latest(session: Session = Depends(get_session), current_user: User 
     assert current_user.id is not None
     snap = get_latest_investor_dashboard_snapshot(session, owner_user_id=int(current_user.id))
     if snap is None:
-        raise HTTPException(status_code=404, detail="No investor dashboard snapshot")
-    return wrap_object(P67InvestorDashboardSnapshotRead.model_validate(snap), owner_user_id=int(current_user.id))
+        body = P67InvestorDashboardLatestRead(
+            status="EMPTY",
+            message="No investor dashboard snapshot yet.",
+        )
+        return wrap_object(body, owner_user_id=int(current_user.id))
+    read = P67InvestorDashboardSnapshotRead.model_validate(snap)
+    body = P67InvestorDashboardLatestRead(
+        status="OK",
+        message="",
+        collection_value=read.collection_value,
+        cost_basis=read.cost_basis,
+        unrealized_gain=read.unrealized_gain,
+        realized_gain=read.realized_gain,
+        portfolio_health_score=read.portfolio_health_score,
+        cards_json=dict(read.cards_json or {}),
+    )
+    return wrap_object(body, owner_user_id=int(current_user.id))
 
 
 @investor_router.post("/build", response_model=ScanApiV1Envelope)

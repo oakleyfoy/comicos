@@ -18,7 +18,7 @@ def test_auto_and_manual_watchlists(client: TestClient, session: Session) -> Non
         json={"publishers": [{"interest_type": "PUBLISHER", "label": "Image", "priority_rank": 1}]},
     )
     seed_release_number_one(session, owner_user_id=owner_id)
-    client.get("/api/v1/discovery/dashboard?refresh=true", headers=auth_headers(token))
+    client.post("/api/v1/discovery/dashboard/refresh", headers=auth_headers(token))
 
     listed = client.get("/api/v1/discovery/watchlists", headers=auth_headers(token))
     assert listed.status_code == 200

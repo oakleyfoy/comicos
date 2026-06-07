@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P77CollectorProfileRead } from "../api/client";
 import { CollectorProfileNav } from "../components/collector/p77/CollectorProfileNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
+import { patriotInputClass, patriotPrimaryButtonClass } from "../components/patriotTheme";
 
 function parseTags(value: string): { interest_type: string; label: string; priority_rank: number }[] {
   return value
@@ -63,30 +64,24 @@ export function CollectorProfilePage(): JSX.Element {
     }
   }
 
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 px-4 py-8">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-2xl space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-sky-300">P77-01</p>
-          <h1 className="text-xl font-semibold">Collector Profile</h1>
-          <CollectorProfileNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-        <section className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4 space-y-3">
+    <PatriotPageLayout
+      eyebrow="P77-01 · Settings"
+      title="Collector profile"
+      subNav={<CollectorProfileNav />}
+      error={error}
+      onRetry={() => void load()}
+      loading={!profile}
+      maxWidthClass="max-w-2xl"
+    >
+      {profile ? (
+        <>
+        <PatriotPanel>
+          <div className="space-y-3">
           <label className="block text-sm">
             Collector type
             <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.collector_type}
               onChange={(e) => setProfile({ ...profile, collector_type: e.target.value })}
             >
@@ -100,7 +95,7 @@ export function CollectorProfilePage(): JSX.Element {
           <label className="block text-sm">
             Risk profile
             <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.risk_profile}
               onChange={(e) => setProfile({ ...profile, risk_profile: e.target.value })}
             >
@@ -114,7 +109,7 @@ export function CollectorProfilePage(): JSX.Element {
           <label className="block text-sm">
             Time horizon
             <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.time_horizon}
               onChange={(e) => setProfile({ ...profile, time_horizon: e.target.value })}
             >
@@ -125,34 +120,35 @@ export function CollectorProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
-        </section>
-        <section className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-300">Interests (comma-separated, priority left → right)</h2>
+          </div>
+        </PatriotPanel>
+        <PatriotPanel title="Interests (comma-separated, priority left → right)">
           <input
-            className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm"
+            className={`w-full ${patriotInputClass}`}
             placeholder="Publishers: DC, Marvel, Image"
             value={publishers}
             onChange={(e) => setPublishers(e.target.value)}
           />
           <input
-            className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm"
+            className={`mt-2 w-full ${patriotInputClass}`}
             placeholder="Characters: Batman, Spider-Man"
             value={characters}
             onChange={(e) => setCharacters(e.target.value)}
           />
           <input
-            className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm"
+            className={`mt-2 w-full ${patriotInputClass}`}
             placeholder="Creators"
             value={creators}
             onChange={(e) => setCreators(e.target.value)}
           />
-        </section>
-        <section className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4 grid grid-cols-2 gap-3">
+        </PatriotPanel>
+        <PatriotPanel>
+          <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
             Default copies
             <input
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.default_copy_count}
               onChange={(e) => setProfile({ ...profile, default_copy_count: Number(e.target.value) })}
             />
@@ -161,7 +157,7 @@ export function CollectorProfilePage(): JSX.Element {
             Key issue copies
             <input
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.key_issue_copy_count}
               onChange={(e) => setProfile({ ...profile, key_issue_copy_count: Number(e.target.value) })}
             />
@@ -170,7 +166,7 @@ export function CollectorProfilePage(): JSX.Element {
             Ratio variants
             <input
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.ratio_variant_copy_count}
               onChange={(e) => setProfile({ ...profile, ratio_variant_copy_count: Number(e.target.value) })}
             />
@@ -178,7 +174,7 @@ export function CollectorProfilePage(): JSX.Element {
           <label className="text-sm">
             Grading
             <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.grading_preference}
               onChange={(e) => setProfile({ ...profile, grading_preference: e.target.value })}
             >
@@ -192,7 +188,7 @@ export function CollectorProfilePage(): JSX.Element {
           <label className="text-sm col-span-2">
             Hold preference
             <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
+              className={`mt-1 w-full ${patriotInputClass}`}
               value={profile.hold_preference}
               onChange={(e) => setProfile({ ...profile, hold_preference: e.target.value })}
             >
@@ -203,16 +199,13 @@ export function CollectorProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
-        </section>
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void save()}
-          className="w-full rounded-xl bg-sky-600 py-3 font-semibold disabled:opacity-50"
-        >
+          </div>
+        </PatriotPanel>
+        <button type="button" disabled={saving} onClick={() => void save()} className={`w-full ${patriotPrimaryButtonClass} py-3`}>
           {saving ? "Saving…" : "Save profile"}
         </button>
-      </main>
-    </div>
+        </>
+      ) : null}
+    </PatriotPageLayout>
   );
 }

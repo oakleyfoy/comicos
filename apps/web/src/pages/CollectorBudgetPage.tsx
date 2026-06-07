@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P77CollectorBudgetRead } from "../api/client";
 import { CollectorProfileNav } from "../components/collector/p77/CollectorProfileNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
+import { patriotInputClass, patriotPrimaryButtonClass } from "../components/patriotTheme";
 
 export function CollectorBudgetPage(): JSX.Element {
   const [budget, setBudget] = useState<P77CollectorBudgetRead | null>(null);
@@ -58,72 +59,61 @@ export function CollectorBudgetPage(): JSX.Element {
     }
   }
 
-  if (!budget) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 px-4 py-8">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : <p className="text-slate-400">Loading…</p>}
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-2xl space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-sky-300">P77-01</p>
-          <h1 className="text-xl font-semibold">Budget Settings</h1>
-          <CollectorProfileNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-        <section className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4 space-y-3">
-          <label className="block text-sm">
-            Monthly budget ($)
-            <input
-              type="number"
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
-              value={budget.monthly_budget}
-              onChange={(e) => setBudget({ ...budget, monthly_budget: Number(e.target.value) })}
-            />
-          </label>
-          <label className="block text-sm">
-            Budget period
-            <select
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2"
-              value={budget.budget_period}
-              onChange={(e) => setBudget({ ...budget, budget_period: e.target.value })}
-            >
-              <option value="MONTHLY">Monthly</option>
-              <option value="QUARTERLY">Quarterly</option>
-            </select>
-          </label>
-          <label className="block text-sm">
-            Publisher budgets (one per line: Name:Amount)
-            <textarea
-              className="mt-1 w-full min-h-[100px] rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 font-mono text-xs"
-              value={publisherLines}
-              onChange={(e) => setPublisherLines(e.target.value)}
-            />
-          </label>
-          <label className="block text-sm">
-            Category budgets
-            <textarea
-              className="mt-1 w-full min-h-[100px] rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 font-mono text-xs"
-              value={categoryLines}
-              onChange={(e) => setCategoryLines(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void save()}
-            className="w-full rounded-xl bg-sky-600 py-3 font-semibold disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save budget"}
-          </button>
-        </section>
-      </main>
-    </div>
+    <PatriotPageLayout
+      eyebrow="P77-01 · Settings"
+      title="Budget settings"
+      subNav={<CollectorProfileNav />}
+      error={error}
+      onRetry={() => void load()}
+      loading={!budget}
+      maxWidthClass="max-w-2xl"
+    >
+      {budget ? (
+        <PatriotPanel>
+          <div className="space-y-3">
+            <label className="block text-sm">
+              Monthly budget ($)
+              <input
+                type="number"
+                className={`mt-1 w-full ${patriotInputClass}`}
+                value={budget.monthly_budget}
+                onChange={(e) => setBudget({ ...budget, monthly_budget: Number(e.target.value) })}
+              />
+            </label>
+            <label className="block text-sm">
+              Budget period
+              <select
+                className={`mt-1 w-full ${patriotInputClass}`}
+                value={budget.budget_period}
+                onChange={(e) => setBudget({ ...budget, budget_period: e.target.value })}
+              >
+                <option value="MONTHLY">Monthly</option>
+                <option value="QUARTERLY">Quarterly</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              Publisher budgets (one per line: Name:Amount)
+              <textarea
+                className={`mt-1 w-full min-h-[100px] ${patriotInputClass} font-mono text-xs`}
+                value={publisherLines}
+                onChange={(e) => setPublisherLines(e.target.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              Category budgets
+              <textarea
+                className={`mt-1 w-full min-h-[100px] ${patriotInputClass} font-mono text-xs`}
+                value={categoryLines}
+                onChange={(e) => setCategoryLines(e.target.value)}
+              />
+            </label>
+            <button type="button" disabled={saving} onClick={() => void save()} className={`w-full ${patriotPrimaryButtonClass} py-3`}>
+              {saving ? "Saving…" : "Save budget"}
+            </button>
+          </div>
+        </PatriotPanel>
+      ) : null}
+    </PatriotPageLayout>
   );
 }

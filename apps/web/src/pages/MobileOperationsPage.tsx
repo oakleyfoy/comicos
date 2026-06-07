@@ -6,8 +6,8 @@ import { StatusBanner } from "../components/StatusBanner";
 
 function Stat({ label, value }: { label: string; value: string | number }): JSX.Element {
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p>
+    <div className="rounded-xl border border-blue-200 bg-white p-3 text-blue-950 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700">{label}</p>
       <p className="text-xl font-semibold">{value}</p>
     </div>
   );
@@ -39,7 +39,7 @@ export function MobileOperationsPage(): JSX.Element {
           <Stat label="Recent audits" value={dash.audit_recent_completed} />
         </div>
       ) : (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-blue-100">Loading…</p>
       )}
     </MobileOpsShell>
   );

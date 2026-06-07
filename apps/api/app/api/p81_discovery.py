@@ -108,7 +108,27 @@ def v1_discovery_opportunity_detail(
 def v1_discovery_personalized(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.nav_route_safe_get import fast_discovery_personalized_list
+
+    body: P81PersonalizedDiscoveryListResponse = fast_discovery_personalized_list(
+        session,
+        owner_user_id=int(current_user.id),
+        limit=limit,
+        offset=offset,
+        refresh=refresh,
+    )
+    return wrap_standard_list(body, owner_user_id=int(current_user.id))
+
+
+@p81_discovery_v1_router.post("/api/v1/discovery/personalized/refresh", response_model=ScanApiV1Envelope)
+def v1_discovery_personalized_refresh(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
@@ -118,7 +138,7 @@ def v1_discovery_personalized(
         owner_user_id=int(current_user.id),
         limit=limit,
         offset=offset,
-        refresh=refresh,
+        refresh=True,
     )
     session.commit()
     return wrap_standard_list(body, owner_user_id=int(current_user.id))
@@ -126,13 +146,27 @@ def v1_discovery_personalized(
 
 @p81_discovery_v1_router.get("/api/v1/discovery/dashboard", response_model=ScanApiV1Envelope)
 def v1_discovery_dashboard(
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.nav_route_safe_get import fast_discovery_dashboard
+
+    body: P81PersonalizedDiscoveryDashboardRead = fast_discovery_dashboard(
+        session, owner_user_id=int(current_user.id), refresh=refresh
+    )
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p81_discovery_v1_router.post("/api/v1/discovery/dashboard/refresh", response_model=ScanApiV1Envelope)
+def v1_discovery_dashboard_refresh(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     body: P81PersonalizedDiscoveryDashboardRead = build_personalized_discovery_dashboard(
-        session, owner_user_id=int(current_user.id), refresh=refresh
+        session, owner_user_id=int(current_user.id), refresh=True
     )
     session.commit()
     return wrap_object(body, owner_user_id=int(current_user.id))
@@ -280,13 +314,27 @@ def v1_discovery_roi_analytics(
 
 @p81_discovery_v1_router.get("/api/v1/discovery/analytics-dashboard", response_model=ScanApiV1Envelope)
 def v1_discovery_analytics_dashboard(
-    refresh: bool = Query(True),
+    refresh: bool = Query(False),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.nav_route_safe_get import fast_discovery_analytics_dashboard
+
+    body: P81DiscoveryAnalyticsDashboardRead = fast_discovery_analytics_dashboard(
+        session, owner_user_id=int(current_user.id), refresh=refresh
+    )
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p81_discovery_v1_router.post("/api/v1/discovery/analytics-dashboard/refresh", response_model=ScanApiV1Envelope)
+def v1_discovery_analytics_dashboard_refresh(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     body: P81DiscoveryAnalyticsDashboardRead = build_analytics_dashboard(
-        session, owner_user_id=int(current_user.id), refresh=refresh
+        session, owner_user_id=int(current_user.id), refresh=True
     )
     session.commit()
     return wrap_object(body, owner_user_id=int(current_user.id))

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, apiClient, type P78SellQueueItemRead } from "../api/client";
-import { SellWorkflowNav } from "../components/sell/p78/SellWorkflowNav";
-import { StatusBanner } from "../components/StatusBanner";
+import { PatriotPanel } from "../components/PatriotPageLayout";
+import { SellWorkflowPageLayout } from "../components/sell/p78/SellWorkflowPageLayout";
 
 function priorityClass(p: string): string {
-  if (p === "HIGH") return "border-rose-500/40 bg-rose-950/30";
-  if (p === "MEDIUM") return "border-amber-500/40 bg-amber-950/20";
-  return "border-slate-600 bg-slate-900/40";
+  if (p === "HIGH") return "border-red-300 bg-red-50";
+  if (p === "MEDIUM") return "border-blue-300 bg-blue-50";
+  return "border-blue-200 bg-white";
 }
 
 export function SellQueuePage(): JSX.Element {
@@ -48,63 +48,57 @@ export function SellQueuePage(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4">
-        <div className="mx-auto max-w-4xl space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-amber-300">P78-01</p>
-          <h1 className="text-xl font-semibold">Sell queue</h1>
-          <SellWorkflowNav />
-        </div>
-      </header>
-      <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-        <p className="text-sm text-slate-400">
+    <SellWorkflowPageLayout title="Sell queue" eyebrow="P78-01 · Sell" error={error} onRetry={() => void load()}>
+      <PatriotPanel>
+        <p className="text-blue-900">
           High {counts.high} · Medium {counts.medium} · Watch {counts.watch}
         </p>
-        {items.length === 0 ? (
-          <p className="text-slate-500">No sell candidates yet.</p>
-        ) : (
-          <ul className="space-y-3">
-            {items.map((row) => (
-              <li key={row.inventory_copy_id} className={`rounded-2xl border p-4 ${priorityClass(row.priority)}`}>
-                <div className="flex flex-wrap justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-white">{row.title}</p>
-                    <p className="text-xs text-slate-400">
-                      {row.priority} · sell {row.suggested_sell_quantity} of {row.owned_copies} (hold {row.target_hold_copies})
-                    </p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p className="font-semibold text-emerald-200">${row.fmv.toFixed(0)} FMV</p>
-                    <p className="text-slate-500">Liq {row.liquidity_score.toFixed(0)}</p>
-                  </div>
+      </PatriotPanel>
+      {items.length === 0 ? (
+        <PatriotPanel>
+          <p className="text-blue-800/80">No sell candidates yet.</p>
+        </PatriotPanel>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((row) => (
+            <li key={row.inventory_copy_id} className={`rounded-2xl border p-4 text-blue-950 ${priorityClass(row.priority)}`}>
+              <div className="flex flex-wrap justify-between gap-2">
+                <div>
+                  <p className="font-medium">{row.title}</p>
+                  <p className="text-xs text-blue-800/80">
+                    {row.priority} · sell {row.suggested_sell_quantity} of {row.owned_copies} (hold {row.target_hold_copies})
+                  </p>
                 </div>
-                {row.signals.length ? (
-                  <ul className="mt-2 space-y-1 text-xs text-slate-300">
-                    {row.signals.slice(0, 4).map((s) => (
-                      <li key={s}>• {s}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                <div className="mt-3 flex gap-2">
-                  {row.listing_draft_id ? (
-                    <span className="text-xs text-slate-400">Draft #{row.listing_draft_id}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={creating === row.inventory_copy_id}
-                      className="rounded-lg bg-amber-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
-                      onClick={() => void createDraft(row.inventory_copy_id)}
-                    >
-                      {creating === row.inventory_copy_id ? "Creating…" : "Create draft"}
-                    </button>
-                  )}
+                <div className="text-right text-sm">
+                  <p className="font-semibold text-blue-950">${row.fmv.toFixed(0)} FMV</p>
+                  <p className="text-blue-800/70">Liq {row.liquidity_score.toFixed(0)}</p>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-    </div>
+              </div>
+              {row.signals.length ? (
+                <ul className="mt-2 space-y-1 text-xs text-blue-900/80">
+                  {row.signals.slice(0, 4).map((s) => (
+                    <li key={s}>• {s}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-3 flex gap-2">
+                {row.listing_draft_id ? (
+                  <span className="text-xs text-blue-800/70">Draft #{row.listing_draft_id}</span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={creating === row.inventory_copy_id}
+                    onClick={() => void createDraft(row.inventory_copy_id)}
+                    className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                  >
+                    {creating === row.inventory_copy_id ? "Creating…" : "Create draft"}
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SellWorkflowPageLayout>
   );
 }

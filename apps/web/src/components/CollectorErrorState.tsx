@@ -16,7 +16,7 @@ export function CollectorErrorState({
       <p className="font-semibold">{title}</p>
       <p className="mt-1 text-red-200/90">{message}</p>
       {onRetry ? (
-        <button type="button" className="mt-3 text-violet-300 hover:underline" onClick={onRetry}>
+        <button type="button" className="mt-3 font-medium text-blue-200 hover:text-white hover:underline" onClick={onRetry}>
           Try again
         </button>
       ) : null}

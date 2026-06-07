@@ -36,7 +36,7 @@ def test_personalized_score_with_profile_boost(client: TestClient, session: Sess
     assert read.collector_adjustment > 0
 
     session.commit()
-    api = client.get("/api/v1/discovery/personalized?refresh=true", headers=auth_headers(token))
+    api = client.post("/api/v1/discovery/personalized/refresh", headers=auth_headers(token))
     assert api.status_code == 200, api.text
     items = api.json()["data"]["items"]
     assert items

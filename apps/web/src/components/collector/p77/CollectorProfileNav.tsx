@@ -1,4 +1,6 @@
-import { Link, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
+
+import { patriotNavLinkActive, patriotNavLinkIdle } from "../../patriotTheme";
 
 const links = [
   { to: "/collector-profile", label: "Profile" },
@@ -11,21 +13,16 @@ const links = [
 ];
 
 export function CollectorProfileNav(): JSX.Element {
-  const location = useLocation();
   return (
-    <nav className="flex flex-wrap gap-3 text-sm">
+    <nav className="flex flex-wrap gap-2 text-sm">
       {links.map((link) => (
-        <Link
+        <NavLink
           key={link.to}
           to={link.to}
-          className={
-            location.pathname === link.to
-              ? "font-semibold text-sky-200 underline underline-offset-4"
-              : "text-slate-400 hover:text-slate-200"
-          }
+          className={({ isActive }) => (isActive ? patriotNavLinkActive : patriotNavLinkIdle)}
         >
           {link.label}
-        </Link>
+        </NavLink>
       ))}
     </nav>
   );

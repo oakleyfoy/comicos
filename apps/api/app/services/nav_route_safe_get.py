@@ -11,7 +11,21 @@ from app.schemas.foc_dashboard import FocDashboardRead, FocDashboardSummaryRead
 from app.schemas.key_issue_intelligence import KeyIssueDashboardRead
 from app.schemas.p78_sell_workflow import P78SellQueueListResponse
 from app.schemas.p81_discovery import P81DiscoveryFeedRead
-from app.schemas.p81_discovery_personalization import P81FuturePullListResponse
+from app.schemas.p81_discovery_analytics import (
+    P81DiscoveryActivityRead,
+    P81DiscoveryAlertPerformanceRead,
+    P81DiscoveryAnalyticsDashboardRead,
+    P81DiscoveryRoiRead,
+    P81FuturePullAnalyticsRead,
+    P81PersonalizationImpactRead,
+)
+from app.schemas.p81_discovery_personalization import (
+    P81FuturePullListResponse,
+    P81PersonalizedDiscoveryDashboardRead,
+    P81PersonalizedDiscoveryListResponse,
+    P81PersonalizedOpportunityRead,
+)
+from app.schemas.p85_production_hardening import P85PlatformCertificationRead
 from app.schemas.p82_p84_collector_expansion import (
     CollectionForecastRead,
     CollectionOptimizationRead,
@@ -50,8 +64,27 @@ from app.services.foc_dashboard import get_foc_dashboard
 from app.services.key_issue_dashboard import build_key_issue_dashboard
 from app.services.marketplace_acquisition_service import list_acquisition_opportunities
 from app.services.p78_sell_queue_service import build_sell_queue
-from app.services.p81_discovery_personalization_service import list_future_pull_list
-from app.services.p81_discovery_service import build_discovery_feed
+from app.models.p81_discovery import P81DiscoveryOpportunity
+from app.models.p81_discovery_analytics import P81DiscoveryAnalyticsSnapshot
+from app.services.p81_discovery_analytics_service import (
+    _activity_metrics,
+    _alert_performance,
+    _category_performance,
+    _future_pull_analytics,
+    _roi_analytics,
+    _watchlist_performance,
+)
+from app.services.p81_discovery_personalization_service import (
+    list_alerts,
+    list_future_pull_list,
+    list_watchlists,
+)
+from app.services.p81_discovery_service import _to_read, build_discovery_feed
+from app.services.platform_production_certification import (
+    get_cached_platform_certification,
+    run_platform_production_certification,
+    store_platform_certification_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -524,3 +557,272 @@ def safe_grading_platform_certification(session: Session, *, owner_user_id: int)
             status="ERROR",
             message=_short_error(exc),
         )
+
+
+_DISCOVERY_EMPTY_MSG = "No cached discovery data yet."
+
+
+def _lightweight_personalized(
+    row: P81DiscoveryOpportunity,
+    *,
+    personalized_score: float | None = None,
+    priority_category: str | None = None,
+) -> P81PersonalizedOpportunityRead:
+    score = float(personalized_score if personalized_score is not None else row.discovery_score)
+    cat = priority_category or (
+        "MUST_BUY"
+        if score >= 90
+        else "HIGH_PRIORITY"
+        if score >= 75
+        else "WATCH"
+        if score >= 55
+        else "LOW_PRIORITY"
+        if score >= 35
+        else "IGNORE"
+    )
+    return P81PersonalizedOpportunityRead(
+        opportunity=_to_read(row),
+        discovery_score=float(row.discovery_score),
+        personalized_score=score,
+        collector_adjustment=0.0,
+        priority_category=cat,  # type: ignore[arg-type]
+        recommendation_action="WATCH",
+        recommendation_quantity=0,
+    )
+
+
+def fast_discovery_personalized_list(
+    session: Session,
+    *,
+    owner_user_id: int,
+    limit: int,
+    offset: int,
+    refresh: bool,
+) -> P81PersonalizedDiscoveryListResponse:
+    if refresh:
+        logger.info("discovery/personalized GET refresh=true ignored for owner_user_id=%s", owner_user_id)
+    lim = max(1, min(limit, 200))
+    off = max(0, offset)
+    try:
+        pull_body = list_future_pull_list(session, owner_user_id=owner_user_id, limit=200, offset=0, refresh=False)
+        items: list[P81PersonalizedOpportunityRead] = []
+        for fp in pull_body.items:
+            row = session.get(P81DiscoveryOpportunity, fp.opportunity_id)
+            if row is None or row.owner_user_id != owner_user_id:
+                continue
+            items.append(
+                _lightweight_personalized(
+                    row,
+                    personalized_score=float(fp.personalized_score),
+                    priority_category=str(fp.priority_category),
+                )
+            )
+        if not items:
+            rows = list(
+                session.exec(
+                    select(P81DiscoveryOpportunity)
+                    .where(P81DiscoveryOpportunity.owner_user_id == owner_user_id)
+                    .order_by(P81DiscoveryOpportunity.discovery_score.desc(), P81DiscoveryOpportunity.id.desc())
+                    .limit(100)
+                ).all()
+            )
+            items = [_lightweight_personalized(r) for r in rows if r.registry_status == "PUBLISHED" or r.discovery_score >= 50]
+        if not items:
+            return P81PersonalizedDiscoveryListResponse(
+                status="EMPTY",
+                message=_DISCOVERY_EMPTY_MSG,
+                items=[],
+                total_items=0,
+                limit=lim,
+                offset=off,
+            )
+        page = items[off : off + lim]
+        return P81PersonalizedDiscoveryListResponse(
+            status="OK",
+            message="",
+            items=page,
+            total_items=len(items),
+            limit=lim,
+            offset=off,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fast_discovery_personalized_list failed: %s", exc, exc_info=True)
+        return P81PersonalizedDiscoveryListResponse(
+            status="ERROR",
+            message=_short_error(exc),
+            items=[],
+            total_items=0,
+            limit=lim,
+            offset=off,
+        )
+
+
+def fast_discovery_dashboard(session: Session, *, owner_user_id: int, refresh: bool) -> P81PersonalizedDiscoveryDashboardRead:
+    if refresh:
+        logger.info("discovery/dashboard GET refresh=true ignored for owner_user_id=%s", owner_user_id)
+    try:
+        pull_body = list_future_pull_list(session, owner_user_id=owner_user_id, limit=30, offset=0, refresh=False)
+        personalized: list[P81PersonalizedOpportunityRead] = []
+        for fp in pull_body.items:
+            row = session.get(P81DiscoveryOpportunity, fp.opportunity_id)
+            if row is None:
+                continue
+            personalized.append(
+                _lightweight_personalized(
+                    row,
+                    personalized_score=float(fp.personalized_score),
+                    priority_category=str(fp.priority_category),
+                )
+            )
+        must_buy = [i for i in personalized if i.priority_category == "MUST_BUY"][:20]
+        high = [i for i in personalized if i.priority_category == "HIGH_PRIORITY"][:20]
+        watch = [i for i in personalized if i.priority_category == "WATCH"][:20]
+        future_pull = pull_body.items
+        watchlists = list_watchlists(session, owner_user_id=owner_user_id).items
+        alerts = list_alerts(session, owner_user_id=owner_user_id, status="ACTIVE", limit=20, offset=0).items
+        if not personalized and not future_pull and not watchlists and not alerts:
+            return P81PersonalizedDiscoveryDashboardRead(
+                status="EMPTY",
+                message=_DISCOVERY_EMPTY_MSG,
+                counts={},
+            )
+        return P81PersonalizedDiscoveryDashboardRead(
+            status="OK",
+            message="",
+            must_buy=must_buy,
+            high_priority=high,
+            watch=watch,
+            future_pull_list=future_pull,
+            watchlists=watchlists,
+            active_alerts=alerts,
+            upcoming_foc=[],
+            counts={
+                "must_buy": len(must_buy),
+                "high_priority": len(high),
+                "watch": len(watch),
+                "future_pull": len(future_pull),
+                "active_alerts": len(alerts),
+                "upcoming_foc": 0,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fast_discovery_dashboard failed: %s", exc, exc_info=True)
+        return P81PersonalizedDiscoveryDashboardRead(status="ERROR", message=_short_error(exc))
+
+
+def fast_discovery_analytics_dashboard(
+    session: Session,
+    *,
+    owner_user_id: int,
+    refresh: bool,
+) -> P81DiscoveryAnalyticsDashboardRead:
+    if refresh:
+        logger.info("discovery/analytics-dashboard GET refresh=true ignored for owner_user_id=%s", owner_user_id)
+    try:
+        snap = session.exec(
+            select(P81DiscoveryAnalyticsSnapshot)
+            .where(P81DiscoveryAnalyticsSnapshot.owner_user_id == owner_user_id)
+            .order_by(P81DiscoveryAnalyticsSnapshot.created_at.desc(), P81DiscoveryAnalyticsSnapshot.id.desc())
+            .limit(1)
+        ).first()
+        activity = _activity_metrics(session, owner_user_id=owner_user_id)
+        if activity.opportunities_discovered == 0 and snap is None:
+            empty_activity = P81DiscoveryActivityRead(
+                opportunities_discovered=0,
+                opportunities_published=0,
+                opportunities_viewed=0,
+                opportunities_saved=0,
+                opportunities_purchased=0,
+            )
+            return P81DiscoveryAnalyticsDashboardRead(
+                status="EMPTY",
+                message=_DISCOVERY_EMPTY_MSG,
+                activity=empty_activity,
+                opportunity_performance=[],
+                alert_performance=P81DiscoveryAlertPerformanceRead(
+                    alerts_sent=0,
+                    alerts_opened=0,
+                    alerts_clicked=0,
+                    alerts_converted=0,
+                ),
+                watchlist_performance=[],
+                future_pull=P81FuturePullAnalyticsRead(recommendations=0, purchased=0, skipped=0, accuracy_pct=0.0),
+                discovery_roi=P81DiscoveryRoiRead(portfolio_roi_pct=0.0, average_fmv_gain_pct=0.0, highlights=[]),
+                personalization_impact=P81PersonalizationImpactRead(
+                    opportunities_evaluated=0,
+                    opportunities_adjusted=0,
+                    adjustment_rate_pct=0.0,
+                ),
+                snapshot_ids={},
+            )
+        if snap is not None and snap.activity_metrics_json:
+            activity = P81DiscoveryActivityRead.model_validate(snap.activity_metrics_json)
+        return P81DiscoveryAnalyticsDashboardRead(
+            status="OK",
+            message="",
+            activity=activity,
+            opportunity_performance=_category_performance(session, owner_user_id=owner_user_id),
+            alert_performance=_alert_performance(session, owner_user_id=owner_user_id),
+            watchlist_performance=_watchlist_performance(session, owner_user_id=owner_user_id),
+            future_pull=_future_pull_analytics(session, owner_user_id=owner_user_id),
+            discovery_roi=_roi_analytics(session, owner_user_id=owner_user_id),
+            personalization_impact=P81PersonalizationImpactRead(
+                opportunities_evaluated=activity.opportunities_discovered,
+                opportunities_adjusted=0,
+                adjustment_rate_pct=0.0,
+            ),
+            snapshot_ids={"activity": int(snap.id or 0) if snap else None},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fast_discovery_analytics_dashboard failed: %s", exc, exc_info=True)
+        return P81DiscoveryAnalyticsDashboardRead(
+            status="ERROR",
+            message=_short_error(exc),
+            activity=P81DiscoveryActivityRead(
+                opportunities_discovered=0,
+                opportunities_published=0,
+                opportunities_viewed=0,
+                opportunities_saved=0,
+                opportunities_purchased=0,
+            ),
+            opportunity_performance=[],
+            alert_performance=P81DiscoveryAlertPerformanceRead(
+                alerts_sent=0,
+                alerts_opened=0,
+                alerts_clicked=0,
+                alerts_converted=0,
+            ),
+            watchlist_performance=[],
+            future_pull=P81FuturePullAnalyticsRead(recommendations=0, purchased=0, skipped=0, accuracy_pct=0.0),
+            discovery_roi=P81DiscoveryRoiRead(portfolio_roi_pct=0.0, average_fmv_gain_pct=0.0, highlights=[]),
+            personalization_impact=P81PersonalizationImpactRead(
+                opportunities_evaluated=0,
+                opportunities_adjusted=0,
+                adjustment_rate_pct=0.0,
+            ),
+            snapshot_ids={},
+        )
+
+
+def fast_platform_certification(session: Session, *, owner_user_id: int) -> P85PlatformCertificationRead:
+    cached = get_cached_platform_certification(owner_user_id)
+    if cached is not None:
+        return cached
+    return P85PlatformCertificationRead(
+        title="ComicOS Platform Production Certification (P85)",
+        status="SKIPPED",
+        message="Certification has not been generated yet.",
+        certified_production_release=False,
+        readiness_score=0.0,
+        checks_passed=0,
+        warnings=0,
+        failures=0,
+        categories=[],
+        production_checklist=[],
+    )
+
+
+def generate_platform_certification(session: Session, *, owner_user_id: int) -> P85PlatformCertificationRead:
+    body = run_platform_production_certification(session, owner_user_id=owner_user_id)
+    store_platform_certification_cache(owner_user_id, body)
+    return body

@@ -12633,7 +12633,12 @@ export interface P81FuturePullListItemRead {
 
 export interface P81FuturePullListResponse {
   items: P81FuturePullListItemRead[];
-  pagination: MarketApiV1Pagination;
+  pagination?: MarketApiV1Pagination;
+  total_items?: number;
+  limit?: number;
+  offset?: number;
+  status?: string;
+  message?: string;
 }
 
 export interface P81FocOpportunityRead {

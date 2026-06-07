@@ -17,6 +17,7 @@ class P85PlatformCategoryRead(BaseModel):
 class P85PlatformCertificationRead(BaseModel):
     title: str
     status: str
+    message: str = ""
     certified_production_release: bool
     readiness_score: float
     checks_passed: int

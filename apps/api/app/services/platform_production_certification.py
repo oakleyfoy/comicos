@@ -7,6 +7,16 @@ from typing import Callable
 from sqlmodel import Session
 
 from app.schemas.p85_production_hardening import P85PlatformCategoryRead, P85PlatformCertificationRead, P85ProductionDashboardRead
+
+_certification_cache: dict[int, P85PlatformCertificationRead] = {}
+
+
+def get_cached_platform_certification(owner_user_id: int) -> P85PlatformCertificationRead | None:
+    return _certification_cache.get(owner_user_id)
+
+
+def store_platform_certification_cache(owner_user_id: int, body: P85PlatformCertificationRead) -> None:
+    _certification_cache[owner_user_id] = body
 from app.services.collector_command_center_service import build_collector_command_center
 from app.services.collector_home_service import build_collector_home
 from app.services.collector_notification_service import list_collector_notifications

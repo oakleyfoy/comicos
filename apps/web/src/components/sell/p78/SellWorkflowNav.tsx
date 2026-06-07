@@ -1,4 +1,6 @@
-import { Link, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
+
+import { patriotNavLinkActive, patriotNavLinkIdle } from "../../patriotTheme";
 
 const links = [
   { to: "/sell-queue", label: "Sell queue" },
@@ -8,22 +10,39 @@ const links = [
   { to: "/bundle-opportunities", label: "Bundles" },
 ];
 
-export function SellWorkflowNav(): JSX.Element {
-  const location = useLocation();
+type Variant = "patriot" | "dark";
+
+export function SellWorkflowNav({ variant = "patriot" }: { variant?: Variant }): JSX.Element {
+  if (variant === "dark") {
+    return (
+      <nav className="flex flex-wrap gap-3 text-sm">
+        {links.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            className={({ isActive }) =>
+              isActive
+                ? "font-semibold text-amber-200 underline underline-offset-4"
+                : "text-slate-400 hover:text-slate-200"
+            }
+          >
+            {link.label}
+          </NavLink>
+        ))}
+      </nav>
+    );
+  }
+
   return (
-    <nav className="flex flex-wrap gap-3 text-sm">
+    <nav className="flex flex-wrap gap-2 text-sm">
       {links.map((link) => (
-        <Link
+        <NavLink
           key={link.to}
           to={link.to}
-          className={
-            location.pathname === link.to
-              ? "font-semibold text-amber-200 underline underline-offset-4"
-              : "text-slate-400 hover:text-slate-200"
-          }
+          className={({ isActive }) => (isActive ? patriotNavLinkActive : patriotNavLinkIdle)}
         >
           {link.label}
-        </Link>
+        </NavLink>
       ))}
     </nav>
   );

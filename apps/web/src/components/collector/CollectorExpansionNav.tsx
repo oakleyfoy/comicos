@@ -12,7 +12,7 @@ const LINKS = [
 
 type NavVariant = "dark" | "patriot";
 
-export function CollectorExpansionNav({ variant = "dark" }: { variant?: NavVariant }): JSX.Element {
+export function CollectorExpansionNav({ variant = "patriot" }: { variant?: NavVariant }): JSX.Element {
   const activeClass =
     variant === "patriot"
       ? "rounded bg-red-700 px-2 py-1 font-medium text-white shadow-sm"

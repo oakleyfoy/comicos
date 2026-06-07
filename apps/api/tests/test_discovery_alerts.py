@@ -21,7 +21,7 @@ def test_discovery_alerts_generated_and_updatable(client: TestClient, session: S
         },
     )
     seed_release_number_one(session, owner_user_id=owner_id)
-    client.get("/api/v1/discovery/dashboard?refresh=true", headers=auth_headers(token))
+    client.post("/api/v1/discovery/dashboard/refresh", headers=auth_headers(token))
 
     alerts = client.get("/api/v1/discovery/alerts?status=ACTIVE", headers=auth_headers(token))
     assert alerts.status_code == 200

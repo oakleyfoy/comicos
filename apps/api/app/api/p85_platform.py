@@ -36,7 +36,21 @@ def v1_platform_certification(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    body: P85PlatformCertificationRead = run_platform_production_certification(session, owner_user_id=int(current_user.id))
+    from app.services.nav_route_safe_get import fast_platform_certification
+
+    body: P85PlatformCertificationRead = fast_platform_certification(session, owner_user_id=int(current_user.id))
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p85_platform_router.post("/api/v1/platform/certification/generate", response_model=ScanApiV1Envelope)
+def v1_platform_certification_generate(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.nav_route_safe_get import generate_platform_certification
+
+    body: P85PlatformCertificationRead = generate_platform_certification(session, owner_user_id=int(current_user.id))
     session.commit()
     return wrap_object(body, owner_user_id=int(current_user.id))
 

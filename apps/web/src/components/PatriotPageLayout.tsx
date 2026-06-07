@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { AppShell } from "./AppShell";
 import { CollectorExpansionNav } from "./collector/CollectorExpansionNav";
@@ -12,6 +13,10 @@ type Props = {
   onRetry?: () => void;
   loading?: boolean;
   showExpansionNav?: boolean;
+  subNav?: ReactNode;
+  headerExtra?: ReactNode;
+  headerActions?: ReactNode;
+  maxWidthClass?: string;
   children: ReactNode;
 };
 
@@ -23,26 +28,45 @@ export function PatriotPageLayout({
   onRetry,
   loading,
   showExpansionNav = false,
+  subNav,
+  headerExtra,
+  headerActions,
+  maxWidthClass = "max-w-5xl",
   children,
 }: Props): JSX.Element {
   return (
     <AppShell>
       <div className="overflow-hidden rounded-xl bg-blue-950 text-white">
         <header className="border-b border-red-700 bg-gradient-to-r from-blue-950 via-blue-900 to-red-900 px-4 py-6">
-          <div className="mx-auto max-w-5xl space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-red-200">{eyebrow}</p>
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            {description ? <p className="text-sm text-blue-100">{description}</p> : null}
+          <div className={`mx-auto ${maxWidthClass} space-y-2`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-red-200">{eyebrow}</p>
+                <h1 className="text-2xl font-semibold">{title}</h1>
+                {description ? <p className="text-sm text-blue-100">{description}</p> : null}
+              </div>
+              {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
+            </div>
             {showExpansionNav ? <CollectorExpansionNav variant="patriot" /> : null}
+            {subNav}
+            {headerExtra ? <div className="text-sm text-blue-100">{headerExtra}</div> : null}
           </div>
         </header>
-        <main className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+        <main className={`mx-auto ${maxWidthClass} space-y-4 px-4 py-6`}>
           {error ? <CollectorErrorState message={error} onRetry={onRetry} /> : null}
           {loading ? <p className="text-sm text-blue-100">Loading…</p> : null}
-          {!loading ? children : null}
+          {children}
         </main>
       </div>
     </AppShell>
+  );
+}
+
+export function PatriotInlineLink({ to, children }: { to: string; children: ReactNode }): JSX.Element {
+  return (
+    <Link to={to} className="text-blue-100 underline-offset-2 hover:text-white hover:underline">
+      {children}
+    </Link>
   );
 }
 

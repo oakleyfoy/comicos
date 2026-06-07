@@ -24,4 +24,5 @@ def test_p67_owner_isolation(client: TestClient) -> None:
     client.post("/api/v1/portfolio-analytics/platform/build", headers=auth_headers(token_a))
     token_b = register_and_login(client, "p67-owner-b@example.com")
     latest = client.get("/api/v1/investor-dashboard/latest", headers=auth_headers(token_b))
-    assert latest.status_code == 404
+    assert latest.status_code == 200
+    assert latest.json()["data"]["status"] == "EMPTY"

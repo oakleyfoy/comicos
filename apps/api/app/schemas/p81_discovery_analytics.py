@@ -77,6 +77,8 @@ class P81DiscoveryRoiAnalyticsRead(BaseModel):
 
 
 class P81DiscoveryAnalyticsDashboardRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     activity: P81DiscoveryActivityRead
     opportunity_performance: list[P81DiscoveryCategoryPerformanceRead]
     alert_performance: P81DiscoveryAlertPerformanceRead

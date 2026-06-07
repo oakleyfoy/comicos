@@ -50,6 +50,25 @@ class P67PortfolioPerformanceListRead(BaseModel):
     items: list[P67PortfolioPerformanceItemRead] = Field(default_factory=list)
 
 
+class P67CollectionAnalyticsLatestRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
+    total_holdings: int = 0
+    concentration_score: float = 0.0
+    metadata_json: dict = Field(default_factory=dict)
+
+
+class P67InvestorDashboardLatestRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
+    collection_value: float = 0.0
+    cost_basis: float = 0.0
+    unrealized_gain: float = 0.0
+    realized_gain: float = 0.0
+    portfolio_health_score: float = 0.0
+    cards_json: dict = Field(default_factory=dict)
+
+
 class P67CollectionAnalyticsSnapshotRead(_Orm):
     id: int
     owner_user_id: int

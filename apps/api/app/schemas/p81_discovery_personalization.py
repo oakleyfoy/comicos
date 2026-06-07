@@ -29,6 +29,8 @@ class P81PersonalizedOpportunityRead(BaseModel):
 
 
 class P81PersonalizedDiscoveryListResponse(BaseModel):
+    status: str = "OK"
+    message: str = ""
     items: list[P81PersonalizedOpportunityRead]
     total_items: int
     limit: int
@@ -119,6 +121,8 @@ class P81FocOpportunityRead(BaseModel):
 
 
 class P81PersonalizedDiscoveryDashboardRead(BaseModel):
+    status: str = "OK"
+    message: str = ""
     must_buy: list[P81PersonalizedOpportunityRead] = Field(default_factory=list)
     high_priority: list[P81PersonalizedOpportunityRead] = Field(default_factory=list)
     watch: list[P81PersonalizedOpportunityRead] = Field(default_factory=list)

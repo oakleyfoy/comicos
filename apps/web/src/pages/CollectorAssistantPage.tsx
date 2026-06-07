@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-
 import { ApiError, apiClient, type P80CollectorScanResultRead } from "../api/client";
 import { CollectorAssistantResultPanel } from "../components/mobile/p80/CollectorAssistantResultPanel";
+import { PatriotMobilePanel, PatriotMobileShell } from "../components/mobile/p80/PatriotMobileShell";
+import { patriotInputClass, patriotPrimaryButtonClass } from "../components/patriotTheme";
 import { StatusBanner } from "../components/StatusBanner";
 
 export function CollectorAssistantPage(): JSX.Element {
@@ -35,61 +35,44 @@ export function CollectorAssistantPage(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-4 sm:px-6">
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">P80-03</p>
-            <h1 className="text-xl font-semibold text-white">Collector Assistant</h1>
-          </div>
-          <div className="flex gap-3 text-sm">
-            <Link to="/convention-mode" className="text-emerald-200 underline-offset-2 hover:underline">
-              Convention
-            </Link>
-            <Link to="/collector-dashboard" className="text-emerald-200 underline-offset-2 hover:underline">
-              Dashboard
-            </Link>
-          </div>
-        </div>
-      </header>
+    <PatriotMobileShell
+      eyebrow="P80-03 · Mobile"
+      title="Collector Assistant"
+      headerLinks={[
+        { to: "/convention-mode", label: "Convention" },
+        { to: "/collector-dashboard", label: "Dashboard" },
+      ]}
+    >
+      {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
-      <main className="mx-auto max-w-lg space-y-6 px-4 py-6 sm:px-6">
-        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      <PatriotMobilePanel>
+        <p className="text-xs font-semibold uppercase tracking-wider text-red-700">Shopping scan</p>
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitScan();
+          }}
+        >
+          <input className={`w-full ${patriotInputClass}`} placeholder="UPC, ISBN, or manual title" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+          <input
+            className={`w-full ${patriotInputClass}`}
+            placeholder="Vendor price (optional)"
+            inputMode="decimal"
+            value={vendorPrice}
+            onChange={(e) => setVendorPrice(e.target.value)}
+          />
+          <button type="submit" disabled={submitting} className={`w-full ${patriotPrimaryButtonClass} py-3`}>
+            {submitting ? "Evaluating…" : "Scan & evaluate"}
+          </button>
+        </form>
+      </PatriotMobilePanel>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-slate-900/70 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-wider text-slate-400">Shopping scan</p>
-          <form
-            className="mt-4 space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitScan();
-            }}
-          >
-            <input
-              className="w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500"
-              placeholder="UPC, ISBN, or manual title"
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-            />
-            <input
-              className="w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500"
-              placeholder="Vendor price (optional)"
-              inputMode="decimal"
-              value={vendorPrice}
-              onChange={(e) => setVendorPrice(e.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full rounded-xl bg-emerald-600 py-3 font-semibold text-white disabled:opacity-50"
-            >
-              {submitting ? "Evaluating…" : "Scan & evaluate"}
-            </button>
-          </form>
-        </section>
-
-        {result ? <CollectorAssistantResultPanel result={result} /> : null}
-      </main>
-    </div>
+      {result ? (
+        <PatriotMobilePanel>
+          <CollectorAssistantResultPanel result={result} />
+        </PatriotMobilePanel>
+      ) : null}
+    </PatriotMobileShell>
   );
 }
