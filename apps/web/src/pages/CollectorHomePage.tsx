@@ -5,6 +5,12 @@ import { ApiError, apiClient, type P85CollectorHomeRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { CollectorErrorState } from "../components/CollectorErrorState";
+import {
+  buildCollectorHomeHeaderSummary,
+  COLLECTOR_HOME_TITLE,
+  itemLabel,
+  prepareCollectorHomeSections,
+} from "./collectorHomePresentation";
 
 export function CollectorHomePage(): JSX.Element {
   const [home, setHome] = useState<P85CollectorHomeRead | null>(null);
@@ -45,17 +51,16 @@ export function CollectorHomePage(): JSX.Element {
     );
   }
 
+  const headerSummary = buildCollectorHomeHeaderSummary(home);
+  const sections = prepareCollectorHomeSections(home.sections);
+
   return (
     <AppShell>
       <div className="rounded-xl bg-blue-950 text-white">
         <header className="border-b border-red-700 bg-gradient-to-r from-blue-950 via-blue-900 to-red-900 px-4 py-6">
           <div className="mx-auto max-w-4xl">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-red-200">P85 · Home</p>
-            <h1 className="mt-1 text-2xl font-semibold">{home.headline}</h1>
-            <p className="mt-2 text-sm text-blue-100">
-              Budget {String(home.budget_status.state ?? "—")} · Portfolio $
-              {Number(home.portfolio_movement.current_value ?? 0).toFixed(0)}
-            </p>
+            <h1 className="text-2xl font-semibold">{COLLECTOR_HOME_TITLE}</h1>
+            <p className="mt-2 text-sm text-blue-100">{headerSummary}</p>
           </div>
         </header>
         <main className="mx-auto max-w-4xl space-y-8 px-4 py-6">
@@ -64,10 +69,10 @@ export function CollectorHomePage(): JSX.Element {
             {home.todays_actions.length === 0 ? (
               <div className="mt-3">
                 <CollectorEmptyState
-                  title="No actions queued yet"
-                  description="Daily actions combine recommendations, FOC, sell, and grade signals."
-                  actionLabel="Open daily actions"
-                  actionTo="/daily-actions"
+                  title="No high-priority actions today"
+                  description="ComicOS will surface buy, sell, grade, FOC, storage, marketplace, and pull-list actions here when something needs attention."
+                  actionLabel="Review dashboards"
+                  actionTo="/discovery-dashboard"
                 />
               </div>
             ) : (
@@ -77,44 +82,33 @@ export function CollectorHomePage(): JSX.Element {
                     <Link to={a.action_url || "/daily-actions"} className="text-red-200 hover:text-white hover:underline">
                       {a.title}
                     </Link>
-                    <span className="ml-2 text-blue-200">
-                      {a.action_type} · {a.priority_score.toFixed(0)}
-                    </span>
                   </li>
                 ))}
               </ul>
             )}
           </section>
-          {home.sections.map((sec) => (
+          {sections.map((sec) => (
             <section key={sec.key} className="rounded-lg border border-blue-800 bg-white px-4 py-3 text-blue-950 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-blue-950">{sec.title}</h2>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  sec.status === "OK" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"
-                }`}>
-                  {sec.status}
-                </span>
-              </div>
-              {sec.count === 0 && sec.empty_hint ? (
-                <p className="mt-2 text-sm text-blue-700">{sec.empty_hint}</p>
-              ) : (
+              <h2 className="text-sm font-semibold text-blue-950">{sec.title}</h2>
+              {sec.showItems ? (
                 <ul className="mt-2 space-y-1 text-sm text-blue-900">
                   {sec.items.map((item, idx) => (
-                    <li key={idx}>{String(item.title ?? item.label ?? JSON.stringify(item))}</li>
+                    <li key={idx}>{itemLabel(item)}</li>
                   ))}
                 </ul>
+              ) : (
+                <p className="mt-2 text-sm text-blue-700">{sec.body}</p>
               )}
+              <p className="mt-3 text-sm">
+                <Link
+                  to={sec.actionTo}
+                  className="inline-block rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800"
+                >
+                  {sec.actionLabel}
+                </Link>
+              </p>
             </section>
           ))}
-          <p className="text-xs text-blue-200">
-            <Link to="/collector-command-center" className="text-red-200 hover:text-white hover:underline">
-              Command center
-            </Link>
-            {" · "}
-            <Link to="/workflow-health" className="text-red-200 hover:text-white hover:underline">
-              Workflow health
-            </Link>
-          </p>
         </main>
       </div>
     </AppShell>
