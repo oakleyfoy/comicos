@@ -16,7 +16,21 @@ from app.schemas.p90_automation import (
     P90CollectorAlertUpdate,
 )
 from app.services.collector_action_queue_service import build_action_queue
+from app.services.p90_safe_reads import p90_safe_call
 
+
+def _empty_automation_dashboard() -> P90AutomationDashboardRead:
+    now = datetime.now(timezone.utc)
+    return P90AutomationDashboardRead(
+        status="EMPTY",
+        todays_actions=[],
+        buy_alerts=[],
+        sell_alerts=[],
+        grade_alerts=[],
+        collection_gaps=[],
+        release_alerts=[],
+        generated_at=now,
+    )
 
 def _to_read(row: P90CollectorAlert) -> P90CollectorAlertRead:
     return P90CollectorAlertRead(
@@ -182,21 +196,24 @@ def _section_alerts(session: Session, *, owner_user_id: int, alert_types: tuple[
 
 
 def build_automation_dashboard(session: Session, *, owner_user_id: int) -> P90AutomationDashboardRead:
-    now = datetime.now(timezone.utc)
-    return P90AutomationDashboardRead(
-        todays_actions=build_action_queue(session, owner_user_id=owner_user_id),
-        buy_alerts=_section_alerts(
-            session,
-            owner_user_id=owner_user_id,
-            alert_types=("BUY_OPPORTUNITY", "PRICE_DROP", "WATCHLIST_MATCH"),
-        ),
-        sell_alerts=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("SELL_OPPORTUNITY",)),
-        grade_alerts=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("GRADE_OPPORTUNITY",)),
-        collection_gaps=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("COLLECTION_GAP",)),
-        release_alerts=_section_alerts(
-            session,
-            owner_user_id=owner_user_id,
-            alert_types=("RELEASE_ALERT", "PORTFOLIO_ACTION"),
-        ),
-        generated_at=now,
-    )
+    def _build() -> P90AutomationDashboardRead:
+        now = datetime.now(timezone.utc)
+        return P90AutomationDashboardRead(
+            todays_actions=build_action_queue(session, owner_user_id=owner_user_id),
+            buy_alerts=_section_alerts(
+                session,
+                owner_user_id=owner_user_id,
+                alert_types=("BUY_OPPORTUNITY", "PRICE_DROP", "WATCHLIST_MATCH"),
+            ),
+            sell_alerts=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("SELL_OPPORTUNITY",)),
+            grade_alerts=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("GRADE_OPPORTUNITY",)),
+            collection_gaps=_section_alerts(session, owner_user_id=owner_user_id, alert_types=("COLLECTION_GAP",)),
+            release_alerts=_section_alerts(
+                session,
+                owner_user_id=owner_user_id,
+                alert_types=("RELEASE_ALERT", "PORTFOLIO_ACTION"),
+            ),
+            generated_at=now,
+        )
+
+    return p90_safe_call(session, _build, default=_empty_automation_dashboard(), label="automation_dashboard")

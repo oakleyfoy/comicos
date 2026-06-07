@@ -165,6 +165,24 @@ def test_collector_home_does_not_call_build_sell_queue(client: TestClient, monke
     assert resp.status_code == 200
 
 
+def test_collector_home_survives_missing_p90_advisor_table(client: TestClient, monkeypatch) -> None:
+    from sqlalchemy.exc import ProgrammingError
+
+    token = register_and_login(client, "p85-home-p90-missing@example.com")
+
+    def _boom(*_args, **_kwargs):
+        raise ProgrammingError("SELECT", {}, Exception('relation "p90_collector_advisor_snapshot" does not exist'))
+
+    import app.services.collector_advisor_service as advisor_svc
+
+    monkeypatch.setattr(advisor_svc, "latest_advisor_snapshot", _boom)
+    resp = client.get("/api/v1/collector-home", headers=auth_headers(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["advisor_plan_ready"] is False
+    assert data["advisor_total_actions"] is None
+
+
 def test_collector_home_indicator_lookup_error_does_not_fail_home(client: TestClient, monkeypatch) -> None:
     token = register_and_login(client, "p85-home-ind-err@example.com")
 

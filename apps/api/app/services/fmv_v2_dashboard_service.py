@@ -41,26 +41,42 @@ def _snap_read(row: P90FmvSnapshot) -> P90FmvSnapshotRead:
 
 
 def build_fmv_intelligence_dashboard(session: Session, *, owner_user_id: int) -> P90FmvIntelligenceDashboardRead:
-    now = datetime.now(timezone.utc)
-    snaps = latest_snapshots_for_owner(session, owner_user_id=owner_user_id, limit=500)
-    reads = [_snap_read(s) for s in snaps]
-    return P90FmvIntelligenceDashboardRead(
+    from app.services.p90_safe_reads import p90_safe_call
+
+    def _build() -> P90FmvIntelligenceDashboardRead:
+        now = datetime.now(timezone.utc)
+        snaps = latest_snapshots_for_owner(session, owner_user_id=owner_user_id, limit=500)
+        reads = [_snap_read(s) for s in snaps]
+        return P90FmvIntelligenceDashboardRead(
+            portfolio=build_portfolio_fmv_v2(session, owner_user_id=owner_user_id),
+            highest_value=sorted(reads, key=lambda r: r.market_value, reverse=True)[:12],
+            largest_movers=sorted(reads, key=lambda r: abs(r.trend_score), reverse=True)[:12],
+            strongest_uptrends=sorted(reads, key=lambda r: r.trend_score, reverse=True)[:12],
+            strongest_downtrends=sorted(reads, key=lambda r: r.trend_score)[:12],
+            highest_confidence=sorted(
+                reads,
+                key=lambda r: ({"HIGH": 3, "MEDIUM": 2, "LOW": 1}.get(r.valuation_confidence, 0), r.market_value),
+                reverse=True,
+            )[:12],
+            lowest_confidence=sorted(
+                reads,
+                key=lambda r: ({"HIGH": 3, "MEDIUM": 2, "LOW": 1}.get(r.valuation_confidence, 0), -r.market_value),
+            )[:12],
+            generated_at=now,
+        )
+
+    empty = P90FmvIntelligenceDashboardRead(
+        status="EMPTY",
         portfolio=build_portfolio_fmv_v2(session, owner_user_id=owner_user_id),
-        highest_value=sorted(reads, key=lambda r: r.market_value, reverse=True)[:12],
-        largest_movers=sorted(reads, key=lambda r: abs(r.trend_score), reverse=True)[:12],
-        strongest_uptrends=sorted(reads, key=lambda r: r.trend_score, reverse=True)[:12],
-        strongest_downtrends=sorted(reads, key=lambda r: r.trend_score)[:12],
-        highest_confidence=sorted(
-            reads,
-            key=lambda r: ({"HIGH": 3, "MEDIUM": 2, "LOW": 1}.get(r.valuation_confidence, 0), r.market_value),
-            reverse=True,
-        )[:12],
-        lowest_confidence=sorted(
-            reads,
-            key=lambda r: ({"HIGH": 3, "MEDIUM": 2, "LOW": 1}.get(r.valuation_confidence, 0), -r.market_value),
-        )[:12],
-        generated_at=now,
+        highest_value=[],
+        largest_movers=[],
+        strongest_uptrends=[],
+        strongest_downtrends=[],
+        highest_confidence=[],
+        lowest_confidence=[],
+        generated_at=datetime.now(timezone.utc),
     )
+    return p90_safe_call(session, _build, default=empty, label="fmv_intelligence_dashboard")
 
 
 def build_fmv_diagnostics(session: Session, *, owner_user_id: int) -> P90FmvDiagnosticsRead:

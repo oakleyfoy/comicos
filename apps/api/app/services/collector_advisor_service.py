@@ -416,12 +416,19 @@ def generate_collector_advisor_snapshot(
 
 
 def latest_advisor_snapshot(session: Session, *, owner_user_id: int) -> P90CollectorAdvisorSnapshot | None:
-    return session.exec(
-        select(P90CollectorAdvisorSnapshot)
-        .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
-        .order_by(P90CollectorAdvisorSnapshot.snapshot_date.desc(), P90CollectorAdvisorSnapshot.id.desc())
-        .limit(1)
-    ).first()
+    from app.services.p90_safe_reads import p90_safe_call
+
+    return p90_safe_call(
+        session,
+        lambda: session.exec(
+            select(P90CollectorAdvisorSnapshot)
+            .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
+            .order_by(P90CollectorAdvisorSnapshot.snapshot_date.desc(), P90CollectorAdvisorSnapshot.id.desc())
+            .limit(1)
+        ).first(),
+        default=None,
+        label="latest_advisor_snapshot",
+    )
 
 
 def build_collector_advisor_dashboard(session: Session, *, owner_user_id: int) -> P90CollectorAdvisorDashboardRead:

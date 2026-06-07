@@ -106,7 +106,15 @@ def v1_collector_home(
     assert current_user.id is not None
     owner_user_id = int(current_user.id)
     started = time.perf_counter()
-    body: P85CollectorHomeRead = build_collector_home(session, owner_user_id=owner_user_id)
+    try:
+        body: P85CollectorHomeRead = build_collector_home(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("GET /api/v1/collector-home failed owner_user_id=%s: %s", owner_user_id, exc)
+        from app.services.collector_home_service import _static_safe_collector_home
+        from app.services.p90_safe_reads import p90_rollback_session
+
+        p90_rollback_session(session)
+        body = _static_safe_collector_home()
     elapsed = time.perf_counter() - started
     logger.info(
         "GET /api/v1/collector-home owner_user_id=%s elapsed_seconds=%.3f sections=%s",

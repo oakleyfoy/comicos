@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models.grade_before_sell import GradeBeforeSellRecommendation
+from app.services.p90_safe_reads import p90_rollback_session, p90_safe_call
 from app.services.listing_draft_service import count_drafts_awaiting_review
 from app.services.listing_management_service import (
     count_active_managed_listings,
@@ -297,13 +297,15 @@ def _static_safe_collector_home() -> P85CollectorHomeRead:
     )
 
 
-def _timed_payload(name: str, build):
+def _timed_payload(name: str, build, session: Session | None = None):
     started = time.monotonic()
     try:
         payload = build()
     except Exception as exc:  # noqa: BLE001
         elapsed_ms = round((time.monotonic() - started) * 1000, 1)
         logger.warning("collector_home payload=%s elapsed_ms=%s status=ERROR error=%s", name, elapsed_ms, exc)
+        if session is not None:
+            p90_rollback_session(session)
         return None
     elapsed = time.monotonic() - started
     elapsed_ms = round(elapsed * 1000, 1)
@@ -374,10 +376,13 @@ def _portfolio_movement(session: Session, *, owner_user_id: int) -> dict:
     }
     from app.models.p90_fmv_snapshot import P90FmvSnapshot
 
-    latest_fmv_date = session.exec(
-        select(func.max(P90FmvSnapshot.snapshot_date)).where(P90FmvSnapshot.owner_user_id == owner_user_id)
-    ).one()
-    if latest_fmv_date is not None:
+    def _fmv_v2_enrichment() -> None:
+        nonlocal out
+        latest_fmv_date = session.exec(
+            select(func.max(P90FmvSnapshot.snapshot_date)).where(P90FmvSnapshot.owner_user_id == owner_user_id)
+        ).one()
+        if latest_fmv_date is None:
+            return
         rows = list(
             session.exec(
                 select(P90FmvSnapshot)
@@ -385,16 +390,19 @@ def _portfolio_movement(session: Session, *, owner_user_id: int) -> dict:
                 .where(P90FmvSnapshot.snapshot_date == latest_fmv_date)
             ).all()
         )
-        if rows:
-            avg_trend = sum(float(r.trend_score) for r in rows) / len(rows)
-            if avg_trend >= 8:
-                trend = "UP"
-            elif avg_trend <= -8:
-                trend = "DOWN"
-            else:
-                trend = "FLAT"
-            out["fmv_v2_portfolio_trend"] = trend
-            out["fmv_v2_high_confidence_count"] = sum(1 for r in rows if r.valuation_confidence == "HIGH")
+        if not rows:
+            return
+        avg_trend = sum(float(r.trend_score) for r in rows) / len(rows)
+        if avg_trend >= 8:
+            trend = "UP"
+        elif avg_trend <= -8:
+            trend = "DOWN"
+        else:
+            trend = "FLAT"
+        out["fmv_v2_portfolio_trend"] = trend
+        out["fmv_v2_high_confidence_count"] = sum(1 for r in rows if r.valuation_confidence == "HIGH")
+
+    p90_safe_call(session, _fmv_v2_enrichment, default=None, label="collector_home_fmv_v2")
     return out
 
 
@@ -679,7 +687,12 @@ def _count_discovery_alerts(session: Session, *, owner_user_id: int) -> _Section
 def _advisor_home_meta(session: Session, *, owner_user_id: int) -> tuple[bool, int | None]:
     from app.services.collector_advisor_service import latest_advisor_snapshot
 
-    snap = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
+    snap = p90_safe_call(
+        session,
+        lambda: latest_advisor_snapshot(session, owner_user_id=owner_user_id),
+        default=None,
+        label="collector_home_advisor_meta",
+    )
     if snap is None:
         return False, None
     return True, int(snap.total_actions)
@@ -689,7 +702,12 @@ def _todays_top_actions_from_advisor(session: Session, *, owner_user_id: int) ->
     """Read cached advisor snapshot only — no advisor generation on home load."""
     from app.services.collector_advisor_service import latest_advisor_snapshot
 
-    snap = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
+    snap = p90_safe_call(
+        session,
+        lambda: latest_advisor_snapshot(session, owner_user_id=owner_user_id),
+        default=None,
+        label="collector_home_advisor_actions",
+    )
     if snap is None or not snap.todays_actions:
         return [], "OK", "Open Collector Advisor for your daily action plan."
     actions = [
@@ -731,6 +749,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     budget_status = _timed_payload(
         "budget_status",
         lambda: _budget_status(session, owner_user_id=owner_user_id),
+        session=session,
     ) or {
         "status": "SKIPPED",
         "error": f"Skipped: budget exceeded {_SECTION_MAX_SECONDS:.1f}s.",
@@ -741,6 +760,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     portfolio_movement = _timed_payload(
         "portfolio_movement",
         lambda: _portfolio_movement(session, owner_user_id=owner_user_id),
+        session=session,
     ) or {
         "status": "SKIPPED",
         "error": f"Skipped: portfolio snapshot exceeded {_SECTION_MAX_SECONDS:.1f}s.",
@@ -779,6 +799,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     cross_market = _timed_payload(
         "cross_market_buy_deals",
         lambda: _count_cross_market_buy_deals(session, owner_user_id=uid),
+        session=session,
     )
     cross_market_count = int(cross_market or 0)
     buy_cross_items: list[dict] = []
@@ -873,6 +894,7 @@ def build_collector_home(session: Session, *, owner_user_id: int) -> P85Collecto
     action_block = _timed_payload(
         "todays_actions",
         lambda: _todays_top_actions_from_advisor(session, owner_user_id=owner_user_id),
+        session=session,
     )
     if action_block is None:
         home_actions, todays_status, todays_error = [], "SKIPPED", f"Skipped: actions exceeded {_SECTION_MAX_SECONDS:.1f}s."

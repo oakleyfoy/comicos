@@ -292,15 +292,22 @@ def lookup_latest_fmv_v2(
     issue_number: str,
     variant: str = "",
 ) -> P90FmvSnapshot | None:
-    return session.exec(
-        select(P90FmvSnapshot)
-        .where(P90FmvSnapshot.owner_user_id == owner_user_id)
-        .where(P90FmvSnapshot.series == _norm(series))
-        .where(P90FmvSnapshot.issue_number == _norm(issue_number))
-        .where(P90FmvSnapshot.variant == _norm(variant))
-        .order_by(col(P90FmvSnapshot.snapshot_date).desc(), col(P90FmvSnapshot.id).desc())
-        .limit(1)
-    ).first()
+    from app.services.p90_safe_reads import p90_safe_call
+
+    return p90_safe_call(
+        session,
+        lambda: session.exec(
+            select(P90FmvSnapshot)
+            .where(P90FmvSnapshot.owner_user_id == owner_user_id)
+            .where(P90FmvSnapshot.series == _norm(series))
+            .where(P90FmvSnapshot.issue_number == _norm(issue_number))
+            .where(P90FmvSnapshot.variant == _norm(variant))
+            .order_by(col(P90FmvSnapshot.snapshot_date).desc(), col(P90FmvSnapshot.id).desc())
+            .limit(1)
+        ).first(),
+        default=None,
+        label="lookup_latest_fmv_v2",
+    )
 
 
 def lookup_fmv_v2_display(
@@ -394,21 +401,26 @@ def latest_snapshots_for_owner(
     owner_user_id: int,
     limit: int = 500,
 ) -> list[P90FmvSnapshot]:
-    rows = list(
-        session.exec(
-            select(P90FmvSnapshot)
-            .where(P90FmvSnapshot.owner_user_id == owner_user_id)
-            .order_by(col(P90FmvSnapshot.snapshot_date).desc(), col(P90FmvSnapshot.id).desc())
-        ).all()
-    )
-    seen: set[tuple[str, str, str]] = set()
-    latest: list[P90FmvSnapshot] = []
-    for row in rows:
-        key = (row.series, row.issue_number, row.variant)
-        if key in seen:
-            continue
-        seen.add(key)
-        latest.append(row)
-        if len(latest) >= limit:
-            break
-    return latest
+    from app.services.p90_safe_reads import p90_safe_call
+
+    def _load() -> list[P90FmvSnapshot]:
+        rows = list(
+            session.exec(
+                select(P90FmvSnapshot)
+                .where(P90FmvSnapshot.owner_user_id == owner_user_id)
+                .order_by(col(P90FmvSnapshot.snapshot_date).desc(), col(P90FmvSnapshot.id).desc())
+            ).all()
+        )
+        seen: set[tuple[str, str, str]] = set()
+        latest: list[P90FmvSnapshot] = []
+        for row in rows:
+            key = (row.series, row.issue_number, row.variant)
+            if key in seen:
+                continue
+            seen.add(key)
+            latest.append(row)
+            if len(latest) >= limit:
+                break
+        return latest
+
+    return p90_safe_call(session, _load, default=[], label="latest_fmv_v2_snapshots")
