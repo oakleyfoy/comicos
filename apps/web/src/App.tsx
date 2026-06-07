@@ -131,6 +131,7 @@ import { RecommendationFeedbackPage } from "./pages/RecommendationFeedbackPage";
 import { GradingValidationPage } from "./pages/GradingValidationPage";
 import { GradingPlatformPage } from "./pages/GradingPlatformPage";
 import { ReleaseIntelligencePage } from "./pages/ReleaseIntelligencePage";
+import { ReleaseLifecyclePage } from "./pages/ReleaseLifecyclePage";
 import { ReleaseMonitoringPage } from "./pages/ReleaseMonitoringPage";
 import { FocPurchaseIntelligencePage } from "./pages/FocPurchaseIntelligencePage";
 import { ReleaseIntelligenceAnalyticsPage } from "./pages/ReleaseIntelligenceAnalyticsPage";
@@ -253,6 +254,7 @@ export default function App() {
         <Route path="/grading-platform" element={<GradingPlatformPage />} />
         <Route path="/release-intelligence" element={<ReleaseIntelligencePage />} />
         <Route path="/release-monitoring" element={<ReleaseMonitoringPage />} />
+        <Route path="/release-lifecycle" element={<ReleaseLifecyclePage />} />
         <Route path="/foc-purchase-intelligence" element={<FocPurchaseIntelligencePage />} />
         <Route path="/release-intelligence-analytics" element={<ReleaseIntelligenceAnalyticsPage />} />
         <Route path="/storage-locations" element={<StorageLocationsPage />} />

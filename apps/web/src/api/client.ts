@@ -17835,6 +17835,85 @@ export interface P74ReleaseMonitoringDashboardRead {
   watchlist_activity: P74WatchlistActivityRead[];
 }
 
+export interface P86ReleaseLifecyclePlanItemRead {
+  target_release_date: string;
+  lifecycle_stage: string;
+  status?: string;
+  issue_count?: number | null;
+  variant_count?: number | null;
+  elapsed_seconds?: number | null;
+  warnings?: string[];
+  failures?: string[];
+  run_id?: number | null;
+}
+
+export interface P86ReleaseLifecyclePlanRead {
+  anchor_release_date: string;
+  run_date: string;
+  items: P86ReleaseLifecyclePlanItemRead[];
+}
+
+export interface P86ReleaseLifecycleRunRead {
+  id: number;
+  owner_id: number;
+  run_date: string;
+  anchor_release_date: string;
+  target_release_date: string;
+  lifecycle_stage: string;
+  command: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  elapsed_seconds: number | null;
+  parent_queue_count: number | null;
+  parent_captured_count: number | null;
+  issue_count: number | null;
+  variant_count: number | null;
+  warnings: string[];
+  failures: string[];
+  raw_path: string;
+  crosswalk_skipped: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface P86ReleaseLifecycleLatestReportRead {
+  status: string;
+  title: string;
+  body: string;
+  created_at: string | null;
+  runs: P86ReleaseLifecycleRunRead[];
+  action_url: string;
+  report_id: number | null;
+}
+
+export interface P86ReleaseLifecycleAutomationRead {
+  has_completed_weekly_run: boolean;
+  cron_setup_hint: string;
+  last_report_at: string | null;
+  last_report_status: string | null;
+}
+
+export interface P86ReleaseLifecycleDashboardRead {
+  anchor_release_date: string;
+  run_date: string;
+  this_week_plan: P86ReleaseLifecyclePlanItemRead[];
+  recent_runs: P86ReleaseLifecycleRunRead[];
+  failed_or_blocked: P86ReleaseLifecycleRunRead[];
+  upcoming_lifecycle_dates: P86ReleaseLifecyclePlanItemRead[];
+  latest_successful: P86ReleaseLifecycleRunRead[];
+  active_running_count: number;
+  latest_report: P86ReleaseLifecycleLatestReportRead;
+  automation: P86ReleaseLifecycleAutomationRead;
+}
+
+export interface P86ReleaseLifecycleRunListRead {
+  items: P86ReleaseLifecycleRunRead[];
+  total_items: number;
+  limit: number;
+  offset: number;
+}
+
 export interface P74ReleaseOutcomeRead {
   id: number;
   release_issue_id: number;
@@ -29647,6 +29726,34 @@ export const apiClient = {
 
   getReleaseMonitoringDashboard(): Promise<P74ReleaseMonitoringDashboardRead> {
     return requestScanV1<P74ReleaseMonitoringDashboardRead>("/release-monitoring/dashboard");
+  },
+
+  getReleaseLifecycleDashboard(): Promise<P86ReleaseLifecycleDashboardRead> {
+    return requestScanV1<P86ReleaseLifecycleDashboardRead>("/release-lifecycle/dashboard");
+  },
+
+  getReleaseLifecycleLatestReport(): Promise<P86ReleaseLifecycleLatestReportRead> {
+    return requestScanV1<P86ReleaseLifecycleLatestReportRead>("/release-lifecycle/latest-report");
+  },
+
+  getReleaseLifecyclePlan(): Promise<P86ReleaseLifecyclePlanRead> {
+    return requestScanV1<P86ReleaseLifecyclePlanRead>("/release-lifecycle/plan");
+  },
+
+  getReleaseLifecycleRuns(limit = 50, offset = 0): Promise<P86ReleaseLifecycleRunListRead> {
+    const q = buildQueryString({ limit, offset });
+    return requestScanV1<P86ReleaseLifecycleRunListRead>(`/release-lifecycle/runs${q}`);
+  },
+
+  runReleaseLifecycleWeekly(): Promise<{ runs: P86ReleaseLifecycleRunRead[]; skipped: boolean; message: string }> {
+    return requestScanV1<{ runs: P86ReleaseLifecycleRunRead[]; skipped: boolean; message: string }>(
+      "/release-lifecycle/run-weekly",
+      { method: "POST" },
+    );
+  },
+
+  retryReleaseLifecycleRun(runId: number): Promise<P86ReleaseLifecycleRunRead> {
+    return requestScanV1<P86ReleaseLifecycleRunRead>(`/release-lifecycle/runs/${runId}/retry`, { method: "POST" });
   },
 
   getFocPurchaseDashboard(): Promise<P74FocDashboardRead> {

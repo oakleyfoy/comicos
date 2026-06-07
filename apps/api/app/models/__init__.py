@@ -838,6 +838,7 @@ from app.models.p81_discovery_analytics import (
     P81DiscoveryOpportunityPerformanceSnapshot,
     P81DiscoveryRoiSnapshot,
 )
+from app.models.p86_release_lifecycle import P86ReleaseLifecycleReport, P86ReleaseLifecycleRun
 from app.models.p82_p84_collector_expansion import (
     CollectionRiskSnapshot,
     CollectionScenarioRun,
@@ -1412,6 +1413,8 @@ __all__ = [
     "IndustryReleaseSignal",
     "IndustryOpportunityScore",
     "IndustryScannerAutomationRun",
+    "P86ReleaseLifecycleRun",
+    "P86ReleaseLifecycleReport",
     "IndustryScannerCertificationRun",
     "SpecInput",
     "SpecBaselineScore",

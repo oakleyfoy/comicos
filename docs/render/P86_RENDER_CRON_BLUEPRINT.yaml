@@ -1,0 +1,23 @@
+# P86 Release Lifecycle — Render Cron Job blueprint
+# Apply in Render Dashboard (New → Cron Job) or merge into your API/worker blueprint.
+#
+# This repo's root render.yaml only publishes the static frontend.
+
+services:
+  - type: cron
+    name: comic-os-release-lifecycle-weekly
+    runtime: python
+    rootDir: apps/api
+    schedule: "0 3 * * 4"
+    # CDT (Mar–Nov): Wed 22:00 America/Chicago ≈ Thu 03:00 UTC → 0 3 * * 4
+    # CST (Nov–Mar): Wed 22:00 America/Chicago ≈ Thu 04:00 UTC → 0 4 * * 4
+    # Prefer Render timezone UI when available: America/Chicago, Wed 22:00
+    buildCommand: python -m pip install --upgrade pip && pip install -e .[dev]
+    startCommand: python scripts/run_release_lifecycle_weekly.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        sync: false

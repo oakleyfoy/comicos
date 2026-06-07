@@ -101,6 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Watchlists", to: "/discovery-watchlists" },
       { label: "Discovery Alerts", to: "/discovery-alerts" },
       { label: "Release Intelligence", to: "/release-intelligence", hiddenFromNav: true },
+      { label: "Release Lifecycle", to: "/release-lifecycle" },
       { label: "Future Releases", to: "/future-releases", hiddenFromNav: true },
     ],
   },

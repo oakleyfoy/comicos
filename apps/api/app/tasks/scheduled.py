@@ -29,6 +29,9 @@ MARKET_REFRESH_SCAN_JOB_TYPE = "scheduled_market_refresh_scan"
 MARKET_REFRESH_SCAN_INTERVAL_SECONDS = 86400
 MARKET_REFRESH_SCAN_JOB_ID = "scheduled-market-refresh-scan"
 
+RELEASE_LIFECYCLE_WEEKLY_JOB_TYPE = "scheduled_release_lifecycle_weekly"
+RELEASE_LIFECYCLE_WEEKLY_JOB_ID = "scheduled-release-lifecycle-weekly"
+
 
 def schedule_worker_heartbeat(*, delay_seconds: int = 300):
     settings = get_settings()
@@ -200,4 +203,43 @@ def schedule_pull_list_daily_refresh_scan(*, delay_seconds: int = PULL_LIST_REFR
         func="app.tasks.scheduled.run_scheduled_pull_list_refresh_scan",
         meta={"job_type": PULL_LIST_REFRESH_SCAN_JOB_TYPE},
         job_id=PULL_LIST_REFRESH_SCAN_JOB_ID,
+    )
+
+
+def run_scheduled_release_lifecycle_weekly_scan() -> dict[str, object]:
+    from app.tasks.release_lifecycle_task import run_scheduled_release_lifecycle_weekly
+
+    result = run_scheduled_release_lifecycle_weekly()
+    schedule_release_lifecycle_weekly_scan()
+    return result
+
+
+def schedule_release_lifecycle_weekly_scan(*, delay_seconds: int | None = None) -> object:
+    from datetime import datetime, timezone
+
+    from app.services.release_lifecycle_plan import compute_next_wednesday_schedule_at
+
+    settings = get_settings()
+    existing_job = fetch_job_by_id(RELEASE_LIFECYCLE_WEEKLY_JOB_ID)
+    if existing_job is not None and existing_job.get_status(refresh=True) in {
+        "scheduled",
+        "queued",
+        "started",
+        "deferred",
+    }:
+        return existing_job
+
+    if existing_job is not None:
+        existing_job.delete()
+
+    if delay_seconds is None:
+        next_at = compute_next_wednesday_schedule_at()
+        delay_seconds = max(60, int((next_at - datetime.now(timezone.utc)).total_seconds()))
+
+    return schedule_job_in(
+        queue_name=settings.rq_ai_parse_queue_name,
+        delay_seconds=delay_seconds,
+        func="app.tasks.scheduled.run_scheduled_release_lifecycle_weekly_scan",
+        meta={"job_type": RELEASE_LIFECYCLE_WEEKLY_JOB_TYPE},
+        job_id=RELEASE_LIFECYCLE_WEEKLY_JOB_ID,
     )

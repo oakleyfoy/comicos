@@ -11,3 +11,7 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+# P86 Release Lifecycle — Render Cron is NOT defined here (static site only).
+# Create manually in Render Dashboard or apply docs/render/P86_RENDER_CRON_BLUEPRINT.yaml
+# in a separate backend blueprint. See docs/P86_RELEASE_LIFECYCLE_AUTOMATION.md.
