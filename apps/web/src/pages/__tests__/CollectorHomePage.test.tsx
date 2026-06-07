@@ -73,7 +73,7 @@ describe("CollectorHomePage", () => {
     cleanup();
   });
 
-  it("shows collector-facing header and empty states", async () => {
+  it("shows collector-facing header and compact today summary", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
     render(
       <MemoryRouter>
@@ -83,10 +83,15 @@ describe("CollectorHomePage", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Collector Home" })).toBeInTheDocument();
     });
+    expect(screen.getByRole("heading", { name: "Today's actions" })).toBeInTheDocument();
     expect(screen.queryByText(/Fast operational dashboard/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/SKIPPED/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/UNSET/i)).not.toBeInTheDocument();
-    expect(screen.getByText("No high-priority actions today")).toBeInTheDocument();
+    expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
+    expect(screen.queryByText("Review dashboards")).not.toBeInTheDocument();
+    expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent(
+      "Review 4 opportunities across ComicOS.",
+    );
     expect(screen.queryByText("Discovery alerts")).not.toBeInTheDocument();
     expect(screen.queryByText("Discovery Alerts")).not.toBeInTheDocument();
     expect(screen.getByText("Marketplace Deals")).toBeInTheDocument();
@@ -98,6 +103,35 @@ describe("CollectorHomePage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows no-immediate-actions summary when nothing has items", async () => {
+    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(
+      baseHome({
+        sections: [
+          {
+            key: "sell_alerts",
+            title: "Sell alerts",
+            items: [],
+            empty_hint: "",
+            count: 0,
+            indicator_status: "EMPTY",
+            status: "SKIPPED",
+            error: "",
+          },
+        ],
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("collector-home-todays-summary")).toHaveTextContent(
+        "No immediate actions require attention.",
+      );
+    });
+  });
+
   it("does not show legacy empty actions copy", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
     render(
@@ -106,7 +140,7 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("No high-priority actions today")).toBeInTheDocument();
+      expect(screen.getByTestId("collector-home-todays-summary")).toBeInTheDocument();
     });
     expect(screen.queryByText(/No actions queued yet/i)).not.toBeInTheDocument();
   });
@@ -162,6 +196,7 @@ describe("CollectorHomePage", () => {
     await waitFor(() => {
       expect(screen.getByRole("link", { name: "Review sell candidate" })).toBeInTheDocument();
     });
+    expect(screen.queryByTestId("collector-home-todays-summary")).not.toBeInTheDocument();
     expect(screen.queryByText("No high-priority actions today")).not.toBeInTheDocument();
     const grid = screen.getByTestId("collector-home-section-grid");
     expect(grid.className).toMatch(/grid-cols-1/);

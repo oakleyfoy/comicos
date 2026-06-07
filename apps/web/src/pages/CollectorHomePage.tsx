@@ -3,12 +3,11 @@ import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type P85CollectorHomeRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
-import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { CollectorErrorState } from "../components/CollectorErrorState";
 import {
   buildCollectorHomeHeaderSummary,
+  buildTodaysActionsCompactSummary,
   COLLECTOR_HOME_TITLE,
-  homeHasSectionItemsReady,
   indicatorBadgeClassName,
   itemLabel,
   prepareCollectorHomeSections,
@@ -55,8 +54,8 @@ export function CollectorHomePage(): JSX.Element {
 
   const headerSummary = buildCollectorHomeHeaderSummary(home);
   const sections = prepareCollectorHomeSections(home.sections);
-  const showDashboardsReadyHint =
-    home.todays_actions.length === 0 && homeHasSectionItemsReady(home.sections);
+  const todaysCompactSummary = buildTodaysActionsCompactSummary(home.sections);
+  const hasDailyActions = home.todays_actions.length > 0;
 
   return (
     <AppShell>
@@ -67,37 +66,28 @@ export function CollectorHomePage(): JSX.Element {
             <p className="mt-2 text-sm text-blue-100">{headerSummary}</p>
           </div>
         </header>
-        <main className="mx-auto max-w-4xl space-y-8 px-4 py-6">
-          <section aria-labelledby="collector-home-todays-actions">
+        <main className="mx-auto max-w-4xl px-4 py-6">
+          <section aria-labelledby="collector-home-todays-actions" className="mb-5">
             <h2
               id="collector-home-todays-actions"
               className="text-sm font-semibold uppercase tracking-wide text-red-200"
             >
               Today&apos;s actions
             </h2>
-            {home.todays_actions.length === 0 ? (
-              <div className="mt-3">
-                <CollectorEmptyState
-                  title="No high-priority actions today"
-                  description={
-                    showDashboardsReadyHint
-                      ? "Some dashboards have items ready for review. ComicOS will also surface buy, sell, grade, FOC, storage, marketplace, and pull-list actions here when something needs attention."
-                      : "ComicOS will surface buy, sell, grade, FOC, storage, marketplace, and pull-list actions here when something needs attention."
-                  }
-                  actionLabel="Review dashboards"
-                  actionTo="/discovery-dashboard"
-                />
-              </div>
-            ) : (
-              <ul className="mt-3 space-y-2 text-sm">
+            {hasDailyActions ? (
+              <ul className="mt-2 space-y-1.5 text-sm">
                 {home.todays_actions.map((a, i) => (
-                  <li key={`${a.title}-${i}`} className="rounded border border-blue-700 bg-white/5 px-3 py-2">
+                  <li key={`${a.title}-${i}`} className="rounded border border-blue-700/80 bg-white/5 px-3 py-1.5">
                     <Link to={a.action_url || "/daily-actions"} className="text-red-200 hover:text-white hover:underline">
                       {a.title}
                     </Link>
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className="mt-1 text-sm text-blue-100" data-testid="collector-home-todays-summary">
+                {todaysCompactSummary}
+              </p>
             )}
           </section>
           <div

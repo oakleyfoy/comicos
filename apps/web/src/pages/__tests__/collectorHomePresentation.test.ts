@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { P85CollectorHomeRead } from "../../api/client";
 import {
   buildCollectorHomeHeaderSummary,
+  buildTodaysActionsCompactSummary,
   homeHasSectionItemsReady,
   prepareCollectorHomeSections,
   sectionIndicatorDisplay,
@@ -73,5 +74,20 @@ describe("collectorHomePresentation", () => {
     expect(
       homeHasSectionItemsReady([{ key: "sell_alerts", indicator_status: "HAS_ITEMS" } as never]),
     ).toBe(true);
+  });
+
+  it("builds compact today summary from section indicators", () => {
+    expect(buildTodaysActionsCompactSummary([])).toBe("No immediate actions require attention.");
+    expect(
+      buildTodaysActionsCompactSummary([
+        { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: 4 } as never,
+        { key: "buy_alerts", indicator_status: "HAS_ITEMS", count: 12 } as never,
+      ]),
+    ).toBe("Review 16 opportunities across ComicOS.");
+    expect(
+      buildTodaysActionsCompactSummary([
+        { key: "sell_alerts", indicator_status: "HAS_ITEMS", count: null } as never,
+      ]),
+    ).toBe("Some dashboards have items ready for review.");
   });
 });

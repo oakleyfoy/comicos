@@ -152,6 +152,23 @@ export function homeHasSectionItemsReady(sections: P85CollectorHomeRead["section
   );
 }
 
+/** Compact line under Today's Actions when there are no daily action rows. */
+export function buildTodaysActionsCompactSummary(sections: P85CollectorHomeRead["sections"]): string {
+  const actionable = sections.filter((s) => s.key !== "discovery_alerts" && s.indicator_status === "HAS_ITEMS");
+  if (actionable.length === 0) {
+    return "No immediate actions require attention.";
+  }
+  const hasNullCount = actionable.some((s) => s.count === null || s.count === undefined);
+  if (hasNullCount) {
+    return "Some dashboards have items ready for review.";
+  }
+  const totalCount = actionable.reduce((sum, s) => sum + Math.max(0, Number(s.count) || 0), 0);
+  if (totalCount <= 0) {
+    return "Some dashboards have items ready for review.";
+  }
+  return `Review ${totalCount} opportunities across ComicOS.`;
+}
+
 function sectionDisplay(sec: P85CollectorHomeRead["sections"][number]): CollectorHomeDisplaySection {
   const title = SECTION_LABELS[sec.key] ?? sec.title;
   const emptyAction = SECTION_EMPTY_ACTIONS[sec.key] ?? {
