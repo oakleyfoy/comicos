@@ -26,7 +26,7 @@ class UserSkipMatcher:
     urls: set[str] = field(default_factory=set)
     title_needles: list[str] = field(default_factory=list)
 
-    def matches(self, *, url: str, title: str) -> bool:
+    def matches(self, url: str, title: str) -> bool:
         if normalize_detail_url(url) in self.urls:
             return True
         title_lower = (title or "").strip().lower()
