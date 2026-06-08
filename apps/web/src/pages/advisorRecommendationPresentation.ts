@@ -1,4 +1,5 @@
 import type { P90AdvisorActionRead, P90AdvisorTodayActionRead } from "../api/client";
+import { advisorValueMetricLabel, sanitizeBuyEvidence } from "../features/buyOpportunities/buyRecommendationTrust";
 
 const TITLE_PREFIXES = [
   "Strong Buy: ",
@@ -117,10 +118,16 @@ export function actionValueMetric(action: {
   potential_upside?: number | null;
   profit_potential?: number | null;
   value_increase?: number | null;
+  has_verified_listing?: boolean;
+  estimated_savings?: number | null;
+  potential_upside_percent?: number | null;
+  is_verified_deal?: boolean;
+  recommendation_type?: string;
 }): { label: string; amount: number } | null {
   const cat = (action.category || "").toUpperCase();
-  if (cat === "BUY" && action.potential_upside != null && action.potential_upside > 0) {
-    return { label: "Estimated savings", amount: action.potential_upside };
+  if (cat === "BUY") {
+    const trust = advisorValueMetricLabel(action as P90AdvisorActionRead);
+    if (trust) return trust;
   }
   if (cat === "SELL" && action.profit_potential != null && action.profit_potential > 0) {
     return { label: "Estimated profit", amount: action.profit_potential };
@@ -136,6 +143,14 @@ export function resolveActionEvidence(action: P90AdvisorActionRead): {
   supporting: string[];
   hiddenCount: number;
 } {
+  if ((action.category || "").toUpperCase() === "BUY") {
+    const cleaned = sanitizeBuyEvidence(action);
+    const hidden = Math.max(
+      0,
+      dedupeEvidenceSegments(splitEvidenceSegments(action.reason || "")).length - MAX_VISIBLE_EVIDENCE,
+    );
+    return { primary: cleaned.primary, supporting: cleaned.supporting, hiddenCount: hidden };
+  }
   const merged = dedupeEvidenceString(action.primary_reason || action.reason || "");
   if (action.supporting_signals?.length) {
     const primary = action.primary_reason || merged.split(" · ")[0] || merged;

@@ -42,6 +42,16 @@ def rank_mixed_top_actions(actions: list[dict[str, Any]], *, limit: int = 5) -> 
             str(action.get("primary_reason") or action.get("reason") or action.get("summary") or "")
         )
         primary, _, _ = format_evidence_for_display(reason_raw)
+        rec_type = str(action.get("recommendation_type") or "")
+        if category == "BUY":
+            if rec_type == "VERIFIED_DEAL" or action.get("has_verified_listing"):
+                action_pill = "BUY NOW"
+            elif rec_type == "WATCHLIST_BUY":
+                action_pill = "WATCH"
+            else:
+                action_pill = "REVIEW BUY"
+        else:
+            action_pill = category
         out.append(
             {
                 "rank": idx,
@@ -57,6 +67,10 @@ def rank_mixed_top_actions(actions: list[dict[str, Any]], *, limit: int = 5) -> 
                 "action_url_type": action.get("action_url_type"),
                 "has_verified_listing": action.get("has_verified_listing"),
                 "marketplace_name": action.get("marketplace_name"),
+                "recommendation_type": rec_type,
+                "recommendation_type_label": action.get("recommendation_type_label"),
+                "is_verified_deal": action.get("is_verified_deal"),
+                "action_pill": action_pill,
             }
         )
     return out

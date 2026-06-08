@@ -75,6 +75,21 @@ class MarketplaceAcquisitionOpportunityRead(BaseModel):
     savings_vs_highest: float | None = None
     best_buy_reason: str | None = None
     marketplace_count: int = 0
+    recommendation_type: str = "RECOMMENDED_BUY"
+    recommendation_type_label: str = "Recommended Buy"
+    is_verified_deal: bool = False
+    is_recommendation_only: bool = True
+    price_source: str = "P82_OPPORTUNITY"
+    price_source_label: str = "Recommendation estimate"
+    target_buy_price: float | None = None
+    estimated_value: float | None = None
+    current_price: float | None = None
+    estimated_savings: float | None = None
+    potential_upside_percent: float | None = None
+    why_this_book: str = ""
+    why_now: str = ""
+    why_for_me: str = ""
+    recommended_action: str = ""
 
 
 class MarketplaceAcquisitionListResponse(BaseModel):

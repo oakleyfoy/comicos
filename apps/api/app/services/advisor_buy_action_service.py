@@ -7,8 +7,9 @@ from urllib.parse import quote
 
 from sqlmodel import Session
 
-from app.services.advisor_evidence import dedupe_evidence_string, format_evidence_for_display
+from app.services.buy_recommendation_trust_service import apply_buy_trust_to_action
 from app.services.marketplace.marketplace_listing_service import listing_summary_for_opportunity
+from app.services.p82_listing_url_safety import is_safe_marketplace_listing_url
 
 
 def _marketplace_search_route(title: str) -> str:
@@ -33,15 +34,18 @@ def resolve_buy_action_target(
         )
         verified = summary.get("best_verified_listing")
         if isinstance(verified, dict) and verified.get("listing_url"):
-            return {
-                "has_verified_listing": True,
-                "verified_listing_count": int(summary.get("verified_listing_count") or 0),
-                "action_url": str(verified["listing_url"]),
-                "action_url_type": "MARKETPLACE_LISTING",
-                "best_verified_listing": verified,
-                "best_total_cost": summary.get("best_total_cost"),
-                "marketplace_name": verified.get("marketplace_name") or verified.get("marketplace"),
-            }
+            url = str(verified["listing_url"])
+            item_id = str(verified.get("item_id") or "")
+            if is_safe_marketplace_listing_url(listing_url=url, external_listing_id=item_id):
+                return {
+                    "has_verified_listing": True,
+                    "verified_listing_count": int(summary.get("verified_listing_count") or 0),
+                    "action_url": url,
+                    "action_url_type": "MARKETPLACE_LISTING",
+                    "best_verified_listing": verified,
+                    "best_total_cost": summary.get("best_total_cost"),
+                    "marketplace_name": verified.get("marketplace_name") or verified.get("marketplace"),
+                }
         return {
             "has_verified_listing": False,
             "verified_listing_count": int(summary.get("verified_listing_count") or 0),
@@ -89,27 +93,8 @@ def enrich_buy_action_dict(
         fallback_route=str(item.get("action_route") or ""),
     )
     item.update(target)
-    if target["has_verified_listing"]:
-        mp = target.get("marketplace_name") or "marketplace"
-        savings = item.get("potential_upside")
-        parts = [str(item.get("primary_reason") or item.get("reason") or "")]
-        parts.append(f"Verified marketplace listing on {mp}")
-        if savings:
-            parts.append(f"Estimated savings ${float(savings):.0f}")
-        merged = dedupe_evidence_string(" · ".join(p for p in parts if p))
-        primary, supporting, hidden = format_evidence_for_display(merged)
-        item["reason"] = merged
-        item["primary_reason"] = primary or merged
-        item["supporting_signals"] = supporting
-        item["hidden_signal_count"] = hidden
-    else:
-        note = "Recommendation only · no verified listing yet"
-        merged = dedupe_evidence_string(f"{item.get('primary_reason') or item.get('reason') or ''} · {note}")
-        primary, supporting, hidden = format_evidence_for_display(merged)
-        item["reason"] = merged
-        item["primary_reason"] = primary or merged
-        item["supporting_signals"] = supporting
-        item["hidden_signal_count"] = hidden
+    item["best_verified_listing"] = target.get("best_verified_listing")
+    apply_buy_trust_to_action(session, owner_user_id=owner_user_id, item=item)
 
 
 def enrich_buy_action_dicts(session: Session, *, owner_user_id: int, items: list[dict[str, Any]]) -> None:

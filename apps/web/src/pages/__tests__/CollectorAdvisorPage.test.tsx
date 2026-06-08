@@ -269,7 +269,7 @@ describe("CollectorAdvisorPage", () => {
     });
     renderPage();
     await screen.findByRole("heading", { name: "Buy", level: 2 });
-    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute("href", "/marketplace-opportunity/1");
+    expect(screen.getByRole("link", { name: "Review Opportunity" })).toHaveAttribute("href", "/marketplace-opportunity/1");
     expect(screen.queryByRole("link", { name: "Buy Now" })).not.toBeInTheDocument();
   });
 

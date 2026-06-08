@@ -20,6 +20,7 @@ import {
   recommendationHeaderLabel,
   resolveOpportunityBuyCta,
 } from "../features/buyOpportunities/buyVerifiedAction";
+import { canShowBuyNow, opportunityPageTitle } from "../features/buyOpportunities/buyRecommendationTrust";
 import { ImportMarketplaceUrlModal } from "../features/buyOpportunities/ImportMarketplaceUrlModal";
 
 function sourceTypeLabel(sourceType: string): string {
@@ -82,7 +83,7 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
 
   return (
     <PatriotPageLayout
-      eyebrow="Buy"
+      eyebrow={opp ? opportunityPageTitle(opp) : "Buy"}
       title={opp?.title ?? "Buy opportunity"}
       showExpansionNav={true}
       error={error}
@@ -110,7 +111,7 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
         <PatriotPanel>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full bg-red-700 px-2.5 py-0.5 text-xs font-semibold text-white">
-              {verified ? headerLabel : "Recommended Buy"}
+              {verified ? "Verified Deal" : opp.recommendation_type_label || "Recommended Buy"}
             </span>
             <span className="text-sm text-blue-800">Score {Math.round(opp.opportunity_score)}</span>
           </div>
@@ -124,7 +125,7 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
                   <dd className="font-medium">{opp.best_verified_listing?.marketplace_name ?? opp.marketplace}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wide text-blue-600">Price</dt>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Current price</dt>
                   <dd className="font-medium">${(displayPrice ?? opp.asking_price).toFixed(2)}</dd>
                 </div>
                 <div>
@@ -163,33 +164,52 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
               </p>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
                 <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Target buy price</dt>
+                  <dd className="font-medium">${(opp.target_buy_price ?? opp.asking_price).toFixed(2)}</dd>
+                </div>
+                <div>
                   <dt className="text-xs uppercase tracking-wide text-blue-600">Estimated value</dt>
                   <dd className="font-medium">${opp.estimated_fmv.toFixed(2)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wide text-blue-600">Signal</dt>
-                  <dd className="font-medium">{badge}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-blue-600">Upside</dt>
-                  <dd className="font-medium">{upside?.text.replace(/^Upside:\s*/, "") ?? "Unknown"}</dd>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Potential upside</dt>
+                  <dd className="font-medium">
+                    +{Math.round(opp.potential_upside_percent ?? opp.discount_to_fmv)}%
+                  </dd>
                 </div>
               </dl>
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                No verified live listing is currently available.
+                ComicOS has not verified a live listing for this recommendation yet.
               </div>
+              <div className="mt-4 flex flex-wrap gap-2">
               {buyCta ? (
                 <Link
                   to={buyCta.href}
-                  className="mt-4 inline-block rounded-md border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+                  className="inline-block rounded-md border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50"
                 >
                   {buyCta.label}
                 </Link>
               ) : null}
+              <Link
+                to="/buy-opportunities"
+                className="inline-block rounded-md border border-blue-300 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-50"
+              >
+                Back to Buy Opportunities
+              </Link>
+              </div>
+              {(opp.why_this_book || opp.recommended_action) ? (
+                <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/50 px-3 py-3 text-sm text-blue-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Why this recommendation</p>
+                  {opp.why_this_book ? <p className="mt-2"><span className="font-medium">Why this book:</span> {opp.why_this_book}</p> : null}
+                  {opp.why_now ? <p className="mt-1"><span className="font-medium">Why now:</span> {opp.why_now}</p> : null}
+                  {opp.why_for_me ? <p className="mt-1"><span className="font-medium">Why for me:</span> {opp.why_for_me}</p> : null}
+                  {opp.recommended_action ? <p className="mt-1"><span className="font-medium">Recommended action:</span> {opp.recommended_action}</p> : null}
+                </div>
+              ) : null}
             </>
           )}
 
-          {opp.reasons.length > 0 ? (
+          {opp.reasons.length > 0 && verified ? (
             <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-blue-800">
               {opp.reasons.slice(0, 3).map((r) => (
                 <li key={r}>{r}</li>

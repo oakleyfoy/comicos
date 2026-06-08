@@ -109,6 +109,6 @@ describe("buyVerifiedAction", () => {
       action_url_type: "OPPORTUNITY_DETAIL",
       has_verified_listing: false,
     });
-    expect(cta.label).toBe("Review");
+    expect(cta.label).toBe("Review Opportunity");
   });
 });

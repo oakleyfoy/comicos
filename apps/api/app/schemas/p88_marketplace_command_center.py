@@ -36,6 +36,7 @@ class BestDealTodayRead(BaseModel):
     has_verified_listing: bool = False
     action_url: str = ""
     action_url_type: str = "OPPORTUNITY_DETAIL"
+    recommendation_type: str = ""
 
 
 class PriceDropRead(BaseModel):
@@ -106,6 +107,8 @@ class MarketplaceCommandCenterRead(BaseModel):
     status: str = "OK"
     kpis: MarketplaceCommandCenterKpiRead
     best_deals_today: list[BestDealTodayRead] = Field(default_factory=list)
+    recommended_buys_today: list[BestDealTodayRead] = Field(default_factory=list)
+    watchlist_opportunities_today: list[BestDealTodayRead] = Field(default_factory=list)
     price_drops: list[PriceDropRead] = Field(default_factory=list)
     collection_gaps: list[CollectionGapFeedRead] = Field(default_factory=list)
     watchlist_matches: list[WatchlistMatchRead] = Field(default_factory=list)

@@ -64,7 +64,9 @@ export function BuyOpportunityCard({ card }: Props): JSX.Element {
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-blue-600">Price</dt>
+          <dt className="text-xs uppercase tracking-wide text-blue-600">
+            {card.hasVerifiedListings ? "Current price" : "Target buy price"}
+          </dt>
           <dd className="font-medium">${card.bestPrice.toFixed(2)}</dd>
         </div>
         <div>

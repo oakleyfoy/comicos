@@ -185,6 +185,35 @@ def _best_deal_action_for_opportunity(o) -> tuple[bool, str, str, float, str | N
     )
 
 
+def _opportunity_to_deal(o, *, require_verified: bool | None = None) -> BestDealTodayRead | None:
+    has_verified, action_url, action_type, price, marketplace, marketplace_name = _best_deal_action_for_opportunity(o)
+    if require_verified is True and not has_verified:
+        return None
+    if require_verified is False and has_verified:
+        return None
+    rec_type = getattr(o, "recommendation_type", None) or (
+        "VERIFIED_DEAL" if has_verified else "RECOMMENDED_BUY"
+    )
+    if not marketplace_name and marketplace:
+        marketplace_name = marketplace_display_name(str(marketplace))
+    return BestDealTodayRead(
+        opportunity_id=o.id,
+        title=o.title or f"{o.series} #{o.issue}".strip(),
+        marketplace=marketplace,
+        marketplace_name=marketplace_name or (marketplace_display_name(str(marketplace)) if marketplace else None),
+        price=round(price, 2),
+        fmv=round(float(o.estimated_fmv), 2),
+        upside_percent=_upside_percent(price, float(o.estimated_fmv)),
+        savings_vs_highest=o.savings_vs_highest,
+        opportunity_score=float(o.opportunity_score),
+        recommendation=o.recommendation,
+        has_verified_listing=has_verified,
+        action_url=action_url,
+        action_url_type=action_type,
+        recommendation_type=str(rec_type),
+    )
+
+
 def _build_best_deals(opportunities) -> list[BestDealTodayRead]:
     candidates = [
         o
@@ -192,36 +221,53 @@ def _build_best_deals(opportunities) -> list[BestDealTodayRead]:
         if o.recommendation in {"STRONG_BUY", "GOOD_BUY", "WATCH"} and o.status == "ACTIVE"
     ]
 
-    def sort_key(o) -> tuple[int, float, float]:
-        has_v = bool(getattr(o, "has_verified_listings", False) and getattr(o, "best_verified_listing", None))
+    def sort_key(o) -> tuple[float, float]:
         _, _, _, price, _, _ = _best_deal_action_for_opportunity(o)
         upside = _upside_percent(price, float(o.estimated_fmv)) or 0.0
-        return (-1 if has_v else 0, -float(o.opportunity_score), -upside)
+        return (-float(o.opportunity_score), -upside)
 
-    candidates.sort(key=sort_key)
     deals: list[BestDealTodayRead] = []
-    for o in candidates[:10]:
-        has_verified, action_url, action_type, price, marketplace, marketplace_name = _best_deal_action_for_opportunity(o)
-        if not marketplace_name and marketplace:
-            marketplace_name = marketplace_display_name(str(marketplace))
-        deals.append(
-            BestDealTodayRead(
-                opportunity_id=o.id,
-                title=o.title or f"{o.series} #{o.issue}".strip(),
-                marketplace=marketplace,
-                marketplace_name=marketplace_name or (marketplace_display_name(str(marketplace)) if marketplace else None),
-                price=round(price, 2),
-                fmv=round(float(o.estimated_fmv), 2),
-                upside_percent=_upside_percent(price, float(o.estimated_fmv)),
-                savings_vs_highest=o.savings_vs_highest,
-                opportunity_score=float(o.opportunity_score),
-                recommendation=o.recommendation,
-                has_verified_listing=has_verified,
-                action_url=action_url,
-                action_url_type=action_type,
-            )
-        )
+    verified = [o for o in candidates if _best_deal_action_for_opportunity(o)[0]]
+    verified.sort(key=sort_key)
+    for o in verified[:10]:
+        row = _opportunity_to_deal(o, require_verified=True)
+        if row:
+            deals.append(row)
     return deals
+
+
+def _build_recommended_buys(opportunities) -> list[BestDealTodayRead]:
+    candidates = [
+        o
+        for o in opportunities
+        if o.recommendation in {"STRONG_BUY", "GOOD_BUY", "SPEC_BUY", "UNDERVALUED"}
+        and o.status == "ACTIVE"
+        and not _best_deal_action_for_opportunity(o)[0]
+    ]
+    candidates.sort(key=lambda o: (-float(o.opportunity_score), -float(o.discount_to_fmv or 0)))
+    out: list[BestDealTodayRead] = []
+    for o in candidates[:10]:
+        row = _opportunity_to_deal(o, require_verified=False)
+        if row:
+            row.recommendation_type = "RECOMMENDED_BUY"
+            out.append(row)
+    return out
+
+
+def _build_watchlist_opportunities(opportunities) -> list[BestDealTodayRead]:
+    candidates = [
+        o
+        for o in opportunities
+        if o.recommendation == "WATCH" and o.status == "ACTIVE" and not _best_deal_action_for_opportunity(o)[0]
+    ]
+    candidates.sort(key=lambda o: -float(o.opportunity_score))
+    out: list[BestDealTodayRead] = []
+    for o in candidates[:10]:
+        row = _opportunity_to_deal(o, require_verified=False)
+        if row:
+            row.recommendation_type = "WATCHLIST_BUY"
+            out.append(row)
+    return out
 
 
 def _build_price_drops(session: Session, *, owner_user_id: int) -> list[PriceDropRead]:
@@ -417,6 +463,8 @@ def build_marketplace_command_center(session: Session, *, owner_user_id: int) ->
     dashboard = MarketplaceCommandCenterRead(
         kpis=kpis,
         best_deals_today=_build_best_deals(opportunities),
+        recommended_buys_today=_build_recommended_buys(opportunities),
+        watchlist_opportunities_today=_build_watchlist_opportunities(opportunities),
         price_drops=_build_price_drops(session, owner_user_id=owner_user_id),
         collection_gaps=gap_feed,
         watchlist_matches=_build_watchlist_matches(session, owner_user_id=owner_user_id),

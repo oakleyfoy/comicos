@@ -159,9 +159,9 @@ export function MarketplaceCommandCenterPage(): JSX.Element {
             )}
           </PatriotPanel>
 
-          <PatriotPanel title="Best deals today" className="mt-4">
+          <PatriotPanel title="Verified deals" className="mt-4">
             {data.best_deals_today.length === 0 ? (
-              <p className="text-sm text-blue-800">No best deals in cache.</p>
+              <p className="text-sm text-blue-800">No verified marketplace deals in cache.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -206,6 +206,46 @@ export function MarketplaceCommandCenterPage(): JSX.Element {
                   </tbody>
                 </table>
               </div>
+            )}
+          </PatriotPanel>
+
+          <PatriotPanel title="Recommended buys" className="mt-4">
+            {data.recommended_buys_today.length === 0 ? (
+              <p className="text-sm text-blue-800">No recommendation-only buy ideas cached.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {data.recommended_buys_today.map((row) => (
+                  <li key={row.opportunity_id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 px-3 py-2">
+                    <div>
+                      <Link to={`/marketplace-opportunity/${row.opportunity_id}`} className="font-medium text-red-700 hover:underline">
+                        {row.title}
+                      </Link>
+                      <p className="text-xs text-blue-700">
+                        Target ${row.price.toFixed(2)} · FMV ${row.fmv.toFixed(2)}
+                      </p>
+                    </div>
+                    <Link to={`/marketplace-opportunity/${row.opportunity_id}`} className="text-xs font-semibold text-blue-900 hover:underline">
+                      Review Opportunity
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </PatriotPanel>
+
+          <PatriotPanel title="Watchlist opportunities" className="mt-4">
+            {data.watchlist_opportunities_today.length === 0 ? (
+              <p className="text-sm text-blue-800">No watchlist buy signals.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {data.watchlist_opportunities_today.map((row) => (
+                  <li key={row.opportunity_id} className="rounded border border-blue-100 px-3 py-2">
+                    <Link to={`/marketplace-opportunity/${row.opportunity_id}`} className="font-medium text-red-700 hover:underline">
+                      {row.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </PatriotPanel>
 

@@ -21,6 +21,8 @@ function emptyDashboard(): P88MarketplaceCommandCenterRead {
       upcoming_releases: 0,
     },
     best_deals_today: [],
+    recommended_buys_today: [],
+    watchlist_opportunities_today: [],
     price_drops: [],
     collection_gaps: [],
     watchlist_matches: [],
@@ -136,7 +138,7 @@ describe("MarketplaceCommandCenterPage", () => {
       expect(screen.getByRole("heading", { name: "Marketplace Command Center", level: 1 })).toBeInTheDocument();
     });
     expect(screen.getByText("No marketplace signals yet")).toBeInTheDocument();
-    expect(screen.getByText("No best deals in cache.")).toBeInTheDocument();
+    expect(screen.getByText("No verified marketplace deals in cache.")).toBeInTheDocument();
   });
 
   it("renders populated sections", async () => {
@@ -149,7 +151,7 @@ describe("MarketplaceCommandCenterPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Absolute Batman #20").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Best deals today")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verified deals", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("Recent price drops")).toBeInTheDocument();
     expect(screen.getByText("Battle Beast #1")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Watchlist matches", level: 2 })).toBeInTheDocument();

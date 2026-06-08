@@ -12,6 +12,7 @@ import {
   type P90PortfolioImpactRead,
 } from "../api/client";
 import { resolveAdvisorBuyCta } from "../features/buyOpportunities/buyVerifiedAction";
+import { advisorBuyBadge, advisorBuyMetrics } from "../features/buyOpportunities/buyRecommendationTrust";
 import { useAuth } from "../auth/AuthContext";
 import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
 import {
@@ -52,39 +53,67 @@ function RecommendationCard({ action }: { action: P90AdvisorActionRead }): JSX.E
   const value = actionValueMetric(action);
   const buyCta = action.category.toUpperCase() === "BUY" ? resolveAdvisorBuyCta(action) : null;
   const subtext = buyCta?.subtext ?? categoryRecommendationLabel(action.category);
+  const isBuy = action.category.toUpperCase() === "BUY";
+  const metrics = isBuy ? advisorBuyMetrics(action) : [];
+  const searchHref =
+    isBuy && !buyCta?.external
+      ? `/buy-opportunities?search=${encodeURIComponent(title)}`
+      : null;
 
   return (
     <li className="rounded-lg border border-blue-200 bg-white px-4 py-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
+          {isBuy ? (
+            <span className="mb-1 inline-block rounded-full bg-red-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              {advisorBuyBadge(action)}
+            </span>
+          ) : null}
           <p className="text-base font-semibold text-blue-950">{title}</p>
           <p className="mt-0.5 text-xs text-blue-600">{subtext}</p>
           {evidence.primary ? <p className="mt-2 font-medium text-blue-900">{evidence.primary}</p> : null}
+          {metrics.length ? (
+            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
+              {metrics.map((m) => (
+                <div key={m.label}>
+                  <dt className="text-blue-600">{m.label}</dt>
+                  <dd className="font-medium text-blue-950">{m.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
           {evidence.supporting.length ? (
             <p className="mt-1 text-blue-800">{evidence.supporting.join(" · ")}</p>
           ) : null}
-          {evidence.hiddenCount > 0 ? (
-            <p className="mt-1 text-xs text-blue-600">+{evidence.hiddenCount} more signals</p>
+          {action.recommended_action ? (
+            <p className="mt-2 text-xs text-blue-700">{action.recommended_action}</p>
           ) : null}
           <p className="mt-2 text-xs text-blue-600">
             Priority {action.priority_score.toFixed(0)} · {action.confidence} confidence
-            {value ? ` · ${value.label}: ${money(value.amount)}` : ""}
+            {value
+              ? ` · ${value.label}: ${
+                  value.label.toLowerCase().includes("discount")
+                    ? `${Math.round(value.amount)}%`
+                    : money(value.amount)
+                }`
+              : ""}
           </p>
         </div>
+        <div className="flex shrink-0 flex-col gap-2">
         {buyCta ? (
           buyCta.external ? (
             <a
               href={buyCta.href}
               target="_blank"
               rel="noreferrer"
-              className="shrink-0 rounded-md border border-red-700 bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
+              className="rounded-md border border-red-700 bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
             >
               {buyCta.label}
             </a>
           ) : (
             <Link
               to={buyCta.href}
-              className="shrink-0 rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50"
+              className="rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50"
             >
               {buyCta.label}
             </Link>
@@ -92,11 +121,17 @@ function RecommendationCard({ action }: { action: P90AdvisorActionRead }): JSX.E
         ) : action.action_route ? (
           <Link
             to={action.action_route}
-            className="shrink-0 rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50"
+            className="rounded-md border border-red-700 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50"
           >
             View
           </Link>
         ) : null}
+        {searchHref && buyCta && !buyCta.external ? (
+          <Link to={searchHref} className="text-center text-xs font-medium text-blue-800 hover:underline">
+            Search Marketplaces
+          </Link>
+        ) : null}
+        </div>
       </div>
     </li>
   );
@@ -147,10 +182,23 @@ function TodaysBestActions({ actions }: { actions: P90AdvisorTodayActionRead[] }
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-blue-950">{title}</p>
-                    <CategoryPill category={action.category} />
+                    {action.action_pill ? (
+                      <span className="rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase text-red-800">
+                        {action.action_pill}
+                      </span>
+                    ) : (
+                      <CategoryPill category={action.category} />
+                    )}
                   </div>
                   {action.detail ? <p className="mt-1 text-sm text-blue-800">{action.detail}</p> : null}
-                  {value ? <p className="mt-1 text-xs text-blue-700">{value.label}: {money(value.amount)}</p> : null}
+                  {value ? (
+                    <p className="mt-1 text-xs text-blue-700">
+                      {value.label}:{" "}
+                      {value.label.toLowerCase().includes("discount")
+                        ? `${Math.round(value.amount)}%`
+                        : money(value.amount)}
+                    </p>
+                  ) : null}
                 </div>
                 {buyCta && action.category.toUpperCase() === "BUY" ? (
                   buyCta.external ? (

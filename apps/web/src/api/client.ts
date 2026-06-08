@@ -12804,6 +12804,21 @@ export interface P82MarketplaceAcquisitionOpportunityRead {
   savings_vs_highest?: number | null;
   best_buy_reason?: string | null;
   marketplace_count?: number;
+  recommendation_type?: string;
+  recommendation_type_label?: string;
+  is_verified_deal?: boolean;
+  is_recommendation_only?: boolean;
+  price_source?: string;
+  price_source_label?: string;
+  target_buy_price?: number | null;
+  estimated_value?: number | null;
+  current_price?: number | null;
+  estimated_savings?: number | null;
+  potential_upside_percent?: number | null;
+  why_this_book?: string;
+  why_now?: string;
+  why_for_me?: string;
+  recommended_action?: string;
 }
 
 export interface P82MarketplaceAcquisitionListResponse {
@@ -13009,6 +13024,38 @@ export interface P88MarketplaceCommandCenterRead {
     has_verified_listing?: boolean;
     action_url?: string;
     action_url_type?: string;
+  }[];
+  recommended_buys_today: {
+    opportunity_id: number;
+    title: string;
+    marketplace: string | null;
+    marketplace_name: string | null;
+    price: number;
+    fmv: number;
+    upside_percent: number | null;
+    savings_vs_highest: number | null;
+    opportunity_score: number;
+    recommendation: string;
+    has_verified_listing?: boolean;
+    action_url?: string;
+    action_url_type?: string;
+    recommendation_type?: string;
+  }[];
+  watchlist_opportunities_today: {
+    opportunity_id: number;
+    title: string;
+    marketplace: string | null;
+    marketplace_name: string | null;
+    price: number;
+    fmv: number;
+    upside_percent: number | null;
+    savings_vs_highest: number | null;
+    opportunity_score: number;
+    recommendation: string;
+    has_verified_listing?: boolean;
+    action_url?: string;
+    action_url_type?: string;
+    recommendation_type?: string;
   }[];
   price_drops: {
     opportunity_id: number | null;
@@ -17557,6 +17604,22 @@ export interface P90AdvisorActionRead {
   marketplace_name?: string | null;
   entity_type?: string;
   entity_id?: number;
+  recommendation_type?: string;
+  recommendation_type_label?: string;
+  is_verified_deal?: boolean;
+  is_recommendation_only?: boolean;
+  price_source?: string;
+  price_source_label?: string;
+  target_buy_price?: number | null;
+  estimated_value?: number | null;
+  current_price?: number | null;
+  estimated_savings?: number | null;
+  potential_upside_percent?: number | null;
+  why_this_book?: string;
+  why_now?: string;
+  why_for_me?: string;
+  recommended_action?: string;
+  best_verified_listing?: P82VerifiedMarketplaceListingRead | null;
 }
 
 export interface P90AdvisorTodayActionRead {
@@ -17573,6 +17636,10 @@ export interface P90AdvisorTodayActionRead {
     action_url_type?: string;
     has_verified_listing?: boolean;
     marketplace_name?: string | null;
+    recommendation_type?: string;
+    recommendation_type_label?: string;
+    is_verified_deal?: boolean;
+    action_pill?: string;
 }
 
 export interface P90AdvisorActivityRead {

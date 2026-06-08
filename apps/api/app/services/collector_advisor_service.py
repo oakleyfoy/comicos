@@ -192,10 +192,32 @@ def _finalize_actions(raw: list[dict]) -> list[dict]:
     for item in ranked:
         category = str(item.get("category") or "")
         comic = comic_label_from_title(str(item.get("comic") or item.get("title") or ""))
-        reason = dedupe_evidence_string(str(item.get("reason") or ""))
-        primary, supporting, hidden = format_evidence_for_display(reason)
-        out.append(
-            {
+        if category.upper() == "BUY" and item.get("primary_reason"):
+            reason = str(item.get("reason") or "")
+            primary = str(item.get("primary_reason") or "")
+            supporting = list(item.get("supporting_signals") or [])
+            hidden = int(item.get("hidden_signal_count") or 0)
+        else:
+            reason = dedupe_evidence_string(str(item.get("reason") or ""))
+            primary, supporting, hidden = format_evidence_for_display(reason)
+        trust_keys = (
+            "recommendation_type",
+            "recommendation_type_label",
+            "is_verified_deal",
+            "is_recommendation_only",
+            "price_source",
+            "price_source_label",
+            "target_buy_price",
+            "estimated_value",
+            "current_price",
+            "estimated_savings",
+            "potential_upside_percent",
+            "why_this_book",
+            "why_now",
+            "why_for_me",
+            "recommended_action",
+        )
+        payload = {
                 "category": category,
                 "comic": comic,
                 "reason": reason,
@@ -226,7 +248,10 @@ def _finalize_actions(raw: list[dict]) -> list[dict]:
                 "verified_listing_count": int(item.get("verified_listing_count") or 0),
                 "marketplace_name": item.get("marketplace_name"),
             }
-        )
+        for key in trust_keys:
+            if key in item and item.get(key) is not None:
+                payload[key] = item.get(key)
+        out.append(payload)
     return out
 
 

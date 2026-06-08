@@ -28,6 +28,21 @@ class P90AdvisorActionRead(BaseModel):
     has_verified_listing: bool = False
     verified_listing_count: int = 0
     marketplace_name: str | None = None
+    recommendation_type: str = ""
+    recommendation_type_label: str = ""
+    is_verified_deal: bool = False
+    is_recommendation_only: bool = True
+    price_source: str = ""
+    price_source_label: str = ""
+    target_buy_price: float | None = None
+    estimated_value: float | None = None
+    current_price: float | None = None
+    estimated_savings: float | None = None
+    potential_upside_percent: float | None = None
+    why_this_book: str = ""
+    why_now: str = ""
+    why_for_me: str = ""
+    recommended_action: str = ""
 
 
 class P90AdvisorTodayActionRead(BaseModel):
@@ -44,6 +59,10 @@ class P90AdvisorTodayActionRead(BaseModel):
     action_url_type: str = ""
     has_verified_listing: bool = False
     marketplace_name: str | None = None
+    recommendation_type: str = ""
+    recommendation_type_label: str = ""
+    is_verified_deal: bool = False
+    action_pill: str = ""
 
 
 class P90AdvisorActivityRead(BaseModel):

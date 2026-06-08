@@ -1,6 +1,7 @@
 import type { P90AdvisorActionRead } from "../../api/client";
 import type { P82MarketplaceAcquisitionOpportunityRead } from "../../api/client";
 import { isSafeMarketplaceListingUrl } from "./buyOpportunityPresentation";
+import { canShowBuyNow, type BuyTrustCheckInput } from "./buyRecommendationTrust";
 
 export type BuyActionUrlType = "MARKETPLACE_LISTING" | "OPPORTUNITY_DETAIL" | "MARKETPLACE_SEARCH";
 
@@ -12,20 +13,8 @@ export type BuyCta = {
   urlType: BuyActionUrlType;
 };
 
-export function opportunityHasVerifiedListing(
-  opp: Pick<
-    P82MarketplaceAcquisitionOpportunityRead,
-    "has_verified_listings" | "best_verified_listing" | "listing_url" | "external_listing_id" | "marketplace"
-  >,
-): boolean {
-  if (opp.best_verified_listing?.listing_url) {
-    return isSafeMarketplaceListingUrl({
-      listing_url: opp.best_verified_listing.listing_url,
-      external_listing_id: opp.external_listing_id,
-      marketplace: opp.best_verified_listing.marketplace,
-    });
-  }
-  return Boolean(opp.has_verified_listings && isSafeMarketplaceListingUrl(opp));
+export function opportunityHasVerifiedListing(opp: BuyTrustCheckInput): boolean {
+  return canShowBuyNow(opp);
 }
 
 export function resolveOpportunityBuyCta(
@@ -77,7 +66,7 @@ export function resolveAdvisorBuyCta(
   const urlType = (action.action_url_type || "OPPORTUNITY_DETAIL") as BuyActionUrlType;
   const url = (action.action_url || action.action_route || "").trim();
 
-  if (action.has_verified_listing && urlType === "MARKETPLACE_LISTING" && url.startsWith("http")) {
+  if (canShowBuyNow(action) && urlType === "MARKETPLACE_LISTING" && url.startsWith("http")) {
     return {
       label: "Buy Now",
       href: url,
@@ -90,7 +79,7 @@ export function resolveAdvisorBuyCta(
   }
 
   return {
-    label: "Review",
+    label: "Review Opportunity",
     href: url.startsWith("/") ? url : `/marketplace-opportunity/${action.entity_id ?? ""}`,
     external: false,
     subtext: "Recommendation only · no verified listing yet",

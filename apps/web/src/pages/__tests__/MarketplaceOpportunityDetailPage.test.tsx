@@ -66,10 +66,12 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("No verified live listing is currently available.")).toBeInTheDocument();
+      expect(
+        screen.getByText("ComicOS has not verified a live listing for this recommendation yet."),
+      ).toBeInTheDocument();
     });
     expect(screen.queryByRole("link", { name: "Buy Now" })).not.toBeInTheDocument();
-    expect(screen.getByText("Recommended Buy")).toBeInTheDocument();
+    expect(screen.getAllByText("Recommended Buy").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Search Marketplaces" })).toBeInTheDocument();
   });
 
@@ -79,6 +81,8 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
         external_listing_id: "123456789012",
         listing_url: "https://www.ebay.com/itm/123456789012",
         has_verified_listings: true,
+        is_verified_deal: true,
+        recommendation_type: "VERIFIED_DEAL",
         verified_listing_count: 1,
         best_verified_listing: {
           marketplace: "EBAY",
@@ -107,9 +111,9 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
         "https://www.ebay.com/itm/123456789012",
       );
     });
-    expect(screen.getByText("Strong Buy")).toBeInTheDocument();
+    expect(screen.getByText("Verified Deal")).toBeInTheDocument();
     expect(
-      screen.queryByText("No verified live listing is currently available."),
+      screen.queryByText("ComicOS has not verified a live listing for this recommendation yet."),
     ).not.toBeInTheDocument();
   });
 
@@ -128,7 +132,7 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText("Recommended Buy")).toBeInTheDocument();
+      expect(screen.getAllByText("Recommended Buy").length).toBeGreaterThan(0);
     });
     expect(screen.queryByRole("link", { name: "Buy Now" })).not.toBeInTheDocument();
   });

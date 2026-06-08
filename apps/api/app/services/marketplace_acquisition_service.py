@@ -18,6 +18,7 @@ from app.schemas.p82_p84_collector_expansion import (
     VerifiedMarketplaceListingRead,
 )
 from app.services.marketplace.marketplace_listing_service import listing_summary_for_opportunity
+from app.services.buy_recommendation_trust_service import trust_fields_for_opportunity
 from app.services.p77_personalization_engine import load_personalization_context, personalize_score
 
 
@@ -43,6 +44,8 @@ def _to_read(
     best_verified: VerifiedMarketplaceListingRead | None = None
     if isinstance(best_verified_raw, dict) and best_verified_raw.get("listing_url"):
         best_verified = VerifiedMarketplaceListingRead.model_validate(best_verified_raw)
+    has_verified = bool(s.get("has_verified_listings")) and best_verified is not None
+    trust = trust_fields_for_opportunity(row, summary=s, has_verified_listing=has_verified)
     effective_fmv = float(row.estimated_fmv)
     effective_discount = float(row.discount_to_fmv)
     fmv_v2_market: float | None = None
@@ -104,6 +107,7 @@ def _to_read(
         fmv_v2_market_value=fmv_v2_market,
         fmv_v2_confidence=fmv_v2_conf,
         effective_discount_to_fmv=effective_discount if fmv_v2_market is not None else None,
+        **trust,
     )
 
 
