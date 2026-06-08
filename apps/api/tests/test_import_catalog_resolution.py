@@ -39,6 +39,41 @@ def test_title_normalization_terminal_volume() -> None:
     assert normalize_import_title("Terminal") == normalize_import_title("Terminal Vol 1")
 
 
+def test_strong_title_issue_match_accepts_over_issue_only_ties() -> None:
+    winner = CatalogCandidateRow(
+        source="ExternalCatalogIssue",
+        source_id=6830,
+        publisher="Marvel Comics",
+        title="Jeff the Land Shark",
+        issue_number="1",
+        release_date=date(2025, 6, 18),
+    )
+    tie = CatalogCandidateRow(
+        source="ReleaseIssue",
+        source_id=32,
+        publisher="DC Comics",
+        title="Animal Man",
+        issue_number="1",
+        release_date=date(2026, 10, 13),
+    )
+    scored = [
+        ScoredCatalogCandidate(
+            candidate=winner,
+            score=62,
+            reasons=["issue_number_exact", "title_overlap_good", "release_date_present"],
+        ),
+        ScoredCatalogCandidate(
+            candidate=tie,
+            score=58,
+            reasons=["issue_number_exact", "publisher_alias_match", "release_date_present"],
+        ),
+    ]
+    result = _pick_resolution(scored)
+    assert result.matched is True
+    assert result.source == "ExternalCatalogIssue"
+    assert result.source_id == 6830
+
+
 def test_ambiguous_candidates_not_auto_applied() -> None:
     candidate_a = CatalogCandidateRow(
         source="ReleaseIssue",
@@ -177,3 +212,100 @@ def test_score_terminal_candidate() -> None:
         ),
     )
     assert scored.score >= 70
+
+
+def test_jeff_the_land_shark_superstar_issue_1_resolves(session: Session) -> None:
+    user = User(email="jeff-land-shark-1@example.com", password_hash="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    assert user.id is not None
+
+    row = ExternalCatalogIssue(
+        source_name="locg",
+        title="Jeff the Land Shark #1",
+        publisher="Marvel Comics",
+        series_name="Jeff the Land Shark",
+        issue_number="1",
+        release_date=date(2025, 6, 18),
+        cover_image_url="https://example.com/jeff-1.jpg",
+    )
+    session.add(row)
+    session.commit()
+
+    resolution = resolve_import_catalog_match(
+        session,
+        owner_user_id=user.id,
+        item={
+            "publisher": None,
+            "title": "Jeff The Land Shark Superstar",
+            "issue_number": "1",
+            "cover_name": "Cover A Regular Gurihiru Cover",
+        },
+    )
+    assert resolution.matched is True
+    assert resolution.source == "ExternalCatalogIssue"
+    assert resolution.release_date == date(2025, 6, 18)
+    assert "Jeff" in (resolution.series_title or "")
+
+    enriched = enrich_import_item_lifecycle(
+        session,
+        owner_user_id=user.id,
+        item={
+            "publisher": None,
+            "title": "Jeff The Land Shark Superstar",
+            "issue_number": "1",
+            "release_status": "unknown",
+            "order_status": "ordered",
+        },
+        today=date(2026, 6, 8),
+    )
+    assert enriched["catalog_match_matched"] is True
+    assert enriched["release_lifecycle_status"] in {"RELEASED_NOT_RECEIVED", "OVERDUE"}
+
+
+def test_jeff_the_land_shark_superstar_issue_2_resolves(session: Session) -> None:
+    user = User(email="jeff-land-shark-2@example.com", password_hash="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    assert user.id is not None
+
+    row = ExternalCatalogIssue(
+        source_name="locg",
+        title="Jeff the Land Shark #2",
+        publisher="Marvel Comics",
+        series_name="Jeff the Land Shark",
+        issue_number="2",
+        release_date=date(2025, 7, 23),
+        cover_image_url="https://example.com/jeff-2.jpg",
+    )
+    session.add(row)
+    session.commit()
+
+    resolution = resolve_import_catalog_match(
+        session,
+        owner_user_id=user.id,
+        item={
+            "publisher": "DC",
+            "title": "Jeff The Land Shark Superstar",
+            "issue_number": "2",
+        },
+    )
+    assert resolution.matched is True
+    assert resolution.source == "ExternalCatalogIssue"
+    assert resolution.release_date == date(2025, 7, 23)
+
+    enriched = enrich_import_item_lifecycle(
+        session,
+        owner_user_id=user.id,
+        item={
+            "publisher": "DC",
+            "title": "Jeff The Land Shark Superstar",
+            "issue_number": "2",
+            "release_status": "unknown",
+        },
+        today=date(2026, 6, 8),
+    )
+    assert enriched["catalog_match_matched"] is True
+    assert enriched["parsed_release_date"] == "2025-07-23"

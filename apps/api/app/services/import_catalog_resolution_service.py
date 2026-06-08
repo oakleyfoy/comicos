@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal
 
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from app.models.external_catalog import ExternalCatalogIssue
@@ -17,7 +18,10 @@ CatalogSource = Literal["ReleaseIssue", "ExternalCatalogIssue"]
 
 ACCEPT_SCORE = 70
 POSSIBLE_SCORE = 55
+STRONG_TITLE_ISSUE_MIN_SCORE = 60
 CANDIDATE_LIMIT = 100
+
+_TITLE_SEARCH_STOP = frozenset({"the", "and", "for", "vol", "volume", "live"})
 
 IMPORT_PUBLISHER_ALIASES: dict[str, str] = {
     "image comics": "image",
@@ -131,6 +135,33 @@ def _title_tokens(value: str | None) -> set[str]:
     if not normalized:
         return set()
     return {token for token in normalized.split() if len(token) > 1}
+
+
+def _catalog_title_search_tokens(value: str | None) -> list[str]:
+    """Distinct tokens for SQL title pre-filter (longest / most selective first)."""
+    normalized = normalize_import_title(value)
+    if not normalized:
+        return []
+    tokens = [
+        token
+        for token in normalized.split()
+        if len(token) > 1 and token not in _TITLE_SEARCH_STOP
+    ]
+    if not tokens:
+        tokens = [token for token in normalized.split() if len(token) > 1]
+    deduped = sorted(set(tokens), key=len, reverse=True)
+    return deduped[:4]
+
+
+def _strong_title_issue_match(reasons: list[str]) -> bool:
+    return "issue_number_exact" in reasons and any(
+        reason in reasons
+        for reason in (
+            "title_normalized_exact",
+            "title_overlap_strong",
+            "title_overlap_good",
+        )
+    )
 
 
 def _token_overlap_score(left: set[str], right: set[str]) -> tuple[int, str | None]:
@@ -253,22 +284,42 @@ def score_catalog_candidate(
     return ScoredCatalogCandidate(candidate=candidate, score=score, reasons=reasons)
 
 
+def _title_prefilter_clause(tokens: list[str], *columns: Any) -> Any | None:
+    if not tokens:
+        return None
+    clauses = []
+    for token in tokens:
+        pattern = f"%{token}%"
+        for column in columns:
+            clauses.append(column.ilike(pattern))  # type: ignore[attr-defined]
+    return or_(*clauses)
+
+
 def _collect_release_issue_candidates(
     session: Session,
     *,
     owner_user_id: int,
     issue_number: str | None,
+    title: str | None = None,
 ) -> list[CatalogCandidateRow]:
     variants = issue_number_variants(issue_number)
     if not variants:
         return []
-    rows = session.exec(
+    search_tokens = _catalog_title_search_tokens(title)
+    stmt = (
         select(ReleaseIssue, ReleaseSeries)
         .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
         .where(ReleaseIssue.owner_user_id == owner_user_id)
         .where(ReleaseIssue.issue_number.in_(list(variants)))  # type: ignore[attr-defined]
-        .limit(CANDIDATE_LIMIT)
-    ).all()
+    )
+    title_clause = _title_prefilter_clause(
+        search_tokens,
+        ReleaseSeries.series_name,
+        ReleaseIssue.title,
+    )
+    if title_clause is not None:
+        stmt = stmt.where(title_clause)
+    rows = session.exec(stmt.limit(CANDIDATE_LIMIT)).all()
     candidates: list[CatalogCandidateRow] = []
     for issue, series in rows:
         if issue.id is None:
@@ -290,15 +341,24 @@ def _collect_external_catalog_candidates(
     session: Session,
     *,
     issue_number: str | None,
+    title: str | None = None,
 ) -> list[CatalogCandidateRow]:
     variants = issue_number_variants(issue_number)
     if not variants:
         return []
-    rows = session.exec(
-        select(ExternalCatalogIssue)
-        .where(ExternalCatalogIssue.issue_number.in_(list(variants)))  # type: ignore[attr-defined]
-        .limit(CANDIDATE_LIMIT)
-    ).all()
+    search_tokens = _catalog_title_search_tokens(title)
+    stmt = select(ExternalCatalogIssue).where(
+        ExternalCatalogIssue.issue_number.in_(list(variants))  # type: ignore[attr-defined]
+    )
+    title_clause = _title_prefilter_clause(
+        search_tokens,
+        ExternalCatalogIssue.series_name,
+        ExternalCatalogIssue.title,
+        ExternalCatalogIssue.normalized_title_key,
+    )
+    if title_clause is not None:
+        stmt = stmt.where(title_clause)
+    rows = session.exec(stmt.limit(CANDIDATE_LIMIT)).all()
     candidates: list[CatalogCandidateRow] = []
     for row in rows:
         if row.id is None:
@@ -370,6 +430,17 @@ def _pick_resolution(scored: list[ScoredCatalogCandidate]) -> ImportCatalogResol
     else:
         rejected_reason = "below_threshold"
 
+    if (
+        not matched
+        and best.score >= STRONG_TITLE_ISSUE_MIN_SCORE
+        and _strong_title_issue_match(best.reasons)
+    ):
+        second_weak = second is None or not _strong_title_issue_match(second.reasons)
+        if second_weak or best.score > second.score:
+            matched = True
+            possible_match = False
+            rejected_reason = None
+
     winner = best if matched else None
     return ImportCatalogResolutionResult(
         matched=matched,
@@ -432,9 +503,16 @@ def resolve_import_catalog_match(
 
     candidates: list[CatalogCandidateRow] = []
     candidates.extend(
-        _collect_release_issue_candidates(session, owner_user_id=owner_user_id, issue_number=issue_number)
+        _collect_release_issue_candidates(
+            session,
+            owner_user_id=owner_user_id,
+            issue_number=issue_number,
+            title=title,
+        )
     )
-    candidates.extend(_collect_external_catalog_candidates(session, issue_number=issue_number))
+    candidates.extend(
+        _collect_external_catalog_candidates(session, issue_number=issue_number, title=title)
+    )
 
     scored = [
         score_catalog_candidate(

@@ -198,7 +198,9 @@ def _lookup_publisher_aliases(
 ) -> PublisherAutofillCandidate | None:
     from app.services.metadata_enrichment import SOURCE_LINE_PUBLISHER_MARKERS
 
-    tokens = _tokenize_haystack(canonical_series, raw_text)
+    # Only scan the series title for alias tokens — not the full order raw_text, which can
+    # mention unrelated publishers and poison every line item (P90-09D).
+    tokens = _tokenize_haystack(canonical_series)
     for token in tokens:
         alias_key = normalize_alias_lookup_key(token)
         if alias_key in STATIC_PUBLISHER_ALIAS_MAP:
