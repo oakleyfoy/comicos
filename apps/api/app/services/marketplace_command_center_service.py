@@ -157,6 +157,34 @@ def _count_kpis(session: Session, *, owner_user_id: int) -> MarketplaceCommandCe
     )
 
 
+def _best_deal_action_for_opportunity(o) -> tuple[bool, str, str, float, str | None, str | None]:
+    verified = getattr(o, "best_verified_listing", None)
+    has_verified = bool(getattr(o, "has_verified_listings", False) and verified and verified.listing_url)
+    if has_verified and verified:
+        url = str(verified.listing_url)
+        price = float(verified.total_cost if verified.total_cost is not None else verified.price)
+        mp = verified.marketplace_name or verified.marketplace
+        return True, url, "MARKETPLACE_LISTING", price, verified.marketplace, mp
+    opp_id = int(getattr(o, "id", 0) or 0)
+    title = (getattr(o, "title", None) or "").strip()
+    if title:
+        from urllib.parse import quote
+
+        return False, f"/buy-opportunities?search={quote(title)}", "MARKETPLACE_SEARCH", float(
+            o.best_active_price if o.best_active_price is not None else o.asking_price
+        ), getattr(o, "best_marketplace", None) or getattr(o, "listing_marketplace", None) or getattr(o, "marketplace", None), getattr(
+            o, "best_marketplace_name", None
+        )
+    return (
+        False,
+        f"/marketplace-opportunity/{opp_id}",
+        "OPPORTUNITY_DETAIL",
+        float(o.best_active_price if o.best_active_price is not None else o.asking_price),
+        getattr(o, "best_marketplace", None) or getattr(o, "listing_marketplace", None) or getattr(o, "marketplace", None),
+        getattr(o, "best_marketplace_name", None),
+    )
+
+
 def _build_best_deals(opportunities) -> list[BestDealTodayRead]:
     candidates = [
         o
@@ -164,28 +192,33 @@ def _build_best_deals(opportunities) -> list[BestDealTodayRead]:
         if o.recommendation in {"STRONG_BUY", "GOOD_BUY", "WATCH"} and o.status == "ACTIVE"
     ]
 
-    def sort_key(o) -> tuple[float, float]:
-        price = float(o.best_active_price if o.best_active_price is not None else o.asking_price)
+    def sort_key(o) -> tuple[int, float, float]:
+        has_v = bool(getattr(o, "has_verified_listings", False) and getattr(o, "best_verified_listing", None))
+        _, _, _, price, _, _ = _best_deal_action_for_opportunity(o)
         upside = _upside_percent(price, float(o.estimated_fmv)) or 0.0
-        return (-float(o.opportunity_score), -upside)
+        return (-1 if has_v else 0, -float(o.opportunity_score), -upside)
 
     candidates.sort(key=sort_key)
     deals: list[BestDealTodayRead] = []
     for o in candidates[:10]:
-        price = float(o.best_active_price if o.best_active_price is not None else o.asking_price)
-        marketplace = o.best_marketplace or o.listing_marketplace or o.marketplace
+        has_verified, action_url, action_type, price, marketplace, marketplace_name = _best_deal_action_for_opportunity(o)
+        if not marketplace_name and marketplace:
+            marketplace_name = marketplace_display_name(str(marketplace))
         deals.append(
             BestDealTodayRead(
                 opportunity_id=o.id,
                 title=o.title or f"{o.series} #{o.issue}".strip(),
                 marketplace=marketplace,
-                marketplace_name=o.best_marketplace_name or marketplace_display_name(str(marketplace)),
+                marketplace_name=marketplace_name or (marketplace_display_name(str(marketplace)) if marketplace else None),
                 price=round(price, 2),
                 fmv=round(float(o.estimated_fmv), 2),
                 upside_percent=_upside_percent(price, float(o.estimated_fmv)),
                 savings_vs_highest=o.savings_vs_highest,
                 opportunity_score=float(o.opportunity_score),
                 recommendation=o.recommendation,
+                has_verified_listing=has_verified,
+                action_url=action_url,
+                action_url_type=action_type,
             )
         )
     return deals

@@ -18,6 +18,20 @@ ScenarioType = Literal[
 ]
 NotifPriority = Literal["CRITICAL", "HIGH", "NORMAL", "LOW"]
 NotifStatus = Literal["UNREAD", "READ", "DISMISSED", "SAVED"]
+ActionUrlType = Literal["MARKETPLACE_LISTING", "OPPORTUNITY_DETAIL", "MARKETPLACE_SEARCH"]
+
+
+class VerifiedMarketplaceListingRead(BaseModel):
+    marketplace: str
+    marketplace_name: str = ""
+    listing_url: str
+    price: float
+    shipping: float = 0.0
+    total_cost: float
+    seller: str = ""
+    condition: str = ""
+    last_verified_at: str | None = None
+    confidence: str = "MEDIUM"
 
 
 class MarketplaceAcquisitionOpportunityRead(BaseModel):
@@ -52,6 +66,9 @@ class MarketplaceAcquisitionOpportunityRead(BaseModel):
     best_active_price: float | None = None
     listing_marketplace: str | None = None
     has_verified_listings: bool = False
+    verified_listing_count: int = 0
+    best_total_cost: float | None = None
+    best_verified_listing: VerifiedMarketplaceListingRead | None = None
     best_marketplace: str | None = None
     best_marketplace_name: str | None = None
     best_market_price: float | None = None

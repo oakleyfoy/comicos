@@ -6,6 +6,28 @@ import { BuyMarketplaceNav } from "../components/buy/BuyMarketplaceNav";
 import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
 
+function BestDealAction({ row }: { row: P88MarketplaceCommandCenterRead["best_deals_today"][number] }): JSX.Element {
+  const label = row.has_verified_listing ? "Buy Now" : "Review Opportunity";
+  if (row.has_verified_listing && row.action_url?.startsWith("http")) {
+    return (
+      <a
+        href={row.action_url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-semibold text-red-700 hover:underline"
+      >
+        {label}
+      </a>
+    );
+  }
+  const href = row.action_url?.startsWith("/") ? row.action_url : `/marketplace-opportunity/${row.opportunity_id}`;
+  return (
+    <Link to={href} className="font-semibold text-blue-900 hover:underline">
+      {label}
+    </Link>
+  );
+}
+
 function KpiCard({ label, value }: { label: string; value: number }): JSX.Element {
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50/40 px-3 py-2">
@@ -150,7 +172,8 @@ export function MarketplaceCommandCenterPage(): JSX.Element {
                       <th className="py-2 pr-3">Price</th>
                       <th className="py-2 pr-3">FMV</th>
                       <th className="py-2 pr-3">Upside</th>
-                      <th className="py-2">Savings</th>
+                      <th className="py-2 pr-3">Savings</th>
+                      <th className="py-2">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -170,10 +193,13 @@ export function MarketplaceCommandCenterPage(): JSX.Element {
                         <td className="py-2 pr-3">
                           {row.upside_percent != null ? `+${Math.round(row.upside_percent)}%` : "—"}
                         </td>
-                        <td className="py-2">
+                        <td className="py-2 pr-3">
                           {row.savings_vs_highest != null
                             ? `$${row.savings_vs_highest.toFixed(2)}`
                             : "—"}
+                        </td>
+                        <td className="py-2">
+                          <BestDealAction row={row} />
                         </td>
                       </tr>
                     ))}

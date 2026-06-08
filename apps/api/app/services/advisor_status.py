@@ -16,7 +16,8 @@ ADVISOR_MESSAGE_NO_SNAPSHOT = (
 )
 ADVISOR_MESSAGE_EMPTY_NO_COLLECTION = "Import comics to unlock personalized recommendations."
 ADVISOR_MESSAGE_EMPTY_NO_SIGNALS = (
-    "ComicOS found your collection data, but no ranked actions need attention right now."
+    "ComicOS reviewed your current collection signals. "
+    "No buy, sell, grade, or watch actions need attention right now."
 )
 ADVISOR_MESSAGE_GATHER_FAILED = "ComicOS could not finish building your Advisor plan. Try again."
 

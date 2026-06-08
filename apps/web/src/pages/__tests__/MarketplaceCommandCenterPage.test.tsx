@@ -63,6 +63,9 @@ function populatedDashboard(): P88MarketplaceCommandCenterRead {
         savings_vs_highest: 4,
         opportunity_score: 88,
         recommendation: "STRONG_BUY",
+        has_verified_listing: true,
+        action_url: "https://www.ebay.com/itm/1234567890",
+        action_url_type: "MARKETPLACE_LISTING",
       },
     ],
     price_drops: [
@@ -149,9 +152,13 @@ describe("MarketplaceCommandCenterPage", () => {
     expect(screen.getByText("Best deals today")).toBeInTheDocument();
     expect(screen.getByText("Recent price drops")).toBeInTheDocument();
     expect(screen.getByText("Battle Beast #1")).toBeInTheDocument();
-    expect(screen.getByText("Watchlist matches")).toBeInTheDocument();
-    expect(screen.getByText("Collection gaps")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Watchlist matches", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Collection gaps", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("ComicOS top recommendations")).toBeInTheDocument();
     expect(screen.getByText("Active opportunities")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Buy Now" })).toHaveAttribute(
+      "href",
+      "https://www.ebay.com/itm/1234567890",
+    );
   });
 });

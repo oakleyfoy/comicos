@@ -29,7 +29,18 @@ export const COLLECTOR_ADVISOR_STATUS = {
 export type CollectorAdvisorStatus = (typeof COLLECTOR_ADVISOR_STATUS)[keyof typeof COLLECTOR_ADVISOR_STATUS];
 
 export const COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_SIGNALS =
-  "ComicOS found your collection data, but no ranked actions need attention right now.";
+  "ComicOS reviewed your current collection signals. No buy, sell, grade, or watch actions need attention right now.";
+
+export const COLLECTOR_ADVISOR_GENERATE_PLAN_CTA = "Generate New Plan";
+
+export const COLLECTOR_ADVISOR_TODAYS_BEST_ACTIONS_TITLE = "Today's Best Actions";
+
+export const COLLECTOR_ADVISOR_OPPORTUNITY_VALUE_TITLE = "Today's Opportunity Value";
+
+export const COLLECTOR_ADVISOR_EMPTY_SECTIONS_MESSAGE =
+  "No sell, grade, watch, or market alerts require attention today.";
+
+export const COLLECTOR_ADVISOR_NO_OPPORTUNITY_VALUE = "No quantified opportunity value yet.";
 
 export const COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION =
   "Import comics to unlock personalized recommendations.";

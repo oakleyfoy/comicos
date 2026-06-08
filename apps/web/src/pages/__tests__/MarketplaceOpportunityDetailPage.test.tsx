@@ -56,7 +56,7 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
     cleanup();
   });
 
-  it("shows no-live-listing message for simulated IDs and hides outbound link", async () => {
+  it("shows recommendation layout for simulated IDs without Buy Now", async () => {
     vi.spyOn(apiClient, "getMarketplaceAcquisitionOpportunity").mockResolvedValue(baseOpp());
     render(
       <MemoryRouter initialEntries={["/marketplace-opportunity/1"]}>
@@ -66,16 +66,54 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(
-        screen.getByText("No live marketplace listing is available for this opportunity yet."),
-      ).toBeInTheDocument();
+      expect(screen.getByText("No verified live listing is currently available.")).toBeInTheDocument();
     });
-    expect(screen.queryByRole("link", { name: "View Marketplace Listing" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/GOOD_BUY/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Strong Buy")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Buy Now" })).not.toBeInTheDocument();
+    expect(screen.getByText("Recommended Buy")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Search Marketplaces" })).toBeInTheDocument();
   });
 
-  it("shows View Marketplace Listing for numeric eBay item URL", async () => {
+  it("shows Buy Now for verified best_verified_listing", async () => {
+    vi.spyOn(apiClient, "getMarketplaceAcquisitionOpportunity").mockResolvedValue(
+      baseOpp({
+        external_listing_id: "123456789012",
+        listing_url: "https://www.ebay.com/itm/123456789012",
+        has_verified_listings: true,
+        verified_listing_count: 1,
+        best_verified_listing: {
+          marketplace: "EBAY",
+          marketplace_name: "eBay",
+          listing_url: "https://www.ebay.com/itm/123456789012",
+          price: 4.49,
+          shipping: 0,
+          total_cost: 4.49,
+          seller: "",
+          condition: "",
+          last_verified_at: new Date().toISOString(),
+          confidence: "HIGH",
+        },
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={["/marketplace-opportunity/1"]}>
+        <Routes>
+          <Route path="/marketplace-opportunity/:id" element={<MarketplaceOpportunityDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Buy Now" })).toHaveAttribute(
+        "href",
+        "https://www.ebay.com/itm/123456789012",
+      );
+    });
+    expect(screen.getByText("Strong Buy")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No verified live listing is currently available."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("without verified payload does not show Buy Now in header CTA", async () => {
     vi.spyOn(apiClient, "getMarketplaceAcquisitionOpportunity").mockResolvedValue(
       baseOpp({
         external_listing_id: "123456789012",
@@ -90,14 +128,9 @@ describe("MarketplaceOpportunityDetailPage listing safety", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "View Marketplace Listing" })).toHaveAttribute(
-        "href",
-        "https://www.ebay.com/itm/123456789012",
-      );
+      expect(screen.getByText("Recommended Buy")).toBeInTheDocument();
     });
-    expect(
-      screen.queryByText("No live marketplace listing is available for this opportunity yet."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Buy Now" })).not.toBeInTheDocument();
   });
 
   it("shows marketplace listings section for verified active listings", async () => {

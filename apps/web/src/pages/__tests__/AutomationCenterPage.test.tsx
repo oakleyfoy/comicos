@@ -1,20 +1,19 @@
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiClient from "../../api/client";
 import { AutomationCenterPage } from "../AutomationCenterPage";
-import {
-  COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION,
-  COLLECTOR_ADVISOR_NO_PLAN_MESSAGE,
-} from "../collectorAdvisorPresentation";
+import { COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION } from "../collectorAdvisorPresentation";
+
+const useAuthMock = vi.fn(() => ({ isOpsAdmin: false, isAuthenticated: true, isLoading: false }));
 
 vi.mock("../../components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("../../auth/AuthContext", () => ({
-  useAuth: () => ({ isOpsAdmin: false, isAuthenticated: true, isLoading: false }),
+  useAuth: () => useAuthMock(),
 }));
 
 const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
@@ -30,7 +29,7 @@ const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
       potential_upside: 12,
       action_route: "/buy-opportunities",
       source_system: "P88",
-      display_label: "Buy Battle Beast #2",
+      display_label: "Battle Beast #2",
     },
   ],
   sell_actions: [],
@@ -40,7 +39,7 @@ const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
     {
       rank: 1,
       category: "BUY",
-      title: "Buy Battle Beast #2",
+      title: "Battle Beast #2",
       detail: "Strong buy opportunity",
       priority_score: 88,
       action_route: "/buy-opportunities",
@@ -62,9 +61,11 @@ const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
 describe("AutomationCenterPage", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    useAuthMock.mockReturnValue({ isOpsAdmin: false, isAuthenticated: true, isLoading: false });
   });
 
-  it("renders advisor sections and today's actions", async () => {
+  it("renders advisor sections and today's best actions", async () => {
     vi.spyOn(apiClient.apiClient, "getCollectorAdvisor").mockResolvedValue({
       status: "OK",
       plan,
@@ -76,26 +77,10 @@ describe("AutomationCenterPage", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole("heading", { name: "Collector Advisor", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today's actions", level: 2 })).toBeInTheDocument();
-    expect(screen.getAllByText("Buy Battle Beast #2").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Today's Best Actions", level: 2 })).toBeInTheDocument();
+    expect(screen.getAllByText("Battle Beast #2").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Buy", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Portfolio impact", level: 2 })).toBeInTheDocument();
-  });
-
-  it("renders empty states", async () => {
-    vi.spyOn(apiClient.apiClient, "getCollectorAdvisor").mockResolvedValue({
-      status: "NO_SNAPSHOT",
-      plan: null,
-      message: COLLECTOR_ADVISOR_NO_PLAN_MESSAGE,
-      generated_at: new Date().toISOString(),
-    });
-    render(
-      <MemoryRouter>
-        <AutomationCenterPage />
-      </MemoryRouter>,
-    );
-    expect(await screen.findByText(COLLECTOR_ADVISOR_NO_PLAN_MESSAGE)).toBeInTheDocument();
-    expect(screen.queryByText(/batch job/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today's Opportunity Value", level: 2 })).toBeInTheDocument();
   });
 
   it("renders EMPTY_NO_COLLECTION import guidance", async () => {

@@ -12753,6 +12753,19 @@ export interface P81DiscoveryCertificationRead {
   production_checklist: { area: string; status: string }[];
 }
 
+export interface P82VerifiedMarketplaceListingRead {
+  marketplace: string;
+  marketplace_name?: string;
+  listing_url: string;
+  price: number;
+  shipping?: number;
+  total_cost: number;
+  seller?: string;
+  condition?: string;
+  last_verified_at?: string | null;
+  confidence?: string;
+}
+
 export interface P82MarketplaceAcquisitionOpportunityRead {
   id: number;
   marketplace: string;
@@ -12782,6 +12795,9 @@ export interface P82MarketplaceAcquisitionOpportunityRead {
   best_active_price?: number | null;
   listing_marketplace?: string | null;
   has_verified_listings?: boolean;
+  verified_listing_count?: number;
+  best_total_cost?: number | null;
+  best_verified_listing?: P82VerifiedMarketplaceListingRead | null;
   best_marketplace?: string | null;
   best_marketplace_name?: string | null;
   best_market_price?: number | null;
@@ -12990,6 +13006,9 @@ export interface P88MarketplaceCommandCenterRead {
     savings_vs_highest: number | null;
     opportunity_score: number;
     recommendation: string;
+    has_verified_listing?: boolean;
+    action_url?: string;
+    action_url_type?: string;
   }[];
   price_drops: {
     opportunity_id: number | null;
@@ -17529,6 +17548,15 @@ export interface P90AdvisorActionRead {
   action_route: string;
   source_system: string;
   display_label: string;
+  primary_reason?: string;
+  supporting_signals?: string[];
+  hidden_signal_count?: number;
+  action_url?: string;
+  action_url_type?: string;
+  has_verified_listing?: boolean;
+  marketplace_name?: string | null;
+  entity_type?: string;
+  entity_id?: number;
 }
 
 export interface P90AdvisorTodayActionRead {
@@ -17538,6 +17566,13 @@ export interface P90AdvisorTodayActionRead {
   detail: string;
   priority_score: number;
   action_route: string;
+    potential_upside?: number | null;
+    profit_potential?: number | null;
+    value_increase?: number | null;
+    action_url?: string;
+    action_url_type?: string;
+    has_verified_listing?: boolean;
+    marketplace_name?: string | null;
 }
 
 export interface P90AdvisorActivityRead {

@@ -87,7 +87,7 @@ def test_collector_advisor_generate_empty_no_signals(client: TestClient, session
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["status"] == ADVISOR_STATUS_EMPTY_NO_SIGNALS
-    assert "no ranked actions need attention" in data["message"]
+    assert "need attention right now" in data["message"]
 
 
 def test_collector_advisor_generate_survives_gather_failure(client: TestClient, monkeypatch) -> None:
@@ -236,6 +236,74 @@ def test_advisor_deduplicates_proposals() -> None:
     )
     out = dedupe_proposals([base, dup])
     assert len(out) == 1
+
+
+def test_advisor_deduplicates_same_comic_cross_subsystem() -> None:
+    acquisition = _Proposal(
+        alert_type="BUY_OPPORTUNITY",
+        severity="HIGH",
+        title="Strong Buy: Absolute Batman #20",
+        summary="Opportunity score 88",
+        source_system="P88_MARKETPLACE",
+        entity_type="marketplace_acquisition",
+        entity_id=10,
+        confidence="HIGH",
+        reason="55% below FMV",
+        action_route="/marketplace-opportunity/10",
+        profit_signal=8.0,
+    )
+    alert = _Proposal(
+        alert_type="BUY_OPPORTUNITY",
+        severity="MEDIUM",
+        title="Absolute Batman #20",
+        summary="New listing under FMV",
+        source_system="P88_MONITORING",
+        entity_type="marketplace_alert",
+        entity_id=99,
+        confidence="MEDIUM",
+        reason="verified listing",
+        action_route="/marketplace-monitoring",
+        profit_signal=4.0,
+    )
+    out = dedupe_proposals([acquisition, alert])
+    assert len(out) == 1
+    assert "55% below FMV" in out[0].reason
+    assert "marketplace alert" in out[0].reason.lower() or "verified listing" in out[0].reason.lower()
+
+
+def test_advisor_dedupe_keeps_higher_priority() -> None:
+    high = _Proposal(
+        alert_type="BUY_OPPORTUNITY",
+        severity="HIGH",
+        title="Strong Buy: Energon Universe #2026SPECIAL1",
+        summary="high",
+        source_system="P88_MARKETPLACE",
+        entity_type="marketplace_acquisition",
+        entity_id=1,
+        confidence="HIGH",
+        reason="priority 89",
+        action_route="/a",
+        profit_signal=9.0,
+        marketplace_activity=9.0,
+    )
+    low = _Proposal(
+        alert_type="BUY_OPPORTUNITY",
+        severity="LOW",
+        title="Energon Universe #2026SPECIAL1",
+        summary="low",
+        source_system="P88_MONITORING",
+        entity_type="marketplace_alert",
+        entity_id=2,
+        confidence="LOW",
+        reason="priority 48",
+        action_route="/b",
+        profit_signal=2.0,
+    )
+    out = dedupe_proposals([low, high])
+    assert len(out) == 1
+    assert out[0].entity_id == 1
+    assert "priority 89" in out[0].reason
+    assert "priority 48" in out[0].reason
 
 
 def test_advisor_wider_buy_recommendations(client: TestClient, session: Session) -> None:

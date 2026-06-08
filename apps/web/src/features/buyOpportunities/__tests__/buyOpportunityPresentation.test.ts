@@ -144,6 +144,18 @@ describe("buyOpportunityPresentation", () => {
       opp({
         id: 1,
         has_verified_listings: true,
+        best_verified_listing: {
+          marketplace: "EBAY",
+          marketplace_name: "eBay",
+          listing_url: "https://www.ebay.com/itm/1234567890",
+          price: 3.2,
+          shipping: 0,
+          total_cost: 3.2,
+          seller: "",
+          condition: "",
+          last_verified_at: null,
+          confidence: "HIGH",
+        },
         active_listing_count: 3,
         best_active_price: 3.2,
         listing_marketplace: "EBAY",

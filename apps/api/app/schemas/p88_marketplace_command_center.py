@@ -33,6 +33,9 @@ class BestDealTodayRead(BaseModel):
     savings_vs_highest: float | None = None
     opportunity_score: float
     recommendation: str
+    has_verified_listing: bool = False
+    action_url: str = ""
+    action_url_type: str = "OPPORTUNITY_DETAIL"
 
 
 class PriceDropRead(BaseModel):

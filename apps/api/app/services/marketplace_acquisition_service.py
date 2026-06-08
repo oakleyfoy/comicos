@@ -15,6 +15,7 @@ from app.schemas.p82_p84_collector_expansion import (
     MarketplaceAcquisitionListResponse,
     MarketplaceAcquisitionOpportunityRead,
     MarketplaceAcquisitionScanPayload,
+    VerifiedMarketplaceListingRead,
 )
 from app.services.marketplace.marketplace_listing_service import listing_summary_for_opportunity
 from app.services.p77_personalization_engine import load_personalization_context, personalize_score
@@ -38,6 +39,10 @@ def _to_read(
     owner_user_id: int | None = None,
 ) -> MarketplaceAcquisitionOpportunityRead:
     s = summary or {}
+    best_verified_raw = s.get("best_verified_listing")
+    best_verified: VerifiedMarketplaceListingRead | None = None
+    if isinstance(best_verified_raw, dict) and best_verified_raw.get("listing_url"):
+        best_verified = VerifiedMarketplaceListingRead.model_validate(best_verified_raw)
     effective_fmv = float(row.estimated_fmv)
     effective_discount = float(row.discount_to_fmv)
     fmv_v2_market: float | None = None
@@ -87,6 +92,9 @@ def _to_read(
         best_active_price=s.get("best_active_price"),  # type: ignore[arg-type]
         listing_marketplace=s.get("listing_marketplace"),  # type: ignore[arg-type]
         has_verified_listings=bool(s.get("has_verified_listings")),
+        verified_listing_count=int(s.get("verified_listing_count") or 0),
+        best_total_cost=s.get("best_total_cost"),  # type: ignore[arg-type]
+        best_verified_listing=best_verified,
         best_marketplace=s.get("best_marketplace"),  # type: ignore[arg-type]
         best_marketplace_name=s.get("best_marketplace_name"),  # type: ignore[arg-type]
         best_market_price=s.get("best_market_price"),  # type: ignore[arg-type]

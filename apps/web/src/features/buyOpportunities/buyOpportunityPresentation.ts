@@ -1,4 +1,4 @@
-import type { P82MarketplaceAcquisitionOpportunityRead } from "../../api/client";
+import type { P82MarketplaceAcquisitionOpportunityRead, P82VerifiedMarketplaceListingRead } from "../../api/client";
 
 export type MarketplaceListingLinkInput = Pick<
   P82MarketplaceAcquisitionOpportunityRead,
@@ -77,6 +77,7 @@ export type BuyOpportunityDisplayCard = {
   hasVerifiedListings: boolean;
   bestMarketplaceLabel: string | null;
   savingsVsHighest: number | null;
+  bestVerifiedListing?: P82VerifiedMarketplaceListingRead | null;
 };
 
 const RECOMMENDATION_BADGE: Record<string, string> = {
@@ -300,12 +301,13 @@ function buildCardFromListings(listings: P82MarketplaceAcquisitionOpportunityRea
     recommendation: primary.recommendation,
     marketplaceLabel,
     activeListingCount,
-    hasVerifiedListings: Boolean(primary.has_verified_listings),
+    hasVerifiedListings: Boolean(primary.has_verified_listings && primary.best_verified_listing),
     bestMarketplaceLabel: marketplaceLabel,
     savingsVsHighest:
       primary.savings_vs_highest != null && primary.savings_vs_highest > 0
         ? primary.savings_vs_highest
         : null,
+    bestVerifiedListing: primary.best_verified_listing ?? null,
   };
 }
 

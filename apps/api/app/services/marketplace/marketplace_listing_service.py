@@ -13,6 +13,11 @@ from app.services.marketplace.listing_health_service import apply_health_to_list
 from app.services.marketplace.marketplace_confidence_service import score_listing_confidence
 from app.services.marketplace.marketplace_registry import marketplace_display_name
 from app.services.marketplace.url_validation import validate_marketplace_url
+from app.services.marketplace.verified_listing_service import (
+    is_verified_marketplace_listing,
+    pick_best_verified_listing,
+    verified_listing_to_dict,
+)
 
 
 def _find_existing(
@@ -83,6 +88,9 @@ def upsert_listing_from_search(
 
 
 def pick_best_listing(listings: list[P88MarketplaceListing]) -> P88MarketplaceListing | None:
+    best_verified = pick_best_verified_listing(listings)
+    if best_verified is not None:
+        return best_verified
     active = [row for row in listings if is_listing_displayable(row)]
     if not active:
         return None
@@ -130,18 +138,24 @@ def listing_summary_for_opportunity(
         .where(P88MarketplaceListing.opportunity_id == opportunity_id)
     ).all()
     displayable = [row for row in listings if is_listing_displayable(row)]
-    best = pick_best_listing(displayable)
+    verified = [row for row in listings if is_verified_marketplace_listing(row)]
+    best_verified = pick_best_verified_listing(listings)
+    best = best_verified or pick_best_listing(displayable)
     comparison = compare_listings(displayable)
     best_buy = recommend_best_buy(displayable)
     best_marketplace_name = comparison.best_marketplace_name
     if best_marketplace_name is None and best is not None:
         best_marketplace_name = marketplace_display_name(best.marketplace)
+    best_total_cost = round(best.price + best.shipping_cost, 2) if best_verified else None
     return {
         "active_listing_count": len(displayable),
+        "verified_listing_count": len(verified),
         "best_active_price": round(best.price + best.shipping_cost, 2) if best else None,
+        "best_total_cost": best_total_cost,
         "listing_marketplace": best.marketplace if best else None,
         "best_listing_id": best.id if best else None,
-        "has_verified_listings": bool(displayable),
+        "has_verified_listings": bool(best_verified),
+        "best_verified_listing": verified_listing_to_dict(best_verified) if best_verified else None,
         "best_marketplace": comparison.best_marketplace,
         "best_marketplace_name": best_marketplace_name,
         "best_market_price": comparison.best_price,

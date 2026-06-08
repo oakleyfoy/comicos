@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.advisor_evidence import dedupe_evidence_string, format_evidence_for_display
+from app.services.advisor_proposal_dedupe import comic_label_from_title
 from app.services.collector_alert_priority_service import PriorityInputs, compute_priority_score
 
 
@@ -35,15 +37,26 @@ def rank_mixed_top_actions(actions: list[dict[str, Any]], *, limit: int = 5) -> 
     out: list[dict[str, Any]] = []
     for idx, action in enumerate(ranked[:limit], start=1):
         category = str(action.get("category") or "ALERT").upper()
-        comic = str(action.get("comic") or action.get("title") or "Action")
+        comic = comic_label_from_title(str(action.get("comic") or action.get("title") or "Action"))
+        reason_raw = dedupe_evidence_string(
+            str(action.get("primary_reason") or action.get("reason") or action.get("summary") or "")
+        )
+        primary, _, _ = format_evidence_for_display(reason_raw)
         out.append(
             {
                 "rank": idx,
                 "category": category,
-                "title": f"{category.title()} {comic}".replace("Buy buy", "Buy").replace("Sell sell", "Sell"),
-                "detail": str(action.get("reason") or action.get("summary") or ""),
+                "title": comic,
+                "detail": primary or reason_raw,
                 "priority_score": float(action.get("priority_score") or 0.0),
                 "action_route": str(action.get("action_route") or "/automation-center"),
+                "potential_upside": action.get("potential_upside"),
+                "profit_potential": action.get("profit_potential"),
+                "value_increase": action.get("value_increase"),
+                "action_url": action.get("action_url"),
+                "action_url_type": action.get("action_url_type"),
+                "has_verified_listing": action.get("has_verified_listing"),
+                "marketplace_name": action.get("marketplace_name"),
             }
         )
     return out

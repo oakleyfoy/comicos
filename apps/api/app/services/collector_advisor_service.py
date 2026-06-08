@@ -21,8 +21,14 @@ from app.schemas.p90_collector_advisor import (
     P90CollectorAdvisorSnapshotRead,
     P90PortfolioImpactRead,
 )
+from app.services.advisor_evidence import dedupe_evidence_string, format_evidence_for_display
+from app.services.advisor_buy_action_service import enrich_buy_action_dicts
 from app.services.advisor_priority_service import rank_advisor_actions, rank_mixed_top_actions
-from app.services.advisor_proposal_dedupe import count_unique_advisor_actions
+from app.services.advisor_proposal_dedupe import (
+    comic_label_from_title,
+    count_unique_advisor_actions,
+    dedupe_advisor_action_dicts,
+)
 from app.services.advisor_proposal_gather import gather_advisor_proposals_with_result
 from app.services.automation_engine_service import _Proposal
 from app.services.advisor_signal_diagnostics import build_advisor_signal_diagnostics
@@ -49,19 +55,7 @@ _PER_CATEGORY = 10
 
 
 def _comic_from_title(title: str) -> str:
-    for prefix in (
-        "Strong Buy: ",
-        "Buy opportunity: ",
-        "Sell now: ",
-        "Grade first: ",
-        "Collection gap: ",
-        "Stale listing: ",
-        "Upcoming: ",
-        "Portfolio action: ",
-    ):
-        if title.startswith(prefix):
-            return title[len(prefix) :].strip()
-    return title.strip()
+    return comic_label_from_title(title)
 
 
 def _proposal_to_raw(proposal: _Proposal, *, category: str, **extras: Any) -> dict[str, Any]:
@@ -197,12 +191,17 @@ def _finalize_actions(raw: list[dict]) -> list[dict]:
     out: list[dict] = []
     for item in ranked:
         category = str(item.get("category") or "")
-        comic = str(item.get("comic") or "")
+        comic = comic_label_from_title(str(item.get("comic") or item.get("title") or ""))
+        reason = dedupe_evidence_string(str(item.get("reason") or ""))
+        primary, supporting, hidden = format_evidence_for_display(reason)
         out.append(
             {
                 "category": category,
                 "comic": comic,
-                "reason": str(item.get("reason") or ""),
+                "reason": reason,
+                "primary_reason": primary or reason,
+                "supporting_signals": supporting,
+                "hidden_signal_count": hidden,
                 "confidence": str(item.get("confidence") or "MEDIUM"),
                 "priority_score": float(item.get("priority_score") or 0.0),
                 "potential_upside": item.get("potential_upside"),
@@ -210,7 +209,7 @@ def _finalize_actions(raw: list[dict]) -> list[dict]:
                 "value_increase": item.get("value_increase"),
                 "action_route": str(item.get("action_route") or ""),
                 "source_system": str(item.get("source_system") or ""),
-                "display_label": f"{category.title()} {comic}".strip(),
+                "display_label": comic,
                 "alert_type": item.get("alert_type"),
                 "severity": item.get("severity"),
                 "profit_signal": item.get("profit_signal"),
@@ -219,6 +218,13 @@ def _finalize_actions(raw: list[dict]) -> list[dict]:
                 "release_days": item.get("release_days"),
                 "title": item.get("title"),
                 "summary": item.get("summary"),
+                "entity_type": item.get("entity_type"),
+                "entity_id": item.get("entity_id"),
+                "action_url": item.get("action_url"),
+                "action_url_type": item.get("action_url_type"),
+                "has_verified_listing": bool(item.get("has_verified_listing")),
+                "verified_listing_count": int(item.get("verified_listing_count") or 0),
+                "marketplace_name": item.get("marketplace_name"),
             }
         )
     return out
@@ -404,6 +410,17 @@ def generate_collector_advisor_snapshot(
         p90_rollback_session(session)
     _fmv_grade_hints(session, owner_user_id=owner_user_id, grade_raw=grade_raw)
 
+    buy_raw = dedupe_advisor_action_dicts(buy_raw)
+    sell_raw = dedupe_advisor_action_dicts(sell_raw)
+    grade_raw = dedupe_advisor_action_dicts(grade_raw)
+    watch_raw = dedupe_advisor_action_dicts(watch_raw)
+
+    try:
+        enrich_buy_action_dicts(session, owner_user_id=owner_user_id, items=buy_raw)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("advisor buy action enrich failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
+
     buy_actions = _finalize_actions(buy_raw)
     sell_actions = _finalize_actions(sell_raw)
     grade_actions = _finalize_actions(grade_raw)
@@ -421,7 +438,7 @@ def generate_collector_advisor_snapshot(
         logger.warning("advisor extras failed owner=%s: %s", owner_user_id, exc)
         p90_rollback_session(session)
         extras = []
-    mixed = buy_actions + sell_actions + grade_actions + watch_actions + extras
+    mixed = dedupe_advisor_action_dicts(buy_actions + sell_actions + grade_actions + watch_actions + extras)
     todays_actions = rank_mixed_top_actions(mixed, limit=5)
     try:
         recent_activity, market_alerts = _build_recent_activity(session, owner_user_id=owner_user_id)
@@ -435,9 +452,6 @@ def generate_collector_advisor_snapshot(
         sell_actions,
         grade_actions,
         watch_actions,
-        todays_actions,
-        recent_activity,
-        market_alerts,
     )
 
     summary = {

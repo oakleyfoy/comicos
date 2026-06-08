@@ -20,6 +20,14 @@ class P90AdvisorActionRead(BaseModel):
     action_route: str = ""
     source_system: str = ""
     display_label: str = ""
+    primary_reason: str = ""
+    supporting_signals: list[str] = Field(default_factory=list)
+    hidden_signal_count: int = 0
+    action_url: str = ""
+    action_url_type: str = ""
+    has_verified_listing: bool = False
+    verified_listing_count: int = 0
+    marketplace_name: str | None = None
 
 
 class P90AdvisorTodayActionRead(BaseModel):
@@ -29,6 +37,13 @@ class P90AdvisorTodayActionRead(BaseModel):
     detail: str = ""
     priority_score: float = 0.0
     action_route: str = ""
+    potential_upside: float | None = None
+    profit_potential: float | None = None
+    value_increase: float | None = None
+    action_url: str = ""
+    action_url_type: str = ""
+    has_verified_listing: bool = False
+    marketplace_name: str | None = None
 
 
 class P90AdvisorActivityRead(BaseModel):

@@ -15,6 +15,11 @@ import {
   formatUpsideDisplay,
   isSafeMarketplaceListingUrl,
 } from "../features/buyOpportunities/buyOpportunityPresentation";
+import {
+  opportunityHasVerifiedListing,
+  recommendationHeaderLabel,
+  resolveOpportunityBuyCta,
+} from "../features/buyOpportunities/buyVerifiedAction";
 import { ImportMarketplaceUrlModal } from "../features/buyOpportunities/ImportMarketplaceUrlModal";
 
 function sourceTypeLabel(sourceType: string): string {
@@ -61,22 +66,19 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
     void load();
   }, [load]);
 
-  const listingSafe = opp ? isSafeMarketplaceListingUrl(opp) : false;
+  const verified = opp ? opportunityHasVerifiedListing(opp) : false;
+  const buyCta = opp ? resolveOpportunityBuyCta(opp, { multipleVerified: (opp.verified_listing_count ?? 0) > 1 }) : null;
+  const headerLabel = opp ? recommendationHeaderLabel(opp) : "";
   const displayPrice =
-    opp?.has_verified_listings && opp.best_active_price != null ? opp.best_active_price : opp?.asking_price;
+    verified && opp?.best_verified_listing
+      ? opp.best_verified_listing.total_cost
+      : opp?.has_verified_listings && opp.best_active_price != null
+        ? opp.best_active_price
+        : opp?.asking_price;
+  const estimatedSavings =
+    displayPrice != null && opp ? Math.max(0, opp.estimated_fmv - displayPrice) : 0;
   const badge = opp ? formatRecommendationBadge(opp.recommendation, opp.opportunity_score) : "";
   const upside = opp ? formatUpsideDisplay(displayPrice ?? opp.asking_price, opp.estimated_fmv) : null;
-  const opportunityHealthBadges: string[] = [];
-  if (opp?.has_verified_listings) {
-    opportunityHealthBadges.push("Verified Listings");
-  }
-  for (const row of listings) {
-    for (const b of row.health_badges ?? []) {
-      if (!opportunityHealthBadges.includes(b)) {
-        opportunityHealthBadges.push(b);
-      }
-    }
-  }
 
   return (
     <PatriotPageLayout
@@ -108,46 +110,88 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
         <PatriotPanel>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full bg-red-700 px-2.5 py-0.5 text-xs font-semibold text-white">
-              {badge}
+              {verified ? headerLabel : "Recommended Buy"}
             </span>
             <span className="text-sm text-blue-800">Score {Math.round(opp.opportunity_score)}</span>
           </div>
 
-          {opportunityHealthBadges.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {opportunityHealthBadges.map((label) => (
-                <span
-                  key={label}
-                  className="rounded-full border border-blue-300 bg-white px-2 py-0.5 text-xs font-medium text-blue-900"
+          {verified && buyCta ? (
+            <>
+              <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-red-700">Deal summary</h3>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Marketplace</dt>
+                  <dd className="font-medium">{opp.best_verified_listing?.marketplace_name ?? opp.marketplace}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Price</dt>
+                  <dd className="font-medium">${(displayPrice ?? opp.asking_price).toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Estimated value</dt>
+                  <dd className="font-medium">${opp.estimated_fmv.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Estimated savings</dt>
+                  <dd className="font-medium">${estimatedSavings.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Discount</dt>
+                  <dd className="font-medium">{opp.discount_to_fmv.toFixed(0)}%</dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs font-medium text-emerald-800">Verified marketplace listing</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a
+                  href={buyCta.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
                 >
-                  {label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-blue-600">Price</dt>
-              <dd className="font-medium">${(displayPrice ?? opp.asking_price).toFixed(2)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-blue-600">FMV</dt>
-              <dd className="font-medium">${opp.estimated_fmv.toFixed(2)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-blue-600">Upside</dt>
-              <dd className="font-medium">{upside?.text.replace(/^Upside:\s*/, "") ?? "Unknown"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-blue-600">Discount to FMV</dt>
-              <dd className="font-medium">{opp.discount_to_fmv.toFixed(1)}%</dd>
-            </div>
-          </dl>
+                  Buy Now
+                </a>
+                {(opp.verified_listing_count ?? 0) > 1 ? (
+                  <span className="self-center text-sm text-blue-800">View alternatives below</span>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-red-700">Recommendation summary</h3>
+              <p className="mt-2 text-sm text-blue-900">
+                ComicOS identified this book as a buy opportunity based on value and collection signals.
+              </p>
+              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Estimated value</dt>
+                  <dd className="font-medium">${opp.estimated_fmv.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Signal</dt>
+                  <dd className="font-medium">{badge}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-blue-600">Upside</dt>
+                  <dd className="font-medium">{upside?.text.replace(/^Upside:\s*/, "") ?? "Unknown"}</dd>
+                </div>
+              </dl>
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                No verified live listing is currently available.
+              </div>
+              {buyCta ? (
+                <Link
+                  to={buyCta.href}
+                  className="mt-4 inline-block rounded-md border border-blue-800 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+                >
+                  {buyCta.label}
+                </Link>
+              ) : null}
+            </>
+          )}
 
           {opp.reasons.length > 0 ? (
             <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-blue-800">
-              {opp.reasons.map((r) => (
+              {opp.reasons.slice(0, 3).map((r) => (
                 <li key={r}>{r}</li>
               ))}
             </ul>
@@ -230,7 +274,13 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
                     <p>{row.condition || "Condition unknown"}</p>
                     {row.seller_name ? <p>Seller: {row.seller_name}</p> : null}
                     {row.listing_type ? <p className="text-xs text-blue-700">{row.listing_type}</p> : null}
-                    {row.is_active && row.health_status === "ACTIVE" ? (
+                    {row.is_active &&
+                    row.health_status === "ACTIVE" &&
+                    isSafeMarketplaceListingUrl({
+                      listing_url: row.listing_url,
+                      external_listing_id: row.item_id,
+                      marketplace: row.marketplace,
+                    }) ? (
                       <a
                         href={row.listing_url}
                         className="mt-2 inline-block rounded-md bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
@@ -244,24 +294,7 @@ export function MarketplaceOpportunityDetailPage(): JSX.Element {
                 ))}
               </ul>
             </div>
-          ) : listingSafe ? (
-            <a
-              href={opp.listing_url}
-              className="mt-4 inline-block rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800"
-              target="_blank"
-              rel="noreferrer"
-            >
-              View Marketplace Listing
-            </a>
-          ) : (
-            <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-              <p className="font-medium">No live marketplace listing is available for this opportunity yet.</p>
-              <p className="mt-1 text-blue-800">
-                ComicOS identified this as a buy opportunity based on value and collection signals, but the listing
-                source is not currently verified.
-              </p>
-            </div>
-          )}
+          ) : null}
 
           {sources.length > 0 ? (
             <div className="mt-6 border-t border-blue-200 pt-4">
