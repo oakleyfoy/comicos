@@ -95,16 +95,58 @@ def test_collector_advisor_generate_survives_gather_failure(client: TestClient, 
 
     token = register_and_login(client, "advisor-gather-fail@example.com")
 
-    def _boom(*_args, **_kwargs):
-        raise RuntimeError("simulated missing relation")
+    def _all_fail(session, *, owner_user_id: int):
+        from app.services.advisor_proposal_gather import ADVISOR_GATHER_SUBSYSTEMS, AdvisorGatherResult
 
-    monkeypatch.setattr(advisor_service, "gather_advisor_proposals", _boom)
+        return AdvisorGatherResult(
+            proposals=[],
+            succeeded_subsystems=[],
+            failed_subsystems=[name for name, _ in ADVISOR_GATHER_SUBSYSTEMS],
+            errors=[{"subsystem": name, "message": "simulated"} for name, _ in ADVISOR_GATHER_SUBSYSTEMS],
+        )
+
+    monkeypatch.setattr(advisor_service, "gather_advisor_proposals_with_result", _all_fail)
     resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["status"] == ADVISOR_STATUS_EMPTY_GATHER_FAILED
     assert data["plan"] is not None
     assert data["plan"]["total_actions"] == 0
+
+
+def test_advisor_partial_subsystem_failure_still_ok(client: TestClient, monkeypatch) -> None:
+    import app.services.collector_advisor_service as advisor_service
+    from app.services.automation_engine_service import _Proposal
+
+    token = register_and_login(client, "advisor-partial@example.com")
+    proposal = _Proposal(
+        alert_type="SELL_OPPORTUNITY",
+        severity="MEDIUM",
+        title="Sell: Test",
+        summary="x",
+        source_system="P89",
+        entity_type="sell_candidate",
+        entity_id=1,
+        confidence="MEDIUM",
+        reason="Test",
+        action_route="/sell",
+        profit_signal=10.0,
+    )
+
+    real_gather = advisor_service.gather_advisor_proposals_with_result
+
+    def _partial(session, *, owner_user_id: int):
+        result = real_gather(session, owner_user_id=owner_user_id)
+        result.failed_subsystems.append("marketplace_opportunities")
+        result.succeeded_subsystems.append("sell_candidates")
+        result.proposals = [proposal]
+        return result
+
+    monkeypatch.setattr(advisor_service, "gather_advisor_proposals_with_result", _partial)
+    resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["status"] != ADVISOR_STATUS_EMPTY_GATHER_FAILED
 
 
 def test_collector_advisor_generate_never_500_on_persist_failure(client: TestClient, monkeypatch) -> None:

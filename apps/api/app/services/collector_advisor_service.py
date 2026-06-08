@@ -23,7 +23,7 @@ from app.schemas.p90_collector_advisor import (
 )
 from app.services.advisor_priority_service import rank_advisor_actions, rank_mixed_top_actions
 from app.services.advisor_proposal_dedupe import count_unique_advisor_actions
-from app.services.advisor_proposal_gather import gather_advisor_proposals
+from app.services.advisor_proposal_gather import gather_advisor_proposals_with_result
 from app.services.automation_engine_service import _Proposal
 from app.services.advisor_signal_diagnostics import build_advisor_signal_diagnostics
 from app.services.advisor_status import (
@@ -141,7 +141,7 @@ def _enrich_buy_from_opportunities(session: Session, *, owner_user_id: int, buy_
     )
     for row in rows:
         discount = float(row.discount_to_fmv or 0)
-        fmv = float(row.estimated_fmv or row.listing_price or 0)
+        fmv = float(row.estimated_fmv or row.asking_price or 0)
         savings = (fmv * discount / 100.0) if discount and fmv else profit_signal_from_discount(discount) * 25.0 * 0.4
         for item in buy_raw:
             if item.get("entity_type") == "marketplace_acquisition" and item.get("entity_id") == int(row.id or 0):
@@ -380,14 +380,16 @@ def generate_collector_advisor_snapshot(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     day = snapshot_date or date.today()
-    gather_failed = False
-    try:
-        proposals = gather_advisor_proposals(session, owner_user_id=owner_user_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("advisor gather proposals failed owner=%s: %s", owner_user_id, exc)
-        p90_rollback_session(session)
-        proposals = []
-        gather_failed = True
+    gather_result = gather_advisor_proposals_with_result(session, owner_user_id=owner_user_id)
+    proposals = gather_result.proposals
+    gather_failed = gather_result.all_subsystems_failed
+    if gather_result.errors:
+        logger.info(
+            "advisor gather owner=%s succeeded=%s failed=%s",
+            owner_user_id,
+            gather_result.succeeded_subsystems,
+            gather_result.failed_subsystems,
+        )
     buy_raw, sell_raw, grade_raw, watch_raw = _categorize_proposals(proposals)
     try:
         _enrich_buy_from_opportunities(session, owner_user_id=owner_user_id, buy_raw=buy_raw)
@@ -444,6 +446,8 @@ def generate_collector_advisor_snapshot(
     }
 
     if dry_run:
+        summary["gather_failed_subsystems"] = gather_result.failed_subsystems
+        summary["gather_errors"] = gather_result.errors
         return summary
 
     existing = session.exec(
@@ -475,6 +479,8 @@ def generate_collector_advisor_snapshot(
     except Exception as exc:  # noqa: BLE001
         logger.debug("advisor notification skipped: %s", exc)
     summary["snapshot_id"] = int(row.id or 0)
+    summary["gather_failed_subsystems"] = gather_result.failed_subsystems
+    summary["gather_errors"] = gather_result.errors
     return summary
 
 
@@ -502,6 +508,7 @@ def _persist_empty_advisor_snapshot(
     *,
     owner_user_id: int,
     snapshot_date: date | None = None,
+    generation_status: str = "GATHER_FAILED",
 ) -> None:
     day = snapshot_date or date.today()
     existing = session.exec(
@@ -523,7 +530,7 @@ def _persist_empty_advisor_snapshot(
     row.estimated_profit = 0.0
     row.estimated_savings = 0.0
     row.portfolio_score = 0.0
-    row.generation_status = "GATHER_FAILED"
+    row.generation_status = generation_status
     row.created_at = utc_now()
     session.add(row)
     session.flush()
@@ -536,14 +543,23 @@ def generate_collector_advisor_dashboard_response(
     include_diagnostics: bool = False,
 ) -> P90CollectorAdvisorDashboardRead:
     """Generate advisor plan for UI — always returns HTTP-safe dashboard payload."""
+    gather_meta: dict[str, Any] = {}
     try:
-        generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
+        summary = generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
+        gather_meta = {
+            "gather_errors": summary.get("gather_errors") or [],
+            "gather_failed_subsystems": summary.get("gather_failed_subsystems") or [],
+        }
         session.commit()
     except Exception as exc:  # noqa: BLE001
         logger.exception("collector advisor generate failed owner=%s: %s", owner_user_id, exc)
         p90_rollback_session(session)
         try:
-            _persist_empty_advisor_snapshot(session, owner_user_id=owner_user_id)
+            _persist_empty_advisor_snapshot(
+                session,
+                owner_user_id=owner_user_id,
+                generation_status="GATHER_FAILED",
+            )
             session.commit()
         except Exception as persist_exc:  # noqa: BLE001
             logger.exception("collector advisor empty persist failed owner=%s: %s", owner_user_id, persist_exc)
@@ -559,6 +575,8 @@ def generate_collector_advisor_dashboard_response(
         session,
         owner_user_id=owner_user_id,
         include_diagnostics=include_diagnostics,
+        gather_errors=gather_meta.get("gather_errors"),
+        gather_failed_subsystems=gather_meta.get("gather_failed_subsystems"),
     )
 
 
@@ -583,10 +601,19 @@ def build_collector_advisor_dashboard(
     *,
     owner_user_id: int,
     include_diagnostics: bool = False,
+    gather_errors: list[dict[str, Any]] | None = None,
+    gather_failed_subsystems: list[str] | None = None,
 ) -> P90CollectorAdvisorDashboardRead:
     row = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
     now = datetime.now(timezone.utc)
     diagnostics = build_advisor_signal_diagnostics(session, owner_user_id=owner_user_id)
+    if include_diagnostics and gather_errors is not None:
+        diagnostics = diagnostics.model_copy(
+            update={
+                "gather_errors": gather_errors,
+                "gather_failed_subsystems": gather_failed_subsystems or [],
+            }
+        )
     if row is None:
         status = resolve_advisor_dashboard_status(
             has_snapshot=False,

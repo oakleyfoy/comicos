@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -74,6 +75,8 @@ class P90AdvisorSignalDiagnosticsRead(BaseModel):
     fmv_snapshot_count: int = 0
     grade_before_sell_count: int = 0
     grading_candidate_count: int = 0
+    gather_failed_subsystems: list[str] = Field(default_factory=list)
+    gather_errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class P90CollectorAdvisorDashboardRead(BaseModel):
