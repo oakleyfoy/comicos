@@ -31041,6 +31041,12 @@ export const apiClient = {
     return requestScanV1<P90CollectorAdvisorDashboardRead>("/collector-advisor");
   },
 
+  generateCollectorAdvisor(): Promise<P90CollectorAdvisorDashboardRead> {
+    return requestScanV1<P90CollectorAdvisorDashboardRead>("/collector-advisor/generate", {
+      method: "POST",
+    });
+  },
+
   getFmvIntelligence(): Promise<P90FmvIntelligenceDashboardRead> {
     return requestScanV1<P90FmvIntelligenceDashboardRead>("/fmv-intelligence");
   },

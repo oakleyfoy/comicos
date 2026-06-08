@@ -42,6 +42,15 @@ def test_collector_advisor_dry_run(client: TestClient, session: Session) -> None
     assert summary["dry_run"] is True
 
 
+def test_collector_advisor_generate_endpoint(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "advisor-generate@example.com")
+    resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["status"] == "OK"
+    assert data["plan"] is not None
+
+
 def test_collector_advisor_persist_and_api(client: TestClient, session: Session) -> None:
     from app.models import User
     from sqlmodel import select

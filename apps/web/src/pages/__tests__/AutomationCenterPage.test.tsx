@@ -81,6 +81,7 @@ describe("AutomationCenterPage", () => {
         <AutomationCenterPage />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No advisor plan yet")).toBeInTheDocument();
+    expect(await screen.findByText("Your first advisor plan has not been generated yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/batch job/i)).not.toBeInTheDocument();
   });
 });

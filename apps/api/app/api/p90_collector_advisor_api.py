@@ -12,6 +12,7 @@ from app.schemas.p90_collector_advisor import P90CollectorAdvisorDashboardRead, 
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
 from app.services.collector_advisor_service import (
     build_collector_advisor_dashboard,
+    generate_collector_advisor_snapshot,
     list_advisor_history,
 )
 
@@ -44,6 +45,21 @@ def v1_collector_advisor_latest(
         session, owner_user_id=int(current_user.id)
     )
     return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p90_collector_advisor_router.post("/api/v1/collector-advisor/generate", response_model=ScanApiV1Envelope)
+def v1_collector_advisor_generate(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    owner_user_id = int(current_user.id)
+    generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
+    session.commit()
+    body: P90CollectorAdvisorDashboardRead = build_collector_advisor_dashboard(
+        session, owner_user_id=owner_user_id
+    )
+    return wrap_object(body, owner_user_id=owner_user_id)
 
 
 @p90_collector_advisor_router.get("/api/v1/collector-advisor/history", response_model=ScanApiV1Envelope)

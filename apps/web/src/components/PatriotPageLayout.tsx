@@ -75,13 +75,18 @@ export function PatriotPanel({
   title,
   children,
   className = "",
+  id,
 }: {
   title?: string;
   children: ReactNode;
   className?: string;
+  id?: string;
 }): JSX.Element {
   return (
-    <section className={`rounded-lg border border-blue-800 bg-white px-4 py-3 text-blue-950 shadow-sm ${className}`}>
+    <section
+      id={id}
+      className={`rounded-lg border border-blue-800 bg-white px-4 py-3 text-blue-950 shadow-sm ${className}`}
+    >
       {title ? <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">{title}</h2> : null}
       <div className={title ? "mt-2 text-sm text-blue-900" : "text-sm text-blue-900"}>{children}</div>
     </section>

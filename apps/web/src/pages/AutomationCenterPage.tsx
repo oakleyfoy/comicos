@@ -7,8 +7,12 @@ import {
   type P90AdvisorActionRead,
   type P90CollectorAdvisorDashboardRead,
 } from "../api/client";
-import { CollectorEmptyState } from "../components/CollectorEmptyState";
 import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
+import { CollectorAdvisorEmptyState } from "./CollectorAdvisorEmptyState";
+import {
+  COLLECTOR_ADVISOR_OPEN_PLAN_CTA,
+  COLLECTOR_ADVISOR_PAGE_DESCRIPTION,
+} from "./collectorAdvisorPresentation";
 
 function money(value: number): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
@@ -55,6 +59,8 @@ export function AutomationCenterPage(): JSX.Element {
   const [data, setData] = useState<P90CollectorAdvisorDashboardRead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,31 +78,56 @@ export function AutomationCenterPage(): JSX.Element {
     void load();
   }, [load]);
 
+  const handleGenerate = useCallback(async () => {
+    setGenerateError(null);
+    setGenerating(true);
+    try {
+      const next = await apiClient.generateCollectorAdvisor();
+      setData(next);
+    } catch (err) {
+      setGenerateError(err instanceof ApiError ? err.message : "Unable to generate your advisor plan. Try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }, []);
+
   const plan = data?.plan;
   const impact = plan?.portfolio_impact;
+  const showEmpty = data?.status === "EMPTY" || !plan;
 
   return (
     <PatriotPageLayout
       eyebrow="Home"
       title="Collector Advisor"
-      description="Your daily comic collecting action plan — synthesized from cached buy, sell, grade, FMV, marketplace, and release intelligence."
+      description={COLLECTOR_ADVISOR_PAGE_DESCRIPTION}
       error={error}
       onRetry={() => void load()}
       loading={loading && !data}
       maxWidthClass="max-w-5xl"
+      headerActions={
+        plan ? (
+          <a
+            href="#advisor-todays-actions"
+            className="rounded-md border border-white/40 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
+          >
+            {COLLECTOR_ADVISOR_OPEN_PLAN_CTA}
+          </a>
+        ) : null
+      }
     >
-      {data?.status === "EMPTY" || !plan ? (
-        <CollectorEmptyState
-          title="No advisor plan yet"
-          description="Run the Collector Advisor batch job to generate today's cached action plan. No live marketplace searches run on this page."
+      {showEmpty && data ? (
+        <CollectorAdvisorEmptyState
+          onGenerate={() => void handleGenerate()}
+          generating={generating}
+          generateError={generateError}
         />
       ) : null}
 
       {plan ? (
         <>
-          <PatriotPanel title="Today's actions">
+          <PatriotPanel title="Today's actions" id="advisor-todays-actions">
             {plan.todays_actions.length === 0 ? (
-              <p className="text-sm text-blue-800">No ranked actions in this snapshot.</p>
+              <p className="text-sm text-blue-800">No ranked actions in today&apos;s plan yet.</p>
             ) : (
               <ol className="space-y-2">
                 {plan.todays_actions.map((action) => (
@@ -151,7 +182,7 @@ export function AutomationCenterPage(): JSX.Element {
 
           <PatriotPanel title="Market alerts" className="mt-4">
             {plan.market_alerts.length === 0 ? (
-              <p className="text-sm text-blue-800">No cached marketplace alerts in this snapshot.</p>
+              <p className="text-sm text-blue-800">No marketplace alerts in this plan.</p>
             ) : (
               <ul className="space-y-1 text-sm text-blue-900">
                 {plan.market_alerts.map((row, i) => (
@@ -166,7 +197,7 @@ export function AutomationCenterPage(): JSX.Element {
 
           <PatriotPanel title="Recent activity" className="mt-4">
             {plan.recent_activity.length === 0 ? (
-              <p className="text-sm text-blue-800">No recent activity cached for this snapshot.</p>
+              <p className="text-sm text-blue-800">No recent collection activity in this plan.</p>
             ) : (
               <ul className="space-y-1 text-sm text-blue-900">
                 {plan.recent_activity.map((row, i) => (

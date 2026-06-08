@@ -1,9 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as clientModule from "../../api/client";
 import { AutomationCenterPage } from "../AutomationCenterPage";
+import {
+  COLLECTOR_ADVISOR_GENERATE_CTA,
+  COLLECTOR_ADVISOR_NO_PLAN_MESSAGE,
+  COLLECTOR_ADVISOR_OPEN_PLAN_CTA,
+  COLLECTOR_ADVISOR_SUBTITLE,
+} from "../collectorAdvisorPresentation";
 
 vi.mock("../../components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -52,6 +58,10 @@ const plan: clientModule.P90CollectorAdvisorSnapshotRead = {
 };
 
 describe("CollectorAdvisorPage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders dashboard and impact", async () => {
     vi.spyOn(clientModule.apiClient, "getCollectorAdvisor").mockResolvedValue({
       status: "OK",
@@ -67,9 +77,10 @@ describe("CollectorAdvisorPage", () => {
     expect(screen.getAllByText("Buy Battle Beast #2").length).toBeGreaterThan(0);
     expect(screen.getByText("Portfolio impact")).toBeInTheDocument();
     expect(screen.getByText(/HIGH confidence · priority 88/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: COLLECTOR_ADVISOR_OPEN_PLAN_CTA })).toBeInTheDocument();
   });
 
-  it("renders empty state", async () => {
+  it("renders collector-oriented empty state", async () => {
     vi.spyOn(clientModule.apiClient, "getCollectorAdvisor").mockResolvedValue({
       status: "EMPTY",
       plan: null,
@@ -80,6 +91,35 @@ describe("CollectorAdvisorPage", () => {
         <AutomationCenterPage />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No advisor plan yet")).toBeInTheDocument();
+    expect(await screen.findByText(COLLECTOR_ADVISOR_SUBTITLE)).toBeInTheDocument();
+    expect(screen.getByText(COLLECTOR_ADVISOR_NO_PLAN_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: COLLECTOR_ADVISOR_GENERATE_CTA })).toBeInTheDocument();
+    expect(screen.getByTestId("collector-advisor-empty")).toBeInTheDocument();
+    expect(screen.getByText("What you will get")).toBeInTheDocument();
+    expect(screen.queryByText(/batch job/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cached/i)).not.toBeInTheDocument();
+  });
+
+  it("calls generate when empty CTA is clicked", async () => {
+    vi.spyOn(clientModule.apiClient, "getCollectorAdvisor").mockResolvedValue({
+      status: "EMPTY",
+      plan: null,
+      generated_at: "2026-06-07T12:00:00Z",
+    });
+    const generate = vi.spyOn(clientModule.apiClient, "generateCollectorAdvisor").mockResolvedValue({
+      status: "OK",
+      plan,
+      generated_at: "2026-06-07T12:00:00Z",
+    });
+    const view = render(
+      <MemoryRouter>
+        <AutomationCenterPage />
+      </MemoryRouter>,
+    );
+    const btn = await screen.findByTestId("collector-advisor-generate");
+    fireEvent.click(btn);
+    expect(generate).toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Today's actions" })).toBeInTheDocument();
+    view.unmount();
   });
 });
