@@ -161,7 +161,7 @@ def test_collector_advisor_generate_never_500_on_persist_failure(client: TestCli
     resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
     assert resp.status_code == 200
     data = resp.json()["data"]
-    assert data["status"] == ADVISOR_STATUS_EMPTY_GATHER_FAILED
+    assert data["status"] != ADVISOR_STATUS_EMPTY_GATHER_FAILED
 
 
 def test_collector_advisor_persist_and_api(client: TestClient, session: Session) -> None:

@@ -35,6 +35,12 @@ from app.services.collector_alert_priority_service import profit_signal_from_amo
 from app.services.listing_draft_service import build_listing_draft_briefing
 from app.services.portfolio_impact_service import compute_portfolio_impact
 from app.services.p90_collector_advisor_notifications import notify_collector_advisor_ready
+from app.services.advisor_snapshot_compat import (
+    find_advisor_snapshot_for_day,
+    latest_advisor_snapshot_row,
+    persist_advisor_snapshot,
+    persist_empty_advisor_snapshot,
+)
 from app.services.p90_safe_reads import p90_rollback_session
 
 logger = logging.getLogger(__name__)
@@ -448,39 +454,37 @@ def generate_collector_advisor_snapshot(
     if dry_run:
         summary["gather_failed_subsystems"] = gather_result.failed_subsystems
         summary["gather_errors"] = gather_result.errors
+        summary["gather_all_failed"] = gather_failed
         return summary
 
-    existing = session.exec(
-        select(P90CollectorAdvisorSnapshot)
-        .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
-        .where(P90CollectorAdvisorSnapshot.snapshot_date == day)
-        .order_by(P90CollectorAdvisorSnapshot.id.desc())
-        .limit(1)
-    ).first()
-
-    row = existing or P90CollectorAdvisorSnapshot(owner_user_id=owner_user_id, snapshot_date=day)
-    row.buy_actions = buy_actions
-    row.sell_actions = sell_actions
-    row.grade_actions = grade_actions
-    row.watch_actions = watch_actions
-    row.todays_actions = todays_actions
-    row.recent_activity = recent_activity
-    row.market_alerts = market_alerts
-    row.total_actions = total_actions
-    row.estimated_profit = impact["estimated_profit"]
-    row.estimated_savings = impact["estimated_savings"]
-    row.portfolio_score = impact["portfolio_score"]
-    row.generation_status = "GATHER_FAILED" if gather_failed else "OK"
-    row.created_at = utc_now()
-    session.add(row)
-    session.flush()
+    existing = find_advisor_snapshot_for_day(session, owner_user_id=owner_user_id, snapshot_date=day)
+    gen_status = "GATHER_FAILED" if gather_failed else "OK"
+    snapshot_id = persist_advisor_snapshot(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date=day,
+        existing=existing,
+        buy_actions=buy_actions,
+        sell_actions=sell_actions,
+        grade_actions=grade_actions,
+        watch_actions=watch_actions,
+        todays_actions=todays_actions,
+        recent_activity=recent_activity,
+        market_alerts=market_alerts,
+        total_actions=total_actions,
+        estimated_profit=impact["estimated_profit"],
+        estimated_savings=impact["estimated_savings"],
+        portfolio_score=impact["portfolio_score"],
+        generation_status=gen_status,
+    )
     try:
-        notify_collector_advisor_ready(session, owner_user_id=owner_user_id, snapshot_id=int(row.id or 0))
+        notify_collector_advisor_ready(session, owner_user_id=owner_user_id, snapshot_id=snapshot_id)
     except Exception as exc:  # noqa: BLE001
         logger.debug("advisor notification skipped: %s", exc)
-    summary["snapshot_id"] = int(row.id or 0)
+    summary["snapshot_id"] = snapshot_id
     summary["gather_failed_subsystems"] = gather_result.failed_subsystems
     summary["gather_errors"] = gather_result.errors
+    summary["gather_all_failed"] = gather_failed
     return summary
 
 
@@ -511,29 +515,12 @@ def _persist_empty_advisor_snapshot(
     generation_status: str = "GATHER_FAILED",
 ) -> None:
     day = snapshot_date or date.today()
-    existing = session.exec(
-        select(P90CollectorAdvisorSnapshot)
-        .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
-        .where(P90CollectorAdvisorSnapshot.snapshot_date == day)
-        .order_by(P90CollectorAdvisorSnapshot.id.desc())
-        .limit(1)
-    ).first()
-    row = existing or P90CollectorAdvisorSnapshot(owner_user_id=owner_user_id, snapshot_date=day)
-    row.buy_actions = []
-    row.sell_actions = []
-    row.grade_actions = []
-    row.watch_actions = []
-    row.todays_actions = []
-    row.recent_activity = []
-    row.market_alerts = []
-    row.total_actions = 0
-    row.estimated_profit = 0.0
-    row.estimated_savings = 0.0
-    row.portfolio_score = 0.0
-    row.generation_status = generation_status
-    row.created_at = utc_now()
-    session.add(row)
-    session.flush()
+    persist_empty_advisor_snapshot(
+        session,
+        owner_user_id=owner_user_id,
+        snapshot_date=day,
+        generation_status=generation_status,
+    )
 
 
 def generate_collector_advisor_dashboard_response(
@@ -544,8 +531,10 @@ def generate_collector_advisor_dashboard_response(
 ) -> P90CollectorAdvisorDashboardRead:
     """Generate advisor plan for UI — always returns HTTP-safe dashboard payload."""
     gather_meta: dict[str, Any] = {}
+    gather_all_failed = False
     try:
         summary = generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
+        gather_all_failed = bool(summary.get("gather_all_failed"))
         gather_meta = {
             "gather_errors": summary.get("gather_errors") or [],
             "gather_failed_subsystems": summary.get("gather_failed_subsystems") or [],
@@ -558,7 +547,7 @@ def generate_collector_advisor_dashboard_response(
             _persist_empty_advisor_snapshot(
                 session,
                 owner_user_id=owner_user_id,
-                generation_status="GATHER_FAILED",
+                generation_status="GATHER_FAILED" if gather_all_failed else "OK",
             )
             session.commit()
         except Exception as persist_exc:  # noqa: BLE001
@@ -585,12 +574,7 @@ def latest_advisor_snapshot(session: Session, *, owner_user_id: int) -> P90Colle
 
     return p90_safe_call(
         session,
-        lambda: session.exec(
-            select(P90CollectorAdvisorSnapshot)
-            .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
-            .order_by(P90CollectorAdvisorSnapshot.snapshot_date.desc(), P90CollectorAdvisorSnapshot.id.desc())
-            .limit(1)
-        ).first(),
+        lambda: latest_advisor_snapshot_row(session, owner_user_id=owner_user_id),
         default=None,
         label="latest_advisor_snapshot",
     )

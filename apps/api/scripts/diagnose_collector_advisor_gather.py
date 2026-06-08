@@ -16,7 +16,12 @@ from sqlmodel import Session
 from app.db.session import get_engine
 from app.services.advisor_proposal_gather import ADVISOR_GATHER_SUBSYSTEMS, gather_advisor_proposals_with_result
 from app.services.advisor_signal_diagnostics import build_advisor_signal_diagnostics
-from app.services.collector_advisor_service import generate_collector_advisor_snapshot, latest_advisor_snapshot
+from app.services.advisor_snapshot_compat import advisor_snapshot_has_generation_status
+from app.services.collector_advisor_service import (
+    build_collector_advisor_dashboard,
+    generate_collector_advisor_snapshot,
+    latest_advisor_snapshot,
+)
 
 
 def main() -> int:
@@ -28,7 +33,12 @@ def main() -> int:
 
     with Session(get_engine()) as session:
         diagnostics = build_advisor_signal_diagnostics(session, owner_user_id=owner_user_id)
-        report: dict = {"owner_user_id": owner_user_id, "signal_diagnostics": diagnostics.model_dump(), "subsystems": []}
+        report: dict = {
+            "owner_user_id": owner_user_id,
+            "generation_status_column_present": advisor_snapshot_has_generation_status(session),
+            "signal_diagnostics": diagnostics.model_dump(),
+            "subsystems": [],
+        }
 
         for subsystem, gather in ADVISOR_GATHER_SUBSYSTEMS:
             entry = {"subsystem": subsystem, "ok": True, "proposal_count": 0}
@@ -59,6 +69,13 @@ def main() -> int:
             session.commit()
             snap = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
             report["latest_generation_status"] = str(snap.generation_status if snap else "")
+            report["dashboard_status"] = build_collector_advisor_dashboard(
+                session, owner_user_id=owner_user_id
+            ).status
+        else:
+            report["dashboard_status"] = build_collector_advisor_dashboard(
+                session, owner_user_id=owner_user_id
+            ).status
 
         print(json.dumps(report, indent=2, default=str))
     return 0

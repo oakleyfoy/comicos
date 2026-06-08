@@ -595,6 +595,7 @@ def gather_advisor_proposals_with_result(session: Session, *, owner_user_id: int
     failed: list[str] = []
     errors: list[dict[str, Any]] = []
     for subsystem, gather in ADVISOR_GATHER_SUBSYSTEMS:
+        p90_rollback_session(session)
         try:
             chunk = gather(session, owner_user_id=owner_user_id)
             proposals.extend(chunk)
