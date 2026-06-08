@@ -169,6 +169,9 @@ def enrich_import_item_lifecycle(
     resolution = resolve_import_catalog_match(session, owner_user_id=owner_user_id, item=item)
     catalog_date = resolution.release_date if resolution.matched else None
     item.update(catalog_match_fields_for_item(resolution, include_debug=include_catalog_debug))
+    if resolution.matched and resolution.publisher:
+        item["publisher"] = resolution.publisher
+        item["canonical_publisher"] = resolution.publisher
 
     best = resolve_best_release_date(
         catalog_match_date=catalog_date,

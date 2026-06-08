@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
 from app.models.external_catalog import ExternalCatalogIssue
@@ -21,7 +21,8 @@ POSSIBLE_SCORE = 55
 STRONG_TITLE_ISSUE_MIN_SCORE = 60
 CANDIDATE_LIMIT = 100
 
-_TITLE_SEARCH_STOP = frozenset({"the", "and", "for", "vol", "volume", "live"})
+_TITLE_SEARCH_STOP = frozenset({"the", "and", "for", "vol", "volume", "live", "ai", "superstar"})
+_MIN_TITLE_SEARCH_TOKEN_LEN = 3
 
 IMPORT_PUBLISHER_ALIASES: dict[str, str] = {
     "image comics": "image",
@@ -150,7 +151,10 @@ def _catalog_title_search_tokens(value: str | None) -> list[str]:
     if not tokens:
         tokens = [token for token in normalized.split() if len(token) > 1]
     deduped = sorted(set(tokens), key=len, reverse=True)
-    return deduped[:4]
+    selective = [token for token in deduped if len(token) >= _MIN_TITLE_SEARCH_TOKEN_LEN]
+    if not selective:
+        selective = deduped[:2]
+    return selective[:4]
 
 
 def _strong_title_issue_match(reasons: list[str]) -> bool:
@@ -287,12 +291,18 @@ def score_catalog_candidate(
 def _title_prefilter_clause(tokens: list[str], *columns: Any) -> Any | None:
     if not tokens:
         return None
-    clauses = []
-    for token in tokens:
+    selective = [token for token in tokens if len(token) >= _MIN_TITLE_SEARCH_TOKEN_LEN]
+    if not selective:
+        selective = tokens[:1]
+    if len(selective) >= 2:
+        required = selective[:2]
+    else:
+        required = selective[:1]
+    per_token: list[Any] = []
+    for token in required:
         pattern = f"%{token}%"
-        for column in columns:
-            clauses.append(column.ilike(pattern))  # type: ignore[attr-defined]
-    return or_(*clauses)
+        per_token.append(or_(*[column.ilike(pattern) for column in columns]))  # type: ignore[attr-defined]
+    return and_(*per_token)
 
 
 def _collect_release_issue_candidates(
@@ -337,6 +347,59 @@ def _collect_release_issue_candidates(
     return candidates
 
 
+def _external_row_to_candidate(row: ExternalCatalogIssue) -> CatalogCandidateRow | None:
+    if row.id is None:
+        return None
+    display_title = row.series_name or row.title
+    return CatalogCandidateRow(
+        source="ExternalCatalogIssue",
+        source_id=row.id,
+        publisher=row.publisher,
+        title=display_title,
+        issue_number=row.issue_number or "",
+        release_date=row.release_date,
+    )
+
+
+def _collect_external_catalog_series_candidates(
+    session: Session,
+    *,
+    title: str | None,
+) -> list[CatalogCandidateRow]:
+    """LOCG series-title lookup when issue-number pools miss (P90-09E)."""
+    search_tokens = _catalog_title_search_tokens(title)
+    if not search_tokens:
+        return []
+    stmt = select(ExternalCatalogIssue)
+    title_clause = _title_prefilter_clause(
+        search_tokens,
+        ExternalCatalogIssue.series_name,
+        ExternalCatalogIssue.title,
+        ExternalCatalogIssue.normalized_title_key,
+    )
+    if title_clause is not None:
+        stmt = stmt.where(title_clause)
+    rows = session.exec(stmt.limit(CANDIDATE_LIMIT)).all()
+    candidates: list[CatalogCandidateRow] = []
+    for row in rows:
+        candidate = _external_row_to_candidate(row)
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates
+
+
+def _dedupe_candidates(rows: list[CatalogCandidateRow]) -> list[CatalogCandidateRow]:
+    seen: set[tuple[str, int]] = set()
+    out: list[CatalogCandidateRow] = []
+    for row in rows:
+        key = (row.source, row.source_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
 def _collect_external_catalog_candidates(
     session: Session,
     *,
@@ -361,19 +424,9 @@ def _collect_external_catalog_candidates(
     rows = session.exec(stmt.limit(CANDIDATE_LIMIT)).all()
     candidates: list[CatalogCandidateRow] = []
     for row in rows:
-        if row.id is None:
-            continue
-        title = row.series_name or row.title
-        candidates.append(
-            CatalogCandidateRow(
-                source="ExternalCatalogIssue",
-                source_id=row.id,
-                publisher=row.publisher,
-                title=title,
-                issue_number=row.issue_number or "",
-                release_date=row.release_date,
-            )
-        )
+        candidate = _external_row_to_candidate(row)
+        if candidate is not None:
+            candidates.append(candidate)
     return candidates
 
 
@@ -513,6 +566,7 @@ def resolve_import_catalog_match(
     candidates.extend(
         _collect_external_catalog_candidates(session, issue_number=issue_number, title=title)
     )
+    candidates = _dedupe_candidates(candidates)
 
     scored = [
         score_catalog_candidate(
@@ -525,6 +579,22 @@ def resolve_import_catalog_match(
         )
         for candidate in candidates
     ]
+    top_score = max((row.score for row in scored), default=0)
+    if top_score < STRONG_TITLE_ISSUE_MIN_SCORE:
+        extra = _collect_external_catalog_series_candidates(session, title=title)
+        if extra:
+            candidates = _dedupe_candidates(candidates + extra)
+            scored = [
+                score_catalog_candidate(
+                    input_publisher=publisher,
+                    input_title=title,
+                    input_issue_number=issue_number,
+                    input_cover_name=cover_name,
+                    input_cover_artist=cover_artist,
+                    candidate=candidate,
+                )
+                for candidate in candidates
+            ]
     result = _pick_resolution(scored)
     result.diagnostics = {
         **diagnostics,

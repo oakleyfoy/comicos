@@ -190,6 +190,26 @@ def _tokenize_haystack(*parts: str | None) -> list[str]:
     return re.findall(r"[A-Za-z0-9][A-Za-z0-9'&.\-]*", haystack)
 
 
+def _publisher_marker_context(raw_text: str, canonical_series: str | None) -> str:
+    """Limit publisher marker scans to text near this line item (P90-09E)."""
+    if not raw_text.strip():
+        return ""
+    series_key = _series_key(canonical_series)
+    if not series_key:
+        return ""
+    lower = raw_text.lower()
+    idx = lower.find(series_key)
+    if idx < 0:
+        parts = series_key.split()
+        if parts:
+            idx = lower.find(parts[0])
+    if idx < 0:
+        return ""
+    start = max(0, idx - 160)
+    end = min(len(raw_text), idx + max(len(series_key), 20) + 160)
+    return raw_text[start:end]
+
+
 def _lookup_publisher_aliases(
     session: Session,
     *,
@@ -223,7 +243,8 @@ def _lookup_publisher_aliases(
                 detail=f"publisher_db_alias token={token}",
             )
     for publisher, pattern in SOURCE_LINE_PUBLISHER_MARKERS.items():
-        if pattern.search(raw_text or ""):
+        context = _publisher_marker_context(raw_text, canonical_series)
+        if context and pattern.search(context):
             return PublisherAutofillCandidate(
                 publisher=publisher,
                 confidence=_ALIAS_CONFIDENCE,

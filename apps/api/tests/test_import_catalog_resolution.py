@@ -214,6 +214,39 @@ def test_score_terminal_candidate() -> None:
     assert scored.score >= 70
 
 
+def test_external_series_title_fallback_finds_issue_one(session: Session) -> None:
+    user = User(email="terminal-series-fallback@example.com", password_hash="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    assert user.id is not None
+
+    row = ExternalCatalogIssue(
+        source_name="LEAGUE_OF_COMIC_GEEKS",
+        title="Terminal #1",
+        publisher="Image Comics",
+        series_name="Terminal",
+        issue_number="1",
+        release_date=date(2026, 7, 22),
+        cover_image_url="https://example.com/terminal-1.jpg",
+    )
+    session.add(row)
+    session.commit()
+
+    resolution = resolve_import_catalog_match(
+        session,
+        owner_user_id=user.id,
+        item={
+            "publisher": "Image Comics",
+            "title": "Terminal",
+            "issue_number": "1",
+        },
+    )
+    assert resolution.matched is True
+    assert resolution.source == "ExternalCatalogIssue"
+    assert resolution.release_date == date(2026, 7, 22)
+
+
 def test_jeff_the_land_shark_superstar_issue_1_resolves(session: Session) -> None:
     user = User(email="jeff-land-shark-1@example.com", password_hash="x")
     session.add(user)
