@@ -12,7 +12,7 @@ from app.schemas.p90_collector_advisor import P90CollectorAdvisorDashboardRead, 
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
 from app.services.collector_advisor_service import (
     build_collector_advisor_dashboard,
-    generate_collector_advisor_snapshot,
+    generate_collector_advisor_dashboard_response,
     list_advisor_history,
 )
 
@@ -54,9 +54,7 @@ def v1_collector_advisor_generate(
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     owner_user_id = int(current_user.id)
-    generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
-    session.commit()
-    body: P90CollectorAdvisorDashboardRead = build_collector_advisor_dashboard(
+    body: P90CollectorAdvisorDashboardRead = generate_collector_advisor_dashboard_response(
         session, owner_user_id=owner_user_id
     )
     return wrap_object(body, owner_user_id=owner_user_id)

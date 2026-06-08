@@ -93,7 +93,9 @@ export function AutomationCenterPage(): JSX.Element {
 
   const plan = data?.plan;
   const impact = plan?.portfolio_impact;
-  const showEmpty = data?.status === "EMPTY" || !plan;
+  const showIntroEmpty = Boolean(data && !plan);
+  const emptyPlanMessage =
+    data?.message?.trim() || (data?.status === "EMPTY" && plan ? "Import comics to unlock personalized recommendations." : "");
 
   return (
     <PatriotPageLayout
@@ -105,7 +107,7 @@ export function AutomationCenterPage(): JSX.Element {
       loading={loading && !data}
       maxWidthClass="max-w-5xl"
       headerActions={
-        plan ? (
+        plan && data?.status === "OK" ? (
           <a
             href="#advisor-todays-actions"
             className="rounded-md border border-white/40 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
@@ -115,7 +117,7 @@ export function AutomationCenterPage(): JSX.Element {
         ) : null
       }
     >
-      {showEmpty && data ? (
+      {showIntroEmpty ? (
         <CollectorAdvisorEmptyState
           onGenerate={() => void handleGenerate()}
           generating={generating}
@@ -125,6 +127,9 @@ export function AutomationCenterPage(): JSX.Element {
 
       {plan ? (
         <>
+          {emptyPlanMessage ? (
+            <p className="rounded-lg border border-blue-300 bg-white/90 px-4 py-3 text-sm text-blue-950">{emptyPlanMessage}</p>
+          ) : null}
           <PatriotPanel title="Today's actions" id="advisor-todays-actions">
             {plan.todays_actions.length === 0 ? (
               <p className="text-sm text-blue-800">No ranked actions in today&apos;s plan yet.</p>

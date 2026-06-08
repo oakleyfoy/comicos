@@ -63,6 +63,7 @@ class P90CollectorAdvisorSnapshotRead(BaseModel):
 class P90CollectorAdvisorDashboardRead(BaseModel):
     status: str
     plan: P90CollectorAdvisorSnapshotRead | None = None
+    message: str = ""
     generated_at: datetime
 
 

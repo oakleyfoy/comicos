@@ -47,8 +47,27 @@ def test_collector_advisor_generate_endpoint(client: TestClient, session: Sessio
     resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
     assert resp.status_code == 200
     data = resp.json()["data"]
-    assert data["status"] == "OK"
+    assert data["status"] == "EMPTY"
     assert data["plan"] is not None
+    assert data["plan"]["buy_actions"] == []
+    assert data["message"] == "Import comics to unlock personalized recommendations."
+
+
+def test_collector_advisor_generate_survives_gather_failure(client: TestClient, monkeypatch) -> None:
+    import app.services.collector_advisor_service as advisor_service
+
+    token = register_and_login(client, "advisor-gather-fail@example.com")
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("simulated missing relation")
+
+    monkeypatch.setattr(advisor_service, "_gather_all_proposals", _boom)
+    resp = client.post("/api/v1/collector-advisor/generate", headers=auth_headers(token))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["status"] == "EMPTY"
+    assert data["plan"] is not None
+    assert data["plan"]["total_actions"] == 0
 
 
 def test_collector_advisor_persist_and_api(client: TestClient, session: Session) -> None:

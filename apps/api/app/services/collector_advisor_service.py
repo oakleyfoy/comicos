@@ -26,10 +26,12 @@ from app.services.collector_alert_priority_service import profit_signal_from_amo
 from app.services.listing_draft_service import build_listing_draft_briefing
 from app.services.portfolio_impact_service import compute_portfolio_impact
 from app.services.p90_collector_advisor_notifications import notify_collector_advisor_ready
+from app.services.p90_safe_reads import p90_rollback_session
 
 logger = logging.getLogger(__name__)
 
 _PER_CATEGORY = 10
+EMPTY_ADVISOR_MESSAGE = "Import comics to unlock personalized recommendations."
 
 
 def _comic_from_title(title: str) -> str:
@@ -152,7 +154,7 @@ def _fmv_grade_hints(session: Session, *, owner_user_id: int, grade_raw: list[di
             ).all()
         )
     except Exception:  # noqa: BLE001 — FMV table optional until migrated
-        session.rollback()
+        p90_rollback_session(session)
         return
     for row in rows:
         label = f"{row.series} #{row.issue_number}".strip()
@@ -277,7 +279,7 @@ def _extras_for_today(session: Session, *, owner_user_id: int) -> list[dict]:
                 }
             )
     except Exception:  # noqa: BLE001
-        session.rollback()
+        p90_rollback_session(session)
     try:
         from app.services.collection_gaps import list_collection_gaps
 
@@ -298,7 +300,7 @@ def _extras_for_today(session: Session, *, owner_user_id: int) -> list[dict]:
                 }
             )
     except Exception:  # noqa: BLE001
-        session.rollback()
+        p90_rollback_session(session)
     return extras
 
 
@@ -320,7 +322,31 @@ def _snapshot_to_read(row: P90CollectorAdvisorSnapshot) -> P90CollectorAdvisorSn
     )
 
     def _actions(raw: list) -> list[P90AdvisorActionRead]:
-        return [P90AdvisorActionRead.model_validate(item) for item in raw or []]
+        out: list[P90AdvisorActionRead] = []
+        for item in raw or []:
+            try:
+                out.append(P90AdvisorActionRead.model_validate(item))
+            except Exception:  # noqa: BLE001
+                continue
+        return out
+
+    def _today_actions(raw: list) -> list[P90AdvisorTodayActionRead]:
+        out: list[P90AdvisorTodayActionRead] = []
+        for item in raw or []:
+            try:
+                out.append(P90AdvisorTodayActionRead.model_validate(item))
+            except Exception:  # noqa: BLE001
+                continue
+        return out
+
+    def _activity_rows(raw: list) -> list[P90AdvisorActivityRead]:
+        out: list[P90AdvisorActivityRead] = []
+        for item in raw or []:
+            try:
+                out.append(P90AdvisorActivityRead.model_validate(item))
+            except Exception:  # noqa: BLE001
+                continue
+        return out
 
     return P90CollectorAdvisorSnapshotRead(
         id=int(row.id or 0),
@@ -329,9 +355,9 @@ def _snapshot_to_read(row: P90CollectorAdvisorSnapshot) -> P90CollectorAdvisorSn
         sell_actions=_actions(row.sell_actions),
         grade_actions=_actions(row.grade_actions),
         watch_actions=_actions(row.watch_actions),
-        todays_actions=[P90AdvisorTodayActionRead.model_validate(i) for i in row.todays_actions or []],
-        recent_activity=[P90AdvisorActivityRead.model_validate(i) for i in row.recent_activity or []],
-        market_alerts=[P90AdvisorActivityRead.model_validate(i) for i in row.market_alerts or []],
+        todays_actions=_today_actions(row.todays_actions),
+        recent_activity=_activity_rows(row.recent_activity),
+        market_alerts=_activity_rows(row.market_alerts),
         total_actions=int(row.total_actions),
         portfolio_impact=impact,
         created_at=row.created_at,
@@ -346,9 +372,18 @@ def generate_collector_advisor_snapshot(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     day = snapshot_date or date.today()
-    proposals = _gather_all_proposals(session, owner_user_id=owner_user_id)
+    try:
+        proposals = _gather_all_proposals(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("advisor gather proposals failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
+        proposals = []
     buy_raw, sell_raw, grade_raw, watch_raw = _categorize_proposals(proposals)
-    _enrich_buy_from_opportunities(session, owner_user_id=owner_user_id, buy_raw=buy_raw)
+    try:
+        _enrich_buy_from_opportunities(session, owner_user_id=owner_user_id, buy_raw=buy_raw)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("advisor enrich buy failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
     _fmv_grade_hints(session, owner_user_id=owner_user_id, grade_raw=grade_raw)
 
     buy_actions = _finalize_actions(buy_raw)
@@ -362,11 +397,20 @@ def generate_collector_advisor_snapshot(
         grade_actions=grade_actions,
     )
 
-    mixed = buy_actions + sell_actions + grade_actions + watch_actions + _extras_for_today(
-        session, owner_user_id=owner_user_id
-    )
+    try:
+        extras = _extras_for_today(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("advisor extras failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
+        extras = []
+    mixed = buy_actions + sell_actions + grade_actions + watch_actions + extras
     todays_actions = rank_mixed_top_actions(mixed, limit=5)
-    recent_activity, market_alerts = _build_recent_activity(session, owner_user_id=owner_user_id)
+    try:
+        recent_activity, market_alerts = _build_recent_activity(session, owner_user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("advisor recent activity failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
+        recent_activity, market_alerts = [], []
 
     total_actions = len(buy_actions) + len(sell_actions) + len(grade_actions) + len(watch_actions)
 
@@ -415,6 +459,92 @@ def generate_collector_advisor_snapshot(
     return summary
 
 
+def _synthetic_empty_plan_read(*, snapshot_day: date | None = None) -> P90CollectorAdvisorSnapshotRead:
+    day = snapshot_day or date.today()
+    now = utc_now()
+    return P90CollectorAdvisorSnapshotRead(
+        id=0,
+        snapshot_date=day,
+        buy_actions=[],
+        sell_actions=[],
+        grade_actions=[],
+        watch_actions=[],
+        todays_actions=[],
+        recent_activity=[],
+        market_alerts=[],
+        total_actions=0,
+        portfolio_impact=P90PortfolioImpactRead(),
+        created_at=now,
+    )
+
+
+def _persist_empty_advisor_snapshot(
+    session: Session,
+    *,
+    owner_user_id: int,
+    snapshot_date: date | None = None,
+) -> None:
+    day = snapshot_date or date.today()
+    existing = session.exec(
+        select(P90CollectorAdvisorSnapshot)
+        .where(P90CollectorAdvisorSnapshot.owner_user_id == owner_user_id)
+        .where(P90CollectorAdvisorSnapshot.snapshot_date == day)
+        .order_by(P90CollectorAdvisorSnapshot.id.desc())
+        .limit(1)
+    ).first()
+    row = existing or P90CollectorAdvisorSnapshot(owner_user_id=owner_user_id, snapshot_date=day)
+    row.buy_actions = []
+    row.sell_actions = []
+    row.grade_actions = []
+    row.watch_actions = []
+    row.todays_actions = []
+    row.recent_activity = []
+    row.market_alerts = []
+    row.total_actions = 0
+    row.estimated_profit = 0.0
+    row.estimated_savings = 0.0
+    row.portfolio_score = 0.0
+    row.created_at = utc_now()
+    session.add(row)
+    session.flush()
+
+
+def generate_collector_advisor_dashboard_response(
+    session: Session,
+    *,
+    owner_user_id: int,
+) -> P90CollectorAdvisorDashboardRead:
+    """Generate advisor plan for UI — always returns HTTP-safe dashboard payload."""
+    try:
+        generate_collector_advisor_snapshot(session, owner_user_id=owner_user_id, dry_run=False)
+        session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("collector advisor generate failed owner=%s: %s", owner_user_id, exc)
+        p90_rollback_session(session)
+        try:
+            _persist_empty_advisor_snapshot(session, owner_user_id=owner_user_id)
+            session.commit()
+        except Exception as persist_exc:  # noqa: BLE001
+            logger.exception("collector advisor empty persist failed owner=%s: %s", owner_user_id, persist_exc)
+            p90_rollback_session(session)
+            return P90CollectorAdvisorDashboardRead(
+                status="EMPTY",
+                plan=_synthetic_empty_plan_read(),
+                message=EMPTY_ADVISOR_MESSAGE,
+                generated_at=datetime.now(timezone.utc),
+            )
+
+    dashboard = build_collector_advisor_dashboard(session, owner_user_id=owner_user_id)
+    if dashboard.plan is None:
+        return P90CollectorAdvisorDashboardRead(
+            status="EMPTY",
+            plan=_synthetic_empty_plan_read(),
+            message=EMPTY_ADVISOR_MESSAGE,
+            generated_at=dashboard.generated_at,
+        )
+    return dashboard
+
+
 def latest_advisor_snapshot(session: Session, *, owner_user_id: int) -> P90CollectorAdvisorSnapshot | None:
     from app.services.p90_safe_reads import p90_safe_call
 
@@ -435,10 +565,24 @@ def build_collector_advisor_dashboard(session: Session, *, owner_user_id: int) -
     row = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
     now = datetime.now(timezone.utc)
     if row is None:
-        return P90CollectorAdvisorDashboardRead(status="EMPTY", plan=None, generated_at=now)
+        return P90CollectorAdvisorDashboardRead(
+            status="EMPTY",
+            plan=None,
+            message=EMPTY_ADVISOR_MESSAGE,
+            generated_at=now,
+        )
+    plan = _snapshot_to_read(row)
+    if int(row.total_actions or 0) <= 0:
+        return P90CollectorAdvisorDashboardRead(
+            status="EMPTY",
+            plan=plan,
+            message=EMPTY_ADVISOR_MESSAGE,
+            generated_at=now,
+        )
     return P90CollectorAdvisorDashboardRead(
         status="OK",
-        plan=_snapshot_to_read(row),
+        plan=plan,
+        message="",
         generated_at=now,
     )
 

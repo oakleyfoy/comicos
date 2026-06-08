@@ -17573,6 +17573,7 @@ export interface P90CollectorAdvisorSnapshotRead {
 export interface P90CollectorAdvisorDashboardRead {
   status: string;
   plan: P90CollectorAdvisorSnapshotRead | null;
+  message?: string;
   generated_at: string;
 }
 
