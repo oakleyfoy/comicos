@@ -17570,10 +17570,34 @@ export interface P90CollectorAdvisorSnapshotRead {
   created_at: string;
 }
 
+export type CollectorAdvisorDashboardStatus =
+  | "NO_SNAPSHOT"
+  | "EMPTY_NO_COLLECTION"
+  | "EMPTY_NO_SIGNALS"
+  | "EMPTY_GATHER_FAILED"
+  | "OK";
+
+export interface P90AdvisorSignalDiagnosticsRead {
+  inventory_count: number;
+  marketplace_opportunity_count: number;
+  marketplace_alert_count: number;
+  sell_candidate_count: number;
+  listing_draft_count: number;
+  managed_listing_count: number;
+  future_pull_count: number;
+  discovery_alert_count: number;
+  collection_gap_count: number;
+  automation_alert_count: number;
+  fmv_snapshot_count: number;
+  grade_before_sell_count?: number;
+  grading_candidate_count?: number;
+}
+
 export interface P90CollectorAdvisorDashboardRead {
-  status: string;
+  status: CollectorAdvisorDashboardStatus | string;
   plan: P90CollectorAdvisorSnapshotRead | null;
   message?: string;
+  signal_diagnostics?: P90AdvisorSignalDiagnosticsRead | null;
   generated_at: string;
 }
 

@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, FastAPI, Query
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
+from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models import User
+from app.services.ops_access import is_ops_admin_user
 from app.schemas.p90_collector_advisor import P90CollectorAdvisorDashboardRead, P90CollectorAdvisorHistoryRead
 from app.schemas.scan_api_v1 import ScanApiV1Envelope, wrap_object
 from app.services.collector_advisor_service import (
@@ -27,10 +29,13 @@ def attach_p90_collector_advisor_layer(app: FastAPI) -> None:
 def v1_collector_advisor_dashboard(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     body: P90CollectorAdvisorDashboardRead = build_collector_advisor_dashboard(
-        session, owner_user_id=int(current_user.id)
+        session,
+        owner_user_id=int(current_user.id),
+        include_diagnostics=is_ops_admin_user(current_user, settings),
     )
     return wrap_object(body, owner_user_id=int(current_user.id))
 
@@ -39,10 +44,13 @@ def v1_collector_advisor_dashboard(
 def v1_collector_advisor_latest(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     body: P90CollectorAdvisorDashboardRead = build_collector_advisor_dashboard(
-        session, owner_user_id=int(current_user.id)
+        session,
+        owner_user_id=int(current_user.id),
+        include_diagnostics=is_ops_admin_user(current_user, settings),
     )
     return wrap_object(body, owner_user_id=int(current_user.id))
 
@@ -51,11 +59,14 @@ def v1_collector_advisor_latest(
 def v1_collector_advisor_generate(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     owner_user_id = int(current_user.id)
     body: P90CollectorAdvisorDashboardRead = generate_collector_advisor_dashboard_response(
-        session, owner_user_id=owner_user_id
+        session,
+        owner_user_id=owner_user_id,
+        include_diagnostics=is_ops_admin_user(current_user, settings),
     )
     return wrap_object(body, owner_user_id=owner_user_id)
 

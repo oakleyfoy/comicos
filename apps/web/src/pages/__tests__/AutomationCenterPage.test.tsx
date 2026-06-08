@@ -1,12 +1,20 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiClient from "../../api/client";
 import { AutomationCenterPage } from "../AutomationCenterPage";
+import {
+  COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION,
+  COLLECTOR_ADVISOR_NO_PLAN_MESSAGE,
+} from "../collectorAdvisorPresentation";
 
 vi.mock("../../components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("../../auth/AuthContext", () => ({
+  useAuth: () => ({ isOpsAdmin: false, isAuthenticated: true, isLoading: false }),
 }));
 
 const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
@@ -52,6 +60,10 @@ const plan: apiClient.P90CollectorAdvisorSnapshotRead = {
 };
 
 describe("AutomationCenterPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders advisor sections and today's actions", async () => {
     vi.spyOn(apiClient.apiClient, "getCollectorAdvisor").mockResolvedValue({
       status: "OK",
@@ -72,8 +84,9 @@ describe("AutomationCenterPage", () => {
 
   it("renders empty states", async () => {
     vi.spyOn(apiClient.apiClient, "getCollectorAdvisor").mockResolvedValue({
-      status: "EMPTY",
+      status: "NO_SNAPSHOT",
       plan: null,
+      message: COLLECTOR_ADVISOR_NO_PLAN_MESSAGE,
       generated_at: new Date().toISOString(),
     });
     render(
@@ -81,7 +94,25 @@ describe("AutomationCenterPage", () => {
         <AutomationCenterPage />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("Your first advisor plan has not been generated yet.")).toBeInTheDocument();
+    expect(await screen.findByText(COLLECTOR_ADVISOR_NO_PLAN_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText(/batch job/i)).not.toBeInTheDocument();
+  });
+
+  it("renders EMPTY_NO_COLLECTION import guidance", async () => {
+    vi.spyOn(apiClient.apiClient, "getCollectorAdvisor").mockResolvedValue({
+      status: "EMPTY_NO_COLLECTION",
+      plan: { ...plan, buy_actions: [], todays_actions: [], total_actions: 0 },
+      message: COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION,
+      generated_at: new Date().toISOString(),
+    });
+    render(
+      <MemoryRouter>
+        <AutomationCenterPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("collector-advisor-status-banner")).toHaveTextContent(
+      COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION,
+    );
+    expect(screen.getByRole("link", { name: /Import comics/i })).toBeInTheDocument();
   });
 });

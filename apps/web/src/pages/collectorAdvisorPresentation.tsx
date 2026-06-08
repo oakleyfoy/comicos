@@ -16,8 +16,29 @@ export const COLLECTOR_ADVISOR_ANALYSIS_BULLETS = [
 export const COLLECTOR_ADVISOR_PLAN_PITCH =
   "to build a personalized daily action plan.";
 
+export const COLLECTOR_ADVISOR_TRY_AGAIN_CTA = "Try Again";
+
+export const COLLECTOR_ADVISOR_STATUS = {
+  NO_SNAPSHOT: "NO_SNAPSHOT",
+  EMPTY_NO_COLLECTION: "EMPTY_NO_COLLECTION",
+  EMPTY_NO_SIGNALS: "EMPTY_NO_SIGNALS",
+  EMPTY_GATHER_FAILED: "EMPTY_GATHER_FAILED",
+  OK: "OK",
+} as const;
+
+export type CollectorAdvisorStatus = (typeof COLLECTOR_ADVISOR_STATUS)[keyof typeof COLLECTOR_ADVISOR_STATUS];
+
+export const COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_SIGNALS =
+  "ComicOS found your collection data, but no ranked actions need attention right now.";
+
+export const COLLECTOR_ADVISOR_MESSAGE_EMPTY_NO_COLLECTION =
+  "Import comics to unlock personalized recommendations.";
+
+export const COLLECTOR_ADVISOR_MESSAGE_GATHER_FAILED =
+  "ComicOS could not finish building your Advisor plan. Try again.";
+
 export const COLLECTOR_ADVISOR_NO_PLAN_MESSAGE =
-  "Your first advisor plan has not been generated yet.";
+  "Generate your first Advisor plan to see today's buy, sell, grade, and watch actions.";
 
 export const COLLECTOR_ADVISOR_GENERATE_CTA = "Generate My First Plan";
 

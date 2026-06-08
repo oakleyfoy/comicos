@@ -30,4 +30,5 @@ class P90CollectorAdvisorSnapshot(SQLModel, table=True):
     estimated_profit: float = Field(default=0.0, nullable=False)
     estimated_savings: float = Field(default=0.0, nullable=False)
     portfolio_score: float = Field(default=0.0, nullable=False)
+    generation_status: str = Field(default="", max_length=32, nullable=False)
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))

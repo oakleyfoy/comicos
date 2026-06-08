@@ -13,6 +13,7 @@ from app.models.p90_fmv_snapshot import P90FmvSnapshot
 from app.schemas.p90_collector_advisor import (
     P90AdvisorActionRead,
     P90AdvisorActivityRead,
+    P90AdvisorSignalDiagnosticsRead,
     P90AdvisorTodayActionRead,
     P90CollectorAdvisorBriefingSummary,
     P90CollectorAdvisorDashboardRead,
@@ -21,7 +22,15 @@ from app.schemas.p90_collector_advisor import (
     P90PortfolioImpactRead,
 )
 from app.services.advisor_priority_service import rank_advisor_actions, rank_mixed_top_actions
-from app.services.automation_engine_service import _Proposal, _gather_all_proposals
+from app.services.advisor_proposal_dedupe import count_unique_advisor_actions
+from app.services.advisor_proposal_gather import gather_advisor_proposals
+from app.services.automation_engine_service import _Proposal
+from app.services.advisor_signal_diagnostics import build_advisor_signal_diagnostics
+from app.services.advisor_status import (
+    ADVISOR_STATUS_EMPTY_GATHER_FAILED,
+    advisor_message_for_status,
+    resolve_advisor_dashboard_status,
+)
 from app.services.collector_alert_priority_service import profit_signal_from_amount, profit_signal_from_discount
 from app.services.listing_draft_service import build_listing_draft_briefing
 from app.services.portfolio_impact_service import compute_portfolio_impact
@@ -31,7 +40,6 @@ from app.services.p90_safe_reads import p90_rollback_session
 logger = logging.getLogger(__name__)
 
 _PER_CATEGORY = 10
-EMPTY_ADVISOR_MESSAGE = "Import comics to unlock personalized recommendations."
 
 
 def _comic_from_title(title: str) -> str:
@@ -372,12 +380,14 @@ def generate_collector_advisor_snapshot(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     day = snapshot_date or date.today()
+    gather_failed = False
     try:
-        proposals = _gather_all_proposals(session, owner_user_id=owner_user_id)
+        proposals = gather_advisor_proposals(session, owner_user_id=owner_user_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("advisor gather proposals failed owner=%s: %s", owner_user_id, exc)
         p90_rollback_session(session)
         proposals = []
+        gather_failed = True
     buy_raw, sell_raw, grade_raw, watch_raw = _categorize_proposals(proposals)
     try:
         _enrich_buy_from_opportunities(session, owner_user_id=owner_user_id, buy_raw=buy_raw)
@@ -412,7 +422,15 @@ def generate_collector_advisor_snapshot(
         p90_rollback_session(session)
         recent_activity, market_alerts = [], []
 
-    total_actions = len(buy_actions) + len(sell_actions) + len(grade_actions) + len(watch_actions)
+    total_actions = count_unique_advisor_actions(
+        buy_actions,
+        sell_actions,
+        grade_actions,
+        watch_actions,
+        todays_actions,
+        recent_activity,
+        market_alerts,
+    )
 
     summary = {
         "buy_actions": len(buy_actions),
@@ -448,6 +466,7 @@ def generate_collector_advisor_snapshot(
     row.estimated_profit = impact["estimated_profit"]
     row.estimated_savings = impact["estimated_savings"]
     row.portfolio_score = impact["portfolio_score"]
+    row.generation_status = "GATHER_FAILED" if gather_failed else "OK"
     row.created_at = utc_now()
     session.add(row)
     session.flush()
@@ -504,6 +523,7 @@ def _persist_empty_advisor_snapshot(
     row.estimated_profit = 0.0
     row.estimated_savings = 0.0
     row.portfolio_score = 0.0
+    row.generation_status = "GATHER_FAILED"
     row.created_at = utc_now()
     session.add(row)
     session.flush()
@@ -513,6 +533,7 @@ def generate_collector_advisor_dashboard_response(
     session: Session,
     *,
     owner_user_id: int,
+    include_diagnostics: bool = False,
 ) -> P90CollectorAdvisorDashboardRead:
     """Generate advisor plan for UI — always returns HTTP-safe dashboard payload."""
     try:
@@ -528,21 +549,17 @@ def generate_collector_advisor_dashboard_response(
             logger.exception("collector advisor empty persist failed owner=%s: %s", owner_user_id, persist_exc)
             p90_rollback_session(session)
             return P90CollectorAdvisorDashboardRead(
-                status="EMPTY",
+                status=ADVISOR_STATUS_EMPTY_GATHER_FAILED,
                 plan=_synthetic_empty_plan_read(),
-                message=EMPTY_ADVISOR_MESSAGE,
+                message=advisor_message_for_status(ADVISOR_STATUS_EMPTY_GATHER_FAILED),
                 generated_at=datetime.now(timezone.utc),
             )
 
-    dashboard = build_collector_advisor_dashboard(session, owner_user_id=owner_user_id)
-    if dashboard.plan is None:
-        return P90CollectorAdvisorDashboardRead(
-            status="EMPTY",
-            plan=_synthetic_empty_plan_read(),
-            message=EMPTY_ADVISOR_MESSAGE,
-            generated_at=dashboard.generated_at,
-        )
-    return dashboard
+    return build_collector_advisor_dashboard(
+        session,
+        owner_user_id=owner_user_id,
+        include_diagnostics=include_diagnostics,
+    )
 
 
 def latest_advisor_snapshot(session: Session, *, owner_user_id: int) -> P90CollectorAdvisorSnapshot | None:
@@ -561,28 +578,42 @@ def latest_advisor_snapshot(session: Session, *, owner_user_id: int) -> P90Colle
     )
 
 
-def build_collector_advisor_dashboard(session: Session, *, owner_user_id: int) -> P90CollectorAdvisorDashboardRead:
+def build_collector_advisor_dashboard(
+    session: Session,
+    *,
+    owner_user_id: int,
+    include_diagnostics: bool = False,
+) -> P90CollectorAdvisorDashboardRead:
     row = latest_advisor_snapshot(session, owner_user_id=owner_user_id)
     now = datetime.now(timezone.utc)
+    diagnostics = build_advisor_signal_diagnostics(session, owner_user_id=owner_user_id)
     if row is None:
+        status = resolve_advisor_dashboard_status(
+            has_snapshot=False,
+            generation_status="",
+            total_actions=0,
+            diagnostics=diagnostics,
+        )
         return P90CollectorAdvisorDashboardRead(
-            status="EMPTY",
+            status=status,
             plan=None,
-            message=EMPTY_ADVISOR_MESSAGE,
+            message=advisor_message_for_status(status),
+            signal_diagnostics=diagnostics if include_diagnostics else None,
             generated_at=now,
         )
     plan = _snapshot_to_read(row)
-    if int(row.total_actions or 0) <= 0:
-        return P90CollectorAdvisorDashboardRead(
-            status="EMPTY",
-            plan=plan,
-            message=EMPTY_ADVISOR_MESSAGE,
-            generated_at=now,
-        )
+    total = int(row.total_actions or 0)
+    status = resolve_advisor_dashboard_status(
+        has_snapshot=True,
+        generation_status=str(row.generation_status or ""),
+        total_actions=total,
+        diagnostics=diagnostics,
+    )
     return P90CollectorAdvisorDashboardRead(
-        status="OK",
+        status=status,
         plan=plan,
-        message="",
+        message=advisor_message_for_status(status),
+        signal_diagnostics=diagnostics if include_diagnostics else None,
         generated_at=now,
     )
 

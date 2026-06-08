@@ -60,10 +60,27 @@ class P90CollectorAdvisorSnapshotRead(BaseModel):
     created_at: datetime
 
 
+class P90AdvisorSignalDiagnosticsRead(BaseModel):
+    inventory_count: int = 0
+    marketplace_opportunity_count: int = 0
+    marketplace_alert_count: int = 0
+    sell_candidate_count: int = 0
+    listing_draft_count: int = 0
+    managed_listing_count: int = 0
+    future_pull_count: int = 0
+    discovery_alert_count: int = 0
+    collection_gap_count: int = 0
+    automation_alert_count: int = 0
+    fmv_snapshot_count: int = 0
+    grade_before_sell_count: int = 0
+    grading_candidate_count: int = 0
+
+
 class P90CollectorAdvisorDashboardRead(BaseModel):
     status: str
     plan: P90CollectorAdvisorSnapshotRead | None = None
     message: str = ""
+    signal_diagnostics: P90AdvisorSignalDiagnosticsRead | None = None
     generated_at: datetime
 
 

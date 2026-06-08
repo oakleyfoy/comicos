@@ -5,13 +5,16 @@ import {
   ApiError,
   apiClient,
   type P90AdvisorActionRead,
+  type P90AdvisorSignalDiagnosticsRead,
   type P90CollectorAdvisorDashboardRead,
 } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { PatriotPageLayout, PatriotPanel } from "../components/PatriotPageLayout";
 import { CollectorAdvisorEmptyState } from "./CollectorAdvisorEmptyState";
 import {
   COLLECTOR_ADVISOR_OPEN_PLAN_CTA,
   COLLECTOR_ADVISOR_PAGE_DESCRIPTION,
+  COLLECTOR_ADVISOR_STATUS,
 } from "./collectorAdvisorPresentation";
 
 function money(value: number): string {
@@ -55,7 +58,23 @@ function ActionList({ title, rows, empty }: { title: string; rows: P90AdvisorAct
   );
 }
 
+function AdvisorDiagnosticsFooter({ diag }: { diag: P90AdvisorSignalDiagnosticsRead }): JSX.Element {
+  const buySignals = diag.marketplace_opportunity_count + diag.marketplace_alert_count + diag.automation_alert_count;
+  const alerts = diag.marketplace_alert_count + diag.discovery_alert_count + diag.automation_alert_count;
+  return (
+    <PatriotPanel title="Signals found (ops)" className="mt-4 border-dashed border-amber-400/60" data-testid="advisor-ops-diagnostics">
+      <ul className="space-y-1 text-sm text-blue-900">
+        <li>Inventory: {diag.inventory_count}</li>
+        <li>Buy opportunities: {buySignals}</li>
+        <li>Sell candidates: {diag.sell_candidate_count}</li>
+        <li>Alerts: {alerts}</li>
+      </ul>
+    </PatriotPanel>
+  );
+}
+
 export function AutomationCenterPage(): JSX.Element {
+  const { isOpsAdmin } = useAuth();
   const [data, setData] = useState<P90CollectorAdvisorDashboardRead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,9 +112,16 @@ export function AutomationCenterPage(): JSX.Element {
 
   const plan = data?.plan;
   const impact = plan?.portfolio_impact;
-  const showIntroEmpty = Boolean(data && !plan);
-  const emptyPlanMessage =
-    data?.message?.trim() || (data?.status === "EMPTY" && plan ? "Import comics to unlock personalized recommendations." : "");
+  const status = data?.status ?? "";
+  const showNoSnapshotIntro = status === COLLECTOR_ADVISOR_STATUS.NO_SNAPSHOT;
+  const showGatherFailedIntro = status === COLLECTOR_ADVISOR_STATUS.EMPTY_GATHER_FAILED && !plan;
+  const emptyPlanMessage = data?.message?.trim() ?? "";
+  const bannerTone =
+    status === COLLECTOR_ADVISOR_STATUS.EMPTY_NO_SIGNALS
+      ? "border-emerald-300 bg-emerald-50/95 text-emerald-950"
+      : status === COLLECTOR_ADVISOR_STATUS.EMPTY_GATHER_FAILED
+        ? "border-amber-300 bg-amber-50/95 text-amber-950"
+        : "border-blue-300 bg-white/90 text-blue-950";
 
   return (
     <PatriotPageLayout
@@ -107,7 +133,7 @@ export function AutomationCenterPage(): JSX.Element {
       loading={loading && !data}
       maxWidthClass="max-w-5xl"
       headerActions={
-        plan && data?.status === "OK" ? (
+        plan && status === COLLECTOR_ADVISOR_STATUS.OK ? (
           <a
             href="#advisor-todays-actions"
             className="rounded-md border border-white/40 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
@@ -117,18 +143,52 @@ export function AutomationCenterPage(): JSX.Element {
         ) : null
       }
     >
-      {showIntroEmpty ? (
+      {showNoSnapshotIntro ? (
         <CollectorAdvisorEmptyState
           onGenerate={() => void handleGenerate()}
           generating={generating}
           generateError={generateError}
+          variant="no_snapshot"
+        />
+      ) : null}
+
+      {showGatherFailedIntro ? (
+        <CollectorAdvisorEmptyState
+          onGenerate={() => void handleGenerate()}
+          generating={generating}
+          generateError={generateError}
+          variant="gather_failed"
         />
       ) : null}
 
       {plan ? (
         <>
           {emptyPlanMessage ? (
-            <p className="rounded-lg border border-blue-300 bg-white/90 px-4 py-3 text-sm text-blue-950">{emptyPlanMessage}</p>
+            <p
+              className={`rounded-lg border px-4 py-3 text-sm ${bannerTone}`}
+              data-testid="collector-advisor-status-banner"
+            >
+              {emptyPlanMessage}
+            </p>
+          ) : null}
+          {status === COLLECTOR_ADVISOR_STATUS.EMPTY_GATHER_FAILED ? (
+            <button
+              type="button"
+              data-testid="collector-advisor-retry"
+              disabled={generating}
+              onClick={() => void handleGenerate()}
+              className="mb-4 rounded-md border border-amber-800 bg-amber-800 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-900 disabled:opacity-60"
+            >
+              {generating ? "Building your plan…" : "Try Again"}
+            </button>
+          ) : null}
+          {status === COLLECTOR_ADVISOR_STATUS.EMPTY_NO_COLLECTION ? (
+            <p className="mb-4 text-sm">
+              <Link to="/order-import" className="font-semibold text-red-200 underline hover:text-white">
+                Import comics
+              </Link>{" "}
+              to grow your collection and unlock more recommendations.
+            </p>
           ) : null}
           <PatriotPanel title="Today's actions" id="advisor-todays-actions">
             {plan.todays_actions.length === 0 ? (
@@ -240,6 +300,10 @@ export function AutomationCenterPage(): JSX.Element {
               </li>
             </ul>
           </PatriotPanel>
+
+          {isOpsAdmin && data?.signal_diagnostics ? (
+            <AdvisorDiagnosticsFooter diag={data.signal_diagnostics} />
+          ) : null}
         </>
       ) : null}
     </PatriotPageLayout>
