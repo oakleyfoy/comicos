@@ -142,6 +142,21 @@ export interface AiDraftOrderItem {
   parsed_release_date?: string | null;
   parsed_release_year?: number | null;
   release_status?: "released" | "not_released_yet" | "unknown" | null;
+  release_lifecycle_status?:
+    | "PREORDER"
+    | "RELEASED_NOT_RECEIVED"
+    | "RECEIVED"
+    | "OVERDUE"
+    | "UNKNOWN"
+    | null;
+  days_until_release?: number | null;
+  days_since_release?: number | null;
+  is_preorder?: boolean | null;
+  is_released_not_received?: boolean | null;
+  is_overdue?: boolean | null;
+  lifecycle_sort_bucket?: number | null;
+  lifecycle_display_label?: string | null;
+  lifecycle_display_detail?: string | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
   expected_ship_date?: string | null;

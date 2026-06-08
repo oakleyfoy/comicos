@@ -26,6 +26,11 @@ import {
   zipCreatorSlots,
   CREATOR_ROLE_LABELS,
 } from "./metadataReviewPresentation";
+import {
+  effectiveReleaseStatusForForm,
+  importLifecyclePresentation,
+  sortDraftItemsByLifecycle,
+} from "../lib/importReleaseLifecycle";
 
 interface OrderItemDraft {
   publisher: string;
@@ -44,6 +49,10 @@ interface OrderItemDraft {
   coverArtists: string[];
   quantity: string;
   rawItemPrice: string;
+  releaseLifecycleStatus?: AiDraftOrderItem["release_lifecycle_status"];
+  lifecycleDisplayLabel?: string;
+  lifecycleDisplayDetail?: string;
+  lifecycleSortBucket?: number;
 }
 
 interface ItemFieldErrors {
@@ -245,25 +254,34 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
     taxAmount: draft.tax_amount,
     items:
       draft.items.length > 0
-        ? draft.items.map<OrderItemDraft>((item) => ({
-            publisher: item.publisher ?? "",
-            title: item.title ?? "",
-            releaseDate: item.release_date ?? item.raw_release_date ?? "",
-            releaseStatus: item.release_status ?? "",
-            orderStatus: item.order_status ?? "",
-            issueNumber: item.issue_number ?? "",
-            coverName: item.cover_name ?? "",
-            printing: item.printing ?? "",
-            ratio: item.ratio ?? "",
-            variantType: item.variant_type ?? "",
-            coverArtist: item.cover_artist ?? "",
-            writers: item.writers ?? item.canonical_writers ?? [],
-            artists: item.artists ?? item.canonical_artists ?? [],
-            coverArtists:
-              item.cover_artists ?? item.canonical_cover_artists ?? (item.cover_artist ? [item.cover_artist] : []),
-            quantity: item.quantity === null ? "" : String(item.quantity),
-            rawItemPrice: item.raw_item_price ?? "",
-          }))
+        ? sortDraftItemsByLifecycle(
+            draft.items.map<OrderItemDraft>((item) => ({
+              publisher: item.publisher ?? "",
+              title: item.title ?? "",
+              releaseDate:
+                item.parsed_release_date ?? item.release_date ?? item.raw_release_date ?? "",
+              releaseStatus: effectiveReleaseStatusForForm(item) || item.release_status || "",
+              orderStatus: item.order_status ?? "",
+              issueNumber: item.issue_number ?? "",
+              coverName: item.cover_name ?? "",
+              printing: item.printing ?? "",
+              ratio: item.ratio ?? "",
+              variantType: item.variant_type ?? "",
+              coverArtist: item.cover_artist ?? "",
+              writers: item.writers ?? item.canonical_writers ?? [],
+              artists: item.artists ?? item.canonical_artists ?? [],
+              coverArtists:
+                item.cover_artists ??
+                item.canonical_cover_artists ??
+                (item.cover_artist ? [item.cover_artist] : []),
+              quantity: item.quantity === null ? "" : String(item.quantity),
+              rawItemPrice: item.raw_item_price ?? "",
+              releaseLifecycleStatus: item.release_lifecycle_status ?? undefined,
+              lifecycleDisplayLabel: item.lifecycle_display_label ?? undefined,
+              lifecycleDisplayDetail: item.lifecycle_display_detail ?? undefined,
+              lifecycleSortBucket: item.lifecycle_sort_bucket ?? undefined,
+            })),
+          )
         : [emptyItem()],
   };
 }
@@ -271,6 +289,55 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
 function displayValue(value: string | null | undefined): string {
   const trimmed = value?.trim();
   return trimmed ? trimmed : "Not provided";
+}
+
+function itemLifecycleBadge(item: OrderItemDraft): { label: string; detail: string | null; className: string } | null {
+  const presentation = importLifecyclePresentation({
+    release_lifecycle_status: item.releaseLifecycleStatus ?? null,
+    lifecycle_display_label: item.lifecycleDisplayLabel ?? null,
+    lifecycle_display_detail: item.lifecycleDisplayDetail ?? null,
+    lifecycle_sort_bucket: item.lifecycleSortBucket ?? null,
+    is_preorder: item.releaseLifecycleStatus === "PREORDER",
+    is_overdue: item.releaseLifecycleStatus === "OVERDUE",
+    is_released_not_received: item.releaseLifecycleStatus === "RELEASED_NOT_RECEIVED",
+    release_status: item.releaseStatus || null,
+    parsed_release_date: item.releaseDate || null,
+    release_date: item.releaseDate || null,
+    order_status: item.orderStatus || null,
+  });
+  if (presentation) {
+    return {
+      label: presentation.label,
+      detail: presentation.detail || null,
+      className: presentation.badgeClassName,
+    };
+  }
+  const legacy = itemPreorderLabel(item);
+  if (!legacy) {
+    return null;
+  }
+  return {
+    label: legacy,
+    detail: null,
+    className: "border-cyan-400/30 bg-cyan-500/10 text-cyan-100",
+  };
+}
+
+function itemCardSurfaceClass(item: OrderItemDraft): string {
+  const presentation = importLifecyclePresentation({
+    release_lifecycle_status: item.releaseLifecycleStatus ?? null,
+    lifecycle_display_label: item.lifecycleDisplayLabel ?? null,
+    lifecycle_display_detail: item.lifecycleDisplayDetail ?? null,
+    lifecycle_sort_bucket: item.lifecycleSortBucket ?? null,
+    is_preorder: item.releaseLifecycleStatus === "PREORDER",
+    is_overdue: item.releaseLifecycleStatus === "OVERDUE",
+    is_released_not_received: item.releaseLifecycleStatus === "RELEASED_NOT_RECEIVED",
+    release_status: item.releaseStatus || null,
+    parsed_release_date: item.releaseDate || null,
+    release_date: item.releaseDate || null,
+    order_status: item.orderStatus || null,
+  });
+  return presentation?.cardClassName ?? "border-white/10 bg-slate-900/70 shadow-black/20";
 }
 
 function itemPreorderLabel(item: OrderItemDraft): string | null {
@@ -2836,11 +2903,25 @@ export function OrderImportPage() {
             </section>
 
             <section className="space-y-4">
-              {items.map((item, index) => (
+              {items.map((item, index) => {
+                const lifecycleBadge = itemLifecycleBadge(item);
+                return (
                 <article
                   key={`ai-order-item-${index}`}
-                  className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20"
+                  className={`rounded-3xl border p-5 shadow-xl ${itemCardSurfaceClass(item)}`}
                 >
+                  {lifecycleBadge ? (
+                    <div className="mb-4 space-y-1">
+                      <p
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${lifecycleBadge.className}`}
+                      >
+                        {lifecycleBadge.label}
+                      </p>
+                      {lifecycleBadge.detail ? (
+                        <p className="text-sm text-slate-300">{lifecycleBadge.detail}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
@@ -2912,7 +2993,7 @@ export function OrderImportPage() {
                       <p className="text-sm text-slate-400">
                         Optional. Exact dates are preserved when provided; year-only values stay year-only.
                       </p>
-                      {itemPreorderLabel(item) ? (
+                      {itemLifecycleBadge(item) ? null : itemPreorderLabel(item) ? (
                         <p className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-100">
                           {itemPreorderLabel(item)}
                         </p>
@@ -2927,8 +3008,8 @@ export function OrderImportPage() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
                       >
                         <option value="">Auto from release date</option>
+                        <option value="not_released_yet">Preorder / Upcoming Release</option>
                         <option value="released">Released</option>
-                        <option value="not_released_yet">Not released yet</option>
                         <option value="unknown">Unknown</option>
                       </select>
                     </label>
@@ -3050,7 +3131,8 @@ export function OrderImportPage() {
                     </label>
                   </div>
                 </article>
-              ))}
+              );
+              })}
 
               <button
                 type="button"

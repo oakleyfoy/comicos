@@ -50,6 +50,17 @@ class AiDraftOrderItem(BaseModel):
     parsed_release_date: date | None = None
     parsed_release_year: int | None = None
     release_status: Literal["released", "not_released_yet", "unknown"] | None = None
+    release_lifecycle_status: (
+        Literal["PREORDER", "RELEASED_NOT_RECEIVED", "RECEIVED", "OVERDUE", "UNKNOWN"] | None
+    ) = None
+    days_until_release: int | None = None
+    days_since_release: int | None = None
+    is_preorder: bool | None = None
+    is_released_not_received: bool | None = None
+    is_overdue: bool | None = None
+    lifecycle_sort_bucket: int | None = None
+    lifecycle_display_label: str | None = None
+    lifecycle_display_detail: str | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None
@@ -122,3 +133,4 @@ class ParseOrderResponse(BaseModel):
     items: list[AiDraftOrderItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    lifecycle_enrichment_json: dict[str, int] | None = None

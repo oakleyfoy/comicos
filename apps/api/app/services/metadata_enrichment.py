@@ -797,9 +797,14 @@ def enrich_order_item_metadata(
     printing = normalize_variant_text(item.printing)
     ratio = normalize_variant_text(item.ratio)
     variant_type = normalize_variant_text(item.variant_type)
-    release_status = item.release_status or default_release_status(
-        release_date=release_date.parsed_date
-    )
+    if release_date.parsed_date is not None and (
+        item.release_status is None or item.release_status == "unknown"
+    ):
+        release_status = default_release_status(release_date=release_date.parsed_date)
+    else:
+        release_status = item.release_status or default_release_status(
+            release_date=release_date.parsed_date
+        )
     order_status = default_order_status(
         release_status=release_status,
         received_at=item.received_at,
@@ -952,7 +957,14 @@ def enrich_parse_order_metadata(
         )
         for item in enriched_items
     ]
-    return parsed.model_copy(update={"items": purchase_enriched_items, "warnings": warnings})
+    from app.services.import_release_lifecycle_service import apply_release_lifecycle_to_parse_order
+
+    lifecycle_payload = apply_release_lifecycle_to_parse_order(
+        parsed.model_copy(update={"items": purchase_enriched_items, "warnings": warnings}),
+        session=session,
+        owner_user_id=owner_user_id,
+    )
+    return lifecycle_payload
 
 
 def iter_canonical_creator_names(item: AiDraftOrderItem) -> list[str]:
