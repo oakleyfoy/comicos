@@ -14,7 +14,7 @@ import {
   type ImportParseJobStatus,
   type InventoryCoverImage,
 } from "../api/client";
-import { MetadataReviewDraftCard } from "../components/MetadataReviewDraftCard";
+import { ImportMetadataQuestionsGate } from "../components/imports/ImportMetadataQuestionsGate";
 import { ImportReviewCard } from "../components/imports/ImportReviewCard";
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
@@ -32,6 +32,10 @@ import {
   importLifecyclePresentation,
   sortDraftItemsByLifecycle,
 } from "../lib/importReleaseLifecycle";
+import {
+  buildPendingImportMetadataQuestions,
+  type ImportMetadataQuestion,
+} from "./importMetadataQuestions";
 
 interface OrderItemDraft {
   publisher: string;
@@ -684,6 +688,15 @@ export function OrderImportPage() {
     () => metadataReviewItemsFromDraft(draftPayload),
     [draftPayload],
   );
+  const pendingMetadataQuestions = useMemo(
+    () =>
+      buildPendingImportMetadataQuestions(
+        draftPayload,
+        items.map((item) => item.publisher),
+      ),
+    [draftPayload, items],
+  );
+  const showMetadataGate = shouldShowDraftEditor && pendingMetadataQuestions.length > 0;
   const [releaseDateReviewOnlyFilter, setReleaseDateReviewOnlyFilter] = useState(false);
   const [creatorReviewOnlyFilter, setCreatorReviewOnlyFilter] = useState(false);
   const displayedMetadataReviewItems = useMemo(() => {
@@ -1566,6 +1579,76 @@ export function OrderImportPage() {
     }
   }
 
+  function applyItemPublisher(itemIndex: number, publisher: string): void {
+    const trimmed = publisher.trim();
+    setItems((current) =>
+      current.map((row, idx) => (idx === itemIndex ? { ...row, publisher: trimmed } : row)),
+    );
+    setDraftPayload((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        items: current.items.map((draftItem, idx) =>
+          idx === itemIndex
+            ? {
+                ...draftItem,
+                publisher: trimmed,
+                canonical_publisher: trimmed,
+              }
+            : draftItem,
+        ),
+      };
+    });
+  }
+
+  function applyItemReleaseDate(itemIndex: number, isoDate: string): void {
+    const trimmed = isoDate.trim().slice(0, 10);
+    setItems((current) =>
+      current.map((row, idx) => (idx === itemIndex ? { ...row, releaseDate: trimmed } : row)),
+    );
+    setDraftPayload((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        items: current.items.map((draftItem, idx) =>
+          idx === itemIndex
+            ? {
+                ...draftItem,
+                parsed_release_date: trimmed,
+                release_date: trimmed,
+              }
+            : draftItem,
+        ),
+      };
+    });
+  }
+
+  async function handleMetadataQuestionAnswer(
+    question: ImportMetadataQuestion,
+    answer: string | null,
+  ): Promise<void> {
+    if (question.kind === "missing_publisher" || question.kind === "publisher_canonical") {
+      if (!answer?.trim()) {
+        return;
+      }
+      applyItemPublisher(question.itemIndex, answer);
+    } else if (question.kind === "release_date") {
+      if (!answer?.trim()) {
+        return;
+      }
+      applyItemReleaseDate(question.itemIndex, answer);
+    }
+
+    const draftItem = draftPayload?.items[question.itemIndex];
+    if (draftItem?.metadata_review_required) {
+      await clearMetadataReviewForItem(question.itemIndex, "accept");
+    }
+  }
+
   async function clearMetadataReviewForItem(
     itemIndex: number,
     mode: "accept" | "ignore",
@@ -1992,6 +2075,16 @@ export function OrderImportPage() {
           </div>
         ) : null}
 
+        {showMetadataGate ? (
+          <ImportMetadataQuestionsGate
+            questions={pendingMetadataQuestions}
+            disabled={isSavingDraft || isSubmitting}
+            onAnswer={(question, answer) => handleMetadataQuestionAnswer(question, answer)}
+          />
+        ) : null}
+
+        {shouldShowDraftEditor && !showMetadataGate ? (
+        <>
         <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -2584,264 +2677,6 @@ export function OrderImportPage() {
           )}
         </section>
 
-        {shouldShowDraftEditor && missingPublisherItems.length ? (
-          <div className="mt-6">
-            <StatusBanner tone="info">
-              <div className="space-y-2">
-                <p className="font-semibold text-cyan-50">Publisher review needed</p>
-                <p>
-                  Saving the draft will auto-fill only obvious publisher matches server-side. Any
-                  item still blank after save needs manual review before confirm.
-                </p>
-                <ul className="list-disc space-y-1 pl-5">
-                  {missingPublisherItems.map((item) => (
-                    <li key={`${item.index}-${item.label}`}>
-                      Item {item.index + 1}: {item.label}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </StatusBanner>
-          </div>
-        ) : null}
-
-        {shouldShowDraftEditor && metadataReviewItems.length ? (
-          <section className="mt-6 rounded-3xl border border-amber-400/20 bg-amber-400/10 p-5 shadow-xl shadow-black/20">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-white">Needs Metadata Review</h2>
-                <p className="mt-2 text-sm text-amber-100/80">
-                  Each flagged item starts with a Review Required summary (issue, severity, and recommended
-                  action). Open Advanced Details only when you need raw canonical troubleshooting data.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:flex-wrap">
-                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-rose-400/25 bg-slate-950/60 px-4 py-2.5 text-xs font-medium text-rose-100">
-                  <input
-                    type="checkbox"
-                    checked={releaseDateReviewOnlyFilter}
-                    onChange={(event) => setReleaseDateReviewOnlyFilter(event.target.checked)}
-                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-rose-400 focus:ring-rose-300/40"
-                  />
-                  Show release date warnings only
-                </label>
-                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-fuchsia-400/25 bg-slate-950/60 px-4 py-2.5 text-xs font-medium text-fuchsia-50">
-                  <input
-                    type="checkbox"
-                    checked={creatorReviewOnlyFilter}
-                    onChange={(event) => setCreatorReviewOnlyFilter(event.target.checked)}
-                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-fuchsia-300 focus:ring-fuchsia-300/40"
-                  />
-                  Show creator warnings only
-                </label>
-                <span className="inline-flex whitespace-nowrap rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
-                  {releaseDateReviewOnlyFilter || creatorReviewOnlyFilter
-                    ? `${displayedMetadataReviewItems.length} of ${metadataReviewItems.length} shown`
-                    : `${metadataReviewItems.length} flagged`}
-                </span>
-              </div>
-            </div>
-
-            {isOpsAdmin ? (
-              <div className="mt-4">
-                <StatusBanner tone="info">
-                  Creator aliases mapped here steer future deterministic normalization only. Comic OS never
-                  auto-merges similar creator strings or rewires existing inventory identities from this
-                  panel.
-                </StatusBanner>
-              </div>
-            ) : null}
-
-            {metadataAliasError ? (
-              <div className="mt-4">
-                <StatusBanner tone="error">{metadataAliasError}</StatusBanner>
-              </div>
-            ) : null}
-
-            {metadataAliasSuccess ? (
-              <div className="mt-4">
-                <StatusBanner tone="success">{metadataAliasSuccess}</StatusBanner>
-              </div>
-            ) : null}
-
-            {(releaseDateReviewOnlyFilter || creatorReviewOnlyFilter) &&
-            displayedMetadataReviewItems.length === 0 ? (
-              <div className="mt-4">
-                <StatusBanner tone="info">
-                  No flagged items match the active review filters right now — clear filters to restore
-                  the full metadata review list.
-                </StatusBanner>
-              </div>
-            ) : null}
-
-            <div className="mt-4 space-y-6">
-              {displayedMetadataReviewItems.map(({ index, item }) => (
-                <div key={`metadata-review-${index}`} className="space-y-4">
-                  <p className="text-sm font-semibold text-white">
-                    Item {index + 1}
-                    <span className="ml-2 font-normal text-slate-400">
-                      {displayValue(item.title)} #{displayValue(item.issue_number)}
-                    </span>
-                  </p>
-                  <MetadataReviewDraftCard
-                    index={index}
-                    item={item}
-                    actionsDisabled={isSavingDraft || isSubmitting}
-                    onLooksGood={() => void clearMetadataReviewForItem(index, "accept")}
-                    onIgnoreWarning={() => void clearMetadataReviewForItem(index, "ignore")}
-                    onCreateAlias={() => {
-                      document
-                        .getElementById(`metadata-review-aliases-${index}`)
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                  />
-
-                  <div id={`metadata-review-aliases-${index}`} className="space-y-4">
-                  {isOpsAdmin && needsPublisherAliasHelp(item) ? (
-                    <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100">
-                        Create Publisher Alias
-                      </p>
-                      <p className="mt-2 text-sm text-emerald-100/80">
-                        Save a manual alias for future imports, then refresh this draft with the new
-                        canonical publisher.
-                      </p>
-                      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                        <input
-                          value={item.raw_publisher ?? ""}
-                          readOnly
-                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
-                        />
-                        <input
-                          value={publisherAliasInputs[index] ?? ""}
-                          onChange={(event) =>
-                            setPublisherAliasInputs((current) => ({
-                              ...current,
-                              [index]: event.target.value,
-                            }))
-                          }
-                          placeholder="Canonical publisher"
-                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300/40"
-                        />
-                        <button
-                          type="button"
-                          disabled={activeAliasKey === `publisher-${index}`}
-                          onClick={() => void handleCreateMetadataAlias(index, item, "publisher")}
-                          className="rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {activeAliasKey === `publisher-${index}` ? "Saving..." : "Save Alias"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {isOpsAdmin && needsSeriesAliasHelp(item) ? (
-                    <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-100">
-                        Create Series Alias
-                      </p>
-                      <p className="mt-2 text-sm text-violet-100/80">
-                        Save a manual series alias for future imports when this title should collapse
-                        into a more canonical series name.
-                      </p>
-                      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                        <input
-                          value={item.raw_title ?? ""}
-                          readOnly
-                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
-                        />
-                        <input
-                          value={seriesAliasInputs[index] ?? ""}
-                          onChange={(event) =>
-                            setSeriesAliasInputs((current) => ({
-                              ...current,
-                              [index]: event.target.value,
-                            }))
-                          }
-                          placeholder="Canonical series title"
-                          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-violet-300/40"
-                        />
-                        <button
-                          type="button"
-                          disabled={activeAliasKey === `series-${index}`}
-                          onClick={() => void handleCreateMetadataAlias(index, item, "series")}
-                          className="rounded-2xl bg-violet-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {activeAliasKey === `series-${index}` ? "Saving..." : "Save Alias"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {isOpsAdmin
-                    ? (["writers", "artists", "cover_artists"] as const)
-                        .map((role) => {
-                          const aliasRows = zipCreatorSlots(item, role).filter((row) => row.raw.trim());
-                          return aliasRows.length ? (
-                            <div
-                              key={`${index}-${role}-aliases`}
-                              className="mt-4 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-950/25 p-4"
-                            >
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
-                                Create Creator Alias · {CREATOR_ROLE_LABELS[role]}
-                              </p>
-                              <p className="mt-2 text-sm text-fuchsia-50/85">
-                                Map a raw OCR name to the canonical spelling you want future imports to
-                                use. Applies on the next deterministic enrichment pass only.
-                              </p>
-                              <div className="mt-4 space-y-5">
-                                {aliasRows.map((row) => {
-                                  const rowKey = creatorAliasRowKey(index, role, row.slot);
-                                  const activeKey = activeAliasKey === `creator:${rowKey}`;
-                                  return (
-                                    <div key={rowKey} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                                      <input
-                                        value={row.raw}
-                                        readOnly
-                                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
-                                      />
-                                      <input
-                                        value={creatorAliasInputs[rowKey] ?? ""}
-                                        onChange={(event) =>
-                                          setCreatorAliasInputs((current) => ({
-                                            ...current,
-                                            [rowKey]: event.target.value,
-                                          }))
-                                        }
-                                        placeholder="Canonical creator name"
-                                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-fuchsia-300/40"
-                                      />
-                                      <button
-                                        type="button"
-                                        disabled={activeKey}
-                                        onClick={() =>
-                                          void handleCreateCreatorAlias(
-                                            rowKey,
-                                            row.raw,
-                                            creatorAliasInputs[rowKey] ?? row.canonical,
-                                          )
-                                        }
-                                        className="rounded-2xl bg-fuchsia-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-60"
-                                      >
-                                        {activeKey ? "Saving..." : "Save Alias"}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : null;
-                        })
-                    : null}
-
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {shouldShowDraftEditor ? (
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
             <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -3040,6 +2875,7 @@ export function OrderImportPage() {
               </div>
             </section>
           </form>
+        </>
         ) : null}
       </div>
     </AppShell>
