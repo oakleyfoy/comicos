@@ -130,6 +130,64 @@ def test_resolve_import_cover_falls_back_from_release_issue_match(session: Sessi
     assert result.has_cover_image is True
 
 
+def test_resolve_import_cover_picks_cover_letter_over_issue_fallback(session: Session) -> None:
+    issue = ExternalCatalogIssue(
+        source_name="locg",
+        title="If Destruction Be Our Lot #2",
+        publisher="Image",
+        series_name="If Destruction Be Our Lot",
+        issue_number="2",
+        release_date=date(2026, 6, 17),
+        cover_image_url="https://example.com/issue-default.jpg",
+        thumbnail_url="https://example.com/issue-default-thumb.jpg",
+    )
+    session.add(issue)
+    session.commit()
+    session.refresh(issue)
+    assert issue.id is not None
+
+    cover_a = ExternalCatalogVariant(
+        external_issue_id=issue.id,
+        cover_label="Cover A",
+        variant_name="Regular",
+        artist="Dani",
+        image_url="https://example.com/cover-a.jpg",
+    )
+    cover_b = ExternalCatalogVariant(
+        external_issue_id=issue.id,
+        cover_label="Cover B",
+        variant_name="Variant",
+        artist="Other",
+        image_url="https://example.com/cover-b.jpg",
+    )
+    session.add(cover_a)
+    session.add(cover_b)
+    session.commit()
+
+    result_a = resolve_import_cover(
+        session,
+        {
+            "title": "If Destruction Be Our Lot",
+            "issue_number": "2",
+            "cover_name": "Cover A Regular Dani Cover",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
+        },
+    )
+    result_b = resolve_import_cover(
+        session,
+        {
+            "title": "If Destruction Be Our Lot",
+            "issue_number": "2",
+            "cover_name": "Cover B Variant Other Cover",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
+        },
+    )
+    assert result_a.cover_image_url == "https://example.com/cover-a.jpg"
+    assert result_b.cover_image_url == "https://example.com/cover-b.jpg"
+
+
 def test_resolve_import_cover_uses_draft_cover_fallback(session: Session) -> None:
     cover = CoverImage(
         draft_import_id=42,

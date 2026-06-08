@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,6 +26,18 @@ class ImportCoverResolutionResultPayload:
     has_cover_image: bool
 
 
+_COVER_LETTER_PATTERN = re.compile(r"\bcover\s+([a-z0-9]+)\b", re.IGNORECASE)
+
+
+def _cover_letter_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    match = _COVER_LETTER_PATTERN.search(value)
+    if not match:
+        return None
+    return match.group(1).lower()
+
+
 def _text_tokens(value: str | None) -> set[str]:
     normalized = normalize_import_title(value)
     if not normalized:
@@ -34,6 +47,16 @@ def _text_tokens(value: str | None) -> set[str]:
 
 def _variant_match_score(item: dict[str, Any], variant: ExternalCatalogVariant) -> int:
     score = 0
+    item_letter = _cover_letter_key(item.get("cover_name"))
+    variant_letter = _cover_letter_key(
+        " ".join(filter(None, [variant.cover_label, variant.variant_name]))
+    )
+    if item_letter and variant_letter:
+        if item_letter == variant_letter:
+            score += 120
+        else:
+            return -1000
+
     cover_tokens = _text_tokens(item.get("cover_name"))
     variant_tokens = _text_tokens(" ".join(filter(None, [variant.cover_label, variant.variant_name])))
     if cover_tokens and variant_tokens:
@@ -45,6 +68,24 @@ def _variant_match_score(item: dict[str, Any], variant: ExternalCatalogVariant) 
     if artist_tokens and variant_artist_tokens and artist_tokens & variant_artist_tokens:
         score += 10
     return score
+
+
+def _pick_best_catalog_variant(
+    item: dict[str, Any],
+    variants: list[ExternalCatalogVariant],
+) -> ExternalCatalogVariant | None:
+    if not variants:
+        return None
+    item_letter = _cover_letter_key(item.get("cover_name"))
+    scored = [(variant, _variant_match_score(item, variant)) for variant in variants]
+    if item_letter:
+        letter_matches = [row for row in scored if row[1] >= 0]
+        if letter_matches:
+            scored = letter_matches
+    best_variant, best_score = max(scored, key=lambda row: (row[1], -(row[0].id or 0)))
+    if best_score < 0:
+        return None
+    return best_variant
 
 
 def _resolve_external_issue_id(
@@ -106,8 +147,8 @@ def _resolve_external_catalog_cover(
         .where(ExternalCatalogVariant.image_url.is_not(None))  # type: ignore[attr-defined]
     ).all()
     if variants:
-        best_variant = max(variants, key=lambda row: (_variant_match_score(item, row), -(row.id or 0)))
-        if best_variant.image_url and best_variant.id is not None:
+        best_variant = _pick_best_catalog_variant(item, variants)
+        if best_variant is not None and best_variant.image_url and best_variant.id is not None:
             return ImportCoverResolutionResultPayload(
                 cover_image_url=best_variant.image_url,
                 cover_thumbnail_url=best_variant.image_url,

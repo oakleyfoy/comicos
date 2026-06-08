@@ -68,8 +68,8 @@ export function importLifecyclePresentation(
         label,
         detail,
         sortBucket,
-        cardClassName: "border-cyan-400/35 bg-cyan-950/40 shadow-cyan-950/20",
-        badgeClassName: "border-cyan-400/30 bg-cyan-500/15 text-cyan-100",
+        cardClassName: "border-cyan-400/80 bg-slate-900 shadow-lg shadow-black/40",
+        badgeClassName: "border-cyan-300/80 bg-cyan-700/50 text-white",
       };
     case "RELEASED_NOT_RECEIVED":
       return {
@@ -77,8 +77,8 @@ export function importLifecyclePresentation(
         label,
         detail,
         sortBucket,
-        cardClassName: "border-amber-400/35 bg-amber-950/30 shadow-amber-950/15",
-        badgeClassName: "border-amber-400/30 bg-amber-500/15 text-amber-100",
+        cardClassName: "border-amber-400/80 bg-slate-900 shadow-lg shadow-black/40",
+        badgeClassName: "border-amber-300/80 bg-amber-700/50 text-white",
       };
     case "OVERDUE":
       return {
@@ -86,8 +86,8 @@ export function importLifecyclePresentation(
         label,
         detail,
         sortBucket,
-        cardClassName: "border-rose-400/35 bg-rose-950/35 shadow-rose-950/20",
-        badgeClassName: "border-rose-400/30 bg-rose-500/15 text-rose-100",
+        cardClassName: "border-rose-400/80 bg-slate-900 shadow-lg shadow-black/40",
+        badgeClassName: "border-rose-300/80 bg-rose-700/50 text-white",
       };
     case "RECEIVED":
       return {
@@ -95,8 +95,8 @@ export function importLifecyclePresentation(
         label,
         detail,
         sortBucket,
-        cardClassName: "border-emerald-400/35 bg-emerald-950/30 shadow-emerald-950/15",
-        badgeClassName: "border-emerald-400/30 bg-emerald-500/15 text-emerald-100",
+        cardClassName: "border-emerald-400/80 bg-slate-900 shadow-lg shadow-black/40",
+        badgeClassName: "border-emerald-300/80 bg-emerald-700/50 text-white",
       };
     default:
       return {
@@ -104,8 +104,8 @@ export function importLifecyclePresentation(
         label,
         detail,
         sortBucket,
-        cardClassName: "border-white/10 bg-slate-900/70 shadow-black/20",
-        badgeClassName: "border-slate-400/25 bg-slate-500/10 text-slate-200",
+        cardClassName: "border-slate-500/70 bg-slate-900 shadow-lg shadow-black/40",
+        badgeClassName: "border-slate-400/70 bg-slate-700/60 text-white",
       };
   }
 }

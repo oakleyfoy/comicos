@@ -63,7 +63,11 @@ interface ImportReviewCardProps {
 }
 
 const INPUT_CLASS_NAME =
-  "w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-300/40";
+  "w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400/70";
+
+function coverImageKey(item: ImportReviewCardItem): string {
+  return [item.coverThumbnailUrl, item.coverImageUrl, item.coverName].filter(Boolean).join("|");
+}
 
 function formatCompactPrice(value: string): string {
   const parsed = Number(value);
@@ -116,6 +120,7 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
   if (src) {
     return (
       <img
+        key={coverImageKey(item)}
         src={src}
         alt={alt}
         loading="lazy"
@@ -124,8 +129,8 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
     );
   }
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center bg-slate-950/80 text-center">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-slate-800 text-center">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
         COMICOS
       </span>
       <span className="mt-2 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
@@ -152,17 +157,17 @@ export function ImportReviewCard({
   const compactCoverLabel = getCompactCoverLabel(item.coverName);
 
   return (
-    <article className={`rounded-3xl border p-4 shadow-xl ${cardSurfaceClassName}`}>
-      <div className="flex gap-4">
-        <div className="h-28 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 sm:h-32 sm:w-24">
+    <article className={`rounded-2xl border-2 p-4 ${cardSurfaceClassName}`}>
+      <div className="flex gap-3">
+        <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-600 bg-slate-800 sm:h-32 sm:w-24">
           <CoverThumbnail item={item} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate text-base font-semibold text-white">{titleIssueLabel(item)}</p>
-              <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
+              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
                 Draft Item {index + 1}
               </p>
             </div>
@@ -171,45 +176,45 @@ export function ImportReviewCard({
                 type="button"
                 disabled={isSubmitting}
                 onClick={onRemove}
-                className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-400/15"
+                className="shrink-0 rounded-xl border border-rose-400/50 bg-rose-950 px-2.5 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-900"
               >
                 Remove
               </button>
             ) : null}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             {lifecycleBadge ? (
               <p
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${lifecycleBadge.className}`}
+                className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadge.className}`}
               >
                 {lifecycleBadge.label}
               </p>
             ) : null}
             {item.releaseDate.trim() ? (
-              <p className="text-sm text-slate-200">{item.releaseDate.trim()}</p>
+              <p className="text-sm font-medium text-white">{item.releaseDate.trim()}</p>
             ) : null}
           </div>
 
           {lifecycleBadge?.detail ? (
-            <p className="mt-2 text-sm text-slate-300">{lifecycleBadge.detail}</p>
+            <p className="mt-1.5 text-sm text-slate-100">{lifecycleBadge.detail}</p>
           ) : null}
           {item.catalogReleaseSourceText ? (
-            <p className="mt-1 text-sm text-slate-400">{item.catalogReleaseSourceText}</p>
+            <p className="mt-1 text-sm text-slate-300">{item.catalogReleaseSourceText}</p>
           ) : null}
 
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-200">
             <span>Qty {item.quantity.trim() || "1"}</span>
             <span>{formatCompactPrice(item.rawItemPrice)}</span>
             <span>{compactPublisherLabel(item.publisher)}</span>
             {compactCoverLabel ? <span className="truncate">{compactCoverLabel}</span> : null}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <button
               type="button"
               onClick={onToggleDetails}
-              className="rounded-2xl border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+              className="rounded-xl border border-slate-500 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-cyan-400/70 hover:bg-slate-700"
               aria-expanded={isExpanded}
             >
               {isExpanded ? "Hide Details" : "Show Details"}
@@ -219,10 +224,10 @@ export function ImportReviewCard({
       </div>
 
       {isExpanded ? (
-        <div className="mt-4 border-t border-white/10 pt-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 border-t border-slate-600 pt-4">
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-300">Publisher</span>
+              <span className="text-sm font-medium text-slate-200">Publisher</span>
               <input
                 value={item.publisher}
                 onChange={(event) => {

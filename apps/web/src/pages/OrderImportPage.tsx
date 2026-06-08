@@ -348,7 +348,7 @@ function itemCardSurfaceClass(item: OrderItemDraft): string {
     release_date: item.releaseDate || null,
     order_status: item.orderStatus || null,
   });
-  return presentation?.cardClassName ?? "border-white/10 bg-slate-900/70 shadow-black/20";
+  return presentation?.cardClassName ?? "border-slate-500/70 bg-slate-900 shadow-lg shadow-black/40";
 }
 
 function itemPreorderLabel(item: OrderItemDraft): string | null {
@@ -2925,10 +2925,10 @@ export function OrderImportPage() {
               </div>
             </section>
 
-            <section className="space-y-3">
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {items.map((item, index) => (
                 <ImportReviewCard
-                  key={`ai-order-item-${index}`}
+                  key={`ai-order-item-${index}-${item.coverName}-${item.coverThumbnailUrl ?? ""}`}
                   item={item}
                   index={index}
                   isExpanded={Boolean(expandedItemIndexes[index])}
@@ -2948,7 +2948,7 @@ export function OrderImportPage() {
                 type="button"
                 disabled={isSubmitting}
                 onClick={addItem}
-                className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+                className="rounded-2xl border border-slate-500/60 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:border-cyan-400/70 hover:bg-slate-800 lg:col-span-2"
               >
                 Add item
               </button>
