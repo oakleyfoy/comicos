@@ -20,6 +20,26 @@ from app.schemas.p91_collector_home_setup import (
 SETUP_TOTAL = 6
 
 
+def static_safe_collector_home_setup_status() -> P91CollectorHomeSetupStatusRead:
+    """Fallback when setup queries fail (e.g. schema drift before migrations)."""
+    return P91CollectorHomeSetupStatusRead(
+        imported_first_order=False,
+        has_any_import=False,
+        has_unmatched_imports=False,
+        imports_review_complete=False,
+        has_inventory=False,
+        has_pull_list=False,
+        recommendations_viewed=False,
+        has_budget=False,
+        completed_count=0,
+        total_count=SETUP_TOTAL,
+        percent_complete=0,
+        checklist_dismissed=False,
+        checklist_dismissed_at=None,
+        can_dismiss_checklist=False,
+    )
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

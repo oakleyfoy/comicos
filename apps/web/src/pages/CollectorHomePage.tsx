@@ -49,16 +49,28 @@ export function CollectorHomePage(): JSX.Element {
 
   const load = useCallback(async () => {
     setError(null);
-    try {
-      const [homeRow, setup] = await Promise.all([
-        apiClient.getCollectorHome(),
-        apiClient.getCollectorHomeSetupStatus(),
-      ]);
-      setHome(homeRow);
-      setSetupStatus(setup);
-    } catch (err) {
+    const [homeResult, setupResult] = await Promise.allSettled([
+      apiClient.getCollectorHome(),
+      apiClient.getCollectorHomeSetupStatus(),
+    ]);
+
+    if (homeResult.status === "fulfilled") {
+      setHome(homeResult.value);
+    } else {
+      const err = homeResult.reason;
       setError(err instanceof ApiError ? err.message : "Could not load collector home. Check your connection and try again.");
     }
+
+    if (setupResult.status === "fulfilled") {
+      setSetupStatus(setupResult.value);
+    } else if (homeResult.status !== "fulfilled") {
+      const err = setupResult.reason;
+      setError((prev) =>
+        prev ??
+        (err instanceof ApiError ? err.message : "Could not load collector home. Check your connection and try again."),
+      );
+    }
+    // If home loaded but setup-status failed, show home without checklist (API may return safe fallback).
   }, []);
 
   async function dismissChecklist(): Promise<void> {

@@ -131,11 +131,25 @@ def v1_collector_home_setup_status(
     current_user: User = Depends(get_current_user),
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
-    from app.services.p91_collector_home_setup_service import get_collector_home_setup_status
+    owner_user_id = int(current_user.id)
+    from app.services.p91_collector_home_setup_service import (
+        get_collector_home_setup_status,
+        static_safe_collector_home_setup_status,
+    )
+    from app.services.p90_safe_reads import p90_rollback_session
 
-    body = get_collector_home_setup_status(session, owner_user_id=int(current_user.id))
-    session.commit()
-    return wrap_object(body, owner_user_id=int(current_user.id))
+    try:
+        body = get_collector_home_setup_status(session, owner_user_id=owner_user_id)
+        session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "GET /api/v1/collector-home/setup-status failed owner_user_id=%s: %s",
+            owner_user_id,
+            exc,
+        )
+        p90_rollback_session(session)
+        body = static_safe_collector_home_setup_status()
+    return wrap_object(body, owner_user_id=owner_user_id)
 
 
 @p85_platform_router.post("/api/v1/collector-home/setup-status/dismiss", response_model=ScanApiV1Envelope)
