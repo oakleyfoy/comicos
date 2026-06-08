@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 CollectorType = Literal["INVESTOR", "SPECULATOR", "COMPLETIONIST", "READER", "HYBRID"]
 RiskProfile = Literal["CONSERVATIVE", "MODERATE", "AGGRESSIVE"]
-TimeHorizon = Literal["SHORT_TERM_FLIP", "MEDIUM_TERM", "LONG_TERM", "LEGACY_COLLECTION"]
+TimeHorizon = Literal["SHORT_TERM_FLIP", "MEDIUM_TERM", "LONG_TERM", "LEGACY_COLLECTION", "MIXED"]
 GradingPreference = Literal["NEVER_GRADE", "OPPORTUNISTIC", "AGGRESSIVE"]
 HoldPreference = Literal["FLIP", "MIXED", "LONG_TERM"]
 BudgetPeriod = Literal["MONTHLY", "QUARTERLY"]

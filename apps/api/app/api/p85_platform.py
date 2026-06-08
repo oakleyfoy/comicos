@@ -123,3 +123,42 @@ def v1_collector_home(
         len(body.sections),
     )
     return wrap_object(body, owner_user_id=owner_user_id)
+
+
+@p85_platform_router.get("/api/v1/collector-home/setup-status", response_model=ScanApiV1Envelope)
+def v1_collector_home_setup_status(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.p91_collector_home_setup_service import get_collector_home_setup_status
+
+    body = get_collector_home_setup_status(session, owner_user_id=int(current_user.id))
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p85_platform_router.post("/api/v1/collector-home/setup-status/dismiss", response_model=ScanApiV1Envelope)
+def v1_collector_home_setup_dismiss(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.p91_collector_home_setup_service import dismiss_collector_home_checklist
+
+    body = dismiss_collector_home_checklist(session, owner_user_id=int(current_user.id))
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p85_platform_router.post("/api/v1/collector-profile/recommendations/mark-viewed", response_model=ScanApiV1Envelope)
+def v1_mark_recommendations_viewed(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    from app.services.p91_collector_home_setup_service import mark_recommendations_viewed
+
+    body = mark_recommendations_viewed(session, owner_user_id=int(current_user.id))
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))

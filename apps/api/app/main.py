@@ -2618,6 +2618,48 @@ def get_import_parse_job_status(
     )
 
 
+@app.get("/imports/parse-jobs/{job_id}/guided-progress")
+def get_import_parse_job_guided_progress(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.p92_guided_import_service import map_parse_job_to_progress
+
+    job = get_import_parse_job_status_for_user(session=session, current_user=current_user, job_id=job_id)
+    return map_parse_job_to_progress(job)
+
+
+@app.get("/imports/{import_id}/guided-review")
+def get_import_guided_review(
+    import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.p92_guided_import_service import get_guided_review_for_import
+
+    review = get_guided_review_for_import(session, current_user=current_user, draft_import_id=import_id)
+    session.commit()
+    return review
+
+
+@app.get("/imports/{import_id}/guided-summary")
+def get_import_guided_summary(
+    import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.p92_guided_import_service import build_guided_import_summary
+
+    draft_read = get_import_for_user(
+        session=session,
+        current_user=current_user,
+        import_id=import_id,
+        debug_catalog=False,
+    )
+    return build_guided_import_summary(draft_read)
+
+
 @app.get("/imports/{import_id}", response_model=DraftImportRead)
 def get_import(
     import_id: int,

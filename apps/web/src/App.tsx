@@ -62,6 +62,9 @@ import { CollectorAssistantPage } from "./pages/CollectorAssistantPage";
 import { CollectorConventionPage } from "./pages/CollectorConventionPage";
 import { CollectorDashboardPage } from "./pages/CollectorDashboardPage";
 import { CollectorProfilePage } from "./pages/CollectorProfilePage";
+import { CollectorOnboardingPage } from "./pages/CollectorOnboardingPage";
+import { GuidedImportWizardPage } from "./pages/GuidedImportWizardPage";
+import { CollectorOnboardingGate } from "./components/CollectorOnboardingGate";
 import { CollectorGoalsPage } from "./pages/CollectorGoalsPage";
 import { CollectorBudgetPage } from "./pages/CollectorBudgetPage";
 import { CollectorRecommendationsPage } from "./pages/CollectorRecommendationsPage";
@@ -236,6 +239,8 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
+        <Route element={<CollectorOnboardingGate />}>
+        <Route path="/collector-onboarding" element={<CollectorOnboardingPage />} />
         <Route path="/dashboard" element={<DashboardPage loadProfile="portfolio" />} />
         <Route path="/dashboard/collection" element={<DashboardPage loadProfile="collection" />} />
         <Route path="/dashboard/market" element={<DashboardPage loadProfile="market" />} />
@@ -435,6 +440,8 @@ export default function App() {
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />
+        <Route path="/imports/guided" element={<GuidedImportWizardPage />} />
+        <Route path="/imports/guided/:importId" element={<GuidedImportWizardPage />} />
         <Route path="/imports/email" element={<EmailImportsPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/:orderId" element={<OrderDetailPage />} />
@@ -442,6 +449,7 @@ export default function App() {
         <Route path="/orders/new" element={<OrderNewPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
+        </Route>
       </Route>
       <Route element={<OpsProtectedRoute />}>
         <Route path="/ops" element={<OperationsPage />} />

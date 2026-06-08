@@ -12178,6 +12178,106 @@ export interface P77CollectorProfileUpdate {
   creators?: { interest_type: string; label: string; priority_rank: number }[];
 }
 
+export interface P91OnboardingDraft {
+  step: number;
+  collector_type: string | null;
+  risk_profile: string | null;
+  time_horizon: string | null;
+  publisher_labels: string[];
+  character_labels: string[];
+  creator_labels: string[];
+}
+
+export interface P91OnboardingStatusRead {
+  onboarding_completed: boolean;
+  onboarding_completed_at: string | null;
+  draft: P91OnboardingDraft;
+}
+
+export interface P91InterestOptionRead {
+  label: string;
+  subtitle?: string | null;
+  source_id?: number | null;
+}
+
+export interface P91InterestOptionListResponse {
+  items: P91InterestOptionRead[];
+  pagination: { total_count: number; limit: number; offset: number; has_next?: boolean };
+  query?: string;
+}
+
+export interface P91RecommendationPreviewRead {
+  summary: Record<string, string | string[]>;
+  priorities: { text: string }[];
+}
+
+export interface GuidedImportProgressPhaseRead {
+  code: string;
+  label: string;
+  complete: boolean;
+  active: boolean;
+}
+
+export interface GuidedImportProgressRead {
+  engine_state: string;
+  user_label: string;
+  phases: GuidedImportProgressPhaseRead[];
+  import_id: number | null;
+  job_status: string;
+  error: string | null;
+}
+
+export interface GuidedImportExceptionItemRead {
+  item_index: number;
+  title: string;
+  issue_number: string;
+  publisher: string;
+  variant_label: string;
+  release_date: string;
+  cover_url: string | null;
+  problems: string[];
+  cover_source: string | null;
+  cover_confidence: number | null;
+  catalog_match_score: number | null;
+  suggested_catalog_title: string | null;
+}
+
+export interface GuidedImportReviewRead {
+  import_id: number;
+  auto_matched_count: number;
+  exception_count: number;
+  exceptions: GuidedImportExceptionItemRead[];
+  status: string;
+}
+
+export interface GuidedImportSummaryRead {
+  import_id: number;
+  books_imported: number;
+  publisher_count: number;
+  variant_count: number;
+  value_tracked: number;
+  new_series_count: number;
+  retailer: string | null;
+  order_date: string | null;
+}
+
+export interface P91CollectorHomeSetupStatusRead {
+  imported_first_order: boolean;
+  has_any_import: boolean;
+  has_unmatched_imports: boolean;
+  imports_review_complete: boolean;
+  has_inventory: boolean;
+  has_pull_list: boolean;
+  recommendations_viewed: boolean;
+  has_budget: boolean;
+  completed_count: number;
+  total_count: number;
+  percent_complete: number;
+  checklist_dismissed: boolean;
+  checklist_dismissed_at: string | null;
+  can_dismiss_checklist: boolean;
+}
+
 export interface P77BudgetAllocationRead {
   name: string;
   amount: number;
@@ -31036,6 +31136,41 @@ export const apiClient = {
     });
   },
 
+  getCollectorOnboardingStatus(): Promise<P91OnboardingStatusRead> {
+    return requestScanV1<P91OnboardingStatusRead>("/collector-profile/onboarding");
+  },
+
+  saveCollectorOnboardingDraft(payload: { draft: P91OnboardingDraft }): Promise<P91OnboardingStatusRead> {
+    return requestScanV1<P91OnboardingStatusRead>("/collector-profile/onboarding/draft", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeCollectorOnboarding(payload: { draft?: P91OnboardingDraft }): Promise<P91OnboardingStatusRead> {
+    return requestScanV1<P91OnboardingStatusRead>("/collector-profile/onboarding/complete", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  searchCollectorOnboardingInterestOptions(params: {
+    kind: "PUBLISHER" | "CHARACTER" | "CREATOR";
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<P91InterestOptionListResponse> {
+    const q = buildQueryString(params as Record<string, string | number | undefined>);
+    return requestScanV1<P91InterestOptionListResponse>(`/collector-profile/onboarding/interest-options${q}`);
+  },
+
+  previewCollectorOnboarding(draft: P91OnboardingDraft): Promise<P91RecommendationPreviewRead> {
+    return requestScanV1<P91RecommendationPreviewRead>("/collector-profile/onboarding/preview", {
+      method: "POST",
+      body: JSON.stringify(draft),
+    });
+  },
+
   listCollectorProfileGoals(params?: { limit?: number; offset?: number }): Promise<P77CollectorGoalListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<P77CollectorGoalListResponse>(`/collector-profile/goals${q}`);
@@ -31619,6 +31754,36 @@ export const apiClient = {
       COLLECTOR_HOME_TIMEOUT_MS,
       "Collector Home is taking too long to load. Try again in a moment; sell alerts load separately on Sell Queue.",
     );
+  },
+
+  getCollectorHomeSetupStatus(): Promise<P91CollectorHomeSetupStatusRead> {
+    return requestScanV1<P91CollectorHomeSetupStatusRead>("/collector-home/setup-status");
+  },
+
+  dismissCollectorHomeSetupChecklist(): Promise<{ checklist_dismissed: boolean; completed_count: number }> {
+    return requestScanV1<{ checklist_dismissed: boolean; completed_count: number }>(
+      "/collector-home/setup-status/dismiss",
+      { method: "POST" },
+    );
+  },
+
+  markRecommendationsViewed(): Promise<{ recommendations_viewed: boolean; recommendations_first_viewed_at: string | null }> {
+    return requestScanV1<{ recommendations_viewed: boolean; recommendations_first_viewed_at: string | null }>(
+      "/collector-profile/recommendations/mark-viewed",
+      { method: "POST" },
+    );
+  },
+
+  getGuidedImportProgress(jobId: string): Promise<GuidedImportProgressRead> {
+    return request<GuidedImportProgressRead>(`/imports/parse-jobs/${encodeURIComponent(jobId)}/guided-progress`);
+  },
+
+  getGuidedImportReview(importId: number): Promise<GuidedImportReviewRead> {
+    return request<GuidedImportReviewRead>(`/imports/${importId}/guided-review`);
+  },
+
+  getGuidedImportSummary(importId: number): Promise<GuidedImportSummaryRead> {
+    return request<GuidedImportSummaryRead>(`/imports/${importId}/guided-summary`);
   },
 
   getPlatformCertification(): Promise<P85PlatformCertificationRead> {

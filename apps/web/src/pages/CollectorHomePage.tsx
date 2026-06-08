@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { ApiError, apiClient, type P85CollectorHomeRead } from "../api/client";
+import { ApiError, apiClient, type P85CollectorHomeRead, type P91CollectorHomeSetupStatusRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { FirstTimeSetupChecklist } from "../components/collector-home/FirstTimeSetupChecklist";
 import { CollectorErrorState } from "../components/CollectorErrorState";
 import {
   buildCollectorHomeHeaderSummary,
@@ -42,16 +43,40 @@ function DashboardStripGrid({
 
 export function CollectorHomePage(): JSX.Element {
   const [home, setHome] = useState<P85CollectorHomeRead | null>(null);
+  const [setupStatus, setSetupStatus] = useState<P91CollectorHomeSetupStatusRead | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dismissingChecklist, setDismissingChecklist] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      setHome(await apiClient.getCollectorHome());
+      const [homeRow, setup] = await Promise.all([
+        apiClient.getCollectorHome(),
+        apiClient.getCollectorHomeSetupStatus(),
+      ]);
+      setHome(homeRow);
+      setSetupStatus(setup);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load collector home. Check your connection and try again.");
     }
   }, []);
+
+  async function dismissChecklist(): Promise<void> {
+    setDismissingChecklist(true);
+    try {
+      await apiClient.dismissCollectorHomeSetupChecklist();
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not hide checklist.");
+    } finally {
+      setDismissingChecklist(false);
+    }
+  }
+
+  const showSetupChecklist =
+    setupStatus &&
+    !setupStatus.checklist_dismissed &&
+    setupStatus.completed_count < setupStatus.total_count;
 
   useEffect(() => {
     void load();
@@ -107,6 +132,13 @@ export function CollectorHomePage(): JSX.Element {
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-4 py-6">
+          {showSetupChecklist ? (
+            <FirstTimeSetupChecklist
+              status={setupStatus}
+              dismissing={dismissingChecklist}
+              onDismiss={() => void dismissChecklist()}
+            />
+          ) : null}
           <DashboardStripGrid metrics={dashboardStrip} />
 
           <section

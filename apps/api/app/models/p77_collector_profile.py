@@ -26,6 +26,19 @@ class P77CollectorProfile(SQLModel, table=True):
     default_copy_count: int = Field(default=2, nullable=False)
     key_issue_copy_count: int = Field(default=4, nullable=False)
     ratio_variant_copy_count: int = Field(default=1, nullable=False)
+    onboarding_completed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    onboarding_draft_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    collector_home_checklist_dismissed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    recommendations_first_viewed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 

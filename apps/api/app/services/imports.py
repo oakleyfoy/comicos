@@ -656,6 +656,18 @@ def confirm_import_for_user(
         draft_import.linked_order_id = order_response.order_id
         draft_import.updated_at = utc_now()
         session.add(draft_import)
+        from app.services.p92_guided_import_service import record_import_health_event
+
+        record_import_health_event(
+            session,
+            owner_user_id=int(current_user.id),
+            event_type="import_confirmed",
+            draft_import_id=int(draft_import.id or 0),
+            payload={
+                "total_items": order_response.total_items,
+                "total_copies_created": order_response.total_copies_created,
+            },
+        )
         session.commit()
     except Exception as exc:
         session.rollback()

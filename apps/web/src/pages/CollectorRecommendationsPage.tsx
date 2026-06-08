@@ -24,6 +24,7 @@ export function CollectorRecommendationsPage(): JSX.Element {
 
   useEffect(() => {
     void load();
+    void apiClient.markRecommendationsViewed().catch(() => undefined);
   }, [load]);
 
   return (

@@ -57,6 +57,21 @@ from app.schemas.p77_analytics import (
     P77RecommendationAnalyticsRead,
 )
 from app.schemas.p77_certification import P77CollectorCertificationRead
+from app.schemas.p91_collector_onboarding import (
+    P91OnboardingCompleteRequest,
+    P91OnboardingDraft,
+    P91OnboardingDraftUpdate,
+    P91OnboardingStatusRead,
+)
+from app.services.p91_collector_onboarding_service import (
+    build_recommendation_preview,
+    complete_onboarding,
+    get_onboarding_status,
+    normalize_onboarding_draft,
+    save_onboarding_draft,
+    search_interest_options,
+    seed_draft_from_profile,
+)
 
 p77_collector_profile_v1_router = APIRouter(
     prefix="/api/v1/collector-profile",
@@ -87,6 +102,87 @@ def v1_put_collector_profile(
 ) -> ScanApiV1Envelope:
     assert current_user.id is not None
     body = update_collector_profile(session, owner_user_id=int(current_user.id), payload=payload)
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.get("/onboarding", response_model=ScanApiV1Envelope)
+def v1_get_collector_onboarding(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = get_onboarding_status(session, owner_user_id=int(current_user.id))
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.get("/onboarding/status", response_model=ScanApiV1Envelope)
+def v1_get_collector_onboarding_status_alias(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    return v1_get_collector_onboarding(session=session, current_user=current_user)
+
+
+@p77_collector_profile_v1_router.put("/onboarding/draft", response_model=ScanApiV1Envelope)
+def v1_put_collector_onboarding_draft(
+    payload: P91OnboardingDraftUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = save_onboarding_draft(session, owner_user_id=int(current_user.id), draft=payload.draft)
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.post("/onboarding/complete", response_model=ScanApiV1Envelope)
+def v1_post_collector_onboarding_complete(
+    payload: P91OnboardingCompleteRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = complete_onboarding(session, owner_user_id=int(current_user.id), draft=payload.draft)
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.get("/onboarding/interest-options", response_model=ScanApiV1Envelope)
+def v1_collector_onboarding_interest_options(
+    kind: str = Query(..., pattern="^(PUBLISHER|CHARACTER|CREATOR)$"),
+    q: str = Query("", max_length=120),
+    limit: int = Query(40, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = search_interest_options(session, kind=kind, query=q, limit=limit, offset=offset)
+    session.commit()
+    return wrap_standard_list(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.post("/onboarding/preview", response_model=ScanApiV1Envelope)
+def v1_collector_onboarding_preview(
+    payload: P91OnboardingDraft,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = build_recommendation_preview(normalize_onboarding_draft(payload))
+    session.commit()
+    return wrap_object(body, owner_user_id=int(current_user.id))
+
+
+@p77_collector_profile_v1_router.post("/onboarding/seed-from-profile", response_model=ScanApiV1Envelope)
+def v1_collector_onboarding_seed_from_profile(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ScanApiV1Envelope:
+    assert current_user.id is not None
+    body = seed_draft_from_profile(session, owner_user_id=int(current_user.id))
     session.commit()
     return wrap_object(body, owner_user_id=int(current_user.id))
 

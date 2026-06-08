@@ -84,9 +84,29 @@ function baseHome(overrides: Partial<P85CollectorHomeRead> = {}): P85CollectorHo
   };
 }
 
+function mockSetupComplete(): void {
+  vi.spyOn(apiClient, "getCollectorHomeSetupStatus").mockResolvedValue({
+    imported_first_order: true,
+    has_any_import: true,
+    has_unmatched_imports: false,
+    imports_review_complete: true,
+    has_inventory: true,
+    has_pull_list: true,
+    recommendations_viewed: true,
+    has_budget: true,
+    completed_count: 6,
+    total_count: 6,
+    percent_complete: 100,
+    checklist_dismissed: false,
+    checklist_dismissed_at: null,
+    can_dismiss_checklist: true,
+  });
+}
+
 describe("CollectorHomePage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockSetupComplete();
   });
 
   afterEach(() => {

@@ -146,7 +146,7 @@ def personalize_score(
         reasons.append("Fills collection gap")
         goal_alignment = max(goal_alignment, 90.0)
 
-    if ctx.profile.time_horizon == "LONG_TERM" or ctx.profile.time_horizon == "LEGACY_COLLECTION":
+    if ctx.profile.time_horizon in {"LONG_TERM", "LEGACY_COLLECTION", "MIXED"}:
         collector_adj += 3.0
         all_adjustments.append(P77PersonalizationAdjustmentRead(label="Long-term collector", delta=3.0))
 
