@@ -123,6 +123,7 @@ def serialize_import(
     prefetch_cover_images: bool = True,
     cover_image_count: int | None = None,
     enrich_metadata: bool = True,
+    enrich_lifecycle: bool = True,
     debug_catalog: bool = False,
 ) -> DraftImportRead:
     parsed_payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
@@ -135,18 +136,19 @@ def serialize_import(
         )
     else:
         normalized_payload = parsed_payload
-    normalized_payload = apply_release_lifecycle_to_parse_order(
-        normalized_payload,
-        session=session,
-        owner_user_id=draft_import.user_id,
-        debug_catalog=debug_catalog,
-    )
-    normalized_payload = apply_import_cover_to_parse_order(
-        normalized_payload,
-        session=session,
-        owner_user_id=draft_import.user_id,
-        draft_import_id=draft_import.id,
-    )
+    if enrich_lifecycle:
+        normalized_payload = apply_release_lifecycle_to_parse_order(
+            normalized_payload,
+            session=session,
+            owner_user_id=draft_import.user_id,
+            debug_catalog=debug_catalog,
+        )
+        normalized_payload = apply_import_cover_to_parse_order(
+            normalized_payload,
+            session=session,
+            owner_user_id=draft_import.user_id,
+            draft_import_id=draft_import.id,
+        )
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required
     )

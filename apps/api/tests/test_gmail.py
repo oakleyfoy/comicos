@@ -725,6 +725,15 @@ def test_gmail_imports_list_is_lightweight_and_respects_limit(
         fail_if_cover_prefetch,
     )
 
+    def fail_if_lifecycle_enrichment(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("apply_release_lifecycle_to_parse_order should not run for GET /gmail/imports")
+
+    monkeypatch.setattr(
+        "app.services.imports.apply_release_lifecycle_to_parse_order",
+        fail_if_lifecycle_enrichment,
+    )
+
     default_response = client.get("/gmail/imports", headers=auth_headers(token))
     assert default_response.status_code == 200
     default_payload = default_response.json()

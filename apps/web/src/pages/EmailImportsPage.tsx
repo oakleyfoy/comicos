@@ -23,6 +23,7 @@ export function EmailImportsPage() {
   const [imports, setImports] = useState<GmailImportedDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [gmailConnected, setGmailConnected] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
@@ -37,36 +38,30 @@ export function EmailImportsPage() {
     setImports(records);
   }
 
+  async function refreshPage(): Promise<void> {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const status = await apiClient.getGmailStatus();
+      setGmailConnected(status.connected);
+      if (!status.connected) {
+        setImports([]);
+        return;
+      }
+      await loadImports();
+    } catch (loadError) {
+      if (loadError instanceof ApiError) {
+        setError(loadError.message);
+      } else {
+        setError(loadError instanceof Error ? loadError.message : "Unable to load email imports.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    let ignore = false;
-
-    void apiClient
-      .getGmailImports()
-      .then((records) => {
-        if (!ignore) {
-          setImports(records);
-        }
-      })
-      .catch((loadError) => {
-        if (!ignore) {
-          if (loadError instanceof ApiError) {
-            setError(loadError.message);
-          } else {
-            setError(
-              loadError instanceof Error ? loadError.message : "Unable to load email imports.",
-            );
-          }
-        }
-      })
-      .finally(() => {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
+    void refreshPage();
   }, []);
 
   useEffect(() => {
@@ -167,8 +162,15 @@ export function EmailImportsPage() {
       />
 
       {error ? (
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
           <StatusBanner tone="error">{error}</StatusBanner>
+          <button
+            type="button"
+            onClick={() => void refreshPage()}
+            className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40"
+          >
+            Try again
+          </button>
         </div>
       ) : null}
 
@@ -178,6 +180,24 @@ export function EmailImportsPage() {
         </div>
       ) : null}
 
+      {gmailConnected === false && !isLoading ? (
+        <div className="mt-6">
+          <EmptyState
+            title="Connect Gmail first"
+            description="Link your Gmail account before syncing receipt emails into draft imports."
+            action={
+              <Link
+                to="/settings/integrations"
+                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Connect Gmail
+              </Link>
+            }
+          />
+        </div>
+      ) : null}
+
+      {gmailConnected && !isLoading ? (
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
@@ -193,14 +213,15 @@ export function EmailImportsPage() {
           </div>
         </div>
       </section>
+      ) : null}
 
       {isLoading ? (
         <div className="mt-6">
-          <StatusBanner tone="info">Loading imported Gmail drafts...</StatusBanner>
+          <StatusBanner tone="info">Loading Gmail import status...</StatusBanner>
         </div>
       ) : null}
 
-      {!isLoading && imports.length === 0 ? (
+      {gmailConnected && !isLoading && imports.length === 0 ? (
         <div className="mt-6">
           <EmptyState
             title="No Gmail drafts yet"
@@ -217,7 +238,7 @@ export function EmailImportsPage() {
         </div>
       ) : null}
 
-      {!isLoading && imports.length > 0 ? (
+      {gmailConnected && !isLoading && imports.length > 0 ? (
         <section className="mt-6 space-y-4">
           {imports.map((entry) => (
             <article

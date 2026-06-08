@@ -757,6 +757,7 @@ def serialize_gmail_import_drafts(
                 prefetch_cover_images=False,
                 cover_image_count=cover_count_for(draft_import),
                 enrich_metadata=False,
+                enrich_lifecycle=False,
             ),
         )
         for record, draft_import in records
