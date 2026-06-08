@@ -113,7 +113,8 @@ describe("CollectorHomePage", () => {
       screen.getByText("Review buy recommendations and marketplace opportunities."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("collector-home-dashboard-strip")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Not Available").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("No alerts currently require attention.")).not.toBeInTheDocument();
   });
 
   it("shows renamed collector-facing cards and priority order", async () => {
@@ -188,7 +189,7 @@ describe("CollectorHomePage", () => {
       .getAllByRole("heading", { level: 2 })
       .map((el) => el.textContent)
       .filter((t) => t && t !== "Today's Summary" && t !== "Collector Advisor");
-    expect(headings[0]).toMatch(/Upcoming Releases \(12\)/);
+    expect(headings[0]).toBe("Portfolio");
   });
 
   it("shows monitoring message when all summary counts are zero", async () => {
@@ -244,7 +245,9 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("collector-home-monitoring-message")).toBeInTheDocument();
+      expect(screen.getByTestId("collector-home-monitoring-message")).toHaveTextContent(
+        "ComicOS is actively monitoring your collection",
+      );
     });
   });
 
@@ -289,6 +292,21 @@ describe("CollectorHomePage", () => {
       screen.getByText(/Your personalized daily action plan will appear here once advisor data has been generated/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("Advisor plan not generated yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows Portfolio as first grid card", async () => {
+    vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome());
+    render(
+      <MemoryRouter>
+        <CollectorHomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("collector-home-section-grid")).toBeInTheDocument();
+    });
+    const grid = screen.getByTestId("collector-home-section-grid");
+    const firstCardHeading = within(grid).getAllByRole("heading", { level: 2 })[0];
+    expect(firstCardHeading).toHaveTextContent("Portfolio");
   });
 
   it("shows Portfolio card with Portfolio badge", async () => {

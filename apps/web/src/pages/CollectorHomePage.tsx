@@ -7,12 +7,37 @@ import { CollectorErrorState } from "../components/CollectorErrorState";
 import {
   buildCollectorHomeHeaderSummary,
   buildDashboardStrip,
+  buildDashboardStripLoading,
   buildTodaysSummaryResult,
+  COLLECTOR_HOME_MONITORING_MESSAGE,
   COLLECTOR_HOME_TITLE,
   indicatorBadgeClassName,
   itemLabel,
   prepareCollectorHomeSections,
 } from "./collectorHomePresentation";
+
+function DashboardStripGrid({
+  metrics,
+}: {
+  metrics: { label: string; value: string }[];
+}): JSX.Element {
+  return (
+    <div
+      className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"
+      data-testid="collector-home-dashboard-strip"
+    >
+      {metrics.map((metric) => (
+        <div
+          key={metric.label}
+          className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
+        >
+          <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
+          <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function CollectorHomePage(): JSX.Element {
   const [home, setHome] = useState<P85CollectorHomeRead | null>(null);
@@ -46,8 +71,16 @@ export function CollectorHomePage(): JSX.Element {
   if (!home) {
     return (
       <AppShell>
-        <div className="rounded-lg bg-blue-950 px-4 py-8 text-blue-100">
-          <p>Loading your collector home…</p>
+        <div className="rounded-xl bg-blue-950 text-white">
+          <header className="border-b border-red-700 bg-gradient-to-r from-blue-950 via-blue-900 to-red-900 px-4 py-6">
+            <div className="mx-auto max-w-4xl">
+              <h1 className="text-2xl font-semibold">{COLLECTOR_HOME_TITLE}</h1>
+            </div>
+          </header>
+          <main className="mx-auto max-w-4xl px-4 py-6">
+            <DashboardStripGrid metrics={buildDashboardStripLoading()} />
+            <p className="text-sm text-blue-100">Loading your collector home…</p>
+          </main>
         </div>
       </AppShell>
     );
@@ -61,6 +94,8 @@ export function CollectorHomePage(): JSX.Element {
   const dashboardStrip = buildDashboardStrip(home);
   const advisorUrl = home.advisor_primary_cta_url || "/automation-center";
   const advisorReady = Boolean(home.advisor_plan_ready);
+  const showMonitoringMessage =
+    !hasDailyActions && (summary.allCountsUnknown || summary.allCountsZero);
 
   return (
     <AppShell>
@@ -72,43 +107,32 @@ export function CollectorHomePage(): JSX.Element {
           </div>
         </header>
         <main className="mx-auto max-w-4xl px-4 py-6">
-          <div
-            className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4"
-            data-testid="collector-home-dashboard-strip"
-          >
-            {dashboardStrip.map((metric) => (
-              <div
-                key={metric.label}
-                className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
-              >
-                <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
-                <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
-              </div>
-            ))}
-          </div>
+          <DashboardStripGrid metrics={dashboardStrip} />
 
           <section
             aria-labelledby="collector-home-advisor-summary"
-            className="mb-5 rounded-lg border border-blue-800/80 bg-white/5 px-4 py-3"
+            className="mb-5 rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
             data-testid="collector-home-advisor-summary"
           >
-            <h2 id="collector-home-advisor-summary" className="text-sm font-semibold text-white">
-              Collector Advisor
-            </h2>
-            <p className="mt-1 text-sm text-blue-100">
-              {advisorReady
-                ? "Your daily action plan is ready when generated."
-                : "Your personalized daily action plan will appear here once advisor data has been generated."}
-            </p>
-            <p className="mt-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 id="collector-home-advisor-summary" className="text-sm font-semibold text-white">
+                  Collector Advisor
+                </h2>
+                <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-blue-100">
+                  {advisorReady
+                    ? "Your daily action plan is ready when generated."
+                    : "Your personalized daily action plan will appear here once advisor data has been generated."}
+                </p>
+              </div>
               <Link
                 to={advisorUrl}
-                className="inline-flex rounded-md border border-red-600/80 bg-red-900/40 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-800/50"
+                className="inline-flex shrink-0 rounded-md border border-red-600/80 bg-red-900/40 px-3 py-1.5 text-xs font-medium text-red-100 hover:bg-red-800/50"
                 data-testid="collector-home-advisor-cta"
               >
                 Open Collector Advisor
               </Link>
-            </p>
+            </div>
           </section>
 
           <section aria-labelledby="collector-home-todays-summary-heading" className="mb-5">
@@ -128,6 +152,10 @@ export function CollectorHomePage(): JSX.Element {
                   </li>
                 ))}
               </ul>
+            ) : summary.allCountsUnknown ? (
+              <p className="mt-2 text-sm leading-relaxed text-blue-100" data-testid="collector-home-todays-summary">
+                {COLLECTOR_HOME_MONITORING_MESSAGE}
+              </p>
             ) : (
               <>
                 <ul
@@ -138,12 +166,12 @@ export function CollectorHomePage(): JSX.Element {
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
-                {summary.allCountsZero ? (
+                {showMonitoringMessage ? (
                   <p
-                    className="mt-2 text-sm text-blue-200/90"
+                    className="mt-2 text-sm leading-relaxed text-blue-200/90"
                     data-testid="collector-home-monitoring-message"
                   >
-                    ComicOS is monitoring your collection. New opportunities will appear automatically.
+                    {COLLECTOR_HOME_MONITORING_MESSAGE}
                   </p>
                 ) : null}
               </>

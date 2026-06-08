@@ -11,6 +11,7 @@ import {
   sectionIndicatorDisplay,
   sortCollectorHomeSectionsForDisplay,
   SECTION_SKIPPED_LAUNCHER,
+  STRIP_NOT_AVAILABLE,
 } from "../collectorHomePresentation";
 
 describe("collectorHomePresentation", () => {
@@ -107,11 +108,15 @@ describe("collectorHomePresentation", () => {
     expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null, key: "foc_alerts" } as never).text).toBe(
       "FOC",
     );
-    expect(sectionIndicatorDisplay({ indicator_status: "ERROR", count: null } as never).text).toBe("Unavailable");
+    expect(sectionIndicatorDisplay({ indicator_status: "ERROR", count: null } as never).text).toBe("No Alerts");
+    expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null, key: "buy_alerts" } as never).text).toBe(
+      "Available",
+    );
   });
 
-  it("builds today summary without dashboard fallback copy", () => {
-    expect(buildTodaysSummaryLines([])).toEqual(["No alerts currently require attention."]);
+  it("builds today summary without legacy fallback copy", () => {
+    expect(buildTodaysSummaryResult([]).allCountsUnknown).toBe(true);
+    expect(buildTodaysSummaryLines([])).toEqual([]);
     const result = buildTodaysSummaryResult([
       { key: "buy_alerts", indicator_status: "EMPTY", count: 0 } as never,
       { key: "sell_alerts", indicator_status: "EMPTY", count: 0 } as never,
@@ -121,27 +126,26 @@ describe("collectorHomePresentation", () => {
     expect(result.allCountsZero).toBe(true);
   });
 
-  it("sorts HAS_ITEMS sections before EMPTY and static cards last", () => {
+  it("sorts HAS_ITEMS sections before EMPTY and puts Portfolio first", () => {
     const prepared = prepareCollectorHomeSections([
       { key: "buy_alerts", title: "Buy", items: [], empty_hint: "", count: 0, indicator_status: "EMPTY", status: "SKIPPED", error: "" },
       { key: "sell_alerts", title: "Sell", items: [], empty_hint: "", count: 3, indicator_status: "HAS_ITEMS", status: "SKIPPED", error: "" },
       { key: "storage_issues", title: "Storage", items: [], empty_hint: "", count: 0, indicator_status: "UNKNOWN", status: "SKIPPED", error: "" },
     ]);
-    const keys = prepared.map((s) => s.key);
-    expect(keys.indexOf("sell_alerts")).toBeLessThan(keys.indexOf("buy_alerts"));
-    expect(keys.indexOf("portfolio")).toBeGreaterThan(keys.indexOf("sell_alerts"));
+    expect(prepared[0].key).toBe("portfolio");
+    expect(prepared.map((s) => s.key).indexOf("sell_alerts")).toBeLessThan(prepared.map((s) => s.key).indexOf("buy_alerts"));
   });
 
-  it("builds four-column dashboard strip with placeholders", () => {
+  it("builds four-column dashboard strip with Not Available and zero", () => {
     const metrics = buildDashboardStrip({
-      portfolio_movement: { status: "OK", current_value: 1200 },
+      portfolio_movement: { status: "SKIPPED", current_value: 0 },
       sections: [
         {
           key: "listing_management",
           title: "Listings",
-          items: [{ active_listings: 3 }],
+          items: [{ active_listings: 0 }],
           empty_hint: "",
-          count: 3,
+          count: 0,
           status: "SKIPPED",
           error: "",
         },
@@ -150,17 +154,47 @@ describe("collectorHomePresentation", () => {
           title: "Sell",
           items: [],
           empty_hint: "",
-          count: 2,
-          indicator_status: "HAS_ITEMS",
+          count: 0,
+          indicator_status: "EMPTY",
+          status: "SKIPPED",
+          error: "",
+        },
+        {
+          key: "buy_alerts",
+          title: "Buy",
+          items: [],
+          empty_hint: "",
+          count: 0,
+          indicator_status: "EMPTY",
+          status: "SKIPPED",
+          error: "",
+        },
+        {
+          key: "grade_alerts",
+          title: "Grade",
+          items: [],
+          empty_hint: "",
+          count: 0,
+          indicator_status: "EMPTY",
+          status: "SKIPPED",
+          error: "",
+        },
+        {
+          key: "future_pull_list",
+          title: "Future",
+          items: [],
+          empty_hint: "",
+          count: 0,
+          indicator_status: "EMPTY",
           status: "SKIPPED",
           error: "",
         },
       ],
     } as P85CollectorHomeRead);
     expect(metrics).toHaveLength(4);
-    expect(metrics[0]).toEqual({ label: "Collection Value", value: "$1,200" });
-    expect(metrics[2]).toEqual({ label: "Active Listings", value: "3" });
-    expect(metrics[3].label).toBe("Open Alerts");
+    expect(metrics[0].value).toBe(STRIP_NOT_AVAILABLE);
+    expect(metrics[2].value).toBe("0");
+    expect(metrics[3].value).toBe("0");
   });
 
   it("detects sections with HAS_ITEMS for optional today hint", () => {
