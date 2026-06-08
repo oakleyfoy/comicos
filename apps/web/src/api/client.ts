@@ -162,6 +162,11 @@ export interface AiDraftOrderItem {
   catalog_match_score?: number | null;
   catalog_release_source_text?: string | null;
   catalog_resolution_debug?: Record<string, unknown> | null;
+  cover_image_url?: string | null;
+  cover_thumbnail_url?: string | null;
+  cover_image_source?: string | null;
+  cover_image_source_id?: number | null;
+  has_cover_image?: boolean | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
   expected_ship_date?: string | null;

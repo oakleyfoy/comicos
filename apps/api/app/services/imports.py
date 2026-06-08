@@ -20,6 +20,7 @@ from app.schemas.cover_images import CoverImageRead
 from app.schemas.orders import OrderCreate
 from app.services.ai_order_parser import parse_order_draft_from_text
 from app.services.canonical_creators import get_or_create_canonical_creator
+from app.services.import_cover_resolver import apply_import_cover_to_parse_order
 from app.services.metadata_audits import record_metadata_audit
 from app.services.import_release_lifecycle_service import apply_release_lifecycle_to_parse_order
 from app.services.metadata_enrichment import (
@@ -139,6 +140,12 @@ def serialize_import(
         session=session,
         owner_user_id=draft_import.user_id,
         debug_catalog=debug_catalog,
+    )
+    normalized_payload = apply_import_cover_to_parse_order(
+        normalized_payload,
+        session=session,
+        owner_user_id=draft_import.user_id,
+        draft_import_id=draft_import.id,
     )
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required

@@ -73,6 +73,11 @@ class AiDraftOrderItem(BaseModel):
     catalog_match_diagnostics: dict[str, Any] | None = None
     catalog_release_source_text: str | None = None
     catalog_resolution_debug: dict[str, Any] | None = None
+    cover_image_url: str | None = None
+    cover_thumbnail_url: str | None = None
+    cover_image_source: str | None = None
+    cover_image_source_id: int | None = None
+    has_cover_image: bool | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None

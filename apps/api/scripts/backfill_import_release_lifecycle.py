@@ -23,6 +23,7 @@ from app.db.session import get_engine
 from app.models import User
 from app.models.asset_ledger import DraftImport
 from app.schemas.ai import ParseOrderResponse
+from app.services.import_cover_resolver import apply_import_cover_to_parse_order
 from app.services.import_release_lifecycle_service import apply_release_lifecycle_to_parse_order
 
 
@@ -58,6 +59,12 @@ def main() -> None:
                 parsed,
                 session=session,
                 owner_user_id=draft.user_id,
+            )
+            enriched = apply_import_cover_to_parse_order(
+                enriched,
+                session=session,
+                owner_user_id=draft.user_id,
+                draft_import_id=draft.id,
             )
             score_total = 0
             score_count = 0

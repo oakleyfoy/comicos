@@ -15,6 +15,7 @@ import {
   type InventoryCoverImage,
 } from "../api/client";
 import { MetadataReviewDraftCard } from "../components/MetadataReviewDraftCard";
+import { ImportReviewCard } from "../components/imports/ImportReviewCard";
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
@@ -55,6 +56,9 @@ interface OrderItemDraft {
   lifecycleSortBucket?: number;
   catalogReleaseSourceText?: string;
   catalogMatchPossible?: boolean;
+  coverImageUrl?: string;
+  coverThumbnailUrl?: string;
+  hasCoverImage?: boolean;
 }
 
 interface ItemFieldErrors {
@@ -284,6 +288,9 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               lifecycleSortBucket: item.lifecycle_sort_bucket ?? undefined,
               catalogReleaseSourceText: item.catalog_release_source_text ?? undefined,
               catalogMatchPossible: item.catalog_match_possible ?? undefined,
+              coverImageUrl: item.cover_image_url ?? undefined,
+              coverThumbnailUrl: item.cover_thumbnail_url ?? undefined,
+              hasCoverImage: item.has_cover_image ?? undefined,
             })),
           )
         : [emptyItem()],
@@ -590,6 +597,7 @@ export function OrderImportPage() {
   const [shippingAmount, setShippingAmount] = useState("0.00");
   const [taxAmount, setTaxAmount] = useState("0.00");
   const [items, setItems] = useState<OrderItemDraft[]>([emptyItem()]);
+  const [expandedItemIndexes, setExpandedItemIndexes] = useState<Record<number, boolean>>({});
   const [formErrors, setFormErrors] = useState<FormErrors>(emptyFormErrors());
   const [error, setError] = useState<string | null>(null);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
@@ -705,6 +713,7 @@ export function OrderImportPage() {
     setShippingAmount(mapped.shippingAmount);
     setTaxAmount(mapped.taxAmount);
     setItems(mapped.items);
+    setExpandedItemIndexes({});
     setParseWarnings(savedImport.parsed_payload_json.warnings);
     setDraftPayload(savedImport.parsed_payload_json);
     setPublisherAliasInputs(
@@ -762,6 +771,7 @@ export function OrderImportPage() {
     setShippingAmount("0.00");
     setTaxAmount("0.00");
     setItems([emptyItem()]);
+    setExpandedItemIndexes({});
     setFormErrors(emptyFormErrors());
     setParseWarnings([]);
     setDraftPayload(null);
@@ -891,10 +901,19 @@ export function OrderImportPage() {
 
   function addItem(): void {
     setItems((current) => [...current, emptyItem()]);
+    setExpandedItemIndexes({});
   }
 
   function removeItem(index: number): void {
     setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setExpandedItemIndexes({});
+  }
+
+  function toggleItemDetails(index: number): void {
+    setExpandedItemIndexes((current) => ({
+      ...current,
+      [index]: !current[index],
+    }));
   }
 
   function validate(): FormErrors {
@@ -2906,240 +2925,24 @@ export function OrderImportPage() {
               </div>
             </section>
 
-            <section className="space-y-4">
-              {items.map((item, index) => {
-                const lifecycleBadge = itemLifecycleBadge(item);
-                return (
-                <article
+            <section className="space-y-3">
+              {items.map((item, index) => (
+                <ImportReviewCard
                   key={`ai-order-item-${index}`}
-                  className={`rounded-3xl border p-5 shadow-xl ${itemCardSurfaceClass(item)}`}
-                >
-                  {lifecycleBadge ? (
-                    <div className="mb-4 space-y-1">
-                      <p
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${lifecycleBadge.className}`}
-                      >
-                        {lifecycleBadge.label}
-                      </p>
-                      {lifecycleBadge.detail ? (
-                        <p className="text-sm text-slate-300">{lifecycleBadge.detail}</p>
-                      ) : null}
-                      {item.catalogReleaseSourceText ? (
-                        <p className="text-sm text-slate-400">{item.catalogReleaseSourceText}</p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                        Draft Item {index + 1}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-400">
-                        Review every field before confirming the draft.
-                      </p>
-                    </div>
-
-                    {items.length > 1 ? (
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => removeItem(index)}
-                        className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-400/15"
-                      >
-                        Remove item
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Publisher</span>
-                      <input
-                        value={item.publisher}
-                        onChange={(event) => {
-                          updateItem(index, "publisher", event.target.value);
-                          clearItemError(index, "publisher");
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      {formErrors.items[index]?.publisher ? (
-                        <p className="text-sm text-rose-300">
-                          {formErrors.items[index]?.publisher}
-                        </p>
-                      ) : !item.publisher.trim() ? (
-                        <p className="text-sm text-slate-400">
-                          Leave this blank only if unclear. Save the draft to let the server infer
-                          obvious publishers safely.
-                        </p>
-                      ) : null}
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Title</span>
-                      <input
-                        value={item.title}
-                        onChange={(event) => {
-                          updateItem(index, "title", event.target.value);
-                          clearItemError(index, "title");
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      {formErrors.items[index]?.title ? (
-                        <p className="text-sm text-rose-300">{formErrors.items[index]?.title}</p>
-                      ) : null}
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Release Date</span>
-                      <input
-                        value={item.releaseDate}
-                        onChange={(event) => updateItem(index, "releaseDate", event.target.value)}
-                        placeholder="2024, 2024-05, or 2024-05-15"
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      <p className="text-sm text-slate-400">
-                        Optional. Exact dates are preserved when provided; year-only values stay year-only.
-                      </p>
-                      {itemLifecycleBadge(item) ? null : itemPreorderLabel(item) ? (
-                        <p className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-100">
-                          {itemPreorderLabel(item)}
-                        </p>
-                      ) : null}
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Release Status</span>
-                      <select
-                        value={item.releaseStatus}
-                        onChange={(event) => updateItem(index, "releaseStatus", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      >
-                        <option value="">Auto from release date</option>
-                        <option value="not_released_yet">Preorder / Upcoming Release</option>
-                        <option value="released">Released</option>
-                        <option value="unknown">Unknown</option>
-                      </select>
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Order Status</span>
-                      <select
-                        value={item.orderStatus}
-                        onChange={(event) => updateItem(index, "orderStatus", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      >
-                        <option value="">Auto from release / receipt</option>
-                        <option value="ordered">Ordered</option>
-                        <option value="preordered">Preordered</option>
-                        <option value="shipped">Shipped</option>
-                        <option value="received">Received</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Issue Number</span>
-                      <input
-                        value={item.issueNumber}
-                        onChange={(event) => {
-                          updateItem(index, "issueNumber", event.target.value);
-                          clearItemError(index, "issueNumber");
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      {formErrors.items[index]?.issueNumber ? (
-                        <p className="text-sm text-rose-300">
-                          {formErrors.items[index]?.issueNumber}
-                        </p>
-                      ) : null}
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Cover Name</span>
-                      <input
-                        value={item.coverName}
-                        onChange={(event) => updateItem(index, "coverName", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Printing</span>
-                      <input
-                        value={item.printing}
-                        onChange={(event) => updateItem(index, "printing", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Ratio</span>
-                      <input
-                        value={item.ratio}
-                        onChange={(event) => updateItem(index, "ratio", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Variant Type</span>
-                      <input
-                        value={item.variantType}
-                        onChange={(event) => updateItem(index, "variantType", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Cover Artist</span>
-                      <input
-                        value={item.coverArtist}
-                        onChange={(event) => updateItem(index, "coverArtist", event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Quantity</span>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={item.quantity}
-                        onChange={(event) => {
-                          updateItem(index, "quantity", event.target.value);
-                          clearItemError(index, "quantity");
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      {formErrors.items[index]?.quantity ? (
-                        <p className="text-sm text-rose-300">{formErrors.items[index]?.quantity}</p>
-                      ) : null}
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-sm font-medium text-slate-300">Raw Item Price</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.rawItemPrice}
-                        onChange={(event) => {
-                          updateItem(index, "rawItemPrice", event.target.value);
-                          clearItemError(index, "rawItemPrice");
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                      />
-                      {formErrors.items[index]?.rawItemPrice ? (
-                        <p className="text-sm text-rose-300">
-                          {formErrors.items[index]?.rawItemPrice}
-                        </p>
-                      ) : null}
-                    </label>
-                  </div>
-                </article>
-              );
-              })}
+                  item={item}
+                  index={index}
+                  isExpanded={Boolean(expandedItemIndexes[index])}
+                  canRemove={items.length > 1}
+                  isSubmitting={isSubmitting}
+                  itemError={formErrors.items[index]}
+                  lifecycleBadge={itemLifecycleBadge(item)}
+                  cardSurfaceClassName={itemCardSurfaceClass(item)}
+                  onToggleDetails={() => toggleItemDetails(index)}
+                  onRemove={() => removeItem(index)}
+                  onUpdate={(field, value) => updateItem(index, field, value)}
+                  clearItemError={(field) => clearItemError(index, field)}
+                />
+              ))}
 
               <button
                 type="button"
