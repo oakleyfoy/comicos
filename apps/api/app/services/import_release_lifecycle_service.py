@@ -203,11 +203,14 @@ def enrich_parse_order_payload_lifecycle(
     payload: dict[str, Any],
     today: date | None = None,
 ) -> dict[str, Any]:
+    from app.services.import_locg_hydrate_service import import_locg_hydrate_request_scope
+
     items = payload.get("items") or []
-    enriched_items = [
-        enrich_import_item_lifecycle(session, owner_user_id=owner_user_id, item=dict(item), today=today)
-        for item in items
-    ]
+    with import_locg_hydrate_request_scope():
+        enriched_items = [
+            enrich_import_item_lifecycle(session, owner_user_id=owner_user_id, item=dict(item), today=today)
+            for item in items
+        ]
     payload["items"] = enriched_items
     payload["lifecycle_enrichment_json"] = {
         "item_count": len(enriched_items),

@@ -29,6 +29,22 @@ from app.tasks import queue as rq_queue_module
 
 
 @pytest.fixture(autouse=True)
+def disable_import_locg_hydrate_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("IMPORT_LOCG_HYDRATE", "0")
+
+
+@pytest.fixture(autouse=True)
+def reset_import_locg_hydrate_process_cache() -> None:
+    from app.services import import_locg_hydrate_service as hydrate_mod
+
+    hydrate_mod._process_hydrate_cache.clear()
+    hydrate_mod._hydrate_request_cache.set(None)
+    yield
+    hydrate_mod._process_hydrate_cache.clear()
+    hydrate_mod._hydrate_request_cache.set(None)
+
+
+@pytest.fixture(autouse=True)
 def fake_rq_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeStrictRedis:
     """Route all default Redis/RQ traffic to one in-memory broker per test."""
 

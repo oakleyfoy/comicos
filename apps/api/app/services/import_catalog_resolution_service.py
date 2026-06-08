@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -15,6 +16,8 @@ from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.metadata_aliases import STATIC_PUBLISHER_ALIAS_MAP, normalize_alias_lookup_key
 
 CatalogSource = Literal["ReleaseIssue", "ExternalCatalogIssue"]
+
+logger = logging.getLogger(__name__)
 
 ACCEPT_SCORE = 70
 POSSIBLE_SCORE = 55
@@ -288,6 +291,71 @@ def score_catalog_candidate(
     return ScoredCatalogCandidate(candidate=candidate, score=score, reasons=reasons)
 
 
+def _parse_release_date_from_item(item: dict[str, Any]) -> date | None:
+    raw = item.get("parsed_release_date") or item.get("release_date")
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return date.fromisoformat(raw.strip()[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _gather_and_score_import_candidates(
+    session: Session,
+    *,
+    owner_user_id: int,
+    publisher: str | None,
+    title: str | None,
+    issue_number: str | None,
+    cover_name: str | None,
+    cover_artist: str | None,
+) -> list[ScoredCatalogCandidate]:
+    candidates: list[CatalogCandidateRow] = []
+    candidates.extend(
+        _collect_release_issue_candidates(
+            session,
+            owner_user_id=owner_user_id,
+            issue_number=issue_number,
+            title=title,
+        )
+    )
+    candidates.extend(
+        _collect_external_catalog_candidates(session, issue_number=issue_number, title=title)
+    )
+    candidates = _dedupe_candidates(candidates)
+    scored = [
+        score_catalog_candidate(
+            input_publisher=publisher,
+            input_title=title,
+            input_issue_number=issue_number,
+            input_cover_name=cover_name,
+            input_cover_artist=cover_artist,
+            candidate=candidate,
+        )
+        for candidate in candidates
+    ]
+    top_score = max((row.score for row in scored), default=0)
+    if top_score < STRONG_TITLE_ISSUE_MIN_SCORE:
+        extra = _collect_external_catalog_series_candidates(session, title=title)
+        if extra:
+            candidates = _dedupe_candidates(candidates + extra)
+            scored = [
+                score_catalog_candidate(
+                    input_publisher=publisher,
+                    input_title=title,
+                    input_issue_number=issue_number,
+                    input_cover_name=cover_name,
+                    input_cover_artist=cover_artist,
+                    candidate=candidate,
+                )
+                for candidate in candidates
+            ]
+    return scored
+
+
 def _title_prefilter_clause(tokens: list[str], *columns: Any) -> Any | None:
     if not tokens:
         return None
@@ -554,50 +622,67 @@ def resolve_import_catalog_match(
         )
         return result
 
-    candidates: list[CatalogCandidateRow] = []
-    candidates.extend(
-        _collect_release_issue_candidates(
-            session,
-            owner_user_id=owner_user_id,
-            issue_number=issue_number,
-            title=title,
-        )
+    scored = _gather_and_score_import_candidates(
+        session,
+        owner_user_id=owner_user_id,
+        publisher=publisher,
+        title=title,
+        issue_number=issue_number,
+        cover_name=cover_name,
+        cover_artist=cover_artist,
     )
-    candidates.extend(
-        _collect_external_catalog_candidates(session, issue_number=issue_number, title=title)
-    )
-    candidates = _dedupe_candidates(candidates)
-
-    scored = [
-        score_catalog_candidate(
-            input_publisher=publisher,
-            input_title=title,
-            input_issue_number=issue_number,
-            input_cover_name=cover_name,
-            input_cover_artist=cover_artist,
-            candidate=candidate,
-        )
-        for candidate in candidates
-    ]
-    top_score = max((row.score for row in scored), default=0)
-    if top_score < STRONG_TITLE_ISSUE_MIN_SCORE:
-        extra = _collect_external_catalog_series_candidates(session, title=title)
-        if extra:
-            candidates = _dedupe_candidates(candidates + extra)
-            scored = [
-                score_catalog_candidate(
-                    input_publisher=publisher,
-                    input_title=title,
-                    input_issue_number=issue_number,
-                    input_cover_name=cover_name,
-                    input_cover_artist=cover_artist,
-                    candidate=candidate,
-                )
-                for candidate in candidates
-            ]
     result = _pick_resolution(scored)
+    hydrate_diag: dict[str, Any] = {}
+    should_try_locg_hydrate = (
+        not result.matched
+        and result.score < ACCEPT_SCORE
+        and bool(normalize_import_title(title))
+        and bool(issue_number_variants(issue_number))
+    )
+    if should_try_locg_hydrate:
+        from app.services.import_locg_hydrate_service import (
+            hydrate_import_item_from_locg_calendar,
+            hydrate_result_to_diagnostics,
+            import_locg_hydrate_enabled,
+        )
+
+        if import_locg_hydrate_enabled():
+            parsed_release = _parse_release_date_from_item(item)
+            try:
+                hydrate_result = hydrate_import_item_from_locg_calendar(
+                    session,
+                    title=title,
+                    issue_number=issue_number,
+                    parsed_release_date=parsed_release,
+                )
+                hydrate_diag = hydrate_result_to_diagnostics(hydrate_result)
+                if hydrate_result.hydrated:
+                    scored = _gather_and_score_import_candidates(
+                        session,
+                        owner_user_id=owner_user_id,
+                        publisher=publisher,
+                        title=title,
+                        issue_number=issue_number,
+                        cover_name=cover_name,
+                        cover_artist=cover_artist,
+                    )
+                    result = _pick_resolution(scored)
+            except Exception:
+                logger.warning(
+                    "import_locg_hydrate_resolve_guard title=%r issue=%r",
+                    title,
+                    issue_number,
+                    exc_info=True,
+                )
+                hydrate_diag = {
+                    "locg_hydrate_attempted": True,
+                    "locg_hydrated": False,
+                    "locg_hydrate_no_match_reason": "resolve_guard",
+                }
     result.diagnostics = {
         **diagnostics,
+        **hydrate_diag,
+        "locg_hydrated": hydrate_diag.get("locg_hydrated", False),
         "candidates_examined": result.candidates_examined,
         "matched": result.matched,
         "score": result.score,
@@ -614,7 +699,10 @@ def catalog_match_fields_for_item(
     *,
     include_debug: bool = False,
 ) -> dict[str, Any]:
-    if resolution.matched:
+    locg_hydrated = bool(resolution.diagnostics.get("locg_hydrated"))
+    if resolution.matched and locg_hydrated:
+        source_text = "Verified release date from LOCG (live hydrate)"
+    elif resolution.matched:
         source_text = "Verified release date from catalog"
     elif resolution.possible_match:
         source_text = "Possible catalog match needs review"
@@ -631,10 +719,17 @@ def catalog_match_fields_for_item(
         "catalog_match_publisher": resolution.publisher,
         "catalog_match_issue_number": resolution.issue_number,
         "catalog_match_release_date": resolution.release_date,
+        "catalog_match_hydrated": locg_hydrated,
+        "catalog_match_catalog_source": "LOCG_LIVE_HYDRATED" if locg_hydrated and resolution.matched else None,
         "catalog_match_diagnostics": {
             "rejected_reason": resolution.rejected_reason,
             "candidates_examined": resolution.candidates_examined,
             "top_candidates": resolution.top_candidates,
+            **{
+                key: value
+                for key, value in resolution.diagnostics.items()
+                if key.startswith("locg_hydrate")
+            },
         },
         "catalog_release_source_text": source_text,
     }
