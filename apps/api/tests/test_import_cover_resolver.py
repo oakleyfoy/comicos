@@ -260,3 +260,61 @@ def test_resolve_import_cover_uses_draft_cover_fallback(session: Session) -> Non
     assert result.cover_image_source == "draft_cover_image"
     assert result.cover_image_url is not None
     assert result.has_cover_image is True
+
+
+def test_resolve_import_cover_prefers_line_upload_over_draft_fallback(session: Session) -> None:
+    cover = CoverImage(
+        draft_import_id=99,
+        source_type="upload",
+        original_filename="scan.jpg",
+        storage_path="cover-images/test/scan.jpg",
+        mime_type="image/jpeg",
+        sha256_hash="scanhash",
+    )
+    session.add(cover)
+    session.commit()
+    session.refresh(cover)
+    assert cover.id is not None
+
+    result = resolve_import_cover(
+        session,
+        {
+            "title": "Line Scan",
+            "issue_number": "1",
+            "import_line_cover_image_id": cover.id,
+        },
+        draft_import_id=99,
+        allow_draft_cover_fallback=False,
+    )
+    assert result.cover_image_source == "draft_cover_image"
+    assert result.cover_image_source_id == cover.id
+    assert result.has_cover_image is True
+
+
+def test_resolve_import_cover_prefers_line_upload_over_draft_fallback(session: Session) -> None:
+    cover = CoverImage(
+        draft_import_id=99,
+        source_type="upload",
+        original_filename="scan.jpg",
+        storage_path="cover-images/test/scan.jpg",
+        mime_type="image/jpeg",
+        sha256_hash="scanhash",
+    )
+    session.add(cover)
+    session.commit()
+    session.refresh(cover)
+    assert cover.id is not None
+
+    result = resolve_import_cover(
+        session,
+        {
+            "title": "Line Scan",
+            "issue_number": "1",
+            "import_line_cover_image_id": cover.id,
+        },
+        draft_import_id=99,
+        allow_draft_cover_fallback=False,
+    )
+    assert result.cover_image_source == "draft_cover_image"
+    assert result.cover_image_source_id == cover.id
+    assert result.has_cover_image is True

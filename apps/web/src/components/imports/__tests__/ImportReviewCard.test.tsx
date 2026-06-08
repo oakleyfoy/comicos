@@ -42,7 +42,6 @@ function Harness({
   return (
     <ImportReviewCard
       item={item}
-      index={0}
       isExpanded={expanded}
       canRemove={true}
       isSubmitting={false}
@@ -57,6 +56,9 @@ function Harness({
       onRemove={() => undefined}
       onUpdate={(field, value) => setItem((current) => ({ ...current, [field]: value }))}
       clearItemError={() => undefined}
+      canScanCover={false}
+      scanCoverBusy={false}
+      onScanCoverSelected={() => undefined}
     />
   );
 }
@@ -65,6 +67,7 @@ describe("ImportReviewCard", () => {
   it("renders compact card title, issue, and status", () => {
     render(<Harness />);
     expect(screen.getByText("Terminal #1")).toBeInTheDocument();
+    expect(screen.getByText("July 22, 2026")).toBeInTheDocument();
     expect(screen.getByText("Upcoming Release")).toBeInTheDocument();
     expect(screen.getByText("Verified release date from catalog")).toBeInTheDocument();
   });

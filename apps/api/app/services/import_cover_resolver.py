@@ -237,6 +237,57 @@ def _resolve_external_catalog_cover(
     return None
 
 
+def _cover_payload_from_stored_image(
+    session: Session,
+    cover: CoverImage,
+) -> ImportCoverResolutionResultPayload | None:
+    if cover.id is None:
+        return None
+    derivatives = session.exec(
+        select(CoverImageDerivative).where(CoverImageDerivative.cover_image_id == cover.id)
+    ).all()
+    thumb = next(
+        (
+            cover_derivative_fetch_path(cover.id, row.derivative_type)
+            for row in derivatives
+            if row.derivative_type == "thumb"
+        ),
+        None,
+    )
+    medium = next(
+        (
+            cover_derivative_fetch_path(cover.id, row.derivative_type)
+            for row in derivatives
+            if row.derivative_type == "medium"
+        ),
+        None,
+    )
+    return ImportCoverResolutionResultPayload(
+        cover_image_url=medium or cover_fetch_path(cover.id),
+        cover_thumbnail_url=thumb or medium or cover_fetch_path(cover.id),
+        cover_image_source="draft_cover_image",
+        cover_image_source_id=cover.id,
+        has_cover_image=True,
+    )
+
+
+def _resolve_line_upload_cover(
+    session: Session,
+    item: dict[str, Any],
+) -> ImportCoverResolutionResultPayload | None:
+    raw_id = item.get("import_line_cover_image_id")
+    if raw_id is None:
+        return None
+    try:
+        cover_id = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+    cover = session.get(CoverImage, cover_id)
+    if cover is None:
+        return None
+    return _cover_payload_from_stored_image(session, cover)
+
+
 def _resolve_draft_cover(
     session: Session,
     *,
@@ -249,28 +300,9 @@ def _resolve_draft_cover(
         .where(CoverImage.draft_import_id == draft_import_id)
         .order_by(CoverImage.created_at.asc(), CoverImage.id.asc())
     ).first()
-    if cover is None or cover.id is None:
+    if cover is None:
         return None
-
-    derivatives = session.exec(
-        select(CoverImageDerivative)
-        .where(CoverImageDerivative.cover_image_id == cover.id)
-    ).all()
-    thumb = next(
-        (cover_derivative_fetch_path(cover.id, row.derivative_type) for row in derivatives if row.derivative_type == "thumb"),
-        None,
-    )
-    medium = next(
-        (cover_derivative_fetch_path(cover.id, row.derivative_type) for row in derivatives if row.derivative_type == "medium"),
-        None,
-    )
-    return ImportCoverResolutionResultPayload(
-        cover_image_url=medium or cover_fetch_path(cover.id),
-        cover_thumbnail_url=thumb or medium or cover_fetch_path(cover.id),
-        cover_image_source="draft_cover_image",
-        cover_image_source_id=cover.id,
-        has_cover_image=True,
-    )
+    return _cover_payload_from_stored_image(session, cover)
 
 
 def resolve_import_cover(
@@ -283,6 +315,10 @@ def resolve_import_cover(
     allow_draft_cover_fallback: bool = True,
 ) -> ImportCoverResolutionResultPayload:
     if session is not None:
+        line_upload_cover = _resolve_line_upload_cover(session, item)
+        if line_upload_cover is not None:
+            return line_upload_cover
+
         external_issue_id = _resolve_external_issue_id(
             session,
             owner_user_id=owner_user_id,

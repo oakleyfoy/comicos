@@ -63,6 +63,7 @@ interface OrderItemDraft {
   coverImageUrl?: string;
   coverThumbnailUrl?: string;
   hasCoverImage?: boolean;
+  importLineCoverImageId?: number;
 }
 
 interface ItemFieldErrors {
@@ -76,8 +77,8 @@ interface ItemFieldErrors {
 interface FormErrors {
   retailer?: string;
   orderDate?: string;
-  shippingAmount?: string;
-  taxAmount?: string;
+  orderTotal?: string;
+  totalBooks?: string;
   items: Record<number, ItemFieldErrors>;
 }
 
@@ -255,13 +256,51 @@ function normalizeOrderStatus(
   return value || null;
 }
 
+function lineSubtotalFromItems(items: OrderItemDraft[]): number {
+  return items.reduce((sum, item) => {
+    const quantity = Number(item.quantity || 0);
+    const rawItemPrice = Number(item.rawItemPrice || 0);
+    return sum + quantity * rawItemPrice;
+  }, 0);
+}
+
+function sumLineQuantities(items: OrderItemDraft[]): number {
+  return items.reduce((sum, item) => {
+    const quantity = Number(item.quantity);
+    return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+  }, 0);
+}
+
+function orderTotalFromDraft(draft: AiParseOrderResponse): string {
+  if (draft.order_total != null && String(draft.order_total).trim() !== "") {
+    return String(draft.order_total);
+  }
+  const subtotal = draft.items.reduce((sum, item) => {
+    const quantity = Number(item.quantity ?? 0);
+    const rawItemPrice = Number(item.raw_item_price ?? 0);
+    return sum + quantity * rawItemPrice;
+  }, 0);
+  return String(
+    subtotal + Number(draft.shipping_amount || 0) + Number(draft.tax_amount || 0),
+  );
+}
+
+function totalBooksFromDraft(draft: AiParseOrderResponse): string {
+  if (draft.total_books != null) {
+    return String(draft.total_books);
+  }
+  return String(
+    draft.items.reduce((sum, item) => sum + (item.quantity ?? 0), 0),
+  );
+}
+
 function mapAiDraftToForm(draft: AiParseOrderResponse) {
   return {
     retailer: draft.retailer ?? "",
     orderDate: draft.order_date ?? "",
     sourceType: draft.source_type,
-    shippingAmount: draft.shipping_amount,
-    taxAmount: draft.tax_amount,
+    orderTotal: orderTotalFromDraft(draft),
+    totalBooks: totalBooksFromDraft(draft),
     items:
       draft.items.length > 0
         ? sortDraftItemsByLifecycle(
@@ -295,6 +334,7 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               coverImageUrl: item.cover_image_url ?? undefined,
               coverThumbnailUrl: item.cover_thumbnail_url ?? undefined,
               hasCoverImage: item.has_cover_image ?? undefined,
+              importLineCoverImageId: item.import_line_cover_image_id ?? undefined,
             })),
           )
         : [emptyItem()],
@@ -598,8 +638,8 @@ export function OrderImportPage() {
   const [retailer, setRetailer] = useState("");
   const [orderDate, setOrderDate] = useState("");
   const [sourceType, setSourceType] = useState<DraftSourceType>("ai_draft");
-  const [shippingAmount, setShippingAmount] = useState("0.00");
-  const [taxAmount, setTaxAmount] = useState("0.00");
+  const [orderTotal, setOrderTotal] = useState("0.00");
+  const [totalBooks, setTotalBooks] = useState("0");
   const [items, setItems] = useState<OrderItemDraft[]>([emptyItem()]);
   const [expandedItemIndexes, setExpandedItemIndexes] = useState<Record<number, boolean>>({});
   const [formErrors, setFormErrors] = useState<FormErrors>(emptyFormErrors());
@@ -631,11 +671,10 @@ export function OrderImportPage() {
     notices: string[];
   } | null>(null);
 
-  const importCoverInputRef = useRef<HTMLInputElement>(null);
   const [importCoverImages, setImportCoverImages] = useState<InventoryCoverImage[]>([]);
   const [importCoverThumbUrls, setImportCoverThumbUrls] = useState<string[]>([]);
   const [importCoverRegionPreviewUrls, setImportCoverRegionPreviewUrls] = useState<Record<string, string>>({});
-  const [importCoverUploadBusy, setImportCoverUploadBusy] = useState(false);
+  const [lineCoverScanBusyIndex, setLineCoverScanBusyIndex] = useState<number | null>(null);
   const [importCoverUploadError, setImportCoverUploadError] = useState<string | null>(null);
   const [importCoverActionMessage, setImportCoverActionMessage] = useState<string | null>(null);
   const [importCoverPrimaryBusyId, setImportCoverPrimaryBusyId] = useState<number | null>(null);
@@ -655,16 +694,9 @@ export function OrderImportPage() {
     Record<number, string>
   >({});
 
-  const subtotal = useMemo(
-    () =>
-      items.reduce((sum, item) => {
-        const quantity = Number(item.quantity || 0);
-        const rawItemPrice = Number(item.rawItemPrice || 0);
-        return sum + quantity * rawItemPrice;
-      }, 0),
-    [items],
-  );
-  const estimatedAllInTotal = subtotal + Number(shippingAmount || 0) + Number(taxAmount || 0);
+  const subtotal = useMemo(() => lineSubtotalFromItems(items), [items]);
+  const lineQuantityTotal = useMemo(() => sumLineQuantities(items), [items]);
+  const parsedOrderTotal = Number(orderTotal || 0);
   const isParseJobActive =
     parseJobId !== null && parseJobStatus !== "finished" && parseJobStatus !== "failed";
   const shouldShowDraftEditor = hasDraft || editorMode === "manual";
@@ -723,8 +755,8 @@ export function OrderImportPage() {
     setRetailer(mapped.retailer);
     setOrderDate(mapped.orderDate);
     setSourceType(mapped.sourceType);
-    setShippingAmount(mapped.shippingAmount);
-    setTaxAmount(mapped.taxAmount);
+    setOrderTotal(mapped.orderTotal);
+    setTotalBooks(mapped.totalBooks);
     setItems(mapped.items);
     setExpandedItemIndexes({});
     setParseWarnings(savedImport.parsed_payload_json.warnings);
@@ -781,8 +813,8 @@ export function OrderImportPage() {
     setRetailer("");
     setOrderDate("");
     setSourceType(editorMode === "manual" ? "manual_draft" : "ai_draft");
-    setShippingAmount("0.00");
-    setTaxAmount("0.00");
+    setOrderTotal("0.00");
+    setTotalBooks("0");
     setItems([emptyItem()]);
     setExpandedItemIndexes({});
     setFormErrors(emptyFormErrors());
@@ -813,8 +845,10 @@ export function OrderImportPage() {
       retailer: retailer.trim() || null,
       order_date: orderDate || null,
       source_type: sourceType,
-      shipping_amount: shippingAmount || "0.00",
-      tax_amount: taxAmount || "0.00",
+      shipping_amount: "0.00",
+      tax_amount: "0.00",
+      order_total: orderTotal.trim() ? orderTotal : null,
+      total_books: totalBooks.trim() ? Number(totalBooks) : null,
       items: items.map((item) => ({
         publisher: item.publisher.trim() || null,
         title: item.title.trim() || null,
@@ -832,6 +866,7 @@ export function OrderImportPage() {
         cover_artists: item.coverArtists.length ? item.coverArtists : null,
         quantity: item.quantity.trim() ? Number(item.quantity) : null,
         raw_item_price: item.rawItemPrice.trim() ? item.rawItemPrice : null,
+        import_line_cover_image_id: item.importLineCoverImageId ?? null,
       })),
       warnings: parseWarnings,
       confidence_score: confidenceScore ?? (sourceType === "manual_draft" ? 1 : 0),
@@ -940,12 +975,18 @@ export function OrderImportPage() {
       nextErrors.orderDate = "Order date is required.";
     }
 
-    if (Number(shippingAmount) < 0) {
-      nextErrors.shippingAmount = "Shipping amount must be 0 or greater.";
+    if (Number(orderTotal) < 0) {
+      nextErrors.orderTotal = "Total must be 0 or greater.";
     }
-
-    if (Number(taxAmount) < 0) {
-      nextErrors.taxAmount = "Tax amount must be 0 or greater.";
+    if (orderTotal.trim() && Number(orderTotal) + 0.0001 < subtotal) {
+      nextErrors.orderTotal = "Total spent should be at least the line subtotal.";
+    }
+    const books = totalBooks.trim();
+    if (books) {
+      const parsedBooks = Number(books);
+      if (!Number.isFinite(parsedBooks) || parsedBooks < 0 || !Number.isInteger(parsedBooks)) {
+        nextErrors.totalBooks = "Total books must be a whole number 0 or greater.";
+      }
     }
 
     if (!items.length) {
@@ -978,8 +1019,8 @@ export function OrderImportPage() {
     return Boolean(
       nextErrors.retailer ||
         nextErrors.orderDate ||
-        nextErrors.shippingAmount ||
-        nextErrors.taxAmount ||
+        nextErrors.orderTotal ||
+        nextErrors.totalBooks ||
         Object.values(nextErrors.items).some((itemErrors) =>
           Object.values(itemErrors).some(Boolean),
         ),
@@ -1178,15 +1219,14 @@ export function OrderImportPage() {
     ),
   ]);
 
-  async function handleImportCoverUpload(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const picked = event.target.files?.[0];
-    event.target.value = "";
-    if (!picked || savedImportId === null) {
+  async function handleLineCoverScan(itemIndex: number, picked: File): Promise<void> {
+    if (savedImportId === null) {
+      setError("Save a draft first so cover scans can attach to this import.");
       return;
     }
 
     if (importStatus !== "draft") {
-      setImportCoverUploadError("Cover uploads stay open only while this import is a draft.");
+      setError("Cover scans can only be added while this import is a draft.");
       return;
     }
 
@@ -1195,25 +1235,24 @@ export function OrderImportPage() {
       picked.type.trim() !== "" &&
       /^image\/(jpeg|png|gif|webp)$/i.test(picked.type.trim());
     if (!(matchesName || matchesType)) {
-      setImportCoverUploadError("Use JPG, PNG, WebP, or GIF files.");
+      setError("Use JPG, PNG, WebP, or GIF files for cover scans.");
       return;
     }
 
-    setImportCoverUploadBusy(true);
-    setImportCoverUploadError(null);
-    setImportCoverActionMessage(null);
+    setLineCoverScanBusyIndex(itemIndex);
+    setError(null);
     try {
-      await apiClient.uploadImportCoverImage(savedImportId, picked);
+      await apiClient.uploadImportCoverImage(savedImportId, picked, itemIndex);
       const refreshed = await apiClient.getImport(savedImportId);
       applyImportToForm(refreshed);
     } catch (coverError) {
       if (coverError instanceof ApiError) {
-        setImportCoverUploadError(coverError.message);
+        setError(coverError.message);
       } else {
-        setImportCoverUploadError("Cover upload failed. Try another file.");
+        setError("Cover scan upload failed. Try another file.");
       }
     } finally {
-      setImportCoverUploadBusy(false);
+      setLineCoverScanBusyIndex(null);
     }
   }
 
@@ -2058,23 +2097,6 @@ export function OrderImportPage() {
           </div>
         ) : null}
 
-        {parseWarnings.length ? (
-          <div className="mt-6">
-            <StatusBanner tone="info">
-              <div className="space-y-2">
-                <p className="font-semibold text-cyan-50">
-                  {editorMode === "manual" ? "Draft notes" : "Parser warnings"}
-                </p>
-                <ul className="list-disc space-y-1 pl-5">
-                  {parseWarnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            </StatusBanner>
-          </div>
-        ) : null}
-
         {showMetadataGate ? (
           <ImportMetadataQuestionsGate
             questions={pendingMetadataQuestions}
@@ -2085,598 +2107,6 @@ export function OrderImportPage() {
 
         {shouldShowDraftEditor && !showMetadataGate ? (
         <>
-        <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Cover images</p>
-              <p className="mt-2 text-sm text-slate-400">
-                Optional reference scans for this import only. Saves do not remap covers to catalog
-                issues or change confirm semantics.
-              </p>
-              {!savedImportId ? (
-                <p className="mt-2 text-sm text-slate-500">
-                  Save a draft first so uploads can attach to that import record.
-                </p>
-              ) : null}
-              {savedImportId && importStatus !== "draft" ? (
-                <p className="mt-2 text-sm text-slate-500">
-                  This import is {importStatus}. Earlier uploads remain visible below; uploads are
-                  paused.
-                </p>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              <input
-                ref={importCoverInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
-                className="hidden"
-                onChange={(event) => void handleImportCoverUpload(event)}
-              />
-              <button
-                type="button"
-                disabled={
-                  !savedImportId || importStatus !== "draft" || importCoverUploadBusy || isSubmitting
-                }
-                onClick={() => importCoverInputRef.current?.click()}
-                className="inline-flex items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-5 py-2 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {importCoverUploadBusy ? "Uploading…" : "Upload cover scan"}
-              </button>
-            </div>
-          </div>
-
-          {importCoverUploadError ? (
-            <div className="mt-4">
-              <StatusBanner tone="error">{importCoverUploadError}</StatusBanner>
-            </div>
-          ) : null}
-
-          {importCoverActionMessage ? (
-            <div className="mt-4">
-              <StatusBanner tone="success">{importCoverActionMessage}</StatusBanner>
-            </div>
-          ) : null}
-
-          {importStatus === "confirmed" &&
-          importCoverImages.some((c) => c.draft_import_id != null) ? (
-            <div className="mt-4 space-y-2 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-4 text-sm text-amber-100/90">
-              <p className="font-medium text-white">Manual cover assignment</p>
-              <p className="text-slate-300">{MANUAL_COVER_ASSIGN_INFO}</p>
-              <p className="text-slate-300">{MANUAL_COVER_ASSIGN_MULTI_COPY}</p>
-            </div>
-          ) : null}
-
-          {importCoverImages.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">No scans attached to this import yet.</p>
-          ) : (
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {importCoverImages.map((meta, index) => {
-                const thumb = importCoverThumbUrls[index];
-                const label = meta.original_filename ?? `Cover ${meta.id}`;
-                const busy = importCoverPrimaryBusyId === meta.id;
-                const canSetPrimary = savedImportId !== null && importStatus === "draft";
-                const ocrHeadline = resolveCoverImageOcrHeadline({
-                  ocr_visibility: meta.ocr_visibility,
-                  latest_ocr_result: meta.latest_ocr_result,
-                });
-                const ocrRunCount = meta.ocr_visibility?.ocr_run_count ?? 0;
-                const priorRuns = meta.ocr_visibility?.prior_run_created_ats ?? [];
-                return (
-                  <div
-                    key={meta.id}
-                    className={`rounded-2xl border bg-slate-950/60 p-4 text-sm text-slate-300 ${
-                      meta.is_primary
-                        ? "border-amber-400/40 shadow-lg shadow-amber-500/10"
-                        : "border-white/10"
-                    }`}
-                  >
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      {meta.is_primary ? (
-                        <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
-                          Primary
-                        </span>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                          Alternate
-                        </span>
-                      )}
-                    </div>
-                    {thumb ? (
-                      <button
-                        type="button"
-                        className="mb-3 block w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-                        title="Open full image"
-                        onClick={() => window.open(thumb, "_blank", "noopener,noreferrer")}
-                      >
-                        <img
-                          src={thumb}
-                          alt={`Cover thumbnail for ${label}`}
-                          className="h-40 w-full object-cover"
-                        />
-                      </button>
-                    ) : (
-                      <div className="mb-3 flex h-40 items-center justify-center rounded-xl border border-dashed border-white/15 bg-slate-950/50 text-xs text-slate-500">
-                        Loading preview…
-                      </div>
-                    )}
-                    <p className="font-medium text-white">{label}</p>
-                    <dl className="mt-3 space-y-1 text-xs text-slate-400">
-                      <div className="flex justify-between gap-2">
-                        <dt>MIME</dt>
-                        <dd className="text-right">{meta.mime_type}</dd>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <dt>Dimensions</dt>
-                        <dd className="text-right">
-                          {formatImportCoverDimensions(meta.image_width, meta.image_height)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <dt>Size</dt>
-                        <dd className="text-right">
-                          {formatImportCoverFileSize(meta.file_size ?? null)}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="mt-3 space-y-2 text-xs">
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverProcessingTone(meta.processing_status)}`}
-                        >
-                          {meta.processing_status}
-                        </span>
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverMatchingTone(meta.matching_status)}`}
-                        >
-                          matching {meta.matching_status}
-                        </span>
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-1 font-semibold uppercase tracking-wide ${importCoverOcrHeadlineTone(ocrHeadline)}`}
-                        >
-                          ocr {ocrHeadline}
-                        </span>
-                      </div>
-                      <p className="text-slate-400">
-                        Latest OCR processed:{" "}
-                        {formatImportCoverTimestamp(meta.latest_ocr_result?.processed_at ?? null)}
-                        {meta.latest_ocr_result?.confidence_score != null ? (
-                          <span className="text-slate-500">
-                            {" "}
-                            · confidence {meta.latest_ocr_result.confidence_score}
-                          </span>
-                        ) : null}
-                        {typeof meta.ocr_visibility?.retry_available === "boolean" ? (
-                          <span className="text-slate-500">
-                            {" "}
-                            · retry {meta.ocr_visibility.retry_available ? "available" : "blocked"}
-                          </span>
-                        ) : null}
-                      </p>
-                      {ocrRunCount > 0 ? (
-                        <p className="text-slate-500">
-                          OCR runs recorded: {ocrRunCount}
-                          {priorRuns.length > 0
-                            ? ` · prior timestamps (newest-first): ${priorRuns
-                                .slice(0, 3)
-                                .map((ts: string) => formatImportCoverTimestamp(ts))
-                                .join(", ")}${priorRuns.length > 3 ? "…" : ""}`
-                            : ""}
-                        </p>
-                      ) : null}
-                      {meta.latest_ocr_result?.replay_of_ocr_result_id != null ? (
-                        <p className="text-slate-500">
-                          Latest OCR replayed from #{meta.latest_ocr_result.replay_of_ocr_result_id}
-                          {meta.latest_ocr_result.replay_reason
-                            ? ` · reason: ${meta.latest_ocr_result.replay_reason}`
-                            : ""}
-                        </p>
-                      ) : null}
-                      {meta.latest_ocr_result?.source_cover_image_sha256 ? (
-                        <p className="text-slate-500">
-                          OCR snapshot img {meta.latest_ocr_result.source_cover_image_sha256.slice(0, 12)}...
-                          {meta.latest_ocr_result.source_processing_version
-                            ? ` · ${meta.latest_ocr_result.source_processing_version}`
-                            : ""}
-                          {meta.latest_ocr_result.normalization_version
-                            ? ` · ${meta.latest_ocr_result.normalization_version}`
-                            : ""}
-                        </p>
-                      ) : null}
-                      <p className="text-slate-400">
-                        Metadata refreshed: {formatImportCoverTimestamp(meta.metadata_refreshed_at)}
-                      </p>
-                      <p className="text-slate-400">
-                        Ready for matching: {formatImportCoverTimestamp(meta.ready_for_matching_at)}
-                      </p>
-                      {meta.processing_error ? (
-                        <p className="text-rose-300">{meta.processing_error}</p>
-                      ) : null}
-                      {meta.matching_notes ? <p className="text-amber-100/90">{meta.matching_notes}</p> : null}
-                      {meta.latest_ocr_result?.processing_error ? (
-                        <p className="text-rose-300">{meta.latest_ocr_result.processing_error}</p>
-                      ) : null}
-                    </div>
-                    {meta.latest_ocr_result?.raw_text ? (
-                      <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/80 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">OCR raw text</p>
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-300">
-                          {meta.latest_ocr_result.raw_text}
-                        </pre>
-                      </div>
-                    ) : null}
-                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        OCR Regions ({meta.ocr_regions.length})
-                      </summary>
-                      {meta.ocr_regions.length === 0 ? (
-                        <p className="mt-3 text-xs text-slate-500">No OCR regions extracted yet.</p>
-                      ) : (
-                        <div className="mt-3 grid grid-cols-2 gap-3">
-                          {meta.ocr_regions.map((region) => {
-                            const previewUrl = importCoverRegionPreviewUrls[`${meta.id}:${region.region_type}`];
-                            return (
-                              <a
-                                key={region.id}
-                                href={previewUrl ?? region.fetch_path}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded-lg border border-white/10 bg-slate-900/80 p-2"
-                              >
-                                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                  {region.region_type}
-                                </p>
-                                {previewUrl ? (
-                                  <img
-                                    src={previewUrl}
-                                    alt={`${region.region_type} OCR region`}
-                                    className="mt-2 h-20 w-full rounded object-cover"
-                                  />
-                                ) : (
-                                  <div className="mt-2 flex h-20 items-center justify-center rounded bg-slate-950 text-[11px] text-slate-500">
-                                    Loading…
-                                  </div>
-                                )}
-                              </a>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </details>
-                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        Barcode Candidates ({meta.barcode_candidates.length})
-                      </summary>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={importCoverBarcodeExtractBusyId === meta.id}
-                          onClick={() => void handleImportCoverBarcodeExtract(meta.id)}
-                          className="inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100"
-                        >
-                          {importCoverBarcodeExtractBusyId === meta.id ? "Refreshing…" : "Refresh barcodes"}
-                        </button>
-                        <span className="text-[11px] text-slate-500">
-                          Pending{" "}
-                          {meta.barcode_candidates.filter((candidate) => candidate.review_state === "pending").length}
-                        </span>
-                      </div>
-                      {meta.barcode_candidates.length === 0 ? (
-                        <p className="mt-3 text-xs text-slate-500">
-                          No persisted barcode candidates yet. Refresh to normalize barcode OCR values safely.
-                        </p>
-                      ) : (
-                        <div className="mt-3 space-y-2">
-                          {meta.barcode_candidates.map((candidate) => {
-                            const reviewBusy = importCoverBarcodeReviewBusyId === candidate.id;
-                            const sourceLabel =
-                              candidate.source_ocr_candidate_id != null
-                                ? `OCR candidate #${candidate.source_ocr_candidate_id}`
-                                : candidate.source_ocr_result_id != null
-                                  ? `OCR result #${candidate.source_ocr_result_id}`
-                                  : "derived";
-                            return (
-                              <div
-                                key={candidate.id}
-                                className={`rounded-lg border p-3 text-xs ${barcodeCandidateReviewCardClassImport(candidate.review_state)}`}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-100">
-                                      {candidate.barcode_type}
-                                    </span>
-                                    <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-100">
-                                      {candidate.review_state}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] text-slate-500">
-                                    Updated {formatImportCoverTimestamp(candidate.updated_at)}
-                                  </span>
-                                </div>
-                                <p className="mt-2 text-slate-100">Raw value: {candidate.raw_barcode_value}</p>
-                                <p className="mt-1 text-slate-300">
-                                  Normalized UPC: {candidate.normalized_upc_value}
-                                </p>
-                                <p className="mt-1 text-slate-500">
-                                  Source {sourceLabel}
-                                  {candidate.confidence != null ? ` · confidence ${candidate.confidence}` : ""}
-                                  {candidate.reviewed_at
-                                    ? ` · reviewed ${formatImportCoverTimestamp(candidate.reviewed_at)}`
-                                    : ""}
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={reviewBusy}
-                                    onClick={() => void handleImportBarcodeApprove(candidate.id)}
-                                    className="inline-flex rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100 disabled:opacity-50"
-                                  >
-                                    Approve
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={reviewBusy}
-                                    onClick={() => void handleImportBarcodeReject(candidate.id)}
-                                    className="inline-flex rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-100 disabled:opacity-50"
-                                  >
-                                    Reject
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </details>
-                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        OCR Candidates ({meta.ocr_candidates.length})
-                      </summary>
-                      {meta.ocr_candidates.length === 0 ? (
-                        <p className="mt-3 text-xs text-slate-500">No OCR candidates extracted yet.</p>
-                      ) : (
-                        <div className="mt-3 space-y-4">
-                          {Array.from(
-                            meta.ocr_candidates.reduce((acc, c) => {
-                              const arr = acc.get(c.candidate_type) ?? [];
-                              arr.push(c);
-                              acc.set(c.candidate_type, arr);
-                              return acc;
-                            }, new Map<string, typeof meta.ocr_candidates>()),
-                          )
-                            .sort(([a], [b]) => a.localeCompare(b))
-                            .map(([candidateType, candidatesOfType]) => (
-                              <div key={candidateType}>
-                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                                  {candidateType}
-                                </p>
-                                <div className="space-y-2">
-                                  {[...candidatesOfType]
-                                    .sort((x, y) => x.id - y.id)
-                                    .map((candidate) => {
-                                      const reviewBusy = importCoverOcrCandidateReviewBusyId === candidate.id;
-                                      return (
-                                        <div
-                                          key={candidate.id}
-                                          className={`rounded-lg border p-2 text-xs ${ocrCandidateReviewCardClassImport(candidate.review_status)}`}
-                                        >
-                                          <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <span
-                                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                                candidate.review_status === "approved"
-                                                  ? "border-emerald-400/40 text-emerald-200"
-                                                  : candidate.review_status === "rejected"
-                                                    ? "border-rose-400/40 text-rose-200"
-                                                    : "border-white/15 text-slate-300"
-                                              }`}
-                                            >
-                                              {candidate.review_status}
-                                            </span>
-                                            {candidate.reviewed_at ? (
-                                              <span className="text-[10px] text-slate-500">
-                                                Reviewed {formatImportCoverTimestamp(candidate.reviewed_at)}
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                          <p className="mt-2 text-slate-200">{candidate.raw_candidate_text}</p>
-                                          <p className="mt-1 text-slate-500">
-                                            normalized {candidate.normalized_candidate_text ?? "—"} · source{" "}
-                                            {candidate.extraction_source}
-                                            {candidate.confidence_score != null
-                                              ? ` · confidence ${candidate.confidence_score}`
-                                              : ""}
-                                          </p>
-                                          <label className="mt-2 block text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                            Review notes
-                                          </label>
-                                          <textarea
-                                            className="mt-1 w-full rounded border border-white/10 bg-slate-950/80 px-2 py-1 text-[11px] text-slate-200"
-                                            rows={2}
-                                            disabled={reviewBusy}
-                                            value={
-                                              importCoverOcrCandidateNoteDrafts[candidate.id] ??
-                                              candidate.review_notes ??
-                                              ""
-                                            }
-                                            onChange={(event) =>
-                                              setImportCoverOcrCandidateNoteDrafts((prev) => ({
-                                                ...prev,
-                                                [candidate.id]: event.target.value,
-                                              }))
-                                            }
-                                          />
-                                          <div className="mt-2 flex flex-wrap gap-2">
-                                            <button
-                                              type="button"
-                                              disabled={reviewBusy}
-                                              onClick={() => void handleImportOcrCandidateApprove(candidate.id)}
-                                              className="inline-flex rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100"
-                                            >
-                                              Approve
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={reviewBusy}
-                                              onClick={() => void handleImportOcrCandidateReject(candidate.id)}
-                                              className="inline-flex rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-100"
-                                            >
-                                              Reject
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={reviewBusy}
-                                              onClick={() => void handleImportOcrCandidateSaveNotes(candidate.id)}
-                                              className="inline-flex rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-200"
-                                            >
-                                              Save notes
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </details>
-                    <details className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        OCR Reconciliation Warnings ({meta.ocr_reconciliation_warnings.length})
-                      </summary>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={importCoverOcrReconcileBusyId === meta.id}
-                          onClick={() => void handleImportCoverReconcile(meta.id)}
-                          className="inline-flex rounded-lg border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100"
-                        >
-                          {importCoverOcrReconcileBusyId === meta.id ? "Refreshing…" : "Refresh warnings"}
-                        </button>
-                        <span className="text-[11px] text-slate-500">
-                          Open{" "}
-                          {meta.ocr_reconciliation_warnings.filter((warning) => warning.status === "open").length}
-                        </span>
-                      </div>
-                      {meta.ocr_reconciliation_warnings.length === 0 ? (
-                        <p className="mt-3 text-xs text-slate-500">
-                          No reconciliation warnings recorded yet. Refresh to compare OCR candidates against the
-                          current draft metadata snapshot when available.
-                        </p>
-                      ) : (
-                        <div className="mt-3 space-y-2">
-                          {meta.ocr_reconciliation_warnings.map((warning) => {
-                            const warningBusy = importCoverOcrWarningBusyId === warning.id;
-                            return (
-                              <div
-                                key={warning.id}
-                                className={`rounded-lg border p-3 text-xs ${importOcrReconciliationSeverityClass(warning.severity)}`}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full border border-current/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                                      {warning.severity}
-                                    </span>
-                                    <span
-                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${importOcrReconciliationStatusClass(warning.status)}`}
-                                    >
-                                      {warning.status}
-                                    </span>
-                                    <span className="text-[10px] uppercase tracking-[0.14em] text-slate-300">
-                                      {warning.warning_type.replace(/_/g, " ")}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] text-slate-400">
-                                    {warning.resolved_at
-                                      ? `Resolved ${formatImportCoverTimestamp(warning.resolved_at)}`
-                                      : `Created ${formatImportCoverTimestamp(warning.created_at)}`}
-                                  </span>
-                                </div>
-                                <p className="mt-2 text-slate-100">{warning.message}</p>
-                                <p className="mt-2 text-slate-300">
-                                  Current metadata: {warning.current_metadata_value ?? "—"}
-                                </p>
-                                <p className="mt-1 text-slate-300">OCR candidate: {warning.candidate_value ?? "—"}</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={warningBusy || warning.status === "acknowledged"}
-                                    onClick={() => void handleImportOcrWarningAcknowledge(warning.id)}
-                                    className="inline-flex rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100 disabled:opacity-50"
-                                  >
-                                    Acknowledge
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={warningBusy || warning.status === "dismissed"}
-                                    onClick={() => void handleImportOcrWarningDismiss(warning.id)}
-                                    className="inline-flex rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-200 disabled:opacity-50"
-                                  >
-                                    Dismiss
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </details>
-                    {meta.is_primary ? (
-                      <p className="mt-3 text-xs text-amber-200/90">Primary display image for this draft.</p>
-                    ) : canSetPrimary ? (
-                      <button
-                        type="button"
-                        disabled={busy || importCoverUploadBusy || isSubmitting}
-                        onClick={() => void handleImportCoverPrimary(meta.id)}
-                        className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {busy ? "Updating…" : "Set primary"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={importCoverProcessBusyId === meta.id}
-                      onClick={() => void handleImportCoverProcess(meta.id)}
-                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {importCoverProcessBusyId === meta.id ? "Queueing…" : "Reprocess metadata"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={importCoverEvaluateBusyId === meta.id}
-                      onClick={() => void handleImportCoverEvaluate(meta.id)}
-                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {importCoverEvaluateBusyId === meta.id ? "Evaluating…" : "Evaluate readiness"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={importCoverOcrBusyId === meta.id}
-                      onClick={() => void handleImportCoverOcr(meta)}
-                      className="mt-3 inline-flex rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {importCoverOcrBusyId === meta.id
-                        ? "Queueing…"
-                        : ocrHeadline === "failed"
-                          ? "Retry OCR"
-                          : meta.latest_ocr_result
-                            ? "Replay OCR"
-                            : "Run OCR"}
-                    </button>
-                    {importStatus === "confirmed" && meta.draft_import_id != null ? (
-                      <ImportCoverManualAssignPanel
-                        coverImageId={meta.id}
-                        disabled={isSubmitting || importCoverUploadBusy}
-                        onAssigned={refreshLoadedImportFromServer}
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
             <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -2723,38 +2153,46 @@ export function OrderImportPage() {
                 </label>
 
                 <label className="space-y-2">
-                  <span className="text-sm font-medium text-slate-300">Shipping Amount</span>
+                  <span className="text-sm font-medium text-slate-300">Total</span>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={shippingAmount}
+                    value={orderTotal}
                     onChange={(event) => {
-                      setShippingAmount(event.target.value);
-                      setFormErrors((current) => ({ ...current, shippingAmount: undefined }));
+                      setOrderTotal(event.target.value);
+                      setFormErrors((current) => ({ ...current, orderTotal: undefined }));
                     }}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
                   />
-                  {formErrors.shippingAmount ? (
-                    <p className="text-sm text-rose-300">{formErrors.shippingAmount}</p>
+                  <p className="text-xs text-slate-500">Total spent on this order (all-in).</p>
+                  {formErrors.orderTotal ? (
+                    <p className="text-sm text-rose-300">{formErrors.orderTotal}</p>
                   ) : null}
                 </label>
 
                 <label className="space-y-2">
-                  <span className="text-sm font-medium text-slate-300">Tax Amount</span>
+                  <span className="text-sm font-medium text-slate-300">Total Books</span>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
-                    value={taxAmount}
+                    step="1"
+                    value={totalBooks}
                     onChange={(event) => {
-                      setTaxAmount(event.target.value);
-                      setFormErrors((current) => ({ ...current, taxAmount: undefined }));
+                      setTotalBooks(event.target.value);
+                      setFormErrors((current) => ({ ...current, totalBooks: undefined }));
                     }}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
                   />
-                  {formErrors.taxAmount ? (
-                    <p className="text-sm text-rose-300">{formErrors.taxAmount}</p>
+                  <p className="text-xs text-slate-500">
+                    Books on the receipt
+                    {lineQuantityTotal !== Number(totalBooks || 0)
+                      ? ` · line qty sum is ${lineQuantityTotal}`
+                      : ""}
+                    .
+                  </p>
+                  {formErrors.totalBooks ? (
+                    <p className="text-sm text-rose-300">{formErrors.totalBooks}</p>
                   ) : null}
                 </label>
               </div>
@@ -2765,7 +2203,6 @@ export function OrderImportPage() {
                 <ImportReviewCard
                   key={`ai-order-item-${index}-${item.coverName}-${item.coverThumbnailUrl ?? ""}`}
                   item={item}
-                  index={index}
                   isExpanded={Boolean(expandedItemIndexes[index])}
                   canRemove={items.length > 1}
                   isSubmitting={isSubmitting}
@@ -2776,6 +2213,9 @@ export function OrderImportPage() {
                   onRemove={() => removeItem(index)}
                   onUpdate={(field, value) => updateItem(index, field, value)}
                   clearItemError={(field) => clearItemError(index, field)}
+                  canScanCover={savedImportId !== null && importStatus === "draft"}
+                  scanCoverBusy={lineCoverScanBusyIndex === index}
+                  onScanCoverSelected={(file) => void handleLineCoverScan(index, file)}
                 />
               ))}
 
@@ -2798,15 +2238,13 @@ export function OrderImportPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                  <p className="text-sm font-medium text-slate-400">Shipping + Tax</p>
-                  <p className="mt-3 text-2xl font-semibold text-white">
-                    {formatCurrency(Number(shippingAmount || 0) + Number(taxAmount || 0))}
-                  </p>
+                  <p className="text-sm font-medium text-slate-400">Total Books</p>
+                  <p className="mt-3 text-2xl font-semibold text-white">{totalBooks || "0"}</p>
                 </div>
                 <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                  <p className="text-sm font-medium text-cyan-100">Estimated All-In Total</p>
+                  <p className="text-sm font-medium text-cyan-100">Total Spent</p>
                   <p className="mt-3 text-2xl font-semibold text-white">
-                    {formatCurrency(estimatedAllInTotal)}
+                    {formatCurrency(parsedOrderTotal)}
                   </p>
                 </div>
               </div>

@@ -73,6 +73,7 @@ class AiDraftOrderItem(BaseModel):
     catalog_match_diagnostics: dict[str, Any] | None = None
     catalog_release_source_text: str | None = None
     catalog_resolution_debug: dict[str, Any] | None = None
+    import_line_cover_image_id: int | None = None
     cover_image_url: str | None = None
     cover_thumbnail_url: str | None = None
     cover_image_source: str | None = None
@@ -147,6 +148,8 @@ class ParseOrderResponse(BaseModel):
     source_type: DraftSourceType = "ai_draft"
     shipping_amount: Decimal = Field(default=Decimal("0"), ge=0)
     tax_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    order_total: Decimal | None = Field(default=None, ge=0)
+    total_books: int | None = Field(default=None, ge=0)
     items: list[AiDraftOrderItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)

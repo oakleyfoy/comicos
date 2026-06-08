@@ -1,3 +1,7 @@
+import { useRef } from "react";
+
+import { formatCalendarDateWithYear } from "../../utils/formatCalendarDate";
+
 interface ImportReviewCardItem {
   publisher: string;
   title: string;
@@ -49,7 +53,6 @@ interface LifecycleBadgePresentation {
 
 interface ImportReviewCardProps {
   item: ImportReviewCardItem;
-  index: number;
   isExpanded: boolean;
   canRemove: boolean;
   isSubmitting: boolean;
@@ -60,6 +63,9 @@ interface ImportReviewCardProps {
   onRemove: () => void;
   onUpdate: (field: ImportReviewCardEditableField, value: string) => void;
   clearItemError: (field: keyof ImportReviewCardFieldErrors) => void;
+  canScanCover: boolean;
+  scanCoverBusy: boolean;
+  onScanCoverSelected: (file: File) => void;
 }
 
 const INPUT_CLASS_NAME =
@@ -144,7 +150,6 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
 
 export function ImportReviewCard({
   item,
-  index,
   isExpanded,
   canRemove,
   isSubmitting,
@@ -155,8 +160,14 @@ export function ImportReviewCard({
   onRemove,
   onUpdate,
   clearItemError,
+  canScanCover,
+  scanCoverBusy,
+  onScanCoverSelected,
 }: ImportReviewCardProps) {
   const compactCoverLabel = getCompactCoverLabel(item.coverName);
+  const scanCoverInputRef = useRef<HTMLInputElement>(null);
+  const releaseDateLabel =
+    formatCalendarDateWithYear(item.releaseDate) ?? item.releaseDate.trim();
 
   return (
     <article className={`rounded-2xl border-2 p-4 ${cardSurfaceClassName}`}>
@@ -167,11 +178,17 @@ export function ImportReviewCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-white">{titleIssueLabel(item)}</p>
-              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-                Draft Item {index + 1}
-              </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <p className="truncate text-base font-semibold text-white">{titleIssueLabel(item)}</p>
+                {lifecycleBadge ? (
+                  <span
+                    className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadge.className}`}
+                  >
+                    {lifecycleBadge.label}
+                  </span>
+                ) : null}
+              </div>
             </div>
             {canRemove ? (
               <button
@@ -185,18 +202,11 @@ export function ImportReviewCard({
             ) : null}
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {lifecycleBadge ? (
-              <p
-                className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadge.className}`}
-              >
-                {lifecycleBadge.label}
-              </p>
-            ) : null}
-            {item.releaseDate.trim() ? (
-              <p className="text-sm font-medium text-white">{item.releaseDate.trim()}</p>
-            ) : null}
-          </div>
+          {item.releaseDate.trim() ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-white">{releaseDateLabel}</p>
+            </div>
+          ) : null}
 
           {lifecycleBadge?.detail ? (
             <p className="mt-1.5 text-sm text-slate-100">{lifecycleBadge.detail}</p>
@@ -212,7 +222,7 @@ export function ImportReviewCard({
             {compactCoverLabel ? <span className="truncate">{compactCoverLabel}</span> : null}
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onToggleDetails}
@@ -220,6 +230,32 @@ export function ImportReviewCard({
               aria-expanded={isExpanded}
             >
               {isExpanded ? "Hide Details" : "Show Details"}
+            </button>
+            <input
+              ref={scanCoverInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+              className="hidden"
+              onChange={(event) => {
+                const picked = event.target.files?.[0];
+                event.target.value = "";
+                if (picked) {
+                  onScanCoverSelected(picked);
+                }
+              }}
+            />
+            <button
+              type="button"
+              disabled={!canScanCover || scanCoverBusy || isSubmitting}
+              title={
+                canScanCover
+                  ? "Upload a reference scan for this line only"
+                  : "Save a draft first to attach cover scans"
+              }
+              onClick={() => scanCoverInputRef.current?.click()}
+              className="rounded-xl border border-cyan-400/40 bg-cyan-950/80 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/70 hover:bg-cyan-900/80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {scanCoverBusy ? "Uploading scan…" : "Scan cover"}
             </button>
           </div>
         </div>

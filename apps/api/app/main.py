@@ -923,6 +923,7 @@ from app.services.imports import (
     get_import_for_user,
     list_imports_for_user,
     update_import_for_user,
+    attach_import_line_cover_image,
 )
 from app.services.inventory import (
     bulk_update_inventory,
@@ -2749,9 +2750,10 @@ async def upload_import_cover_image(
     settings: Settings = Depends(get_settings),
     file: UploadFile = File(...),
     source_type: Annotated[str, Form()] = "import_image",
+    draft_item_index: Annotated[int | None, Form()] = None,
 ) -> CoverImageRead:
     validated = validated_cover_source_type(source_type)
-    return await persist_cover_upload(
+    cover_read = await persist_cover_upload(
         session,
         settings=settings,
         file=file,
@@ -2760,6 +2762,17 @@ async def upload_import_cover_image(
         source_type=validated,
         current_user=current_user,
     )
+    if draft_item_index is not None:
+        if draft_item_index < 0:
+            raise HTTPException(status_code=422, detail="Invalid import line index.")
+        attach_import_line_cover_image(
+            session,
+            current_user=current_user,
+            draft_import_id=import_id,
+            line_index=draft_item_index,
+            cover_image_id=cover_read.id,
+        )
+    return cover_read
 
 
 @app.post(

@@ -167,6 +167,7 @@ export interface AiDraftOrderItem {
   cover_image_source?: string | null;
   cover_image_source_id?: number | null;
   has_cover_image?: boolean | null;
+  import_line_cover_image_id?: number | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
   expected_ship_date?: string | null;
@@ -211,6 +212,8 @@ export interface AiParseOrderResponse {
   source_type: DraftSourceType;
   shipping_amount: string;
   tax_amount: string;
+  order_total?: string | null;
+  total_books?: number | null;
   items: AiDraftOrderItem[];
   warnings: string[];
   confidence_score: number;
@@ -21805,10 +21808,17 @@ export const apiClient = {
     })();
   },
 
-  uploadImportCoverImage(importId: number, file: File): Promise<CoverImageRead> {
+  uploadImportCoverImage(
+    importId: number,
+    file: File,
+    draftItemIndex?: number,
+  ): Promise<CoverImageRead> {
     const body = new FormData();
     body.append("file", file);
     body.append("source_type", "import_image");
+    if (draftItemIndex !== undefined) {
+      body.append("draft_item_index", String(draftItemIndex));
+    }
     const token = getStoredToken();
     const headers = new Headers();
     if (token) {

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -472,6 +473,47 @@ def update_import_for_user(
     return serialize_import(session, draft_import)
 
 
+def attach_import_line_cover_image(
+    session: Session,
+    *,
+    current_user: User,
+    draft_import_id: int,
+    line_index: int,
+    cover_image_id: int,
+) -> None:
+    draft_import = get_import_for_user_or_404(session, current_user, draft_import_id)
+    if draft_import.status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail="Cover scans can only be linked to line items on draft imports.",
+        )
+
+    cover = session.get(CoverImage, cover_image_id)
+    if cover is None or cover.draft_import_id != draft_import_id:
+        raise HTTPException(status_code=404, detail="Cover image not found for this import.")
+
+    parsed = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
+    if line_index < 0 or line_index >= len(parsed.items):
+        raise HTTPException(status_code=422, detail="Invalid import line index.")
+
+    items = list(parsed.items)
+    items[line_index] = items[line_index].model_copy(
+        update={"import_line_cover_image_id": cover_image_id},
+    )
+    parsed = parsed.model_copy(update={"items": items})
+
+    normalized_payload = normalize_parsed_order_response(
+        parsed,
+        session=session,
+        owner_user_id=current_user.id,
+        raw_text=draft_import.raw_text,
+    )
+    draft_import.parsed_payload_json = normalized_payload.model_dump(mode="json")
+    draft_import.updated_at = utc_now()
+    session.add(draft_import)
+    session.commit()
+
+
 def discard_import_for_user(
     session: Session,
     current_user: User,
@@ -555,14 +597,25 @@ def build_order_create_from_import(session: Session, draft_import: DraftImport) 
             detail="Draft import is incomplete: " + "; ".join(missing_fields),
         )
 
+    line_subtotal = sum(
+        Decimal(item.quantity or 0) * (item.raw_item_price or Decimal("0"))
+        for item in parsed_payload.items
+    )
+    if parsed_payload.order_total is not None:
+        shipping_amount = Decimal("0")
+        tax_amount = max(Decimal("0"), parsed_payload.order_total - line_subtotal)
+    else:
+        shipping_amount = parsed_payload.shipping_amount
+        tax_amount = parsed_payload.tax_amount
+
     try:
         return OrderCreate.model_validate(
             {
                 "retailer": parsed_payload.retailer,
                 "order_date": parsed_payload.order_date,
                 "source_type": parsed_payload.source_type,
-                "shipping_amount": parsed_payload.shipping_amount,
-                "tax_amount": parsed_payload.tax_amount,
+                "shipping_amount": shipping_amount,
+                "tax_amount": tax_amount,
                 "items": normalized_items,
             }
         )
