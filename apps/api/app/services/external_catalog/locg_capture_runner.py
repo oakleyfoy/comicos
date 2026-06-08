@@ -49,6 +49,8 @@ def resolve_capture_exit_code(
     detail_pages_succeeded: int,
     max_issues: int | None,
     hard_failure: bool = False,
+    intentional_parent_skips: int = 0,
+    resume_parent_skips: int = 0,
 ) -> int:
     """Exit 0 only for successful parent capture; 1 for real capture failures."""
     if hard_failure:
@@ -60,6 +62,8 @@ def resolve_capture_exit_code(
         list_issues_found=list_issues_found,
         detail_pages_succeeded=detail_pages_succeeded,
         max_issues=max_issues,
+        intentional_parent_skips=intentional_parent_skips,
+        resume_parent_skips=resume_parent_skips,
     )
     if run_status in {SYNC_COMPLETED, SYNC_COMPLETE_WITH_WARNINGS, "DRY_RUN"}:
         return 0 if parent_done or run_status == "DRY_RUN" else 1

@@ -50,6 +50,8 @@ def resolve_browser_capture_status(
         list_issues_found=browser.list_issues_found,
         detail_pages_succeeded=browser.detail_pages_succeeded,
         max_issues=max_issues,
+        intentional_parent_skips=browser.intentional_parent_skips,
+        resume_parent_skips=browser.resume_parent_skips,
     )
     if capture_exception is not None and not parent_done:
         return SYNC_FAILED
@@ -57,7 +59,12 @@ def resolve_browser_capture_status(
         return SYNC_COMPLETE_WITH_WARNINGS
     if process_counters.errors_count or browser.errors_count:
         return SYNC_PARTIAL
-    if browser.detail_pages_succeeded < browser.list_issues_found and max_issues is None:
+    accounted = (
+        browser.detail_pages_succeeded
+        + browser.intentional_parent_skips
+        + browser.resume_parent_skips
+    )
+    if accounted < browser.list_issues_found and max_issues is None:
         return SYNC_PARTIAL
     return SYNC_COMPLETED
 
@@ -133,6 +140,8 @@ def finalize_browser_capture_sync_run(
         list_issues_found=browser.list_issues_found,
         detail_pages_succeeded=browser.detail_pages_succeeded,
         max_issues=max_issues,
+        intentional_parent_skips=browser.intentional_parent_skips,
+        resume_parent_skips=browser.resume_parent_skips,
     )
     if capture_exception is not None and not parent_done:
         fail_sync_run_preserving_counters(

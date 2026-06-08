@@ -94,6 +94,9 @@ class BrowserCaptureCounters:
     variant_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
     detail_pages_attempted: int = 0
     detail_pages_succeeded: int = 0
+    intentional_parent_skips: int = 0
+    resume_parent_skips: int = 0
+    skipped_blocked_details: list[dict[str, str]] = field(default_factory=list)
     issues_created: int = 0
     issues_updated: int = 0
     variants_created: int = 0
@@ -114,6 +117,7 @@ def run_playwright_capture(
     save_raw_dir: Path | None,
     process_issue: Callable[[LocgListIssueStub, str, IssueCaptureTiming], None],
     should_skip_url: Callable[[str], bool] | None = None,
+    user_skip_matcher: Callable[[str, str], bool] | None = None,
     persist_list_variants: Callable[..., Any] | None = None,
     timing_audit: CaptureTimingAudit | None = None,
     adaptive_delay: Any | None = None,
@@ -240,6 +244,22 @@ def run_playwright_capture(
                     first_issue = False
                 if should_skip_url and should_skip_url(detail_url):
                     issue_timing.skipped = True
+                    counters.resume_parent_skips += 1
+                    audit.issue_timings.append(issue_timing)
+                    continue
+                if user_skip_matcher and user_skip_matcher(detail_url, stub.title):
+                    from app.services.external_catalog.locg_browser_user_skip import (
+                        record_skipped_blocked_detail,
+                    )
+
+                    issue_timing.skipped = True
+                    record_skipped_blocked_detail(
+                        counters, url=detail_url, title=stub.title
+                    )
+                    print(
+                        f"skipped_blocked_detail: {detail_url} ({stub.title})",
+                        flush=True,
+                    )
                     audit.issue_timings.append(issue_timing)
                     continue
                 counters.detail_pages_attempted += 1
@@ -397,7 +417,25 @@ def run_playwright_capture(
                             cloudflare_wait_count=security_stats.cloudflare_wait_count,
                             force=True,
                         )
-                except LocgBrowserBlockedError:
+                except LocgBrowserBlockedError as blocked_exc:
+                    if user_skip_matcher and user_skip_matcher(detail_url, stub.title):
+                        from app.services.external_catalog.locg_browser_user_skip import (
+                            record_skipped_blocked_detail,
+                        )
+
+                        issue_timing.skipped = True
+                        record_skipped_blocked_detail(
+                            counters,
+                            url=detail_url,
+                            title=stub.title,
+                            reason=f"skipped_blocked_detail: {blocked_exc}",
+                        )
+                        print(
+                            f"skipped_blocked_detail: {detail_url} ({stub.title})",
+                            flush=True,
+                        )
+                        audit.issue_timings.append(issue_timing)
+                        continue
                     raise
                 except LocgSecurityVerificationTimeout as exc:
                     raise LocgBrowserBlockedError(str(exc)) from exc
@@ -460,6 +498,9 @@ def run_playwright_capture(
                 cloudflare_wait_count=audit.cloudflare_wait_count,
                 cloudflare_total_wait_seconds=audit.cloudflare_total_wait_seconds,
                 variant_skipped_reason_counts=counters.variant_skipped_reason_counts,
+                intentional_parent_skips=counters.intentional_parent_skips,
+                resume_parent_skips=counters.resume_parent_skips,
+                skipped_blocked_details=counters.skipped_blocked_details,
             )
             live_state = build_live_page_state(
                 page_date=page_date,
@@ -491,7 +532,10 @@ def run_playwright_capture(
             )
             parent_loop_complete = (
                 counters.list_issues_found > 0
-                and counters.detail_pages_succeeded >= counters.list_issues_found
+                and counters.detail_pages_succeeded
+                + counters.intentional_parent_skips
+                + counters.resume_parent_skips
+                >= counters.list_issues_found
             )
             if not dry_run and not cert.passed:
                 reason = "LoCG capture certification failed: " + "; ".join(cert.failure_reasons)

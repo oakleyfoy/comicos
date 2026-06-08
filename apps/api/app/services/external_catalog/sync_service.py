@@ -234,11 +234,14 @@ def parent_browser_capture_complete(
     list_issues_found: int,
     detail_pages_succeeded: int,
     max_issues: int | None,
+    intentional_parent_skips: int = 0,
+    resume_parent_skips: int = 0,
 ) -> bool:
     if not list_page_loaded or list_issues_found <= 0:
         return False
     expected = list_issues_found if max_issues is None else min(list_issues_found, max_issues)
-    return detail_pages_succeeded >= expected
+    accounted = detail_pages_succeeded + max(0, intentional_parent_skips) + max(0, resume_parent_skips)
+    return accounted >= expected
 
 
 def _find_issue(

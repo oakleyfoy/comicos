@@ -176,9 +176,15 @@ def _finalize_exit_code(
     *,
     max_issues: int | None,
     hard_failure: bool,
+    browser_counters=None,
 ) -> int:
     from app.services.external_catalog.locg_capture_runner import resolve_capture_exit_code
 
+    intentional = 0
+    resume_skips = 0
+    if browser_counters is not None:
+        intentional = int(getattr(browser_counters, "intentional_parent_skips", 0) or 0)
+        resume_skips = int(getattr(browser_counters, "resume_parent_skips", 0) or 0)
     return resolve_capture_exit_code(
         run_status=summary.status,
         list_page_loaded=summary.list_page_loaded,
@@ -186,6 +192,8 @@ def _finalize_exit_code(
         detail_pages_succeeded=summary.detail_pages_succeeded,
         max_issues=max_issues,
         hard_failure=hard_failure,
+        intentional_parent_skips=intentional,
+        resume_parent_skips=resume_skips,
     )
 
 
@@ -256,6 +264,20 @@ def main() -> int:
     )
     parser.add_argument("--save-raw", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--skip-detail-url",
+        action="append",
+        default=[],
+        metavar="URL",
+        help="Skip this parent detail URL (repeatable). Logs skipped_blocked_detail and continues.",
+    )
+    parser.add_argument(
+        "--skip-title",
+        action="append",
+        default=[],
+        metavar="TITLE",
+        help="Skip parents whose list title contains this text (case-insensitive, repeatable).",
+    )
     parser.add_argument("--refresh-existing", action="store_true")
     parser.add_argument(
         "--skip-crosswalk",
@@ -298,7 +320,12 @@ def main() -> int:
         )
         _print_required_final_summary(summary)
         _safe_close_session(session)
-        return _finalize_exit_code(summary, max_issues=args.max_issues, hard_failure=hard_failure)
+        return _finalize_exit_code(
+            summary,
+            max_issues=args.max_issues,
+            hard_failure=hard_failure,
+            browser_counters=browser_counters,
+        )
 
     if args.production and not os.environ.get("DATABASE_URL", "").strip():
         summary.failures.append("DATABASE_URL required for --production")
@@ -418,6 +445,20 @@ def main() -> int:
             return False
         return should_skip_browser_resume(
             session, source_url=url, refresh_existing=args.refresh_existing
+        )
+
+    from app.services.external_catalog.locg_browser_user_skip import UserSkipMatcher
+
+    user_skip = UserSkipMatcher.from_cli(
+        urls=list(args.skip_detail_url or []),
+        titles=list(args.skip_title or []),
+    )
+    user_skip_matcher = user_skip.matches if (user_skip.urls or user_skip.title_needles) else None
+    if user_skip_matcher is not None:
+        print(
+            "User detail skips enabled: "
+            f"urls={len(user_skip.urls)} title_filters={len(user_skip.title_needles)}",
+            flush=True,
         )
 
     timing_audit = CaptureTimingAudit()
@@ -587,6 +628,7 @@ def main() -> int:
             save_raw_dir=raw_dir,
             process_issue=process_issue,
             should_skip_url=should_skip if args.resume else None,
+            user_skip_matcher=user_skip_matcher,
             persist_list_variants=persist_list_variants,
             timing_audit=timing_audit,
             adaptive_delay=adaptive_controller,

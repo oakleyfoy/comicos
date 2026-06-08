@@ -77,6 +77,8 @@ def evaluate_proof_run_completeness(
     detail_pages_succeeded: int,
     detail_pages_attempted: int,
     variant_skipped_reason_counts: dict[str, int] | None,
+    intentional_parent_skips: int = 0,
+    resume_parent_skips: int = 0,
 ) -> tuple[str | None, dict[str, Any], list[str]]:
     """
     Proof-run pass/fail from discovery + persistence signals (not a fixed 400-row floor).
@@ -114,9 +116,10 @@ def evaluate_proof_run_completeness(
         and int(skip.get("skipped_missing_parent") or 0) == 0
         and int(skip.get("variant_upsert_failure") or 0) == 0
     )
+    skip_total = max(0, intentional_parent_skips) + max(0, resume_parent_skips)
     parents_detail_ok = (
-        detail_pages_attempted == parents
-        and detail_pages_succeeded == parents
+        detail_pages_succeeded + skip_total == parents
+        and detail_pages_attempted + skip_total == parents
         and detail_pages_succeeded == detail_pages_attempted
     )
     parent_queue_coverage_passed = parents_detail_ok
@@ -143,6 +146,8 @@ def evaluate_proof_run_completeness(
         "legitimately_lighter_release_week": lighter_week,
         "variants_fully_persisted": variants_ok,
         "parent_details_complete": parents_detail_ok,
+        "intentional_parent_skips": intentional_parent_skips,
+        "resume_parent_skips": resume_parent_skips,
         "list_variants_found": list_variants_found,
         "list_variants_persisted": list_variants_persisted,
     }
@@ -352,6 +357,9 @@ def certify_locg_capture(
     cloudflare_wait_count: int | None = None,
     cloudflare_total_wait_seconds: float | None = None,
     proof_run: bool = True,
+    intentional_parent_skips: int = 0,
+    resume_parent_skips: int = 0,
+    skipped_blocked_details: list[dict[str, str]] | None = None,
 ) -> LocgCaptureCertificationResult:
     result = LocgCaptureCertificationResult(page_date=page_date.isoformat())
     iso = page_date.isoformat()
@@ -449,6 +457,8 @@ def certify_locg_capture(
             detail_pages_succeeded=detail_pages_succeeded,
             detail_pages_attempted=detail_pages_attempted,
             variant_skipped_reason_counts=skip_counts,
+            intentional_parent_skips=intentional_parent_skips,
+            resume_parent_skips=resume_parent_skips,
         )
         result.completeness["proof_run_assessment"] = proof_assessment
         result.completeness["proof_run_typical_week_li_rows"] = PROOF_RUN_TYPICAL_WEEK_LI_ROWS
@@ -460,6 +470,9 @@ def certify_locg_capture(
         "dry_run": dry_run,
         "detail_pages_attempted": detail_pages_attempted,
         "detail_pages_succeeded": detail_pages_succeeded,
+        "intentional_parent_skips": intentional_parent_skips,
+        "resume_parent_skips": resume_parent_skips,
+        "skipped_blocked_details": list(skipped_blocked_details or []),
         "list_variants_found": list_variants_found,
         "list_variants_persisted": list_variants_persisted,
         "variant_persist_skipped_reason": variant_persist_skipped_reason,
