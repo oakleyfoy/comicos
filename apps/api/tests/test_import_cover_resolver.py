@@ -188,6 +188,56 @@ def test_resolve_import_cover_picks_cover_letter_over_issue_fallback(session: Se
     assert result_b.cover_image_url == "https://example.com/cover-b.jpg"
 
 
+def test_resolve_import_cover_rejects_stale_external_issue_for_wrong_issue_number(
+    session: Session,
+) -> None:
+    user = User(email="cover-stale@example.com", password_hash="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    assert user.id is not None
+
+    issue_17 = ExternalCatalogIssue(
+        source_name="locg",
+        title="Absolute Batman #17",
+        publisher="DC",
+        series_name="Absolute Batman",
+        issue_number="17",
+        release_date=date(2026, 6, 17),
+        cover_image_url="https://example.com/batman-17.jpg",
+    )
+    issue_18 = ExternalCatalogIssue(
+        source_name="locg",
+        title="Absolute Batman #18",
+        publisher="DC",
+        series_name="Absolute Batman",
+        issue_number="18",
+        release_date=date(2026, 7, 15),
+        cover_image_url="https://example.com/batman-18.jpg",
+    )
+    session.add(issue_17)
+    session.add(issue_18)
+    session.commit()
+    session.refresh(issue_17)
+    session.refresh(issue_18)
+    assert issue_17.id is not None and issue_18.id is not None
+
+    stale = resolve_import_cover(
+        session,
+        {
+            "publisher": "DC",
+            "title": "Absolute Batman",
+            "issue_number": "18",
+            "cover_name": "Cover A",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue_17.id,
+        },
+        owner_user_id=user.id,
+    )
+    assert stale.cover_image_url == "https://example.com/batman-18.jpg"
+    assert stale.cover_image_source == "external_catalog_issue"
+
+
 def test_resolve_import_cover_uses_draft_cover_fallback(session: Session) -> None:
     cover = CoverImage(
         draft_import_id=42,

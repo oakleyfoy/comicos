@@ -66,7 +66,9 @@ const INPUT_CLASS_NAME =
   "w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400/70";
 
 function coverImageKey(item: ImportReviewCardItem): string {
-  return [item.coverThumbnailUrl, item.coverImageUrl, item.coverName].filter(Boolean).join("|");
+  return [item.issueNumber, item.coverThumbnailUrl, item.coverImageUrl, item.coverName]
+    .filter(Boolean)
+    .join("|");
 }
 
 function formatCompactPrice(value: string): string {

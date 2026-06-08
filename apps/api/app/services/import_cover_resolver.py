@@ -13,7 +13,9 @@ from app.models.external_catalog import ExternalCatalogIssue, ExternalCatalogMat
 from app.services.cover_images import cover_derivative_fetch_path, cover_fetch_path
 from app.services.import_catalog_resolution_service import (
     ImportCatalogResolutionResult,
+    _issue_number_key,
     normalize_import_title,
+    resolve_import_catalog_match,
 )
 
 
@@ -26,7 +28,25 @@ class ImportCoverResolutionResultPayload:
     has_cover_image: bool
 
 
-_COVER_LETTER_PATTERN = re.compile(r"\bcover\s+([a-z0-9]+)\b", re.IGNORECASE)
+_COVER_LETTER_PATTERN = re.compile(
+    r"\bcover\s+([a-z]{1,2}|[0-9]{1,2})(?:\s|$|[^a-z])",
+    re.IGNORECASE,
+)
+
+
+def _issue_numbers_compatible(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return True
+    return _issue_number_key(left) == _issue_number_key(right)
+
+
+def _external_issue_matches_item(issue: ExternalCatalogIssue | None, item: dict[str, Any]) -> bool:
+    if issue is None:
+        return False
+    line_issue = item.get("issue_number") or item.get("canonical_issue_number")
+    if not line_issue:
+        return True
+    return _issue_numbers_compatible(issue.issue_number, str(line_issue))
 
 
 def _cover_letter_key(value: str | None) -> str | None:
@@ -88,6 +108,39 @@ def _pick_best_catalog_variant(
     return best_variant
 
 
+def _external_issue_id_from_catalog_resolution(
+    session: Session,
+    *,
+    owner_user_id: int,
+    item: dict[str, Any],
+    catalog_resolution: ImportCatalogResolutionResult,
+) -> int | None:
+    if not catalog_resolution.matched:
+        return None
+    if catalog_resolution.source == "ExternalCatalogIssue" and catalog_resolution.source_id is not None:
+        row = session.get(ExternalCatalogIssue, catalog_resolution.source_id)
+        if _external_issue_matches_item(row, item):
+            return catalog_resolution.source_id
+        return None
+    if catalog_resolution.source == "ReleaseIssue" and catalog_resolution.source_id is not None:
+        match = session.exec(
+            select(ExternalCatalogMatch)
+            .where(ExternalCatalogMatch.owner_user_id == owner_user_id)
+            .where(ExternalCatalogMatch.release_issue_id == catalog_resolution.source_id)
+            .order_by(
+                ExternalCatalogMatch.match_confidence.desc(),
+                ExternalCatalogMatch.updated_at.desc(),
+                ExternalCatalogMatch.id.desc(),
+            )
+        ).first()
+        if match is None:
+            return None
+        row = session.get(ExternalCatalogIssue, match.external_issue_id)
+        if _external_issue_matches_item(row, item):
+            return match.external_issue_id
+    return None
+
+
 def _resolve_external_issue_id(
     session: Session | None,
     *,
@@ -97,30 +150,28 @@ def _resolve_external_issue_id(
 ) -> int | None:
     if session is None:
         return None
-    if catalog_resolution and catalog_resolution.matched:
-        if catalog_resolution.source == "ExternalCatalogIssue":
-            return catalog_resolution.source_id
-        if (
-            catalog_resolution.source == "ReleaseIssue"
-            and catalog_resolution.source_id is not None
-            and owner_user_id is not None
-        ):
-            match = session.exec(
-                select(ExternalCatalogMatch)
-                .where(ExternalCatalogMatch.owner_user_id == owner_user_id)
-                .where(ExternalCatalogMatch.release_issue_id == catalog_resolution.source_id)
-                .order_by(
-                    ExternalCatalogMatch.match_confidence.desc(),
-                    ExternalCatalogMatch.updated_at.desc(),
-                    ExternalCatalogMatch.id.desc(),
-                )
-            ).first()
-            return match.external_issue_id if match is not None else None
+
     source = item.get("catalog_match_source")
     source_id = item.get("catalog_match_source_id")
     if source == "ExternalCatalogIssue" and source_id is not None:
-        return int(source_id)
-    if source == "ReleaseIssue" and source_id is not None and owner_user_id is not None:
+        row = session.get(ExternalCatalogIssue, int(source_id))
+        if _external_issue_matches_item(row, item):
+            return int(source_id)
+
+    if owner_user_id is None:
+        return None
+
+    if catalog_resolution and catalog_resolution.matched:
+        ext_id = _external_issue_id_from_catalog_resolution(
+            session,
+            owner_user_id=owner_user_id,
+            item=item,
+            catalog_resolution=catalog_resolution,
+        )
+        if ext_id is not None:
+            return ext_id
+
+    if source == "ReleaseIssue" and source_id is not None:
         match = session.exec(
             select(ExternalCatalogMatch)
             .where(ExternalCatalogMatch.owner_user_id == owner_user_id)
@@ -131,8 +182,18 @@ def _resolve_external_issue_id(
                 ExternalCatalogMatch.id.desc(),
             )
         ).first()
-        return match.external_issue_id if match is not None else None
-    return None
+        if match is not None:
+            row = session.get(ExternalCatalogIssue, match.external_issue_id)
+            if _external_issue_matches_item(row, item):
+                return match.external_issue_id
+
+    fresh = resolve_import_catalog_match(session, owner_user_id=owner_user_id, item=item)
+    return _external_issue_id_from_catalog_resolution(
+        session,
+        owner_user_id=owner_user_id,
+        item=item,
+        catalog_resolution=fresh,
+    )
 
 
 def _resolve_external_catalog_cover(
@@ -156,6 +217,8 @@ def _resolve_external_catalog_cover(
                 cover_image_source_id=best_variant.id,
                 has_cover_image=True,
             )
+        if (item.get("cover_name") or "").strip():
+            return None
 
     issue = session.get(ExternalCatalogIssue, external_issue_id)
     if issue is None:
@@ -217,6 +280,7 @@ def resolve_import_cover(
     owner_user_id: int | None = None,
     draft_import_id: int | None = None,
     catalog_resolution: ImportCatalogResolutionResult | None = None,
+    allow_draft_cover_fallback: bool = True,
 ) -> ImportCoverResolutionResultPayload:
     if session is not None:
         external_issue_id = _resolve_external_issue_id(
@@ -234,7 +298,11 @@ def resolve_import_cover(
             if external_cover is not None:
                 return external_cover
 
-        draft_cover = _resolve_draft_cover(session, draft_import_id=draft_import_id)
+        draft_cover = (
+            _resolve_draft_cover(session, draft_import_id=draft_import_id)
+            if allow_draft_cover_fallback
+            else None
+        )
         if draft_cover is not None:
             return draft_cover
 
@@ -260,6 +328,7 @@ def apply_import_cover_to_parse_order(
         parsed = ParseOrderResponse.model_validate(parsed)
 
     enriched_items = []
+    allow_draft_cover = len(parsed.items) <= 1
     for item in parsed.items:
         item_dict = item.model_dump(mode="json")
         cover = resolve_import_cover(
@@ -267,6 +336,7 @@ def apply_import_cover_to_parse_order(
             item_dict,
             owner_user_id=owner_user_id,
             draft_import_id=draft_import_id,
+            allow_draft_cover_fallback=allow_draft_cover,
         )
         enriched_items.append(
             item.model_copy(
