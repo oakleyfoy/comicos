@@ -3,9 +3,15 @@ import type { P85CollectorHomeRead } from "../api/client";
 export const COLLECTOR_HOME_TITLE = "Collector Home";
 
 export const COLLECTOR_HOME_MONITORING_MESSAGE =
-  "ComicOS is actively monitoring your collection. New buy, sell, grading, and release opportunities will appear here automatically.";
+  "Ready for your collection. ComicOS will surface buy, sell, grading, and release opportunities here as you import comics and activity grows.";
 
-export const STRIP_NOT_AVAILABLE = "Not Available";
+export const COLLECTOR_HOME_READY_TAGLINE =
+  "Ready for your collection — import comics to unlock portfolio value and daily opportunities.";
+
+export const COLLECTOR_HOME_ADVISOR_SUMMARY =
+  "Collector Advisor turns your collection signals into a prioritized daily plan for buys, sells, grading, and releases.";
+
+export const STRIP_COLLECTION_VALUE_EMPTY = "Import comics to calculate";
 export const STRIP_ZERO = "0";
 export const STRIP_LOADING = "Loading";
 
@@ -125,20 +131,16 @@ export function sectionIndicatorDisplay(
 
   switch (status) {
     case "HAS_ITEMS":
-      return {
-        showCheck: true,
-        tone: "has",
-        text:
-          count !== null && count !== undefined && count > 0
-            ? `${count} Available`
-            : "Available",
-      };
+      if (count !== null && count !== undefined && count > 0) {
+        return { showCheck: true, tone: "has", text: `${count} Available` };
+      }
+      return { showCheck: false, tone: "empty", text: "No Alerts" };
     case "EMPTY":
       return { showCheck: false, tone: "empty", text: "No Alerts" };
     case "STALE":
-      return { showCheck: false, tone: "stale", text: "Available" };
+      return { showCheck: false, tone: "empty", text: "No Alerts" };
     case "ERROR":
-      return { showCheck: false, tone: "error", text: "No Alerts" };
+      return { showCheck: false, tone: "empty", text: "No Alerts" };
     case "UNKNOWN":
     default:
       if (STATIC_SECTION_BADGE[staticKey]) {
@@ -148,7 +150,7 @@ export function sectionIndicatorDisplay(
           text: STATIC_SECTION_BADGE[staticKey],
         };
       }
-      return { showCheck: false, tone: "unknown", text: "Available" };
+      return { showCheck: false, tone: "empty", text: "No Alerts" };
   }
 }
 
@@ -194,7 +196,7 @@ export function buildCollectorHomeHeaderSummary(home: P85CollectorHomeRead): str
   if (parts.length > 0) {
     return parts.join(" · ");
   }
-  return "Your daily comic collecting launch pad.";
+  return COLLECTOR_HOME_READY_TAGLINE;
 }
 
 export type DashboardStripMetric = {
@@ -205,16 +207,23 @@ export type DashboardStripMetric = {
 const DASHBOARD_STRIP_LABELS = [
   "Collection Value",
   "Books Owned",
-  "Active Listings",
-  "Open Alerts",
+  "Open Opportunities",
+  "Potential Profit",
 ] as const;
 
-function countOpenAlerts(sections: P85CollectorHomeRead["sections"]): { value: string; known: boolean } {
+const OPPORTUNITY_STRIP_KEYS = new Set([
+  "buy_alerts",
+  "sell_alerts",
+  "grade_alerts",
+  "foc_alerts",
+  "future_pull_list",
+]);
+
+function countOpenOpportunities(sections: P85CollectorHomeRead["sections"]): number {
   const collapsed = collapseBuySectionsForSummary(sections);
   let sum = 0;
-  let anyKnown = false;
   for (const sec of collapsed) {
-    if (sec.key === "discovery_alerts" || sec.key === "listing_management") {
+    if (!OPPORTUNITY_STRIP_KEYS.has(sec.key)) {
       continue;
     }
     if (sec.indicator_status === "ERROR") {
@@ -223,10 +232,24 @@ function countOpenAlerts(sections: P85CollectorHomeRead["sections"]): { value: s
     if (sec.count === null || sec.count === undefined) {
       continue;
     }
-    anyKnown = true;
     sum += Math.max(0, Number(sec.count) || 0);
   }
-  return { value: anyKnown ? String(sum) : STRIP_NOT_AVAILABLE, known: anyKnown };
+  return sum;
+}
+
+function formatPotentialProfit(pm: Record<string, unknown>, pmStatus: string): string {
+  const gainRaw = pm.unrealized_gain ?? pm.net_profit ?? pm.total_unrealized_gain;
+  if (pmStatus === "OK" && gainRaw !== null && gainRaw !== undefined && gainRaw !== "") {
+    const gain = Number(gainRaw);
+    if (!Number.isNaN(gain)) {
+      const sign = gain >= 0 ? "" : "-";
+      return `${sign}$${Math.round(Math.abs(gain)).toLocaleString()}`;
+    }
+  }
+  if (pmStatus === "OK") {
+    return "$0";
+  }
+  return STRIP_ZERO;
 }
 
 export function buildDashboardStripLoading(): DashboardStripMetric[] {
@@ -240,40 +263,30 @@ export function buildDashboardStrip(home: P85CollectorHomeRead): DashboardStripM
   const valueRaw = pm.current_value;
   const value =
     valueRaw !== null && valueRaw !== undefined && valueRaw !== "" ? Number(valueRaw) : null;
-  let collectionValue = STRIP_NOT_AVAILABLE;
-  if (pmStatus === "OK" && value !== null && !Number.isNaN(value)) {
+  let collectionValue = STRIP_COLLECTION_VALUE_EMPTY;
+  if (pmStatus === "OK" && value !== null && !Number.isNaN(value) && value > 0) {
     collectionValue = `$${Math.round(value).toLocaleString()}`;
+  } else if (pmStatus === "OK" && value !== null && !Number.isNaN(value) && value === 0) {
+    collectionValue = "$0";
   }
 
   const booksRaw = pm.books_owned ?? pm.book_count;
-  let booksOwned = STRIP_NOT_AVAILABLE;
-  if (pmStatus === "OK") {
-    if (booksRaw !== null && booksRaw !== undefined && booksRaw !== "") {
-      const books = Number(booksRaw);
-      if (!Number.isNaN(books)) {
-        booksOwned = String(Math.round(books));
-      }
-    } else {
-      booksOwned = STRIP_ZERO;
+  let booksOwned = STRIP_ZERO;
+  if (pmStatus === "OK" && booksRaw !== null && booksRaw !== undefined && booksRaw !== "") {
+    const books = Number(booksRaw);
+    if (!Number.isNaN(books)) {
+      booksOwned = String(Math.round(books));
     }
   }
 
-  const listingSection = home.sections.find((s) => s.key === "listing_management");
-  const listingMeta = listingSection?.items?.[0] as { active_listings?: number } | undefined;
-  let activeListings = STRIP_NOT_AVAILABLE;
-  if (typeof listingMeta?.active_listings === "number") {
-    activeListings = String(listingMeta.active_listings);
-  } else if (listingSection && listingSection.status !== "ERROR") {
-    activeListings = STRIP_ZERO;
-  }
-
-  const openAlerts = countOpenAlerts(home.sections);
+  const openOpportunities = String(countOpenOpportunities(home.sections));
+  const potentialProfit = formatPotentialProfit(pm, pmStatus);
 
   return [
     { label: DASHBOARD_STRIP_LABELS[0], value: collectionValue },
     { label: DASHBOARD_STRIP_LABELS[1], value: booksOwned },
-    { label: DASHBOARD_STRIP_LABELS[2], value: activeListings },
-    { label: DASHBOARD_STRIP_LABELS[3], value: openAlerts.value },
+    { label: DASHBOARD_STRIP_LABELS[2], value: openOpportunities },
+    { label: DASHBOARD_STRIP_LABELS[3], value: potentialProfit },
   ];
 }
 
@@ -560,7 +573,7 @@ function buildPortfolioHomeSection(): CollectorHomeDisplaySection {
     key: "portfolio",
     title: "Portfolio",
     items: [],
-    body: "Collection value, gains, losses, and top books.",
+    body: "Track collection value, gains, and top books as you import.",
     actionLabel: "Open Portfolio",
     actionTo: "/dashboard",
     showItems: false,

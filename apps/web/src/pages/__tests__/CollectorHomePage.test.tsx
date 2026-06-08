@@ -113,8 +113,8 @@ describe("CollectorHomePage", () => {
       screen.getByText("Review buy recommendations and marketplace opportunities."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("collector-home-dashboard-strip")).toBeInTheDocument();
-    expect(screen.getAllByText("Not Available").length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText("No alerts currently require attention.")).not.toBeInTheDocument();
+    expect(screen.getByText("Import comics to calculate")).toBeInTheDocument();
+    expect(screen.queryByText("Not Available")).not.toBeInTheDocument();
   });
 
   it("shows renamed collector-facing cards and priority order", async () => {
@@ -245,9 +245,7 @@ describe("CollectorHomePage", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("collector-home-monitoring-message")).toHaveTextContent(
-        "ComicOS is actively monitoring your collection",
-      );
+      expect(screen.getByTestId("collector-home-monitoring-message")).toHaveTextContent("Ready for your collection");
     });
   });
 
@@ -278,7 +276,7 @@ describe("CollectorHomePage", () => {
     expect(within(buySection!).getByRole("link", { name: "Open Buy Opportunities" })).toBeInTheDocument();
   });
 
-  it("shows advisor placeholder copy when plan not ready", async () => {
+  it("shows advisor value proposition copy", async () => {
     vi.spyOn(apiClient, "getCollectorHome").mockResolvedValue(baseHome({ advisor_plan_ready: false }));
     render(
       <MemoryRouter>
@@ -288,10 +286,8 @@ describe("CollectorHomePage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("collector-home-advisor-summary")).toBeInTheDocument();
     });
-    expect(
-      screen.getByText(/Your personalized daily action plan will appear here once advisor data has been generated/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Advisor plan not generated yet.")).not.toBeInTheDocument();
+    expect(screen.getByText(/prioritized daily plan for buys, sells, grading, and releases/i)).toBeInTheDocument();
+    expect(screen.queryByText(/once advisor data has been generated/i)).not.toBeInTheDocument();
   });
 
   it("shows Portfolio as first grid card", async () => {

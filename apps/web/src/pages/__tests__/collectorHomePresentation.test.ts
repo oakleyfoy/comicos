@@ -6,12 +6,13 @@ import {
   buildDashboardStrip,
   buildTodaysSummaryResult,
   buildTodaysSummaryLines,
+  COLLECTOR_HOME_READY_TAGLINE,
   homeHasSectionItemsReady,
   prepareCollectorHomeSections,
   sectionIndicatorDisplay,
   sortCollectorHomeSectionsForDisplay,
   SECTION_SKIPPED_LAUNCHER,
-  STRIP_NOT_AVAILABLE,
+  STRIP_COLLECTION_VALUE_EMPTY,
 } from "../collectorHomePresentation";
 
 describe("collectorHomePresentation", () => {
@@ -20,7 +21,7 @@ describe("collectorHomePresentation", () => {
       budget_status: { status: "SKIPPED", state: "UNSET", monthly_budget: null },
       portfolio_movement: { status: "SKIPPED", current_value: 0 },
     } as P85CollectorHomeRead;
-    expect(buildCollectorHomeHeaderSummary(home)).toBe("Your daily comic collecting launch pad.");
+    expect(buildCollectorHomeHeaderSummary(home)).toBe(COLLECTOR_HOME_READY_TAGLINE);
   });
 
   it("merges discovery into buy opportunities and drops discovery card", () => {
@@ -110,7 +111,7 @@ describe("collectorHomePresentation", () => {
     );
     expect(sectionIndicatorDisplay({ indicator_status: "ERROR", count: null } as never).text).toBe("No Alerts");
     expect(sectionIndicatorDisplay({ indicator_status: "UNKNOWN", count: null, key: "buy_alerts" } as never).text).toBe(
-      "Available",
+      "No Alerts",
     );
   });
 
@@ -136,19 +137,10 @@ describe("collectorHomePresentation", () => {
     expect(prepared.map((s) => s.key).indexOf("sell_alerts")).toBeLessThan(prepared.map((s) => s.key).indexOf("buy_alerts"));
   });
 
-  it("builds four-column dashboard strip with Not Available and zero", () => {
+  it("builds four-column dashboard strip for new collectors", () => {
     const metrics = buildDashboardStrip({
       portfolio_movement: { status: "SKIPPED", current_value: 0 },
       sections: [
-        {
-          key: "listing_management",
-          title: "Listings",
-          items: [{ active_listings: 0 }],
-          empty_hint: "",
-          count: 0,
-          status: "SKIPPED",
-          error: "",
-        },
         {
           key: "sell_alerts",
           title: "Sell",
@@ -192,9 +184,21 @@ describe("collectorHomePresentation", () => {
       ],
     } as P85CollectorHomeRead);
     expect(metrics).toHaveLength(4);
-    expect(metrics[0].value).toBe(STRIP_NOT_AVAILABLE);
+    expect(metrics[0].value).toBe(STRIP_COLLECTION_VALUE_EMPTY);
+    expect(metrics[1].value).toBe("0");
+    expect(metrics[2].label).toBe("Open Opportunities");
     expect(metrics[2].value).toBe("0");
+    expect(metrics[3].label).toBe("Potential Profit");
     expect(metrics[3].value).toBe("0");
+  });
+
+  it("formats potential profit from cached portfolio movement", () => {
+    const metrics = buildDashboardStrip({
+      portfolio_movement: { status: "OK", current_value: 500, unrealized_gain: 120 },
+      sections: [],
+    } as P85CollectorHomeRead);
+    expect(metrics[0].value).toBe("$500");
+    expect(metrics[3].value).toBe("$120");
   });
 
   it("detects sections with HAS_ITEMS for optional today hint", () => {

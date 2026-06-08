@@ -9,6 +9,7 @@ import {
   buildDashboardStrip,
   buildDashboardStripLoading,
   buildTodaysSummaryResult,
+  COLLECTOR_HOME_ADVISOR_SUMMARY,
   COLLECTOR_HOME_MONITORING_MESSAGE,
   COLLECTOR_HOME_TITLE,
   indicatorBadgeClassName,
@@ -32,7 +33,7 @@ function DashboardStripGrid({
           className="rounded-lg border border-blue-800/80 bg-white/5 px-3 py-2"
         >
           <p className="text-xs uppercase tracking-wide text-blue-200">{metric.label}</p>
-          <p className="mt-0.5 text-sm font-semibold text-white">{metric.value}</p>
+          <p className="mt-0.5 text-xs font-semibold leading-snug text-white">{metric.value}</p>
         </div>
       ))}
     </div>
@@ -93,7 +94,6 @@ export function CollectorHomePage(): JSX.Element {
   const topActions = home.todays_actions.slice(0, 3);
   const dashboardStrip = buildDashboardStrip(home);
   const advisorUrl = home.advisor_primary_cta_url || "/automation-center";
-  const advisorReady = Boolean(home.advisor_plan_ready);
   const showMonitoringMessage =
     !hasDailyActions && (summary.allCountsUnknown || summary.allCountsZero);
 
@@ -120,9 +120,7 @@ export function CollectorHomePage(): JSX.Element {
                   Collector Advisor
                 </h2>
                 <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-blue-100">
-                  {advisorReady
-                    ? "Your daily action plan is ready when generated."
-                    : "Your personalized daily action plan will appear here once advisor data has been generated."}
+                  {COLLECTOR_HOME_ADVISOR_SUMMARY}
                 </p>
               </div>
               <Link
