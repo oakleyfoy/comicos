@@ -2623,8 +2623,14 @@ def get_import(
     import_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    debug_catalog: Annotated[bool, Query(alias="debug_catalog")] = False,
 ) -> DraftImportRead:
-    return get_import_for_user(session=session, current_user=current_user, import_id=import_id)
+    return get_import_for_user(
+        session=session,
+        current_user=current_user,
+        import_id=import_id,
+        debug_catalog=debug_catalog,
+    )
 
 
 @app.patch("/imports/{import_id}", response_model=DraftImportRead)

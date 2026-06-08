@@ -157,6 +157,11 @@ export interface AiDraftOrderItem {
   lifecycle_sort_bucket?: number | null;
   lifecycle_display_label?: string | null;
   lifecycle_display_detail?: string | null;
+  catalog_match_matched?: boolean | null;
+  catalog_match_possible?: boolean | null;
+  catalog_match_score?: number | null;
+  catalog_release_source_text?: string | null;
+  catalog_resolution_debug?: Record<string, unknown> | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
   expected_ship_date?: string | null;

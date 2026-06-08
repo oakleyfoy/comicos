@@ -53,6 +53,8 @@ interface OrderItemDraft {
   lifecycleDisplayLabel?: string;
   lifecycleDisplayDetail?: string;
   lifecycleSortBucket?: number;
+  catalogReleaseSourceText?: string;
+  catalogMatchPossible?: boolean;
 }
 
 interface ItemFieldErrors {
@@ -280,6 +282,8 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               lifecycleDisplayLabel: item.lifecycle_display_label ?? undefined,
               lifecycleDisplayDetail: item.lifecycle_display_detail ?? undefined,
               lifecycleSortBucket: item.lifecycle_sort_bucket ?? undefined,
+              catalogReleaseSourceText: item.catalog_release_source_text ?? undefined,
+              catalogMatchPossible: item.catalog_match_possible ?? undefined,
             })),
           )
         : [emptyItem()],
@@ -2919,6 +2923,9 @@ export function OrderImportPage() {
                       </p>
                       {lifecycleBadge.detail ? (
                         <p className="text-sm text-slate-300">{lifecycleBadge.detail}</p>
+                      ) : null}
+                      {item.catalogReleaseSourceText ? (
+                        <p className="text-sm text-slate-400">{item.catalogReleaseSourceText}</p>
                       ) : null}
                     </div>
                   ) : null}

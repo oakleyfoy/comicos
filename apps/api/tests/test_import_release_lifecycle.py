@@ -63,8 +63,7 @@ def test_missing_release_date_unknown() -> None:
 
 def test_catalog_release_date_overrides_missing_import_date() -> None:
     best = resolve_best_release_date(
-        release_issue_date=date(2026, 6, 17),
-        external_catalog_date=None,
+        catalog_match_date=date(2026, 6, 17),
         parsed_import_date=None,
         draft_release_date=None,
     )

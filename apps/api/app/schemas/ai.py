@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -61,6 +61,18 @@ class AiDraftOrderItem(BaseModel):
     lifecycle_sort_bucket: int | None = None
     lifecycle_display_label: str | None = None
     lifecycle_display_detail: str | None = None
+    catalog_match_matched: bool | None = None
+    catalog_match_possible: bool | None = None
+    catalog_match_source: Literal["ReleaseIssue", "ExternalCatalogIssue"] | None = None
+    catalog_match_source_id: int | None = None
+    catalog_match_score: int | None = None
+    catalog_match_title: str | None = None
+    catalog_match_publisher: str | None = None
+    catalog_match_issue_number: str | None = None
+    catalog_match_release_date: date | None = None
+    catalog_match_diagnostics: dict[str, Any] | None = None
+    catalog_release_source_text: str | None = None
+    catalog_resolution_debug: dict[str, Any] | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None

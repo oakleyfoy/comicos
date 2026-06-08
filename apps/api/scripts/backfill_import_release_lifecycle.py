@@ -42,7 +42,8 @@ def main() -> None:
     args = parser.parse_args()
 
     engine = get_engine()
-    summary = Counter()
+    summary: Counter[str] = Counter()
+    unmatched_examples: list[str] = []
     with Session(engine) as session:
         user_id = _resolve_user_id(session, args.email)
         stmt = select(DraftImport)
@@ -58,9 +59,28 @@ def main() -> None:
                 session=session,
                 owner_user_id=draft.user_id,
             )
+            score_total = 0
+            score_count = 0
             for item in enriched.items:
                 status = item.release_lifecycle_status or "UNKNOWN"
                 summary[status.lower()] += 1
+                if item.catalog_match_matched:
+                    summary["catalog_matched"] += 1
+                elif item.catalog_match_possible:
+                    summary["possible_match"] += 1
+                else:
+                    summary["catalog_unmatched"] += 1
+                    if len(unmatched_examples) < 5:
+                        unmatched_examples.append(
+                            f"{item.publisher} | {item.title} #{item.issue_number}"
+                        )
+                if item.catalog_match_score is not None:
+                    score_total += item.catalog_match_score
+                    score_count += 1
+
+            if score_count:
+                summary["avg_score_total"] += score_total
+                summary["avg_score_count"] += score_count
 
             if args.dry_run:
                 continue
@@ -72,6 +92,10 @@ def main() -> None:
         if not args.dry_run:
             session.commit()
 
+    avg_score = 0.0
+    if summary["avg_score_count"]:
+        avg_score = summary["avg_score_total"] / summary["avg_score_count"]
+
     print(
         "summary:",
         f"scanned={summary['scanned']}",
@@ -81,8 +105,17 @@ def main() -> None:
         f"overdue={summary['overdue']}",
         f"received={summary['received']}",
         f"unknown={summary['unknown']}",
+        f"catalog_matched={summary['catalog_matched']}",
+        f"catalog_unmatched={summary['catalog_unmatched']}",
+        f"possible_match={summary['possible_match']}",
+        f"avg_score={avg_score:.1f}",
         sep="\n  ",
     )
+    examples = unmatched_examples
+    if examples:
+        print("top_unmatched_examples:")
+        for line in examples:
+            print(f"  - {line}")
 
 
 if __name__ == "__main__":

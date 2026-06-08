@@ -5,10 +5,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any, Literal
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.models.external_catalog import ExternalCatalogIssue
-from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+from app.services.import_catalog_resolution_service import (
+    catalog_match_fields_for_item,
+    imported_release_date_is_placeholder,
+    resolve_import_catalog_match,
+)
 from app.services.order_states import default_release_status
 
 OVERDUE_GRACE_DAYS = 21
@@ -32,91 +35,13 @@ _SORT_BUCKETS: dict[str, int] = {
 }
 
 
-def _norm(text: str | None) -> str:
-    return " ".join((text or "").strip().lower().split())
-
-
-def _issue_number_key(value: str | None) -> str:
-    raw = (value or "").strip().lower()
-    if not raw:
-        return ""
-    return raw.lstrip("#").strip()
-
-
-def lookup_release_issue_date(
-    session: Session,
-    *,
-    owner_user_id: int,
-    publisher: str | None,
-    series_title: str | None,
-    issue_number: str | None,
-) -> date | None:
-    inum = _issue_number_key(issue_number)
-    series_key = _norm(series_title)
-    pub_key = _norm(publisher)
-    if not inum or not series_key:
-        return None
-    rows = session.exec(
-        select(ReleaseIssue, ReleaseSeries)
-        .join(ReleaseSeries, ReleaseIssue.series_id == ReleaseSeries.id)
-        .where(ReleaseIssue.owner_user_id == owner_user_id)
-        .where(ReleaseIssue.issue_number == inum)
-    ).all()
-    best: date | None = None
-    for issue, series in rows:
-        if issue.release_date is None:
-            continue
-        sname = _norm(series.series_name)
-        if series_key not in sname and sname not in series_key:
-            continue
-        if pub_key and _norm(series.publisher) and pub_key not in _norm(series.publisher):
-            continue
-        if best is None or issue.release_date < best:
-            best = issue.release_date
-    return best
-
-
-def lookup_external_catalog_release_date(
-    session: Session,
-    *,
-    publisher: str | None,
-    series_title: str | None,
-    issue_number: str | None,
-) -> date | None:
-    inum = _issue_number_key(issue_number)
-    series_key = _norm(series_title)
-    pub_key = _norm(publisher)
-    if not inum or not series_key:
-        return None
-    candidates = session.exec(
-        select(ExternalCatalogIssue)
-        .where(ExternalCatalogIssue.issue_number == inum)
-        .where(ExternalCatalogIssue.release_date.is_not(None))  # type: ignore[attr-defined]
-        .limit(200)
-    ).all()
-    best: date | None = None
-    for row in candidates:
-        if row.release_date is None:
-            continue
-        sname = _norm(row.series_name)
-        title_key = _norm(row.title)
-        if series_key not in sname and series_key not in title_key and sname not in series_key:
-            continue
-        if pub_key and _norm(row.publisher) and pub_key not in _norm(row.publisher):
-            continue
-        if best is None or row.release_date < best:
-            best = row.release_date
-    return best
-
-
 def resolve_best_release_date(
     *,
-    release_issue_date: date | None,
-    external_catalog_date: date | None,
+    catalog_match_date: date | None,
     parsed_import_date: date | None,
     draft_release_date: date | None,
 ) -> date | None:
-    for candidate in (release_issue_date, external_catalog_date, parsed_import_date, draft_release_date):
+    for candidate in (catalog_match_date, parsed_import_date, draft_release_date):
         if candidate is not None:
             return candidate
     return None
@@ -217,6 +142,7 @@ def enrich_import_item_lifecycle(
     owner_user_id: int | None,
     item: dict[str, Any],
     today: date | None = None,
+    include_catalog_debug: bool = False,
 ) -> dict[str, Any]:
     """Mutates and returns item dict with lifecycle fields."""
     from app.services.metadata_enrichment import parse_release_date
@@ -232,29 +158,22 @@ def enrich_import_item_lifecycle(
         parsed = parse_release_date(str(raw) if raw else None).parsed_date
 
     draft_date = parsed if isinstance(parsed, date) else None
-    release_issue_date = None
-    external_date = None
-    if session is not None and owner_user_id is not None:
-        release_issue_date = lookup_release_issue_date(
-            session,
-            owner_user_id=owner_user_id,
-            publisher=item.get("publisher") or item.get("canonical_publisher"),
-            series_title=item.get("title") or item.get("canonical_title"),
-            issue_number=item.get("issue_number") or item.get("canonical_issue_number"),
-        )
-    if session is not None:
-        external_date = lookup_external_catalog_release_date(
-            session,
-            publisher=item.get("publisher") or item.get("canonical_publisher"),
-            series_title=item.get("title") or item.get("canonical_title"),
-            issue_number=item.get("issue_number") or item.get("canonical_issue_number"),
-        )
+    raw_release = item.get("release_date") or item.get("raw_release_date")
+    placeholder = imported_release_date_is_placeholder(
+        raw_release_date=str(raw_release) if raw_release is not None else None,
+        parsed_release_date=draft_date,
+        parsed_release_year=item.get("parsed_release_year"),
+    )
+    trusted_draft_date = None if placeholder else draft_date
+
+    resolution = resolve_import_catalog_match(session, owner_user_id=owner_user_id, item=item)
+    catalog_date = resolution.release_date if resolution.matched else None
+    item.update(catalog_match_fields_for_item(resolution, include_debug=include_catalog_debug))
 
     best = resolve_best_release_date(
-        release_issue_date=release_issue_date,
-        external_catalog_date=external_date,
-        parsed_import_date=draft_date,
-        draft_release_date=draft_date,
+        catalog_match_date=catalog_date,
+        parsed_import_date=trusted_draft_date,
+        draft_release_date=trusted_draft_date,
     )
 
     lifecycle = compute_import_release_lifecycle(
@@ -314,7 +233,28 @@ _LIFECYCLE_ITEM_KEYS = (
     "lifecycle_display_detail",
     "parsed_release_date",
     "order_status",
+    "catalog_match_matched",
+    "catalog_match_possible",
+    "catalog_match_source",
+    "catalog_match_source_id",
+    "catalog_match_score",
+    "catalog_match_title",
+    "catalog_match_publisher",
+    "catalog_match_issue_number",
+    "catalog_match_release_date",
+    "catalog_match_diagnostics",
+    "catalog_release_source_text",
+    "catalog_resolution_debug",
 )
+
+
+def should_expose_catalog_debug(*, explicit_debug: bool) -> bool:
+    if explicit_debug:
+        return True
+    from app.core.config import get_settings
+
+    env = get_settings().app_env.lower()
+    return env in {"development", "dev", "local", "test"}
 
 
 def lifecycle_fields_from_item_dict(enriched: dict[str, Any]) -> dict[str, Any]:
@@ -328,12 +268,14 @@ def apply_release_lifecycle_to_parse_order(
     owner_user_id: int | None,
     today: date | None = None,
     sort_items: bool = True,
+    debug_catalog: bool = False,
 ) -> Any:
     from app.schemas.ai import ParseOrderResponse
 
     if not isinstance(parsed, ParseOrderResponse):
         parsed = ParseOrderResponse.model_validate(parsed)
 
+    include_debug = should_expose_catalog_debug(explicit_debug=debug_catalog)
     enriched_items = []
     for item in parsed.items:
         item_dict = item.model_dump(mode="json")
@@ -342,6 +284,7 @@ def apply_release_lifecycle_to_parse_order(
             owner_user_id=owner_user_id,
             item=item_dict,
             today=today,
+            include_catalog_debug=include_debug,
         )
         updates = lifecycle_fields_from_item_dict(enriched)
         parsed_release = enriched.get("parsed_release_date")

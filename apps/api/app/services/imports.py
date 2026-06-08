@@ -122,6 +122,7 @@ def serialize_import(
     prefetch_cover_images: bool = True,
     cover_image_count: int | None = None,
     enrich_metadata: bool = True,
+    debug_catalog: bool = False,
 ) -> DraftImportRead:
     parsed_payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
     if enrich_metadata:
@@ -137,6 +138,7 @@ def serialize_import(
         normalized_payload,
         session=session,
         owner_user_id=draft_import.user_id,
+        debug_catalog=debug_catalog,
     )
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required
@@ -325,10 +327,13 @@ def get_import_for_user(
     session: Session,
     current_user: User,
     import_id: int,
+    *,
+    debug_catalog: bool = False,
 ) -> DraftImportRead:
     return serialize_import(
         session,
         get_import_for_user_or_404(session, current_user, import_id),
+        debug_catalog=debug_catalog,
     )
 
 
