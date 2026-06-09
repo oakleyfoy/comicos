@@ -13,6 +13,7 @@ if str(API_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
+from app.services.receiving_live_capture_service import reset_live_capture_cache
 from app.models.p90_collector_alert import P90AutomationRun, P90CollectorAlert  # noqa: F401
 from app.models.p90_fmv_snapshot import P90FmvSnapshot  # noqa: F401
 from app.models.p90_collector_advisor_snapshot import P90CollectorAdvisorSnapshot  # noqa: F401
@@ -47,6 +48,13 @@ def reset_import_locg_hydrate_process_cache() -> None:
 
 
 @pytest.fixture(autouse=True)
+def reset_live_capture_duplicate_cache() -> None:
+    reset_live_capture_cache()
+    yield
+    reset_live_capture_cache()
+
+
+@pytest.fixture(autouse=True)
 def fake_rq_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeStrictRedis:
     """Route all default Redis/RQ traffic to one in-memory broker per test."""
 
@@ -70,6 +78,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "")
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "")
+    monkeypatch.setenv("RETAILER_CREDENTIAL_ENCRYPTION_KEY", "V6cEMuP6xFZqlkGriZpFMUJsbgx5caX5-CQ1e5rjXQM=")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-0123456789abcdef")
     monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     monkeypatch.setenv("OPENAI_API_KEY", "")

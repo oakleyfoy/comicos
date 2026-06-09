@@ -25,6 +25,7 @@ from app.services.import_cover_verification import (
     cover_fields_from_item_snapshot,
     item_cover_user_locked,
 )
+from app.services.retailer_lookup import enrich_item_with_midtown_lookup
 from app.services.import_locg_hydrate_service import ImportLocgHydrateResult
 from app.services.import_cover_display import cover_display_fields_from_urls
 
@@ -109,7 +110,7 @@ def _finalize_cover_payload(
     )
     return replace(
         payload,
-        cover_source=merged.get("cover_source"),
+        cover_source=merged.get("cover_source") or payload.cover_source,
         cover_confidence=merged.get("cover_confidence"),
         variant_confidence=merged.get("variant_confidence"),
         cover_source_url=merged.get("cover_source_url"),
@@ -123,12 +124,14 @@ def _resolve_retailer_cover(item: dict[str, Any]) -> ImportCoverResolutionResult
     url = (item.get("retailer_cover_url") or "").strip()
     if not url:
         return None
+    source = "midtown_product" if (item.get("retailer_lookup_status") == "matched" or item.get("retailer_product_url")) else "retailer_cover"
     return ImportCoverResolutionResultPayload(
         cover_image_url=url,
         cover_thumbnail_url=url,
-        cover_image_source="retailer_cover",
+        cover_image_source=source,
         cover_image_source_id=None,
         has_cover_image=True,
+        cover_source="RETAILER",
     )
 
 
@@ -773,7 +776,22 @@ def apply_import_cover_to_parse_order(
 
     enriched_items = []
     allow_draft_cover = len(parsed.items) <= 1
+    retailer_hint = f"{parsed.retailer or ''}".casefold()
+    should_try_midtown_lookup = "midtown" in retailer_hint or any(
+        "midtowncomics.com" in f"{getattr(item, 'retailer_product_url', '') or ''}".casefold()
+        for item in parsed.items
+    )
     for item in parsed.items:
+        item_dict = item.model_dump(mode="json")
+        if should_try_midtown_lookup and parsed.retailer:
+            item_dict["retailer"] = parsed.retailer
+        has_exact_retailer_item_cover = bool(item.retailer_cover_url and (item.retailer_item_id or item.retailer_order_number))
+        lookup_updates = (
+            {}
+            if not should_try_midtown_lookup or has_exact_retailer_item_cover
+            else enrich_item_with_midtown_lookup(item_dict, limit=10)
+        )
+        item = item.model_copy(update=lookup_updates) if lookup_updates else item
         item_dict = item.model_dump(mode="json")
         cover = resolve_import_cover(
             session,
@@ -793,11 +811,13 @@ def apply_import_cover_to_parse_order(
                     "cover_image_url": display_fields["cover_image_url"],
                     "cover_thumbnail_url": display_fields["cover_thumbnail_url"],
                     "cover_url": display_fields["cover_url"],
-                    "cover_image_source": cover.cover_image_source,
+                    "cover_image_source": cover.cover_image_source
+                    or ("midtown_product" if (item.retailer_cover_url or item.retailer_lookup_status == "matched") else None),
                     "cover_image_source_id": cover.cover_image_source_id,
                     "has_cover_image": display_fields["has_cover_image"] or cover.has_cover_image,
                     "cover_resolution_debug": cover.cover_resolution_debug,
-                    "cover_source": cover.cover_source,
+                    "cover_source": cover.cover_source
+                    or ("RETAILER" if (item.retailer_cover_url or item.retailer_lookup_status == "matched") else None),
                     "cover_confidence": cover.cover_confidence,
                     "variant_confidence": cover.variant_confidence,
                     "cover_source_url": cover.cover_source_url,

@@ -257,6 +257,7 @@ from app.models.external_catalog import (
     ExternalCatalogSyncRun,
     ExternalCatalogVariant,
 )
+from app.models.receiving import ReceivingSession, ReceivingSessionItem
 from app.models.buy_queue_intelligence import BuyQueueItem, BuyQueueSnapshot
 from app.models.collector_intelligence import (
     AutoWatchlist,
@@ -721,6 +722,12 @@ from app.models.marketplace_accounts import (
     MarketplaceAccount,
     MarketplaceConnectionEvent,
     MarketplaceCredential,
+)
+from app.models.retailer_accounts import (
+    RetailerAccount,
+    RetailerOrderItemSnapshot,
+    RetailerOrderSnapshot,
+    RetailerSyncRun,
 )
 from app.models.marketplace import (
     MarketplaceAccount as MarketplaceConnectorAccount,
@@ -1682,6 +1689,10 @@ __all__ = [
     "MarketplacePricingRule",
     "MarketplaceCredential",
     "MarketplaceConnectionEvent",
+    "RetailerAccount",
+    "RetailerSyncRun",
+    "RetailerOrderSnapshot",
+    "RetailerOrderItemSnapshot",
     "OrganizationInventoryAssignment",
     "OrganizationInventoryQueue",
     "OrganizationInventoryWorkflowEvent",

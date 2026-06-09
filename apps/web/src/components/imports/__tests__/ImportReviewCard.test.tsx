@@ -119,6 +119,31 @@ describe("ImportReviewCard", () => {
     );
   });
 
+  it("labels connected retailer item covers distinctly", () => {
+    render(
+      <ImportReviewCard
+        item={buildItem({
+          coverSource: "RETAILER",
+          retailerProductUrl: "https://www.midtowncomics.com/product/1234/example",
+          retailerOrderNumber: "ABC123",
+        })}
+        isExpanded={false}
+        canRemove={false}
+        isSubmitting={false}
+        lifecycleBadge={null}
+        cardSurfaceClassName="border-slate-600"
+        onToggleDetails={() => undefined}
+        onRemove={() => undefined}
+        onUpdate={() => undefined}
+        clearItemError={() => undefined}
+        canScanCover={false}
+        scanCoverBusy={false}
+        onScanCoverSelected={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Cover from connected retailer order item")).toBeInTheDocument();
+  });
+
   it("shows cover resolution debug when provided", () => {
     render(<Harness />);
     expect(screen.getByText(/Cover debug: none/)).toBeInTheDocument();

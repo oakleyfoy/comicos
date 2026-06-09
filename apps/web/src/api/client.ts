@@ -166,6 +166,22 @@ export interface AiDraftOrderItem {
   cover_thumbnail_url?: string | null;
   cover_url?: string | null;
   retailer_cover_url?: string | null;
+  retailer_thumbnail_url?: string | null;
+  retailer_product_url?: string | null;
+  retailer_sku?: string | null;
+  retailer_order_number?: string | null;
+  retailer_order_url?: string | null;
+  retailer_item_id?: string | null;
+  retailer_item_status?: string | null;
+  retailer_shipped_qty?: number | null;
+  retailer_backordered_qty?: number | null;
+  retailer_unavailable_qty?: number | null;
+  retailer_returned_qty?: number | null;
+  retailer_lookup_enrichment?: Record<string, unknown> | null;
+  retailer_lookup_status?: string | null;
+  retailer_lookup_score?: number | null;
+  retailer_lookup_rejected_reason?: string | null;
+  retailer_lookup_checked_at?: string | null;
   cover_image_source?: string | null;
   cover_image_source_id?: number | null;
   has_cover_image?: boolean | null;
@@ -214,7 +230,7 @@ export interface AiDraftOrderItem {
   raw_item_price: string | null;
 }
 
-export type DraftSourceType = "ai_draft" | "manual_draft" | "gmail_draft";
+export type DraftSourceType = "ai_draft" | "manual_draft" | "gmail_draft" | "retailer_account";
 
 export interface AiParseOrderResponse {
   retailer: string | null;
@@ -230,6 +246,118 @@ export interface AiParseOrderResponse {
 }
 
 export type DraftImportStatus = "draft" | "confirmed" | "discarded";
+
+export interface RetailerAccountCreatePayload {
+  retailer: "midtown";
+  username: string;
+  password: string;
+  display_name?: string | null;
+  sync_enabled?: boolean;
+}
+
+export interface RetailerAccountUpdatePayload {
+  username?: string | null;
+  password?: string | null;
+  display_name?: string | null;
+  sync_enabled?: boolean | null;
+  status?: string | null;
+}
+
+export interface RetailerAccountRead {
+  id: number;
+  retailer: string;
+  display_name?: string | null;
+  masked_username: string;
+  credential_version: number;
+  status: string;
+  sync_enabled: boolean;
+  last_sync_at?: string | null;
+  last_success_at?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetailerSyncRunRead {
+  id: number;
+  retailer_account_id: number;
+  retailer: string;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  orders_seen: number;
+  orders_imported: number;
+  items_seen: number;
+  items_imported: number;
+  items_updated: number;
+  errors_count: number;
+  summary_json: Record<string, unknown>;
+  error_message?: string | null;
+}
+
+export interface RetailerOrderItemSnapshotRead {
+  id: number;
+  retailer_item_id?: string | null;
+  product_url?: string | null;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  title: string;
+  publisher?: string | null;
+  issue_number?: string | null;
+  cover_name?: string | null;
+  variant_type?: string | null;
+  cover_artist?: string | null;
+  quantity: number;
+  unit_price?: string | null;
+  total_price?: string | null;
+  item_status?: string | null;
+  shipped_qty?: number | null;
+  backordered_qty?: number | null;
+  unavailable_qty?: number | null;
+  returned_qty?: number | null;
+  release_date?: string | null;
+  updated_at: string;
+}
+
+export interface RetailerOrderSnapshotRead {
+  id: number;
+  retailer_account_id: number;
+  retailer: string;
+  retailer_order_number: string;
+  order_date?: string | null;
+  order_status?: string | null;
+  order_total?: string | null;
+  source_url?: string | null;
+  updated_at: string;
+  items: RetailerOrderItemSnapshotRead[];
+}
+
+export interface RetailerAccountsListResponse {
+  items: RetailerAccountRead[];
+}
+
+export interface RetailerSyncRunListResponse {
+  items: RetailerSyncRunRead[];
+}
+
+export interface RetailerOrderListResponse {
+  items: RetailerOrderSnapshotRead[];
+}
+
+export interface RetailerAccountSyncRequest {
+  limit_orders?: number;
+}
+
+export interface RetailerAccountTestResponse {
+  account: RetailerAccountRead;
+  run: RetailerSyncRunRead;
+}
+
+export interface RetailerAccountSyncResponse {
+  account: RetailerAccountRead;
+  run: RetailerSyncRunRead;
+  orders: RetailerOrderSnapshotRead[];
+}
 
 /* ——— Cover images / OCR ——— */
 
@@ -12266,6 +12394,8 @@ export interface GuidedImportExceptionItemRead {
   publisher: string;
   variant_label: string;
   release_date: string;
+  cover_image_url: string | null;
+  retailer_cover_url: string | null;
   cover_url: string | null;
   problems: string[];
   cover_source: string | null;
@@ -20220,6 +20350,180 @@ export interface IntelligenceRecommendationDetail {
   reviews: IntelligenceRecommendationReviewRead[];
 }
 
+export type RecognitionBucket = "VERIFIED" | "REVIEW" | "UNKNOWN";
+
+export interface RecognitionCandidateRead {
+  series: string;
+  issue_number: string;
+  variant?: string | null;
+  publisher?: string | null;
+  release_date?: string | null;
+  confidence: number;
+  cover_image_url?: string | null;
+  source?: string;
+  source_id?: number | null;
+}
+
+export interface RecognitionIdentifyRead {
+  status: "success";
+  bucket: RecognitionBucket;
+  confidence: number;
+  series?: string | null;
+  issue_number?: string | null;
+  variant?: string | null;
+  publisher?: string | null;
+  release_date?: string | null;
+  cover_image_url?: string | null;
+  candidate_count: number;
+  candidates: RecognitionCandidateRead[];
+  metrics: Record<string, number>;
+}
+
+export interface ReceivingSessionCreatePayload {
+  notes?: string | null;
+  capture_source?: "WEBCAM" | "MOBILE_CAMERA" | "CONVENTION_SCAN" | null;
+}
+
+export interface ReceivingSessionSummaryRead {
+  id: number;
+  status: string;
+  total_items: number;
+  verified_items: number;
+  review_items: number;
+  unknown_items: number;
+  confirmed_items: number;
+  skipped_items: number;
+  capture_source?: "WEBCAM" | "MOBILE_CAMERA" | "CONVENTION_SCAN" | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  session_notes?: string | null;
+  purchase_order_id?: number | null;
+  purchase_mode?: "existing" | "new" | null;
+  purchase_source_type?:
+    | "FACEBOOK"
+    | "WHATNOT"
+    | "EBAY"
+    | "CONVENTION"
+    | "YARD_SALE"
+    | "COLLECTION_BUY"
+    | "LOCAL_COMIC_SHOP"
+    | "OTHER"
+    | null;
+  purchase_label?: string | null;
+  seller_name?: string | null;
+  purchase_date?: string | null;
+  amount_paid?: string | null;
+  shipping_amount?: string | null;
+  tax_amount?: string | null;
+  purchase_notes?: string | null;
+  allocation_method?: "equal" | "manual" | "key_weighted" | null;
+  allocation_details_json?: Record<string, unknown>;
+  inventory_created_count?: number;
+  live_capture_stats_json?: Record<string, unknown>;
+}
+
+export interface ReceivingSessionItemRead {
+  id: number;
+  receiving_session_id: number;
+  sequence_index: number;
+  source_filename?: string | null;
+  mime_type?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+  image_sha256?: string | null;
+  capture_source?: "WEBCAM" | "MOBILE_CAMERA" | "CONVENTION_SCAN" | null;
+  frame_fingerprint?: string | null;
+  frame_sequence_index?: number | null;
+  stable_frame_count?: number;
+  recognition_bucket: string;
+  status: string;
+  recognition_confidence?: number | null;
+  recognition_latency_ms?: number | null;
+  capture_started_at?: string | null;
+  capture_completed_at?: string | null;
+  recognition_snapshot_json: Record<string, unknown>;
+  candidate_snapshot_json: Record<string, unknown>[];
+  selected_candidate_index?: number | null;
+  selected_candidate_json?: Record<string, unknown> | null;
+  inventory_copy_id?: number | null;
+  duplicate_of_item_id?: number | null;
+  duplicate_suppressed?: boolean;
+  action_taken?: string | null;
+  action_reason?: string | null;
+  capture_metadata_json?: Record<string, unknown>;
+  uploaded_at: string;
+  recognized_at?: string | null;
+  confirmed_at?: string | null;
+  skipped_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReceivingSessionDetailRead extends ReceivingSessionSummaryRead {
+  items: ReceivingSessionItemRead[];
+}
+
+export interface ReceivingUploadResponse {
+  session: ReceivingSessionDetailRead;
+  uploaded_count: number;
+}
+
+export interface ReceivingConfirmPayload {
+  item_id: number;
+  decision?: "confirm" | "wrong_match";
+  selected_candidate_index?: number | null;
+  note?: string | null;
+}
+
+export interface ReceivingSkipPayload {
+  item_id: number;
+  reason?: string | null;
+}
+
+export interface ReceivingActionResponse {
+  session: ReceivingSessionDetailRead;
+  item: ReceivingSessionItemRead;
+}
+
+export interface ReceivingManualAllocationItem {
+  item_id: number;
+  amount: string;
+}
+
+export interface ReceivingPurchaseAssignmentPayload {
+  mode: "existing" | "new";
+  existing_order_id?: number | null;
+  source_type?:
+    | "FACEBOOK"
+    | "WHATNOT"
+    | "EBAY"
+    | "CONVENTION"
+    | "YARD_SALE"
+    | "COLLECTION_BUY"
+    | "LOCAL_COMIC_SHOP"
+    | "OTHER"
+    | null;
+  purchase_label?: string | null;
+  seller_name?: string | null;
+  purchase_date?: string | null;
+  amount_paid?: string;
+  shipping_amount?: string;
+  tax_amount?: string;
+  notes?: string | null;
+  allocation_method?: "equal" | "manual" | "key_weighted";
+  manual_allocations?: ReceivingManualAllocationItem[];
+}
+
+export interface ReceivingCompletionSummaryRead {
+  session: ReceivingSessionSummaryRead;
+  confirmed_inventory_count: number;
+  inventory_copy_ids: number[];
+  top_additions: string[];
+  order_id?: number | null;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -20304,6 +20608,56 @@ export const apiClient = {
     return request<GmailDisconnectResponse>("/gmail/disconnect", {
       method: "POST",
     });
+  },
+
+  getRetailerAccounts(): Promise<RetailerAccountsListResponse> {
+    return request<RetailerAccountsListResponse>("/api/v1/retailer-accounts");
+  },
+
+  saveRetailerAccount(payload: RetailerAccountCreatePayload): Promise<RetailerAccountRead> {
+    return request<RetailerAccountRead>("/api/v1/retailer-accounts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateRetailerAccount(accountId: number, payload: RetailerAccountUpdatePayload): Promise<RetailerAccountRead> {
+    return request<RetailerAccountRead>(`/api/v1/retailer-accounts/${accountId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteRetailerAccount(accountId: number): Promise<void> {
+    return requestEmpty(`/api/v1/retailer-accounts/${accountId}`, { method: "DELETE" });
+  },
+
+  testRetailerAccount(accountId: number): Promise<RetailerAccountTestResponse> {
+    return request<RetailerAccountTestResponse>(`/api/v1/retailer-accounts/${accountId}/test`, {
+      method: "POST",
+    });
+  },
+
+  syncRetailerAccount(
+    accountId: number,
+    payload: RetailerAccountSyncRequest = {},
+  ): Promise<RetailerAccountSyncResponse> {
+    return request<RetailerAccountSyncResponse>(`/api/v1/retailer-accounts/${accountId}/sync`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getRetailerAccountSyncRuns(accountId: number): Promise<RetailerSyncRunListResponse> {
+    return request<RetailerSyncRunListResponse>(`/api/v1/retailer-accounts/${accountId}/sync-runs`);
+  },
+
+  getRetailerOrders(): Promise<RetailerOrderListResponse> {
+    return request<RetailerOrderListResponse>("/api/v1/retailer-orders");
+  },
+
+  getRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
+    return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}`);
   },
 
   syncGmail(): Promise<GmailSyncEnqueueResponse> {
@@ -23306,6 +23660,104 @@ export const apiClient = {
   }): Promise<ScanOcrFailureListResponse> {
     const q = params && Object.keys(params).length ? buildQueryString(params as Record<string, number | undefined>) : "";
     return requestScanV1<ScanOcrFailureListResponse>(`/ops/scan-ocr/failures${q}`);
+  },
+
+  identifyComicFromImage(file: File): Promise<RecognitionIdentifyRead> {
+    const form = new FormData();
+    form.append("image", file);
+    return requestScanV1<RecognitionIdentifyRead>("/recognition/identify", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  listComicRecognitionCandidates(file: File): Promise<RecognitionCandidateRead[]> {
+    const form = new FormData();
+    form.append("image", file);
+    return requestScanV1<RecognitionCandidateRead[]>("/recognition/candidates", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  createReceivingSession(payload?: ReceivingSessionCreatePayload): Promise<ReceivingSessionSummaryRead> {
+    return requestScanV1<ReceivingSessionSummaryRead>("/receiving/session", {
+      method: "POST",
+      body: payload ? JSON.stringify(payload) : JSON.stringify({}),
+    });
+  },
+
+  getReceivingSession(sessionId: number): Promise<ReceivingSessionDetailRead> {
+    return requestScanV1<ReceivingSessionDetailRead>(`/receiving/session/${sessionId}`);
+  },
+
+  uploadReceivingSessionImages(
+    sessionId: number,
+    files: File[],
+    payload?: {
+      capture_source?: "WEBCAM" | "MOBILE_CAMERA" | "CONVENTION_SCAN" | null;
+      frame_fingerprint?: string | null;
+      stable_frame_count?: number;
+      frame_sequence_index?: number | null;
+    },
+  ): Promise<ReceivingUploadResponse> {
+    const form = new FormData();
+    for (const file of files) {
+      form.append("images", file);
+    }
+    if (payload?.capture_source) {
+      form.append("capture_source", payload.capture_source);
+    }
+    if (payload?.frame_fingerprint) {
+      form.append("frame_fingerprint", payload.frame_fingerprint);
+    }
+    if (payload?.stable_frame_count != null) {
+      form.append("stable_frame_count", String(payload.stable_frame_count));
+    }
+    if (payload?.frame_sequence_index != null) {
+      form.append("frame_sequence_index", String(payload.frame_sequence_index));
+    }
+    return requestScanV1<ReceivingUploadResponse>(`/receiving/session/${sessionId}/upload`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  confirmReceivingSessionItem(
+    sessionId: number,
+    payload: ReceivingConfirmPayload,
+  ): Promise<ReceivingActionResponse> {
+    return requestScanV1<ReceivingActionResponse>(`/receiving/session/${sessionId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  skipReceivingSessionItem(sessionId: number, payload: ReceivingSkipPayload): Promise<ReceivingActionResponse> {
+    return requestScanV1<ReceivingActionResponse>(`/receiving/session/${sessionId}/skip`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getReceivingSessionSummary(sessionId: number): Promise<ReceivingCompletionSummaryRead> {
+    return requestScanV1<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/summary`);
+  },
+
+  assignReceivingPurchase(
+    sessionId: number,
+    payload: ReceivingPurchaseAssignmentPayload,
+  ): Promise<ReceivingSessionSummaryRead> {
+    return requestScanV1<ReceivingSessionSummaryRead>(`/receiving/session/${sessionId}/assign-purchase`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeReceivingSession(sessionId: number): Promise<ReceivingCompletionSummaryRead> {
+    return requestScanV1<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/complete`, {
+      method: "POST",
+    });
   },
 
   runScanReconciliation(payload: ScanReconciliationRunCreate): Promise<ScanReconciliationRunDetail> {

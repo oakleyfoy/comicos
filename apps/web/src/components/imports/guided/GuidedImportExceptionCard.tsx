@@ -10,7 +10,11 @@ type Props = {
 };
 
 export function GuidedImportExceptionCard({ item, importId, onUpdated }: Props): JSX.Element {
-  const coverSrc = resolveImportLineCoverUrl({ coverUrl: item.cover_url });
+  const coverSrc = resolveImportLineCoverUrl({
+    coverUrl: item.cover_url,
+    coverImageUrl: item.cover_image_url,
+    retailerCoverUrl: item.retailer_cover_url,
+  });
   return (
     <li className="rounded-xl border border-slate-700 bg-slate-900/80 p-4">
       <div className="flex gap-4">

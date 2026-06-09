@@ -24,6 +24,12 @@ interface ImportReviewCardItem {
   coverThumbnailUrl?: string;
   coverUrl?: string | null;
   retailerCoverUrl?: string | null;
+  retailerProductUrl?: string | null;
+  retailerOrderNumber?: string | null;
+  retailerItemStatus?: string | null;
+  retailerLookupStatus?: string | null;
+  retailerLookupScore?: number | null;
+  retailerLookupRejectedReason?: string | null;
   hasCoverImage?: boolean;
   coverResolutionDebug?: Record<string, unknown> | null;
   coverSource?: "RETAILER" | "LOCG" | "EXTERNAL_CATALOG" | "USER_UPLOAD" | null;
@@ -196,6 +202,7 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
     coverImageUrl: item.coverImageUrl,
     retailerCoverUrl: item.retailerCoverUrl,
   });
+  const retailerLink = item.retailerProductUrl?.trim() || null;
   const alt = titleIssueLabel(item);
   const [displaySrc, setDisplaySrc] = useState<string | null>(
     rawSrc && isDirectCoverUrl(rawSrc) ? rawSrc : null,
@@ -238,7 +245,7 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
   }, [rawSrc]);
 
   if (displaySrc) {
-    return (
+    const image = (
       <img
         key={coverImageKey(item)}
         src={displaySrc}
@@ -246,6 +253,13 @@ function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
         loading="lazy"
         className="h-full w-full object-cover"
       />
+    );
+    return retailerLink ? (
+      <a href={retailerLink} target="_blank" rel="noreferrer" className="block h-full w-full">
+        {image}
+      </a>
+    ) : (
+      image
     );
   }
   if (rawSrc) {
@@ -300,6 +314,7 @@ export function ImportReviewCard({
       coverConfidence: item.coverConfidence,
       variantConfidence: item.variantConfidence,
     });
+  const retailerProductUrl = item.retailerProductUrl?.trim() || null;
 
   return (
     <article className={`rounded-2xl border-2 p-4 ${cardSurfaceClassName}`}>
@@ -312,7 +327,18 @@ export function ImportReviewCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="truncate text-base font-semibold text-white">{titleIssueLabel(item)}</p>
+                {retailerProductUrl ? (
+                  <a
+                    href={retailerProductUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-base font-semibold text-white underline decoration-cyan-300/30 underline-offset-2 hover:text-cyan-100"
+                  >
+                    {titleIssueLabel(item)}
+                  </a>
+                ) : (
+                  <p className="truncate text-base font-semibold text-white">{titleIssueLabel(item)}</p>
+                )}
                 {lifecycleBadge ? (
                   <span
                     className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadge.className}`}
@@ -348,6 +374,19 @@ export function ImportReviewCard({
           ) : null}
           {resolvedCoverSourceLabel ? (
             <p className="mt-1 text-sm text-cyan-100/90">{resolvedCoverSourceLabel}</p>
+          ) : null}
+          {retailerProductUrl && item.coverSource === "RETAILER" ? (
+            <p className="mt-1 text-sm text-cyan-100/90">
+              {item.retailerOrderNumber
+                ? "Cover from connected retailer order item"
+                : "Cover from retailer product match"}
+            </p>
+          ) : null}
+          {item.retailerItemStatus ? (
+            <p className="mt-1 text-sm text-slate-300">Retailer status: {item.retailerItemStatus}</p>
+          ) : null}
+          {item.retailerLookupStatus === "possible_match" ? (
+            <p className="mt-1 text-sm text-amber-100/90">Possible retailer match needs review</p>
           ) : null}
           {resolvedExceptionBadge ? (
             <span className="mt-2 inline-flex rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-100">

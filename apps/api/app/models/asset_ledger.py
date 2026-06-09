@@ -166,6 +166,8 @@ class Order(SQLModel, table=True):
     retailer: str = Field(max_length=255, nullable=False)
     order_date: date = Field(nullable=False)
     source_type: str | None = Field(default=None, max_length=100)
+    seller_name: str | None = Field(default=None, max_length=255, nullable=True)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     shipping_amount: Decimal = Field(
         default=Decimal("0"),
         sa_column=Column(Numeric(12, 2), nullable=False, default=Decimal("0")),
@@ -248,6 +250,8 @@ class InventoryCopy(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+    receiving_session_id: int | None = Field(default=None, foreign_key="receiving_session.id", nullable=True, index=True)
+    received_via: str = Field(default="RECEIVING_STATION", max_length=40, nullable=False, index=True)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

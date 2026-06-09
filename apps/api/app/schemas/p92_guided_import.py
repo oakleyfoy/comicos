@@ -28,6 +28,8 @@ class GuidedImportExceptionItemRead(BaseModel):
     publisher: str = ""
     variant_label: str = ""
     release_date: str = ""
+    cover_image_url: str | None = None
+    retailer_cover_url: str | None = None
     cover_url: str | None = None
     problems: list[str] = Field(default_factory=list)
     cover_source: str | None = None

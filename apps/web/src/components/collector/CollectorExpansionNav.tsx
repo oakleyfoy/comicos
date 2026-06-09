@@ -4,6 +4,7 @@ import { patriotNavLinkActive, patriotNavLinkIdle } from "../patriotTheme";
 
 const LINKS: { to: string; label: string; activePaths?: string[] }[] = [
   { to: "/collector-command-center", label: "Command Center" },
+  { to: "/receiving", label: "Receive Comics" },
   {
     to: "/buy-opportunities",
     label: "Buy Opportunities",

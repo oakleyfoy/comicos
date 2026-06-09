@@ -59,11 +59,17 @@ def _item_cover_snapshot(item: dict) -> dict:
             "cover_image_url",
             "cover_thumbnail_url",
             "retailer_cover_url",
+            "retailer_thumbnail_url",
             "has_cover_image",
             "cover_source",
             "cover_confidence",
             "variant_confidence",
             "cover_resolution_debug",
+            "retailer_lookup_enrichment",
+            "retailer_lookup_status",
+            "retailer_lookup_score",
+            "retailer_lookup_rejected_reason",
+            "retailer_lookup_checked_at",
         )
     }
 
@@ -436,6 +442,7 @@ def re_resolve_import_covers_for_user(
         if item.cover_verified_by == "USER" and effective_import_cover_url(item):
             cleared_items.append(item)
             continue
+        preserve_exact_retailer_item = bool(item.retailer_cover_url and (item.retailer_item_id or item.retailer_order_number))
         cleared_items.append(
             item.model_copy(
                 update={
@@ -446,6 +453,15 @@ def re_resolve_import_covers_for_user(
                     "cover_url": None,
                     "has_cover_image": False,
                     "cover_resolution_debug": None,
+                    "retailer_lookup_enrichment": None,
+                    "retailer_lookup_status": None,
+                    "retailer_lookup_score": None,
+                    "retailer_lookup_rejected_reason": None,
+                    "retailer_lookup_checked_at": None,
+                    "retailer_cover_url": item.retailer_cover_url if preserve_exact_retailer_item else None,
+                    "retailer_thumbnail_url": item.retailer_thumbnail_url if preserve_exact_retailer_item else None,
+                    "retailer_product_url": item.retailer_product_url if preserve_exact_retailer_item else None,
+                    "retailer_sku": item.retailer_sku if preserve_exact_retailer_item else None,
                 }
             )
         )

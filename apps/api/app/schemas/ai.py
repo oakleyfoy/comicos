@@ -86,8 +86,22 @@ class AiDraftOrderItem(BaseModel):
     cover_source_url: str | None = None
     cover_source_sku: str | None = None
     retailer_cover_url: str | None = None
+    retailer_thumbnail_url: str | None = None
     retailer_product_url: str | None = None
     retailer_sku: str | None = None
+    retailer_order_number: str | None = None
+    retailer_order_url: str | None = None
+    retailer_item_id: str | None = None
+    retailer_item_status: str | None = None
+    retailer_shipped_qty: int | None = None
+    retailer_backordered_qty: int | None = None
+    retailer_unavailable_qty: int | None = None
+    retailer_returned_qty: int | None = None
+    retailer_lookup_enrichment: dict[str, Any] | None = None
+    retailer_lookup_status: str | None = None
+    retailer_lookup_score: int | None = None
+    retailer_lookup_rejected_reason: str | None = None
+    retailer_lookup_checked_at: datetime | None = None
     cover_verified_at: datetime | None = None
     cover_verified_by: Literal["SYSTEM", "USER"] | None = None
     cover_url: str | None = None
@@ -151,7 +165,7 @@ class AiDraftOrderItem(BaseModel):
         return _normalize_optional_creator_list(value)
 
 
-DraftSourceType = Literal["ai_draft", "manual_draft", "gmail_draft"]
+DraftSourceType = Literal["ai_draft", "manual_draft", "gmail_draft", "retailer_account"]
 
 
 class ParseOrderResponse(BaseModel):

@@ -26,6 +26,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Advisor", to: "/automation-center" },
       { label: "Today's Actions", to: "/daily-actions" },
       { label: "Command Center", to: "/collector-command-center" },
+      { label: "Receive Comics", to: "/receiving" },
       { label: "Notifications", to: "/notifications" },
     ],
   },
@@ -143,6 +144,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Gmail & integrations", to: "/settings/integrations" },
+      { label: "Connected Retailers", to: "/settings/connected-retailers" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
       { label: "Workflow Health", to: "/workflow-health" },
@@ -190,6 +192,9 @@ export function findGroupIdForPath(pathname: string): string | null {
     return "home";
   }
   if (pathname.startsWith("/collector-") || pathname === "/daily-actions") {
+    return "home";
+  }
+  if (pathname === "/receiving") {
     return "home";
   }
   if (pathname === "/marketplace-command-center" || pathname.startsWith("/marketplace-command-center/")) {

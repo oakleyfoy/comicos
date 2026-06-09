@@ -177,6 +177,8 @@ def build_guided_import_review(draft_read: DraftImportRead) -> GuidedImportRevie
                     publisher=item.publisher or item.canonical_publisher or "",
                     variant_label=item.cover_name or item.variant_type or "",
                     release_date=str(item.release_date or item.parsed_release_date or ""),
+                    cover_image_url=item.cover_image_url,
+                    retailer_cover_url=item.retailer_cover_url,
                     cover_url=effective_import_cover_url(item),
                     problems=reasons,
                     cover_source=_cover_source_display_label(item, retailer),

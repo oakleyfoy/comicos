@@ -9,6 +9,7 @@ import { DealerStorefrontPage } from "./pages/DealerStorefrontPage";
 import { EmailImportsPage } from "./pages/EmailImportsPage";
 import { InventoryDetailPage } from "./pages/InventoryDetailPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
 import { MarketplaceCoverageDashboardPage } from "./pages/MarketplaceCoverageDashboardPage";
@@ -38,6 +39,10 @@ import { ScanHistoricalComparisonPage } from "./pages/ScanHistoricalComparisonPa
 import { ScanAuthenticationPage } from "./pages/ScanAuthenticationPage";
 import { ScanIntelligenceFeedPage } from "./pages/ScanIntelligenceFeedPage";
 import { ScanReplayPage } from "./pages/ScanReplayPage";
+import { RecognitionTestPage } from "./pages/RecognitionTestPage";
+import { ConventionScanPage } from "./pages/ConventionScanPage";
+import { MobileLiveCapturePage, WebcamLiveCapturePage } from "./pages/LiveCapturePage";
+import { ReceivingStationPage } from "./pages/ReceivingStationPage";
 import { AutomationJobsPage } from "./pages/AutomationJobsPage";
 import { AutomationBatchPage } from "./pages/AutomationBatchPage";
 import { AutomationNotificationsPage } from "./pages/AutomationNotificationsPage";
@@ -406,6 +411,11 @@ export default function App() {
         <Route path="/scan-authentication" element={<ScanAuthenticationPage />} />
         <Route path="/scan-intelligence-feed" element={<ScanIntelligenceFeedPage />} />
         <Route path="/scan-replay" element={<ScanReplayPage />} />
+        <Route path="/recognition-test" element={<RecognitionTestPage />} />
+        <Route path="/receiving/live" element={<WebcamLiveCapturePage />} />
+        <Route path="/receiving/mobile" element={<MobileLiveCapturePage />} />
+        <Route path="/convention-scan" element={<ConventionScanPage />} />
+        <Route path="/receiving" element={<ReceivingStationPage />} />
         <Route path="/automation-jobs" element={<AutomationJobsPage />} />
         <Route path="/automation-batch" element={<AutomationBatchPage />} />
         <Route path="/automation-notifications" element={<AutomationNotificationsPage />} />
@@ -451,6 +461,7 @@ export default function App() {
         <Route path="/orders/:orderId" element={<OrderDetailPage />} />
         <Route path="/orders/import" element={<OrderImportPage />} />
         <Route path="/orders/new" element={<OrderNewPage />} />
+        <Route path="/settings/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
         </Route>

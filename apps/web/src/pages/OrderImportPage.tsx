@@ -70,6 +70,12 @@ interface OrderItemDraft {
   importLineCoverImageId?: number;
   coverUrl?: string | null;
   retailerCoverUrl?: string | null;
+  retailerProductUrl?: string | null;
+  retailerOrderNumber?: string | null;
+  retailerItemStatus?: string | null;
+  retailerLookupStatus?: string | null;
+  retailerLookupScore?: number | null;
+  retailerLookupRejectedReason?: string | null;
   coverSource?: AiDraftOrderItem["cover_source"];
   coverConfidence?: number | null;
   variantConfidence?: number | null;
@@ -341,6 +347,12 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               coverThumbnailUrl: item.cover_thumbnail_url ?? undefined,
               coverUrl: item.cover_url ?? undefined,
               retailerCoverUrl: item.retailer_cover_url ?? undefined,
+              retailerProductUrl: item.retailer_product_url ?? undefined,
+              retailerOrderNumber: item.retailer_order_number ?? undefined,
+              retailerItemStatus: item.retailer_item_status ?? undefined,
+              retailerLookupStatus: item.retailer_lookup_status ?? undefined,
+              retailerLookupScore: item.retailer_lookup_score ?? undefined,
+              retailerLookupRejectedReason: item.retailer_lookup_rejected_reason ?? undefined,
               hasCoverImage: item.has_cover_image ?? undefined,
               coverResolutionDebug: item.cover_resolution_debug ?? undefined,
               importLineCoverImageId: item.import_line_cover_image_id ?? undefined,

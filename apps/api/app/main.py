@@ -1128,6 +1128,8 @@ from app.api.scan_ingestion import attach_scan_ingestion_layer
 from app.api.scan_normalization import attach_scan_normalization_layer
 from app.api.scan_boundary import attach_scan_boundary_layer
 from app.api.scan_ocr import attach_scan_ocr_layer
+from app.api.recognition import attach_recognition_layer
+from app.api.receiving import attach_receiving_layer
 from app.api.scan_reconciliation import attach_scan_reconciliation_layer
 from app.api.scan_defects import attach_scan_defects_layer
 from app.api.scan_spine_ticks import attach_scan_spine_ticks_layer
@@ -1160,6 +1162,7 @@ from app.api.marketplace import attach_marketplace_layer
 from app.api.marketplace_publish import attach_marketplace_publish_layer
 from app.api.marketplace_sync import attach_marketplace_sync_layer
 from app.api.marketplace_accounts import attach_marketplace_accounts_layer
+from app.api.retailer_accounts import attach_retailer_accounts_layer
 from app.api.marketplace_events import attach_marketplace_events_layer
 from app.api.marketplace_inventory_sync import attach_marketplace_inventory_sync_layer
 from app.api.marketplace_listings import attach_marketplace_listings_layer
@@ -1315,6 +1318,8 @@ attach_scan_ingestion_layer(app)
 attach_scan_normalization_layer(app)
 attach_scan_boundary_layer(app)
 attach_scan_ocr_layer(app)
+attach_recognition_layer(app)
+attach_receiving_layer(app)
 attach_scan_reconciliation_layer(app)
 attach_scan_defects_layer(app)
 attach_scan_spine_ticks_layer(app)
@@ -1350,6 +1355,7 @@ attach_shopify_layer(app)
 attach_ebay_compliance_layer(app)
 attach_marketplace_dashboard_layer(app)
 attach_marketplace_accounts_layer(app)
+attach_retailer_accounts_layer(app)
 attach_marketplace_events_layer(app)
 attach_live_sales_layer(app)
 attach_marketplace_ops_dashboard_layer(app)

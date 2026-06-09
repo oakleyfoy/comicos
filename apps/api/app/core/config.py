@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
+    retailer_credential_encryption_key: str = Field(default="", alias="RETAILER_CREDENTIAL_ENCRYPTION_KEY")
+    retailer_sync_default_limit_orders: int = Field(default=25, alias="RETAILER_SYNC_DEFAULT_LIMIT_ORDERS")
+    midtown_sync_enabled: bool = Field(default=True, alias="MIDTOWN_SYNC_ENABLED")
     openai_api_key: str | None = None
     openai_order_parser_model: str = "gpt-4o-mini"
     redis_url: str = "redis://localhost:6379/0"
