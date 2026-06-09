@@ -107,7 +107,11 @@ function LiveCapturePageInner({
       setLoading(true);
       try {
         const created = await apiClient.createReceivingSession({ capture_source: captureSource });
-        const detail = await apiClient.getReceivingSession(created.id);
+        const sessionId = created?.id;
+        if (typeof sessionId !== "number") {
+          throw new Error("Invalid receiving session response: missing session id.");
+        }
+        const detail = await apiClient.getReceivingSession(sessionId);
         if (cancelled) {
           return;
         }
@@ -120,6 +124,11 @@ function LiveCapturePageInner({
           return;
         }
         const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Unable to start a live capture session.";
+        if (message.includes("missing session id")) {
+          setError(message);
+          setStatusMessage("Live session response was invalid.");
+          return;
+        }
         const nextAttempt = sessionAttemptRef.current + 1;
         sessionAttemptRef.current = nextAttempt;
         setStatusMessage(`Retrying session creation (${nextAttempt})...`);

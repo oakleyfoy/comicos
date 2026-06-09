@@ -216,4 +216,36 @@ describe("WebcamLiveCapturePage", () => {
     expect(apiClient.createReceivingSession).toHaveBeenCalledTimes(1);
     expect(apiClient.createReceivingSession).toHaveBeenCalledWith({ capture_source: "MOBILE_CAMERA" });
   });
+
+  it("shows a friendly error when the session response is missing an id", async () => {
+    vi.spyOn(apiClient, "createReceivingSession").mockResolvedValue({} as never);
+    vi.spyOn(apiClient, "getReceivingSession").mockResolvedValue({
+      id: 1,
+      status: "PENDING",
+      total_items: 0,
+      verified_items: 0,
+      review_items: 0,
+      unknown_items: 0,
+      confirmed_items: 0,
+      skipped_items: 0,
+      created_at: "2026-06-09T15:00:00Z",
+      updated_at: "2026-06-09T15:00:00Z",
+      started_at: null,
+      completed_at: null,
+      session_notes: null,
+      live_capture_stats_json: {},
+    });
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/missing session id/i)).toBeInTheDocument();
+  });
 });

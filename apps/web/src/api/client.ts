@@ -20409,6 +20409,21 @@ export interface ReceivingSessionCreatePayload {
   capture_source?: "WEBCAM" | "MOBILE_CAMERA" | "CONVENTION_SCAN" | null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function normalizeReceivingSessionSummaryResponse(
+  response: unknown,
+  context = "receiving session",
+): ReceivingSessionSummaryRead {
+  const candidate = isPlainObject(response) && isPlainObject(response.session) ? response.session : response;
+  if (isPlainObject(candidate) && typeof candidate.id === "number") {
+    return candidate as ReceivingSessionSummaryRead;
+  }
+  throw new ApiError(`Invalid ${context} response: missing session id.`, 502);
+}
+
 export interface ReceivingSessionSummaryRead {
   id: number;
   status: string;
@@ -23733,10 +23748,10 @@ export const apiClient = {
   },
 
   createReceivingSession(payload?: ReceivingSessionCreatePayload): Promise<ReceivingSessionSummaryRead> {
-    return requestScanV1<ReceivingSessionSummaryRead>("/receiving/session", {
+    return requestScanV1<unknown>("/receiving/session", {
       method: "POST",
       body: payload ? JSON.stringify(payload) : JSON.stringify({}),
-    });
+    }).then((response) => normalizeReceivingSessionSummaryResponse(response, "receiving session create"));
   },
 
   getReceivingSession(sessionId: number): Promise<ReceivingSessionDetailRead> {
