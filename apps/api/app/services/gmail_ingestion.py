@@ -154,6 +154,16 @@ def _decode_base64url(value: str | None) -> str:
     return raw.decode("utf-8", errors="ignore")
 
 
+def _humanize_google_oauth_error(message: str) -> str:
+    normalized = message.strip().lower()
+    if "invalid_grant" in normalized:
+        return (
+            "Gmail authorization expired or was revoked. "
+            "Go to Settings → Integrations, reconnect Gmail, then try Sync again."
+        )
+    return message.strip()
+
+
 def _extract_error_message(exc: error.HTTPError) -> str:
     try:
         payload = json.loads(exc.read().decode("utf-8"))
@@ -164,10 +174,13 @@ def _extract_error_message(exc: error.HTTPError) -> str:
         detail = payload.get("error")
         if isinstance(detail, dict):
             message = detail.get("message")
-            if isinstance(message, str):
-                return message
-        if isinstance(detail, str):
-            return detail
+            if isinstance(message, str) and message.strip():
+                return _humanize_google_oauth_error(message)
+        if isinstance(detail, str) and detail.strip():
+            return _humanize_google_oauth_error(detail)
+        error_description = payload.get("error_description")
+        if isinstance(error_description, str) and error_description.strip():
+            return _humanize_google_oauth_error(error_description)
 
     return f"Gmail request failed with status {exc.code}."
 
@@ -429,9 +442,23 @@ def _get_valid_access_token(session: Session, account: GmailAccount) -> str:
     if account.refresh_token_encrypted is None:
         raise GmailNotConnectedError("Reconnect Gmail before syncing receipts.")
 
-    refresh_payload = refresh_gmail_access_token(
-        decrypt_secret_value(account.refresh_token_encrypted)
-    )
+    try:
+        refresh_payload = refresh_gmail_access_token(
+            decrypt_secret_value(account.refresh_token_encrypted)
+        )
+    except GmailIntegrationError as exc:
+        if "invalid_grant" in str(exc).lower() or "authorization expired" in str(exc).lower():
+            account.access_token_encrypted = None
+            account.refresh_token_encrypted = None
+            account.token_expires_at = None
+            account.auto_sync_enabled = False
+            account.last_sync_error = str(exc)[:MAX_SYNC_ERROR_LENGTH]
+            account.updated_at = utc_now()
+            session.add(account)
+            session.commit()
+            raise GmailNotConnectedError(str(exc)) from exc
+        raise
+
     access_token = refresh_payload.get("access_token")
     if not isinstance(access_token, str) or not access_token:
         raise GmailIntegrationError("Google refresh did not return an access token.")

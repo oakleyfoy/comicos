@@ -284,6 +284,14 @@ export function EmailImportsPage() {
       {error ? (
         <div className="mt-6 space-y-3">
           <StatusBanner tone="error">{error}</StatusBanner>
+          {/reconnect gmail|authorization expired|invalid_grant/i.test(error) ? (
+            <Link
+              to="/settings/integrations"
+              className="inline-flex rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            >
+              Reconnect Gmail
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => void refreshPage()}

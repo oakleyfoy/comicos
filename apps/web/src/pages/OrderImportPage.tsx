@@ -36,6 +36,7 @@ import {
   buildPendingImportMetadataQuestions,
   type ImportMetadataQuestion,
 } from "./importMetadataQuestions";
+import { normalizeMoneyInput } from "../utils/moneyInput";
 
 interface OrderItemDraft {
   publisher: string;
@@ -111,21 +112,6 @@ function formatCurrency(value: number): string {
     style: "currency",
     currency: "USD",
   }).format(value);
-}
-
-function normalizeMoneyInput(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "0.00";
-  }
-  const raw = typeof value === "number" ? String(value) : value.trim();
-  if (!raw) {
-    return "0.00";
-  }
-  const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(parsed)) {
-    return "0.00";
-  }
-  return parsed.toFixed(2);
 }
 
 function formatImportCoverDimensions(width: number | null, height: number | null): string {
@@ -333,7 +319,10 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
                 item.canonical_cover_artists ??
                 (item.cover_artist ? [item.cover_artist] : []),
               quantity: item.quantity === null ? "" : String(item.quantity),
-              rawItemPrice: item.raw_item_price ?? "",
+              rawItemPrice:
+                item.raw_item_price != null && String(item.raw_item_price).trim() !== ""
+                  ? normalizeMoneyInput(item.raw_item_price)
+                  : "",
               releaseLifecycleStatus: item.release_lifecycle_status ?? undefined,
               lifecycleDisplayLabel: item.lifecycle_display_label ?? undefined,
               lifecycleDisplayDetail: item.lifecycle_display_detail ?? undefined,

@@ -102,7 +102,7 @@ describe("ImportReviewCard", () => {
     expect(screen.queryByDisplayValue("2026-07-22")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show Details" }));
     expect(screen.getByText("Release Date")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("2026-07-22")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("7/22/2026")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Image")).toBeInTheDocument();
   });
 

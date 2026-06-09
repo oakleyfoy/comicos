@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../../api/client";
-import { formatCalendarDateWithYear } from "../../utils/formatCalendarDate";
+import { formatCalendarDateWithYear, formatCalendarDateUsShort, normalizeCalendarDateInput } from "../../utils/formatCalendarDate";
+import { normalizeMoneyInput } from "../../utils/moneyInput";
 
 interface ImportReviewCardItem {
   publisher: string;
@@ -405,13 +406,16 @@ export function ImportReviewCard({
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-300">Release Date</span>
               <input
-                value={item.releaseDate}
+                value={formatCalendarDateUsShort(item.releaseDate)}
                 onChange={(event) => onUpdate("releaseDate", event.target.value)}
-                placeholder="2024, 2024-05, or 2024-05-15"
+                onBlur={(event) => {
+                  onUpdate("releaseDate", normalizeCalendarDateInput(event.target.value));
+                }}
+                placeholder="6/17/2026"
                 className={INPUT_CLASS_NAME}
               />
               <p className="text-sm text-slate-400">
-                Optional. Exact dates are preserved when provided; year-only values stay year-only.
+                Optional. Use M/D/YYYY for full dates; year-only values stay year-only.
               </p>
             </label>
 
@@ -460,7 +464,7 @@ export function ImportReviewCard({
               ) : null}
             </label>
 
-            <label className="space-y-2">
+            <label className="space-y-2 md:col-span-2">
               <span className="text-sm font-medium text-slate-300">Cover Name</span>
               <input
                 value={item.coverName}
@@ -525,17 +529,29 @@ export function ImportReviewCard({
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-300">Raw Item Price</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={item.rawItemPrice}
-                onChange={(event) => {
-                  onUpdate("rawItemPrice", event.target.value);
-                  clearItemError("rawItemPrice");
-                }}
-                className={INPUT_CLASS_NAME}
-              />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                  $
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={item.rawItemPrice}
+                  onChange={(event) => {
+                    onUpdate("rawItemPrice", event.target.value);
+                    clearItemError("rawItemPrice");
+                  }}
+                  onBlur={() => {
+                    const trimmed = item.rawItemPrice.trim();
+                    if (!trimmed) {
+                      onUpdate("rawItemPrice", "");
+                      return;
+                    }
+                    onUpdate("rawItemPrice", normalizeMoneyInput(item.rawItemPrice));
+                  }}
+                  className={`${INPUT_CLASS_NAME} pl-7`}
+                />
+              </div>
               {itemError?.rawItemPrice ? (
                 <p className="text-sm text-rose-300">{itemError.rawItemPrice}</p>
               ) : null}

@@ -32,3 +32,53 @@ export function formatCalendarDateWithYear(value: string | null | undefined): st
   }
   return trimmed || null;
 }
+
+/** US short date for form fields (e.g. 6/17/2026). */
+export function formatCalendarDateUsShort(value: string | null | undefined): string {
+  if (!value?.trim()) {
+    return "";
+  }
+  const trimmed = value.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    return `${month}/${day}/${year}`;
+  }
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slash) {
+    return `${Number(slash[1])}/${Number(slash[2])}/${slash[3]}`;
+  }
+  return trimmed;
+}
+
+/** Normalize typed dates to ISO yyyy-mm-dd when possible; otherwise preserve partial/year-only text. */
+export function normalizeCalendarDateInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (iso) {
+    return trimmed;
+  }
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slash) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (
+      Number.isInteger(month) &&
+      Number.isInteger(day) &&
+      Number.isInteger(year) &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31
+    ) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return trimmed;
+}
