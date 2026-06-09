@@ -142,7 +142,7 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
-      { label: "Integrations", to: "/settings/integrations", hiddenFromNav: true },
+      { label: "Gmail & integrations", to: "/settings/integrations" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
       { label: "Workflow Health", to: "/workflow-health" },

@@ -86,10 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSecurityContext(nextContext);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        setUser(null);
-        setSecurityContext(null);
-      } else {
-        throw error;
+        clearStoredToken();
+      }
+      setUser(null);
+      setSecurityContext(null);
+      if (import.meta.env.DEV && error instanceof Error) {
+        console.warn("Auth bootstrap failed:", error.message);
       }
     } finally {
       setIsLoading(false);

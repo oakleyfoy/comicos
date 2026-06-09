@@ -218,8 +218,12 @@ function HomeRedirect() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-200">
-        Loading ComicOS...
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 px-6 text-center text-slate-200">
+        <p>Loading ComicOS...</p>
+        <p className="max-w-md text-sm text-slate-500">
+          If this takes more than a few seconds, confirm the API is running and{" "}
+          <code className="text-slate-400">VITE_API_BASE_URL</code> is set correctly.
+        </p>
       </div>
     );
   }

@@ -7,6 +7,10 @@ import {
   type GmailStatusResponse,
   type GmailSyncStatusResponse,
 } from "../api/client";
+import {
+  consumeGmailConnectedSearchParam,
+  startGmailOAuth,
+} from "../lib/gmailConnect";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -85,14 +89,9 @@ export function IntegrationsPage() {
   }, []);
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("gmail") === "connected") {
+    if (consumeGmailConnectedSearchParam()) {
       setSuccess("Gmail connected. Email receipts will still create drafts only for review.");
       void loadStatus();
-      searchParams.delete("gmail");
-      const nextQuery = searchParams.toString();
-      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
-      window.history.replaceState({}, "", nextUrl);
     }
   }, []);
 
@@ -100,8 +99,7 @@ export function IntegrationsPage() {
     setIsWorking(true);
     setError(null);
     try {
-      const response = await apiClient.getGmailConnectStart();
-      window.location.href = response.authorization_url;
+      await startGmailOAuth("/settings/integrations");
     } catch (connectError) {
       if (connectError instanceof ApiError) {
         setError(connectError.message);

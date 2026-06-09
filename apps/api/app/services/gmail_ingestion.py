@@ -159,7 +159,7 @@ def _humanize_google_oauth_error(message: str) -> str:
     if "invalid_grant" in normalized:
         return (
             "Gmail authorization expired or was revoked. "
-            "Go to Settings → Integrations, reconnect Gmail, then try Sync again."
+            "Open Gmail Receipt Drafts and use Connect Gmail again."
         )
     return message.strip()
 

@@ -6,6 +6,7 @@ import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import { consumeGmailConnectedSearchParam, GMAIL_IMPORTS_PATH, startGmailOAuth } from "../lib/gmailConnect";
 
 const POLL_INTERVAL_MS = 1500;
 
@@ -111,6 +112,14 @@ export function EmailImportsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+
+  useEffect(() => {
+    if (consumeGmailConnectedSearchParam()) {
+      setSuccess("Gmail connected. You can sync receipt emails into drafts.");
+      void refreshPage();
+    }
+  }, []);
 
   const draftCount = useMemo(
     () => imports.filter((entry) => isPendingGmailImport(entry)).length,
@@ -227,6 +236,22 @@ export function EmailImportsPage() {
     }
   }
 
+  async function handleConnectGmail(): Promise<void> {
+    setError(null);
+    setSuccess(null);
+    setIsConnectingGmail(true);
+    try {
+      await startGmailOAuth(GMAIL_IMPORTS_PATH);
+    } catch (connectError) {
+      if (connectError instanceof ApiError) {
+        setError(connectError.message);
+      } else {
+        setError("Unable to start Gmail connection.");
+      }
+      setIsConnectingGmail(false);
+    }
+  }
+
   async function handleDeleteGmailImport(entry: GmailImportedDraft): Promise<void> {
     const draftId = entry.draft_import.id;
     const retailer = entry.draft_import.parsed_payload_json.retailer ?? "this receipt";
@@ -265,13 +290,13 @@ export function EmailImportsPage() {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/settings/integrations"
-              className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:border-cyan-500/50 hover:bg-slate-50"
             >
-              Manage Gmail
+              Gmail settings
             </Link>
             <button
               type="button"
-              disabled={isSyncing}
+              disabled={isSyncing || isConnectingGmail}
               onClick={() => void handleSync()}
               className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -285,12 +310,14 @@ export function EmailImportsPage() {
         <div className="mt-6 space-y-3">
           <StatusBanner tone="error">{error}</StatusBanner>
           {/reconnect gmail|authorization expired|invalid_grant/i.test(error) ? (
-            <Link
-              to="/settings/integrations"
-              className="inline-flex rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            <button
+              type="button"
+              disabled={isConnectingGmail}
+              onClick={() => void handleConnectGmail()}
+              className="inline-flex rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Reconnect Gmail
-            </Link>
+              {isConnectingGmail ? "Connecting…" : "Connect Gmail"}
+            </button>
           ) : null}
           <button
             type="button"
@@ -314,12 +341,14 @@ export function EmailImportsPage() {
             title="Connect Gmail first"
             description="Link your Gmail account before syncing receipt emails into draft imports."
             action={
-              <Link
-                to="/settings/integrations"
-                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              <button
+                type="button"
+                disabled={isConnectingGmail}
+                onClick={() => void handleConnectGmail()}
+                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Connect Gmail
-              </Link>
+                {isConnectingGmail ? "Connecting…" : "Connect Gmail"}
+              </button>
             }
           />
         </div>
@@ -354,14 +383,16 @@ export function EmailImportsPage() {
         <div className="mt-6">
           <EmptyState
             title="No Gmail drafts yet"
-            description="Connect Gmail, then run a sync to import supported receipt emails into draft imports for review."
+            description="Run a sync to import supported receipt emails into draft imports for review."
             action={
-              <Link
-                to="/settings/integrations"
-                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              <button
+                type="button"
+                disabled={isSyncing}
+                onClick={() => void handleSync()}
+                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Connect Gmail
-              </Link>
+                {isSyncing ? "Syncing…" : "Sync Gmail"}
+              </button>
             }
           />
         </div>

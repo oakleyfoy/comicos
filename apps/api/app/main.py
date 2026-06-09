@@ -2406,13 +2406,15 @@ def post_reenrich_inventory_copy(
 @app.get("/gmail/connect/start", response_model=GmailConnectStartResponse)
 def gmail_connect_start(
     request: Request,
+    redirect_path: str = "/imports/email",
     current_user: User = Depends(get_current_user),
 ) -> GmailConnectStartResponse:
+    safe_path = redirect_path if redirect_path.startswith("/") and not redirect_path.startswith("//") else "/imports/email"
     try:
         authorization_url = build_gmail_connect_authorization_url(
             current_user,
             redirect_origin=request.headers.get("origin"),
-            redirect_path="/settings/integrations",
+            redirect_path=safe_path,
         )
     except GmailIntegrationNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

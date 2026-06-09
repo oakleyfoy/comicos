@@ -6805,6 +6805,10 @@ async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** P57 executive dashboard aggregates many services; cap wait so UI cannot hang indefinitely. */
 const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
+/** Auth bootstrap must fail fast when the API is down or misconfigured. */
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
+const AUTH_BOOTSTRAP_TIMEOUT_MESSAGE =
+  "Unable to reach the ComicOS API. Confirm the API is running and VITE_API_BASE_URL points at your backend.";
 /** P85 collector home must not leave the shell on a pending request indefinitely. */
 const COLLECTOR_HOME_TIMEOUT_MS = 30_000;
 /** P84/P85 collector surfaces (actions, command center, notifications, briefings, workflow health). */
@@ -20213,7 +20217,12 @@ export const apiClient = {
   },
 
   getCurrentUser(): Promise<User> {
-    return request<User>("/auth/me");
+    return requestWithTimeout<User>(
+      "/auth/me",
+      undefined,
+      AUTH_BOOTSTRAP_TIMEOUT_MS,
+      AUTH_BOOTSTRAP_TIMEOUT_MESSAGE,
+    );
   },
 
   listAuthSessions(params?: { limit?: number; offset?: number }): Promise<UserAuthSessionListResponse> {
@@ -20222,7 +20231,12 @@ export const apiClient = {
   },
 
   getSecurityContext(): Promise<OrganizationSecurityContextRead> {
-    return requestScanV1<OrganizationSecurityContextRead>("/auth/security-context");
+    return requestScanV1WithTimeout<OrganizationSecurityContextRead>(
+      "/auth/security-context",
+      undefined,
+      AUTH_BOOTSTRAP_TIMEOUT_MS,
+      AUTH_BOOTSTRAP_TIMEOUT_MESSAGE,
+    );
   },
 
   revokeAuthSession(payload: RevokeAuthSessionRequest): Promise<UserAuthSessionRead> {
@@ -20245,8 +20259,9 @@ export const apiClient = {
     });
   },
 
-  getGmailConnectStart(): Promise<GmailConnectStartResponse> {
-    return request<GmailConnectStartResponse>("/gmail/connect/start");
+  getGmailConnectStart(redirectPath: string = "/imports/email"): Promise<GmailConnectStartResponse> {
+    const query = buildQueryString({ redirect_path: redirectPath });
+    return request<GmailConnectStartResponse>(`/gmail/connect/start${query}`);
   },
 
   getGmailStatus(): Promise<GmailStatusResponse> {
