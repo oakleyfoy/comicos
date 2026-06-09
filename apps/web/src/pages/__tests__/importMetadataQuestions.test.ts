@@ -44,6 +44,25 @@ describe("importMetadataQuestions", () => {
       0,
     );
     expect(question?.kind).toBe("confirm_parsed");
+    expect(question?.affectedField).toBe("Cover artists");
+    expect(question?.invoiceValue).toBe("John Romita Jr.");
+    expect(question?.parsedValue).toBe("John Romita Jr.");
+  });
+
+  it("includes invoice and parsed values when they differ", () => {
+    const question = buildPrimaryMetadataQuestion(
+      item({
+        metadata_review_required: true,
+        metadata_review_notes: [
+          "Cover artist list format was malformed or unsupported. Review preserved creator values.",
+        ],
+        raw_cover_artists: ["J. Romita Jr"],
+        canonical_cover_artists: ["John Romita Jr."],
+      }),
+      0,
+    );
+    expect(question?.invoiceValue).toBe("J. Romita Jr");
+    expect(question?.parsedValue).toBe("John Romita Jr.");
   });
 
   it("queues missing publisher lines without metadata flags", () => {

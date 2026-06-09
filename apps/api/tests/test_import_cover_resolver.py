@@ -193,6 +193,65 @@ def test_resolve_import_cover_picks_cover_letter_over_issue_fallback(session: Se
     assert result_b.cover_image_url == "https://example.com/cover-b.jpg"
 
 
+def test_resolve_import_cover_matches_locg_short_cover_labels(session: Session) -> None:
+    issue = ExternalCatalogIssue(
+        source_name="locg",
+        title="If Destruction Be Our Lot #2",
+        publisher="Image",
+        series_name="If Destruction Be Our Lot",
+        issue_number="2",
+        release_date=date(2026, 6, 17),
+        cover_image_url="https://example.com/issue-default.jpg",
+    )
+    session.add(issue)
+    session.commit()
+    session.refresh(issue)
+    assert issue.id is not None
+
+    cover_a = ExternalCatalogVariant(
+        external_issue_id=issue.id,
+        cover_label="A",
+        variant_name="Andy Macdonald Cover",
+        artist="Andy Macdonald",
+        image_url="https://example.com/cover-a-mac.jpg",
+    )
+    cover_b = ExternalCatalogVariant(
+        external_issue_id=issue.id,
+        cover_label="B",
+        variant_name="Cliff Chiang Cover",
+        artist="Cliff Chiang",
+        image_url="https://example.com/cover-b-chiang.jpg",
+    )
+    session.add(cover_a)
+    session.add(cover_b)
+    session.commit()
+
+    result_a = resolve_import_cover(
+        session,
+        {
+            "title": "If Destruction Be Our Lot",
+            "issue_number": "2",
+            "cover_name": "Cover A • Andy Macdonald",
+            "cover_artist": "Andy Macdonald",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
+        },
+    )
+    result_b = resolve_import_cover(
+        session,
+        {
+            "title": "If Destruction Be Our Lot",
+            "issue_number": "2",
+            "cover_name": "Cover B • Cliff Chiang",
+            "cover_artist": "Cliff Chiang",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
+        },
+    )
+    assert result_a.cover_image_url == "https://example.com/cover-a-mac.jpg"
+    assert result_b.cover_image_url == "https://example.com/cover-b-chiang.jpg"
+
+
 def test_resolve_import_cover_rejects_stale_external_issue_for_wrong_issue_number(
     session: Session,
 ) -> None:

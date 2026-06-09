@@ -70,7 +70,7 @@ def _external_catalog_cover_miss_reason(
         )
     ).all()
     with_images = [variant for variant in all_variants if variant.image_url]
-    item_letter = _cover_letter_key(item.get("cover_name"))
+    item_letter = _item_cover_letter(item)
     detail: dict[str, Any] = {
         "external_issue_id": external_issue_id,
         "variant_row_count": len(all_variants),
@@ -100,10 +100,7 @@ def _external_catalog_cover_miss_reason(
 
     cover_name = (item.get("cover_name") or "").strip()
     if cover_name and all_variants:
-        variant_letters = [
-            _cover_letter_key(" ".join(filter(None, [variant.cover_label, variant.variant_name])))
-            for variant in all_variants
-        ]
+        variant_letters = [_variant_cover_letter(variant) for variant in all_variants]
         if any(letter for letter in variant_letters if letter):
             return "variant_named_no_letter_match_no_issue_fallback", detail
 
@@ -114,6 +111,38 @@ _COVER_LETTER_PATTERN = re.compile(
     r"\bcover\s+([a-z]{1,2}|[0-9]{1,2})(?:\s|$|[^a-z])",
     re.IGNORECASE,
 )
+_LOCG_SHORT_COVER_LABEL = re.compile(r"^(?:cover\s*)?([a-z0-9]{1,2})$", re.IGNORECASE)
+
+
+def _cover_letter_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    match = _COVER_LETTER_PATTERN.search(value)
+    if not match:
+        return None
+    return match.group(1).lower()
+
+
+def _variant_cover_letter(variant: ExternalCatalogVariant) -> str | None:
+    for part in (variant.cover_label, variant.variant_name):
+        letter = _cover_letter_key(part)
+        if letter:
+            return letter
+    label = (variant.cover_label or "").strip()
+    if label:
+        short = _LOCG_SHORT_COVER_LABEL.match(label)
+        if short:
+            return short.group(1).lower()
+    combined = " ".join(filter(None, [variant.cover_label, variant.variant_name]))
+    return _cover_letter_key(combined)
+
+
+def _item_cover_letter(item: dict[str, Any]) -> str | None:
+    for field in ("cover_name", "canonical_variant_text", "raw_variant_text", "variant_type"):
+        letter = _cover_letter_key(item.get(field) if isinstance(item.get(field), str) else None)
+        if letter:
+            return letter
+    return None
 
 
 def _issue_numbers_compatible(left: str | None, right: str | None) -> bool:
@@ -131,15 +160,6 @@ def _external_issue_matches_item(issue: ExternalCatalogIssue | None, item: dict[
     return _issue_numbers_compatible(issue.issue_number, str(line_issue))
 
 
-def _cover_letter_key(value: str | None) -> str | None:
-    if not value:
-        return None
-    match = _COVER_LETTER_PATTERN.search(value)
-    if not match:
-        return None
-    return match.group(1).lower()
-
-
 def _text_tokens(value: str | None) -> set[str]:
     normalized = normalize_import_title(value)
     if not normalized:
@@ -149,10 +169,8 @@ def _text_tokens(value: str | None) -> set[str]:
 
 def _variant_match_score(item: dict[str, Any], variant: ExternalCatalogVariant) -> int:
     score = 0
-    item_letter = _cover_letter_key(item.get("cover_name"))
-    variant_letter = _cover_letter_key(
-        " ".join(filter(None, [variant.cover_label, variant.variant_name]))
-    )
+    item_letter = _item_cover_letter(item)
+    variant_letter = _variant_cover_letter(variant)
     if item_letter and variant_letter:
         if item_letter == variant_letter:
             score += 120
@@ -178,12 +196,13 @@ def _pick_best_catalog_variant(
 ) -> ExternalCatalogVariant | None:
     if not variants:
         return None
-    item_letter = _cover_letter_key(item.get("cover_name"))
-    scored = [(variant, _variant_match_score(item, variant)) for variant in variants]
+    item_letter = _item_cover_letter(item)
     if item_letter:
-        letter_matches = [row for row in scored if row[1] >= 0]
-        if letter_matches:
-            scored = letter_matches
+        letter_variants = [variant for variant in variants if _variant_cover_letter(variant) == item_letter]
+        if not letter_variants:
+            return None
+        variants = letter_variants
+    scored = [(variant, _variant_match_score(item, variant)) for variant in variants]
     best_variant, best_score = max(scored, key=lambda row: (row[1], -(row[0].id or 0)))
     if best_score < 0:
         return None
@@ -299,13 +318,10 @@ def _resolve_external_catalog_cover(
                 cover_image_source_id=best_variant.id,
                 has_cover_image=True,
             )
-        if (item.get("cover_name") or "").strip():
-            item_letter = _cover_letter_key(item.get("cover_name"))
+        if (item.get("cover_name") or "").strip() or _item_cover_letter(item):
+            item_letter = _item_cover_letter(item)
             if item_letter is not None:
-                variant_letters = [
-                    _cover_letter_key(" ".join(filter(None, [variant.cover_label, variant.variant_name])))
-                    for variant in variants
-                ]
+                variant_letters = [_variant_cover_letter(variant) for variant in variants]
                 if any(letter == item_letter for letter in variant_letters if letter):
                     return None
                 if any(letter for letter in variant_letters if letter):
@@ -433,6 +449,25 @@ def _attempt_locg_hydrate_for_cover_images(
         return ImportLocgHydrateResult(attempted=True, hydrated=False, error="hydrate_exception")
 
 
+def _external_variant_debug_fields(
+    session: Session,
+    item: dict[str, Any],
+    cover: ImportCoverResolutionResultPayload,
+) -> dict[str, Any]:
+    if cover.cover_image_source != "external_catalog_variant" or cover.cover_image_source_id is None:
+        return {}
+    row = session.get(ExternalCatalogVariant, cover.cover_image_source_id)
+    if row is None:
+        return {}
+    return {
+        "requested_cover_letter": _item_cover_letter(item),
+        "matched_variant_id": row.id,
+        "matched_variant_cover_label": row.cover_label,
+        "matched_variant_letter": _variant_cover_letter(row),
+        "matched_variant_artist": row.artist,
+    }
+
+
 def resolve_import_cover(
     session: Session | None,
     item: dict[str, Any],
@@ -470,6 +505,7 @@ def resolve_import_cover(
                     external_cover,
                     external_cover.cover_image_source or "external_catalog",
                     external_issue_id=external_issue_id,
+                    **_external_variant_debug_fields(session, item, external_cover),
                 )
             last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
                 session,
@@ -497,6 +533,7 @@ def resolve_import_cover(
                         external_issue_id=refreshed_issue_id,
                         cover_miss_reason_before_hydrate=last_miss_reason,
                         **_locg_hydrate_debug_fields(last_hydrate),
+                        **_external_variant_debug_fields(session, item, external_cover),
                     )
                 last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
                     session,
@@ -527,6 +564,7 @@ def resolve_import_cover(
                         external_cover.cover_image_source or "external_catalog",
                         external_issue_id=external_issue_id,
                         **hydrate_fields,
+                        **_external_variant_debug_fields(session, item, external_cover),
                     )
                 last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
                     session,

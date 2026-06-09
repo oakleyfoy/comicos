@@ -4,6 +4,7 @@ import {
   buildMetadataReviewSummary,
   humanizeMetadataReviewNote,
   severityForMetadataReviewNote,
+  type MetadataReviewSummary,
 } from "./metadataReviewPresentation";
 
 export type ImportMetadataQuestionKind =
@@ -22,6 +23,12 @@ export type ImportMetadataQuestion = {
   /** Raw value from invoice when confirming publisher spelling */
   rawPublisher?: string;
   severity: "LOW" | "MEDIUM" | "HIGH";
+  /** Human label for the field being confirmed (confirm_parsed) */
+  affectedField?: string;
+  /** Value read from the order / invoice */
+  invoiceValue?: string;
+  /** Value ComicOS will store and use after enrichment */
+  parsedValue?: string;
 };
 
 function comicLabelForItem(item: AiDraftOrderItem): string {
@@ -50,6 +57,26 @@ function severityRank(severity: "LOW" | "MEDIUM" | "HIGH"): number {
     return 2;
   }
   return 1;
+}
+
+function displayableReviewValue(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "—" || trimmed === "Not provided") {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function confirmQuestionFieldDetails(
+  summary: MetadataReviewSummary,
+): Pick<ImportMetadataQuestion, "affectedField" | "invoiceValue" | "parsedValue"> {
+  const affectedField =
+    summary.affectedField !== "Metadata" ? summary.affectedField : undefined;
+  return {
+    affectedField,
+    invoiceValue: displayableReviewValue(summary.detectedValue),
+    parsedValue: displayableReviewValue(summary.canonicalValue),
+  };
 }
 
 export function buildPrimaryMetadataQuestion(
@@ -102,6 +129,7 @@ export function buildPrimaryMetadataQuestion(
   }
 
   const summary = buildMetadataReviewSummary(item);
+  const fieldDetails = confirmQuestionFieldDetails(summary);
   if (summary.noCorrectionNecessary) {
     return {
       itemIndex,
@@ -109,6 +137,7 @@ export function buildPrimaryMetadataQuestion(
       comicLabel,
       prompt: summary.issue || humanizeMetadataReviewNote(note),
       severity: summary.severity,
+      ...fieldDetails,
     };
   }
 
@@ -119,6 +148,7 @@ export function buildPrimaryMetadataQuestion(
     prompt: note ? humanizeMetadataReviewNote(note) : "Please confirm this line looks correct before we show the full order.",
     suggestedAnswer: summary.canonicalValue !== "—" ? summary.canonicalValue : undefined,
     severity,
+    ...fieldDetails,
   };
 }
 

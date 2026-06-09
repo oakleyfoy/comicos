@@ -63,7 +63,8 @@ def _parse_variants_from_live(html: str, *, base_url: str) -> list[dict[str, Any
         variant_name = title
         label_m = re.match(r"^\s*Cover\s+([A-Z0-9]+)\s+(.*)$", title, re.IGNORECASE)
         if label_m:
-            cover_label = label_m.group(1).strip()
+            letter = label_m.group(1).strip()
+            cover_label = f"Cover {letter}"
             variant_name = label_m.group(2).strip()
         row = normalize_variant_row(
             {

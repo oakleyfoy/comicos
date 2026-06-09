@@ -8,6 +8,56 @@ type ImportMetadataQuestionsGateProps = {
   onAnswer: (question: ImportMetadataQuestion, answer: string | null) => void | Promise<void>;
 };
 
+function ConfirmFieldPreview({ question }: { question: ImportMetadataQuestion }): JSX.Element | null {
+  if (question.kind !== "confirm_parsed") {
+    return null;
+  }
+
+  const fieldLabel = question.affectedField?.trim();
+  const fromOrder = question.invoiceValue?.trim();
+  const comicOsValue = question.parsedValue?.trim() ?? question.suggestedAnswer?.trim();
+  const valuesMatch =
+    fromOrder && comicOsValue && fromOrder.localeCompare(comicOsValue, undefined, { sensitivity: "accent" }) === 0;
+
+  if (!fieldLabel && !fromOrder && !comicOsValue) {
+    return null;
+  }
+
+  return (
+    <div
+      className="mt-4 rounded-2xl border border-white/15 bg-slate-950/90 px-4 py-4"
+      data-testid="import-metadata-confirm-preview"
+    >
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200/90">
+        {fieldLabel ? `Confirm ${fieldLabel.toLowerCase()}` : "Confirm this value"}
+      </p>
+      {valuesMatch && comicOsValue ? (
+        <p className="mt-3 text-base font-semibold text-white">{comicOsValue}</p>
+      ) : (
+        <dl className="mt-3 space-y-3 text-sm">
+          {fromOrder ? (
+            <div>
+              <dt className="font-medium text-slate-400">From your order</dt>
+              <dd className="mt-1 text-base font-semibold text-white">{fromOrder}</dd>
+            </div>
+          ) : null}
+          {comicOsValue ? (
+            <div>
+              <dt className="font-medium text-slate-400">ComicOS will use</dt>
+              <dd className="mt-1 text-base font-semibold text-emerald-100">{comicOsValue}</dd>
+            </div>
+          ) : null}
+        </dl>
+      )}
+      <p className="mt-3 text-sm text-slate-400">
+        {valuesMatch
+          ? "If this matches your receipt, confirm below to continue."
+          : "If ComicOS picked the right value, confirm below. You can fix it on the line item after the full order appears."}
+      </p>
+    </div>
+  );
+}
+
 export function ImportMetadataQuestionsGate({
   questions,
   disabled = false,
@@ -63,6 +113,7 @@ export function ImportMetadataQuestionsGate({
       </p>
       <h2 className="mt-2 text-xl font-semibold text-white">{current.comicLabel}</h2>
       <p className="mt-4 text-base leading-relaxed text-slate-200">{current.prompt}</p>
+      <ConfirmFieldPreview question={current} />
 
       {needsText ? (
         <div className="mt-6 space-y-4">

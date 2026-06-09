@@ -102,6 +102,15 @@ function formatCoverResolutionDebugLine(debug: Record<string, unknown> | null | 
   if (typeof externalIssueId === "number") {
     parts.push(`external_issue_id=${externalIssueId}`);
   }
+  const variantLabel = debug.matched_variant_cover_label;
+  if (typeof variantLabel === "string" && variantLabel.trim()) {
+    parts.push(`variant=${variantLabel.trim()}`);
+  }
+  const requestedLetter = debug.requested_cover_letter;
+  const matchedLetter = debug.matched_variant_letter;
+  if (typeof requestedLetter === "string" && typeof matchedLetter === "string") {
+    parts.push(`letter ${requestedLetter}→${matchedLetter}`);
+  }
   return parts.join(" · ");
 }
 

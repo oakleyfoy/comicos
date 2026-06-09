@@ -1974,7 +1974,9 @@ export function OrderImportPage() {
       <div className="mx-auto max-w-7xl">
         {isLoadingImport ? (
           <div className="mt-6">
-            <StatusBanner tone="info">Loading saved import draft...</StatusBanner>
+            <StatusBanner tone="info" emphasis="prominent">
+              Loading saved import draft…
+            </StatusBanner>
           </div>
         ) : null}
 
