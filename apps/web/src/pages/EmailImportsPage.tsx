@@ -60,9 +60,9 @@ function GmailImportCard({
         {pending ? (
           <Link
             to={`/orders/import?importId=${entry.draft_import.id}`}
-            className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
+            className="rounded-xl border border-rose-400/50 bg-rose-950/90 px-4 py-2.5 text-sm font-semibold text-rose-50 transition hover:border-rose-300/70 hover:bg-rose-900"
           >
-            Review Draft
+            Review
           </Link>
         ) : entry.draft_import.order_id ? (
           <Link
@@ -92,9 +92,9 @@ function GmailImportCard({
             type="button"
             disabled={deletingDraftId === entry.draft_import.id || isSyncing}
             onClick={() => onDelete(entry)}
-            className="rounded-xl border border-rose-400/40 bg-rose-950/80 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:border-rose-300/60 hover:bg-rose-900/80 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-white/15 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-400 hover:bg-slate-800 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {deletingDraftId === entry.draft_import.id ? "Deleting…" : "Delete Draft"}
+            {deletingDraftId === entry.draft_import.id ? "Deleting…" : "Delete"}
           </button>
         ) : null}
       </div>
@@ -321,15 +321,15 @@ export function EmailImportsPage() {
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-            <p className="text-sm font-medium text-slate-400">Imported Gmail Receipts</p>
+            <p className="text-base font-semibold text-slate-200">Imported Gmail Receipts</p>
             <p className="mt-2 text-3xl font-semibold text-white">{imports.length}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-            <p className="text-sm font-medium text-slate-400">Drafts Awaiting Review</p>
+            <p className="text-base font-semibold text-slate-200">Drafts Awaiting Review</p>
             <p className="mt-2 text-3xl font-semibold text-white">{draftCount}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-            <p className="text-sm font-medium text-slate-400">Completed</p>
+            <p className="text-base font-semibold text-slate-200">Completed</p>
             <p className="mt-2 text-3xl font-semibold text-white">{completedImports.length}</p>
           </div>
         </div>
@@ -364,13 +364,13 @@ export function EmailImportsPage() {
           <section>
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-cyan-300/90">Needs review</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Drafts to finish</h2>
+                <p className="text-sm font-bold uppercase tracking-[0.12em] text-cyan-900">Needs review</p>
+                <h2 className="mt-1.5 text-2xl font-bold text-slate-900">Drafts to finish</h2>
               </div>
-              <p className="text-sm text-slate-400">{pendingImports.length} waiting</p>
+              <p className="text-base font-semibold text-slate-800">{pendingImports.length} waiting</p>
             </div>
             {pendingImports.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-white/15 bg-slate-900/50 px-4 py-8 text-center text-sm text-slate-400">
+              <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-base font-medium text-slate-700">
                 No drafts waiting. Sync Gmail or confirm imports from the list below.
               </p>
             ) : (
@@ -391,13 +391,13 @@ export function EmailImportsPage() {
           <section>
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Done</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-200">Confirmed imports</h2>
+                <p className="text-sm font-bold uppercase tracking-[0.12em] text-slate-700">Done</p>
+                <h2 className="mt-1.5 text-2xl font-bold text-slate-900">Confirmed imports</h2>
               </div>
-              <p className="text-sm text-slate-500">{completedImports.length} completed</p>
+              <p className="text-base font-semibold text-slate-800">{completedImports.length} completed</p>
             </div>
             {completedImports.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 px-4 py-8 text-center text-sm text-slate-500">
+              <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-base font-medium text-slate-700">
                 Confirmed Gmail imports will appear here after you create an order.
               </p>
             ) : (
