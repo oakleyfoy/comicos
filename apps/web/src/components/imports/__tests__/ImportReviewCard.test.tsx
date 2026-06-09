@@ -27,6 +27,12 @@ function buildItem(overrides: Record<string, unknown> = {}) {
     coverImageUrl: undefined,
     coverThumbnailUrl: undefined,
     hasCoverImage: false,
+    coverResolutionDebug: {
+      outcome: "none",
+      reason: "variant_letter_not_matched",
+      locg_hydrate_attempted: true,
+      locg_hydrated: false,
+    },
     ...overrides,
   };
 }
@@ -83,6 +89,12 @@ describe("ImportReviewCard", () => {
       "src",
       "https://example.com/terminal-thumb.jpg",
     );
+  });
+
+  it("shows cover resolution debug when provided", () => {
+    render(<Harness />);
+    expect(screen.getByText(/Cover debug: none/)).toBeInTheDocument();
+    expect(screen.getByText(/variant_letter_not_matched/)).toBeInTheDocument();
   });
 
   it("reveals editable fields after clicking Show Details", () => {

@@ -63,6 +63,7 @@ interface OrderItemDraft {
   coverImageUrl?: string;
   coverThumbnailUrl?: string;
   hasCoverImage?: boolean;
+  coverResolutionDebug?: Record<string, unknown> | null;
   importLineCoverImageId?: number;
 }
 
@@ -110,6 +111,21 @@ function formatCurrency(value: number): string {
     style: "currency",
     currency: "USD",
   }).format(value);
+}
+
+function normalizeMoneyInput(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "0.00";
+  }
+  const raw = typeof value === "number" ? String(value) : value.trim();
+  if (!raw) {
+    return "0.00";
+  }
+  const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(parsed)) {
+    return "0.00";
+  }
+  return parsed.toFixed(2);
 }
 
 function formatImportCoverDimensions(width: number | null, height: number | null): string {
@@ -264,23 +280,16 @@ function lineSubtotalFromItems(items: OrderItemDraft[]): number {
   }, 0);
 }
 
-function sumLineQuantities(items: OrderItemDraft[]): number {
-  return items.reduce((sum, item) => {
-    const quantity = Number(item.quantity);
-    return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
-  }, 0);
-}
-
 function orderTotalFromDraft(draft: AiParseOrderResponse): string {
   if (draft.order_total != null && String(draft.order_total).trim() !== "") {
-    return String(draft.order_total);
+    return normalizeMoneyInput(draft.order_total);
   }
   const subtotal = draft.items.reduce((sum, item) => {
     const quantity = Number(item.quantity ?? 0);
     const rawItemPrice = Number(item.raw_item_price ?? 0);
     return sum + quantity * rawItemPrice;
   }, 0);
-  return String(
+  return normalizeMoneyInput(
     subtotal + Number(draft.shipping_amount || 0) + Number(draft.tax_amount || 0),
   );
 }
@@ -334,6 +343,7 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               coverImageUrl: item.cover_image_url ?? undefined,
               coverThumbnailUrl: item.cover_thumbnail_url ?? undefined,
               hasCoverImage: item.has_cover_image ?? undefined,
+              coverResolutionDebug: item.cover_resolution_debug ?? undefined,
               importLineCoverImageId: item.import_line_cover_image_id ?? undefined,
             })),
           )
@@ -695,8 +705,6 @@ export function OrderImportPage() {
   >({});
 
   const subtotal = useMemo(() => lineSubtotalFromItems(items), [items]);
-  const lineQuantityTotal = useMemo(() => sumLineQuantities(items), [items]);
-  const parsedOrderTotal = Number(orderTotal || 0);
   const isParseJobActive =
     parseJobId !== null && parseJobStatus !== "finished" && parseJobStatus !== "failed";
   const shouldShowDraftEditor = hasDraft || editorMode === "manual";
@@ -847,7 +855,7 @@ export function OrderImportPage() {
       source_type: sourceType,
       shipping_amount: "0.00",
       tax_amount: "0.00",
-      order_total: orderTotal.trim() ? orderTotal : null,
+      order_total: orderTotal.trim() ? normalizeMoneyInput(orderTotal) : null,
       total_books: totalBooks.trim() ? Number(totalBooks) : null,
       items: items.map((item) => ({
         publisher: item.publisher.trim() || null,
@@ -2154,18 +2162,22 @@ export function OrderImportPage() {
 
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-slate-300">Total</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={orderTotal}
-                    onChange={(event) => {
-                      setOrderTotal(event.target.value);
-                      setFormErrors((current) => ({ ...current, orderTotal: undefined }));
-                    }}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
-                  />
-                  <p className="text-xs text-slate-500">Total spent on this order (all-in).</p>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                      $
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={orderTotal}
+                      onChange={(event) => {
+                        setOrderTotal(event.target.value);
+                        setFormErrors((current) => ({ ...current, orderTotal: undefined }));
+                      }}
+                      onBlur={() => setOrderTotal((current) => normalizeMoneyInput(current))}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/80 py-3 pl-8 pr-4 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </div>
                   {formErrors.orderTotal ? (
                     <p className="text-sm text-rose-300">{formErrors.orderTotal}</p>
                   ) : null}
@@ -2184,13 +2196,6 @@ export function OrderImportPage() {
                     }}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
                   />
-                  <p className="text-xs text-slate-500">
-                    Books on the receipt
-                    {lineQuantityTotal !== Number(totalBooks || 0)
-                      ? ` · line qty sum is ${lineQuantityTotal}`
-                      : ""}
-                    .
-                  </p>
                   {formErrors.totalBooks ? (
                     <p className="text-sm text-rose-300">{formErrors.totalBooks}</p>
                   ) : null}
@@ -2230,25 +2235,6 @@ export function OrderImportPage() {
             </section>
 
             <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                  <p className="text-sm font-medium text-slate-400">Running Subtotal</p>
-                  <p className="mt-3 text-2xl font-semibold text-white">
-                    {formatCurrency(subtotal)}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                  <p className="text-sm font-medium text-slate-400">Total Books</p>
-                  <p className="mt-3 text-2xl font-semibold text-white">{totalBooks || "0"}</p>
-                </div>
-                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                  <p className="text-sm font-medium text-cyan-100">Total Spent</p>
-                  <p className="mt-3 text-2xl font-semibold text-white">
-                    {formatCurrency(parsedOrderTotal)}
-                  </p>
-                </div>
-              </div>
-
                   {isSubmitting ? (
                 <div className="mt-4">
                   <StatusBanner tone="info">

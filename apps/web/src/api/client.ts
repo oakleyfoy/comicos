@@ -167,6 +167,7 @@ export interface AiDraftOrderItem {
   cover_image_source?: string | null;
   cover_image_source_id?: number | null;
   has_cover_image?: boolean | null;
+  cover_resolution_debug?: Record<string, unknown> | null;
   import_line_cover_image_id?: number | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
@@ -1653,6 +1654,12 @@ export interface GmailImportedDraft {
   external_message_id: string;
   imported_at: string;
   draft_import: DraftImport;
+}
+
+export interface GmailImportRemoveResponse {
+  draft_import_id: number;
+  external_message_id: string;
+  removed: boolean;
 }
 
 export interface OpsQueueSnapshot {
@@ -20292,6 +20299,12 @@ export const apiClient = {
         }
         throw error;
       });
+  },
+
+  deleteGmailImport(draftImportId: number): Promise<GmailImportRemoveResponse> {
+    return request<GmailImportRemoveResponse>(`/gmail/imports/${draftImportId}`, {
+      method: "DELETE",
+    });
   },
 
   getOpsDashboard(): Promise<OpsDashboardResponse> {

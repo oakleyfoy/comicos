@@ -14,6 +14,9 @@ def test_resolve_import_cover_null_safe_without_match(session: Session) -> None:
     assert result.cover_image_url is None
     assert result.cover_thumbnail_url is None
     assert result.has_cover_image is False
+    assert result.cover_resolution_debug is not None
+    assert result.cover_resolution_debug.get("outcome") == "none"
+    assert result.cover_resolution_debug.get("reason") == "no_owner_user_for_catalog_or_hydrate"
 
 
 def test_resolve_import_cover_prefers_external_variant_image(session: Session) -> None:
@@ -56,6 +59,8 @@ def test_resolve_import_cover_prefers_external_variant_image(session: Session) -
     assert result.cover_image_url == "https://example.com/variant-cover.jpg"
     assert result.cover_image_source == "external_catalog_variant"
     assert result.has_cover_image is True
+    assert result.cover_resolution_debug is not None
+    assert result.cover_resolution_debug.get("outcome") == "external_catalog_variant"
 
 
 def test_resolve_import_cover_falls_back_from_release_issue_match(session: Session) -> None:

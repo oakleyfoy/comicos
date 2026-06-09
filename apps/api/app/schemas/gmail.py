@@ -41,3 +41,9 @@ class GmailImportedDraftRead(BaseModel):
     external_message_id: str
     imported_at: datetime
     draft_import: DraftImportRead
+
+
+class GmailImportRemoveResponse(BaseModel):
+    draft_import_id: int
+    external_message_id: str
+    removed: bool = True

@@ -116,6 +116,7 @@ from app.schemas.gmail import (
     GmailConnectStartResponse,
     GmailDisconnectResponse,
     GmailImportedDraftRead,
+    GmailImportRemoveResponse,
     GmailStatusResponse,
     GmailSyncEnqueueResponse,
     GmailSyncSettingsUpdate,
@@ -913,6 +914,7 @@ from app.services.gmail_ingestion import (
     get_gmail_status_for_user,
     get_gmail_sync_status_for_user,
     serialize_gmail_import_drafts,
+    remove_gmail_import_for_user,
     update_gmail_sync_settings_for_user,
 )
 from app.services.imports import (
@@ -2493,6 +2495,19 @@ def gmail_imports(
         session=session,
         current_user=current_user,
         limit=limit,
+    )
+
+
+@app.delete("/gmail/imports/{draft_import_id}", response_model=GmailImportRemoveResponse)
+def delete_gmail_import(
+    draft_import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> GmailImportRemoveResponse:
+    return remove_gmail_import_for_user(
+        session=session,
+        current_user=current_user,
+        draft_import_id=draft_import_id,
     )
 
 

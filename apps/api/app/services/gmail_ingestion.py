@@ -22,11 +22,17 @@ from app.models import DraftImport, GmailAccount, GmailImportRecord, User
 from app.schemas.ai import ParseOrderResponse
 from app.schemas.gmail import (
     GmailImportedDraftRead,
+    GmailImportRemoveResponse,
     GmailStatusResponse,
     GmailSyncStatusResponse,
 )
 from app.services.ai_order_parser import AiOrderParserError, parse_order_draft_from_text
-from app.services.imports import draft_import_cover_image_counts, serialize_import, utc_now
+from app.services.imports import (
+    draft_import_cover_image_counts,
+    get_import_for_user_or_404,
+    serialize_import,
+    utc_now,
+)
 from app.services.ops_events import classify_failure_message, record_ops_event
 
 LOGGER = logging.getLogger(__name__)
@@ -762,3 +768,54 @@ def serialize_gmail_import_drafts(
         )
         for record, draft_import in records
     ]
+
+
+def remove_gmail_import_for_user(
+    session: Session,
+    current_user: User,
+    draft_import_id: int,
+) -> GmailImportRemoveResponse:
+    draft_import = get_import_for_user_or_404(session, current_user, draft_import_id)
+    if draft_import.status == "confirmed":
+        raise HTTPException(
+            status_code=409,
+            detail="Confirmed imports cannot be removed from Gmail receipts.",
+        )
+
+    gmail_record = session.exec(
+        select(GmailImportRecord).where(GmailImportRecord.draft_import_id == draft_import_id)
+    ).first()
+    if gmail_record is None:
+        raise HTTPException(status_code=404, detail="Gmail import record not found for this draft.")
+
+    account = session.exec(
+        select(GmailAccount).where(
+            GmailAccount.id == gmail_record.gmail_account_id,
+            GmailAccount.user_id == current_user.id,
+        )
+    ).first()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Gmail import record not found for this draft.")
+
+    external_message_id = gmail_record.external_message_id
+    session.delete(gmail_record)
+    draft_import.status = "discarded"
+    draft_import.updated_at = utc_now()
+    session.add(draft_import)
+    session.commit()
+
+    record_ops_event(
+        event_type="gmail_import_removed",
+        status="success",
+        user_id=current_user.id,
+        gmail_account_id=account.id,
+        draft_import_id=draft_import_id,
+        external_message_id=external_message_id,
+        message="Removed Gmail receipt import and discarded draft.",
+    )
+
+    return GmailImportRemoveResponse(
+        draft_import_id=draft_import_id,
+        external_message_id=external_message_id,
+        removed=True,
+    )

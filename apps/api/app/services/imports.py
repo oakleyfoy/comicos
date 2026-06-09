@@ -144,6 +144,7 @@ def serialize_import(
             owner_user_id=draft_import.user_id,
             debug_catalog=debug_catalog,
         )
+    if session is not None and (enrich_metadata or enrich_lifecycle):
         normalized_payload = apply_import_cover_to_parse_order(
             normalized_payload,
             session=session,

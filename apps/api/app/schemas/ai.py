@@ -79,6 +79,7 @@ class AiDraftOrderItem(BaseModel):
     cover_image_source: str | None = None
     cover_image_source_id: int | None = None
     has_cover_image: bool | None = None
+    cover_resolution_debug: dict[str, Any] | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None

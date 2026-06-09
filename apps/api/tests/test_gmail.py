@@ -749,6 +749,60 @@ def test_gmail_imports_list_is_lightweight_and_respects_limit(
     assert [row["external_message_id"] for row in limited_payload] == ["msg-2", "msg-1"]
 
 
+def test_delete_gmail_import_removes_record_and_discards_draft(
+    client: TestClient,
+    session: Session,
+    monkeypatch,
+) -> None:
+    configure_gmail(monkeypatch)
+    token = register_and_login(client)
+    owner = session.exec(select(User).where(User.email == "gmail@example.com")).one()
+    account = GmailAccount(
+        user_id=owner.id,
+        gmail_email="owner@gmail.com",
+        google_subject_id="google-subject-delete",
+        access_token_encrypted=encrypt_secret_value("access-token"),
+        refresh_token_encrypted=encrypt_secret_value("refresh-token"),
+        token_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+    record = seed_gmail_import_record(
+        session,
+        account=account,
+        owner=owner,
+        external_message_id="msg-delete-me",
+        imported_at=datetime(2026, 6, 8, 16, 0, tzinfo=timezone.utc),
+    )
+    assert record.draft_import_id is not None
+
+    response = client.delete(
+        f"/gmail/imports/{record.draft_import_id}",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["removed"] is True
+    assert body["external_message_id"] == "msg-delete-me"
+
+    assert (
+        session.exec(
+            select(GmailImportRecord).where(
+                GmailImportRecord.external_message_id == "msg-delete-me",
+            )
+        ).first()
+        is None
+    )
+    draft = session.get(DraftImport, record.draft_import_id)
+    assert draft is not None
+    assert draft.status == "discarded"
+
+    listed = client.get("/gmail/imports", headers=auth_headers(token))
+    assert listed.status_code == 200
+    assert all(row["external_message_id"] != "msg-delete-me" for row in listed.json())
+
+
 def test_failed_gmail_sync_updates_status_and_safe_error(
     client: TestClient,
     session: Session,

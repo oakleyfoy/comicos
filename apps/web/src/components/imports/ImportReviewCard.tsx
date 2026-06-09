@@ -1,5 +1,6 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { apiClient } from "../../api/client";
 import { formatCalendarDateWithYear } from "../../utils/formatCalendarDate";
 
 interface ImportReviewCardItem {
@@ -20,6 +21,7 @@ interface ImportReviewCardItem {
   coverImageUrl?: string;
   coverThumbnailUrl?: string;
   hasCoverImage?: boolean;
+  coverResolutionDebug?: Record<string, unknown> | null;
 }
 
 interface ImportReviewCardFieldErrors {
@@ -70,6 +72,38 @@ interface ImportReviewCardProps {
 
 const INPUT_CLASS_NAME =
   "w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400/70";
+
+function formatCoverResolutionDebugLine(debug: Record<string, unknown> | null | undefined): string | null {
+  if (!debug || typeof debug !== "object") {
+    return null;
+  }
+  const outcome = typeof debug.outcome === "string" ? debug.outcome : "unknown";
+  const reason = typeof debug.reason === "string" ? debug.reason : null;
+  const hydrateAttempted = debug.locg_hydrate_attempted;
+  const hydrated = debug.locg_hydrated;
+  const parts = [`Cover debug: ${outcome}`];
+  if (reason) {
+    parts.push(reason);
+  }
+  if (hydrateAttempted === true || hydrateAttempted === false) {
+    parts.push(`LOCG hydrate attempted=${String(hydrateAttempted)}`);
+  }
+  if (hydrated === true || hydrated === false) {
+    parts.push(`hydrated=${String(hydrated)}`);
+  }
+  const hydrateReason =
+    typeof debug.locg_hydrate_no_match_reason === "string"
+      ? debug.locg_hydrate_no_match_reason
+      : null;
+  if (hydrateReason) {
+    parts.push(hydrateReason);
+  }
+  const externalIssueId = debug.external_issue_id;
+  if (typeof externalIssueId === "number") {
+    parts.push(`external_issue_id=${externalIssueId}`);
+  }
+  return parts.join(" · ");
+}
 
 function coverImageKey(item: ImportReviewCardItem): string {
   return [item.issueNumber, item.coverThumbnailUrl, item.coverImageUrl, item.coverName]
@@ -122,18 +156,77 @@ export function getCompactCoverLabel(coverName: string | null | undefined): stri
   return artist || raw;
 }
 
+function isDirectCoverUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url.trim());
+}
+
+function coverFetchPath(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+  return `/${trimmed}`;
+}
+
 function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
-  const src = item.coverThumbnailUrl || item.coverImageUrl || null;
+  const rawSrc = item.coverThumbnailUrl || item.coverImageUrl || null;
   const alt = titleIssueLabel(item);
-  if (src) {
+  const [displaySrc, setDisplaySrc] = useState<string | null>(
+    rawSrc && isDirectCoverUrl(rawSrc) ? rawSrc : null,
+  );
+
+  useEffect(() => {
+    if (!rawSrc) {
+      setDisplaySrc(null);
+      return undefined;
+    }
+    if (isDirectCoverUrl(rawSrc)) {
+      setDisplaySrc(rawSrc);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    void apiClient
+      .fetchCoverImageBlob(coverFetchPath(rawSrc))
+      .then((blob) => {
+        if (cancelled) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setDisplaySrc(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDisplaySrc(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [rawSrc]);
+
+  if (displaySrc) {
     return (
       <img
         key={coverImageKey(item)}
-        src={src}
+        src={displaySrc}
         alt={alt}
         loading="lazy"
         className="h-full w-full object-cover"
       />
+    );
+  }
+  if (rawSrc) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-800 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+        Loading…
+      </div>
     );
   }
   return (
@@ -168,6 +261,7 @@ export function ImportReviewCard({
   const scanCoverInputRef = useRef<HTMLInputElement>(null);
   const releaseDateLabel =
     formatCalendarDateWithYear(item.releaseDate) ?? item.releaseDate.trim();
+  const coverDebugLine = formatCoverResolutionDebugLine(item.coverResolutionDebug);
 
   return (
     <article className={`rounded-2xl border-2 p-4 ${cardSurfaceClassName}`}>
@@ -213,6 +307,9 @@ export function ImportReviewCard({
           ) : null}
           {item.catalogReleaseSourceText ? (
             <p className="mt-1 text-sm text-slate-300">{item.catalogReleaseSourceText}</p>
+          ) : null}
+          {coverDebugLine ? (
+            <p className="mt-1 font-mono text-[11px] leading-snug text-amber-200/90">{coverDebugLine}</p>
           ) : null}
 
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-200">

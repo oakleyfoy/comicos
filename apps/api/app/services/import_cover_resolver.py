@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlmodel import Session, select
@@ -14,9 +15,14 @@ from app.services.cover_images import cover_derivative_fetch_path, cover_fetch_p
 from app.services.import_catalog_resolution_service import (
     ImportCatalogResolutionResult,
     _issue_number_key,
+    _parse_release_date_from_item,
     normalize_import_title,
     resolve_import_catalog_match,
 )
+from app.services.import_locg_hydrate_service import ImportLocgHydrateResult
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,6 +32,82 @@ class ImportCoverResolutionResultPayload:
     cover_image_source: str | None
     cover_image_source_id: int | None
     has_cover_image: bool
+    cover_resolution_debug: dict[str, Any] | None = None
+
+
+def _with_cover_debug(
+    payload: ImportCoverResolutionResultPayload,
+    outcome: str,
+    **extra: Any,
+) -> ImportCoverResolutionResultPayload:
+    debug: dict[str, Any] = {"outcome": outcome}
+    for key, value in extra.items():
+        if value is not None:
+            debug[key] = value
+    return replace(payload, cover_resolution_debug=debug)
+
+
+def _locg_hydrate_debug_fields(result: ImportLocgHydrateResult) -> dict[str, Any]:
+    return {
+        "locg_hydrate_attempted": result.attempted,
+        "locg_hydrated": result.hydrated,
+        "locg_hydrate_external_issue_id": result.external_issue_id,
+        "locg_hydrate_no_match_reason": result.no_match_reason,
+        "locg_hydrate_error": result.error,
+        "locg_hydrate_cached": result.cached,
+    }
+
+
+def _external_catalog_cover_miss_reason(
+    session: Session,
+    *,
+    external_issue_id: int,
+    item: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    all_variants = session.exec(
+        select(ExternalCatalogVariant).where(
+            ExternalCatalogVariant.external_issue_id == external_issue_id
+        )
+    ).all()
+    with_images = [variant for variant in all_variants if variant.image_url]
+    item_letter = _cover_letter_key(item.get("cover_name"))
+    detail: dict[str, Any] = {
+        "external_issue_id": external_issue_id,
+        "variant_row_count": len(all_variants),
+        "variant_rows_with_image_url": len(with_images),
+        "requested_cover_letter": item_letter,
+    }
+    if with_images:
+        best_variant = _pick_best_catalog_variant(item, with_images)
+        if best_variant is None:
+            if item_letter is not None:
+                return "variant_letter_not_matched", detail
+            return "no_matching_variant_row", detail
+        return "unexpected_miss", detail
+
+    issue = session.get(ExternalCatalogIssue, external_issue_id)
+    if issue is None:
+        return "external_issue_row_missing", detail
+
+    has_issue_image = bool(
+        issue.high_resolution_image_url or issue.cover_image_url or issue.thumbnail_url
+    )
+    detail["issue_has_image_urls"] = has_issue_image
+    if not has_issue_image:
+        if all_variants:
+            return "catalog_variants_and_issue_missing_image_urls", detail
+        return "catalog_issue_missing_image_urls", detail
+
+    cover_name = (item.get("cover_name") or "").strip()
+    if cover_name and all_variants:
+        variant_letters = [
+            _cover_letter_key(" ".join(filter(None, [variant.cover_label, variant.variant_name])))
+            for variant in all_variants
+        ]
+        if any(letter for letter in variant_letters if letter):
+            return "variant_named_no_letter_match_no_issue_fallback", detail
+
+    return "catalog_issue_image_unavailable", detail
 
 
 _COVER_LETTER_PATTERN = re.compile(
@@ -218,7 +300,16 @@ def _resolve_external_catalog_cover(
                 has_cover_image=True,
             )
         if (item.get("cover_name") or "").strip():
-            return None
+            item_letter = _cover_letter_key(item.get("cover_name"))
+            if item_letter is not None:
+                variant_letters = [
+                    _cover_letter_key(" ".join(filter(None, [variant.cover_label, variant.variant_name])))
+                    for variant in variants
+                ]
+                if any(letter == item_letter for letter in variant_letters if letter):
+                    return None
+                if any(letter for letter in variant_letters if letter):
+                    return None
 
     issue = session.get(ExternalCatalogIssue, external_issue_id)
     if issue is None:
@@ -285,6 +376,8 @@ def _resolve_line_upload_cover(
     cover = session.get(CoverImage, cover_id)
     if cover is None:
         return None
+    if cover.processing_status == "failed":
+        return None
     return _cover_payload_from_stored_image(session, cover)
 
 
@@ -305,6 +398,41 @@ def _resolve_draft_cover(
     return _cover_payload_from_stored_image(session, cover)
 
 
+def _attempt_locg_hydrate_for_cover_images(
+    session: Session,
+    item: dict[str, Any],
+) -> ImportLocgHydrateResult:
+    """Fetch LOCG detail when the mirror row exists but has no usable cover art yet."""
+    from app.services.import_locg_hydrate_service import (
+        hydrate_import_item_from_locg_calendar,
+        import_locg_hydrate_enabled,
+    )
+
+    if not import_locg_hydrate_enabled():
+        return ImportLocgHydrateResult(attempted=False, no_match_reason="hydrate_disabled")
+
+    title = item.get("title") or item.get("canonical_title")
+    issue_number = item.get("issue_number") or item.get("canonical_issue_number")
+    if not normalize_import_title(title) or not issue_number:
+        return ImportLocgHydrateResult(attempted=False, no_match_reason="missing_title_or_issue")
+
+    try:
+        return hydrate_import_item_from_locg_calendar(
+            session,
+            title=str(title),
+            issue_number=str(issue_number),
+            parsed_release_date=_parse_release_date_from_item(item),
+        )
+    except Exception:
+        LOGGER.warning(
+            "import_cover_locg_hydrate_failed title=%r issue=%r",
+            title,
+            issue_number,
+            exc_info=True,
+        )
+        return ImportLocgHydrateResult(attempted=True, hydrated=False, error="hydrate_exception")
+
+
 def resolve_import_cover(
     session: Session | None,
     item: dict[str, Any],
@@ -314,10 +442,15 @@ def resolve_import_cover(
     catalog_resolution: ImportCatalogResolutionResult | None = None,
     allow_draft_cover_fallback: bool = True,
 ) -> ImportCoverResolutionResultPayload:
+    last_hydrate: ImportLocgHydrateResult | None = None
+    last_miss_reason: str | None = None
+    last_miss_detail: dict[str, Any] | None = None
+    resolved_external_issue_id: int | None = None
+
     if session is not None:
         line_upload_cover = _resolve_line_upload_cover(session, item)
         if line_upload_cover is not None:
-            return line_upload_cover
+            return _with_cover_debug(line_upload_cover, "line_upload")
 
         external_issue_id = _resolve_external_issue_id(
             session,
@@ -325,6 +458,7 @@ def resolve_import_cover(
             item=item,
             catalog_resolution=catalog_resolution,
         )
+        resolved_external_issue_id = external_issue_id
         if external_issue_id is not None:
             external_cover = _resolve_external_catalog_cover(
                 session,
@@ -332,7 +466,77 @@ def resolve_import_cover(
                 item=item,
             )
             if external_cover is not None:
-                return external_cover
+                return _with_cover_debug(
+                    external_cover,
+                    external_cover.cover_image_source or "external_catalog",
+                    external_issue_id=external_issue_id,
+                )
+            last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
+                session,
+                external_issue_id=external_issue_id,
+                item=item,
+            )
+            last_hydrate = _attempt_locg_hydrate_for_cover_images(session, item)
+            refreshed_issue_id = _resolve_external_issue_id(
+                session,
+                owner_user_id=owner_user_id,
+                item=item,
+                catalog_resolution=None,
+            )
+            resolved_external_issue_id = refreshed_issue_id or resolved_external_issue_id
+            if refreshed_issue_id is not None:
+                external_cover = _resolve_external_catalog_cover(
+                    session,
+                    external_issue_id=refreshed_issue_id,
+                    item=item,
+                )
+                if external_cover is not None:
+                    return _with_cover_debug(
+                        external_cover,
+                        external_cover.cover_image_source or "external_catalog",
+                        external_issue_id=refreshed_issue_id,
+                        cover_miss_reason_before_hydrate=last_miss_reason,
+                        **_locg_hydrate_debug_fields(last_hydrate),
+                    )
+                last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
+                    session,
+                    external_issue_id=refreshed_issue_id,
+                    item=item,
+                )
+        elif owner_user_id is not None:
+            last_hydrate = _attempt_locg_hydrate_for_cover_images(session, item)
+            external_issue_id = _resolve_external_issue_id(
+                session,
+                owner_user_id=owner_user_id,
+                item=item,
+                catalog_resolution=None,
+            )
+            resolved_external_issue_id = external_issue_id
+            if external_issue_id is not None:
+                external_cover = _resolve_external_catalog_cover(
+                    session,
+                    external_issue_id=external_issue_id,
+                    item=item,
+                )
+                if external_cover is not None:
+                    hydrate_fields = (
+                        _locg_hydrate_debug_fields(last_hydrate) if last_hydrate else {}
+                    )
+                    return _with_cover_debug(
+                        external_cover,
+                        external_cover.cover_image_source or "external_catalog",
+                        external_issue_id=external_issue_id,
+                        **hydrate_fields,
+                    )
+                last_miss_reason, last_miss_detail = _external_catalog_cover_miss_reason(
+                    session,
+                    external_issue_id=external_issue_id,
+                    item=item,
+                )
+            elif last_hydrate is not None:
+                last_miss_reason = last_hydrate.no_match_reason or "locg_hydrate_no_issue"
+        else:
+            last_miss_reason = "no_owner_user_for_catalog_or_hydrate"
 
         draft_cover = (
             _resolve_draft_cover(session, draft_import_id=draft_import_id)
@@ -340,15 +544,38 @@ def resolve_import_cover(
             else None
         )
         if draft_cover is not None:
-            return draft_cover
+            extra: dict[str, Any] = {}
+            if last_hydrate is not None:
+                extra.update(_locg_hydrate_debug_fields(last_hydrate))
+            if last_miss_reason:
+                extra["cover_miss_reason_before_draft"] = last_miss_reason
+            return _with_cover_debug(draft_cover, "draft_cover_image", **extra)
 
-    return ImportCoverResolutionResultPayload(
+    empty = ImportCoverResolutionResultPayload(
         cover_image_url=None,
         cover_thumbnail_url=None,
         cover_image_source=None,
         cover_image_source_id=None,
         has_cover_image=False,
     )
+    reason = last_miss_reason
+    if reason is None:
+        if session is None:
+            reason = "no_database_session"
+        elif resolved_external_issue_id is None:
+            reason = "no_external_issue_id"
+        else:
+            reason = "no_cover_source"
+    debug_extra: dict[str, Any] = {
+        "reason": reason,
+        "external_issue_id": resolved_external_issue_id,
+        "allow_draft_cover_fallback": allow_draft_cover_fallback,
+    }
+    if last_miss_detail:
+        debug_extra["catalog_cover_detail"] = last_miss_detail
+    if last_hydrate is not None:
+        debug_extra.update(_locg_hydrate_debug_fields(last_hydrate))
+    return _with_cover_debug(empty, "none", **debug_extra)
 
 
 def apply_import_cover_to_parse_order(
@@ -382,6 +609,7 @@ def apply_import_cover_to_parse_order(
                     "cover_image_source": cover.cover_image_source,
                     "cover_image_source_id": cover.cover_image_source_id,
                     "has_cover_image": cover.has_cover_image,
+                    "cover_resolution_debug": cover.cover_resolution_debug,
                 }
             )
         )
