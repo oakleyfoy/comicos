@@ -145,7 +145,7 @@ describe("ConnectedRetailersPage", () => {
       },
       helper_token: "helper-token",
       helper_token_expires_at: "2999-01-01T00:00:00Z",
-      capture_url: "https://www.midtowncomics.com/account/orders",
+      capture_url: "https://www.midtowncomics.com/account-settings",
       helper_mode: "bookmarklet",
     });
     vi.spyOn(apiClient, "completeRetailerLocalSync").mockResolvedValue({

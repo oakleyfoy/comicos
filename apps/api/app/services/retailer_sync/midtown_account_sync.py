@@ -32,7 +32,7 @@ SESSION_STATE_ROOT = Path(__file__).resolve().parents[5] / "data" / "retailer_se
 CHALLENGE_RETRY_DELAY_SECONDS = 15 * 60
 LOCAL_SYNC_TOKEN_TTL_MINUTES = 15
 MIDTOWN_LOGIN_URL = "https://www.midtowncomics.com/login"
-MIDTOWN_ORDERS_URL = "https://www.midtowncomics.com/account/orders"
+MIDTOWN_ORDERS_URL = "https://www.midtowncomics.com/account-settings"
 
 
 class MidtownNeedsAttentionError(RuntimeError):
@@ -161,7 +161,7 @@ def _local_sync_start_summary(
             "then click the Comicos Midtown Sync bookmark on the Midtown orders page."
         ),
         "suggested_next_step": (
-            "Make sure the Midtown orders page is fully visible before running "
+            "Make sure the Midtown order history page inside your account is fully visible before running "
             "the bookmark. The bookmark will capture the order history and recent "
             "detail pages from your current browser session."
         ),

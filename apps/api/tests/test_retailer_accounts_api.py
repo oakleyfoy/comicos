@@ -253,7 +253,7 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
     )
     assert started.status_code == 200, started.text
     assert started.json()["run"]["status"] == "awaiting_browser"
-    assert started.json()["capture_url"].endswith("/account/orders")
+    assert started.json()["capture_url"].endswith("/account-settings")
 
     completed = client.post(
         f"/api/v1/retailer-accounts/{account_id}/local-sync/{started.json()['run']['id']}/complete",
