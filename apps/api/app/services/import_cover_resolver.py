@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 from sqlmodel import Session, select
@@ -18,6 +19,11 @@ from app.services.import_catalog_resolution_service import (
     _parse_release_date_from_item,
     normalize_import_title,
     resolve_import_catalog_match,
+)
+from app.services.import_cover_verification import (
+    build_cover_item_updates,
+    cover_fields_from_item_snapshot,
+    item_cover_user_locked,
 )
 from app.services.import_locg_hydrate_service import ImportLocgHydrateResult
 
@@ -33,6 +39,13 @@ class ImportCoverResolutionResultPayload:
     cover_image_source_id: int | None
     has_cover_image: bool
     cover_resolution_debug: dict[str, Any] | None = None
+    cover_source: str | None = None
+    cover_confidence: float | None = None
+    variant_confidence: float | None = None
+    cover_source_url: str | None = None
+    cover_source_sku: str | None = None
+    cover_verified_at: datetime | None = None
+    cover_verified_by: str | None = None
 
 
 def _with_cover_debug(
@@ -45,6 +58,96 @@ def _with_cover_debug(
         if value is not None:
             debug[key] = value
     return replace(payload, cover_resolution_debug=debug)
+
+
+def _variant_letter_matched_for_cover(
+    session: Session,
+    item: dict[str, Any],
+    cover: ImportCoverResolutionResultPayload,
+) -> bool | None:
+    if cover.cover_image_source != "external_catalog_variant" or cover.cover_image_source_id is None:
+        return None
+    row = session.get(ExternalCatalogVariant, cover.cover_image_source_id)
+    if row is None:
+        return None
+    item_letter = _item_cover_letter(item)
+    if item_letter is None:
+        return None
+    return _variant_cover_letter(row) == item_letter
+
+
+def _finalize_cover_payload(
+    session: Session | None,
+    item: dict[str, Any],
+    payload: ImportCoverResolutionResultPayload,
+    *,
+    external_issue_id: int | None = None,
+    variant_letter_matched: bool | None = None,
+    used_issue_fallback: bool = False,
+    retailer_cover: bool = False,
+) -> ImportCoverResolutionResultPayload:
+    if variant_letter_matched is None and session is not None and payload.has_cover_image:
+        variant_letter_matched = _variant_letter_matched_for_cover(session, item, payload)
+    if payload.cover_image_source == "external_catalog_issue":
+        used_issue_fallback = True
+    merged = build_cover_item_updates(
+        {
+            "cover_image_url": payload.cover_image_url,
+            "cover_thumbnail_url": payload.cover_thumbnail_url,
+            "cover_image_source": payload.cover_image_source,
+            "cover_image_source_id": payload.cover_image_source_id,
+            "has_cover_image": payload.has_cover_image,
+            "cover_resolution_debug": payload.cover_resolution_debug,
+        },
+        session=session,
+        external_issue_id=external_issue_id,
+        item=item,
+        variant_letter_matched=variant_letter_matched,
+        used_issue_fallback=used_issue_fallback,
+        retailer_cover=retailer_cover,
+    )
+    return replace(
+        payload,
+        cover_source=merged.get("cover_source"),
+        cover_confidence=merged.get("cover_confidence"),
+        variant_confidence=merged.get("variant_confidence"),
+        cover_source_url=merged.get("cover_source_url"),
+        cover_source_sku=merged.get("cover_source_sku"),
+        cover_verified_at=merged.get("cover_verified_at"),
+        cover_verified_by=merged.get("cover_verified_by"),
+    )
+
+
+def _resolve_retailer_cover(item: dict[str, Any]) -> ImportCoverResolutionResultPayload | None:
+    url = (item.get("retailer_cover_url") or "").strip()
+    if not url:
+        return None
+    return ImportCoverResolutionResultPayload(
+        cover_image_url=url,
+        cover_thumbnail_url=url,
+        cover_image_source="retailer_cover",
+        cover_image_source_id=None,
+        has_cover_image=True,
+    )
+
+
+def _locked_cover_payload(item: dict[str, Any]) -> ImportCoverResolutionResultPayload:
+    snap = cover_fields_from_item_snapshot(item)
+    return ImportCoverResolutionResultPayload(
+        cover_image_url=snap.get("cover_image_url"),
+        cover_thumbnail_url=snap.get("cover_thumbnail_url"),
+        cover_image_source=snap.get("cover_image_source"),
+        cover_image_source_id=snap.get("cover_image_source_id"),
+        has_cover_image=bool(snap.get("has_cover_image")),
+        cover_resolution_debug=snap.get("cover_resolution_debug"),
+        cover_source=snap.get("cover_source"),
+        cover_confidence=snap.get("cover_confidence"),
+        variant_confidence=snap.get("variant_confidence"),
+        cover_source_url=snap.get("cover_source_url"),
+        cover_source_sku=snap.get("cover_source_sku"),
+        cover_verified_at=snap.get("cover_verified_at"),
+        cover_verified_by=snap.get("cover_verified_by"),
+    )
 
 
 def _locg_hydrate_debug_fields(result: ImportLocgHydrateResult) -> dict[str, Any]:
@@ -468,6 +571,26 @@ def _external_variant_debug_fields(
     }
 
 
+def _emit_cover(
+    session: Session | None,
+    item: dict[str, Any],
+    payload: ImportCoverResolutionResultPayload,
+    outcome: str,
+    *,
+    external_issue_id: int | None = None,
+    retailer_cover: bool = False,
+    **debug: Any,
+) -> ImportCoverResolutionResultPayload:
+    decorated = _with_cover_debug(payload, outcome, **debug)
+    return _finalize_cover_payload(
+        session,
+        item,
+        decorated,
+        external_issue_id=external_issue_id,
+        retailer_cover=retailer_cover,
+    )
+
+
 def resolve_import_cover(
     session: Session | None,
     item: dict[str, Any],
@@ -482,10 +605,23 @@ def resolve_import_cover(
     last_miss_detail: dict[str, Any] | None = None
     resolved_external_issue_id: int | None = None
 
+    if item_cover_user_locked(item):
+        return _locked_cover_payload(item)
+
     if session is not None:
         line_upload_cover = _resolve_line_upload_cover(session, item)
         if line_upload_cover is not None:
-            return _with_cover_debug(line_upload_cover, "line_upload")
+            return _emit_cover(session, item, line_upload_cover, "line_upload")
+
+        retailer_cover = _resolve_retailer_cover(item)
+        if retailer_cover is not None:
+            return _emit_cover(
+                session,
+                item,
+                retailer_cover,
+                "retailer_cover",
+                retailer_cover=True,
+            )
 
         external_issue_id = _resolve_external_issue_id(
             session,
@@ -501,7 +637,9 @@ def resolve_import_cover(
                 item=item,
             )
             if external_cover is not None:
-                return _with_cover_debug(
+                return _emit_cover(
+                    session,
+                    item,
                     external_cover,
                     external_cover.cover_image_source or "external_catalog",
                     external_issue_id=external_issue_id,
@@ -527,7 +665,9 @@ def resolve_import_cover(
                     item=item,
                 )
                 if external_cover is not None:
-                    return _with_cover_debug(
+                    return _emit_cover(
+                        session,
+                        item,
                         external_cover,
                         external_cover.cover_image_source or "external_catalog",
                         external_issue_id=refreshed_issue_id,
@@ -559,7 +699,9 @@ def resolve_import_cover(
                     hydrate_fields = (
                         _locg_hydrate_debug_fields(last_hydrate) if last_hydrate else {}
                     )
-                    return _with_cover_debug(
+                    return _emit_cover(
+                        session,
+                        item,
                         external_cover,
                         external_cover.cover_image_source or "external_catalog",
                         external_issue_id=external_issue_id,
@@ -587,7 +729,7 @@ def resolve_import_cover(
                 extra.update(_locg_hydrate_debug_fields(last_hydrate))
             if last_miss_reason:
                 extra["cover_miss_reason_before_draft"] = last_miss_reason
-            return _with_cover_debug(draft_cover, "draft_cover_image", **extra)
+            return _emit_cover(session, item, draft_cover, "draft_cover_image", **extra)
 
     empty = ImportCoverResolutionResultPayload(
         cover_image_url=None,
@@ -613,7 +755,7 @@ def resolve_import_cover(
         debug_extra["catalog_cover_detail"] = last_miss_detail
     if last_hydrate is not None:
         debug_extra.update(_locg_hydrate_debug_fields(last_hydrate))
-    return _with_cover_debug(empty, "none", **debug_extra)
+    return _emit_cover(session, item, empty, "none", **debug_extra)
 
 
 def apply_import_cover_to_parse_order(
@@ -648,6 +790,13 @@ def apply_import_cover_to_parse_order(
                     "cover_image_source_id": cover.cover_image_source_id,
                     "has_cover_image": cover.has_cover_image,
                     "cover_resolution_debug": cover.cover_resolution_debug,
+                    "cover_source": cover.cover_source,
+                    "cover_confidence": cover.cover_confidence,
+                    "variant_confidence": cover.variant_confidence,
+                    "cover_source_url": cover.cover_source_url,
+                    "cover_source_sku": cover.cover_source_sku,
+                    "cover_verified_by": cover.cover_verified_by,
+                    "cover_verified_at": cover.cover_verified_at,
                 }
             )
         )

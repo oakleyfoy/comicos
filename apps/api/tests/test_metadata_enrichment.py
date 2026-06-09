@@ -196,6 +196,22 @@ def test_malformed_variant_text_is_flagged_for_review() -> None:
     )
 
 
+def test_variant_normalization_preserves_wonder_man_cover_phrase() -> None:
+    raw = (
+        "Cover B / Variant / Stefano Caselli First Appearance A Wonder Man Cover"
+    )
+    normalized = normalize_variant_text(raw)
+    assert "Wonder Man Cover" in normalized.canonical_value
+    assert "Wonder Cover Man" not in normalized.canonical_value
+    assert normalized.review_required is False
+
+
+def test_variant_slash_variant_segment_is_structural_not_malformed() -> None:
+    normalized = normalize_variant_text("Cover B / Variant / Artist Name")
+    assert normalized.canonical_value == "Cover B / Variant / Artist Name"
+    assert normalized.review_required is False
+
+
 def test_enrichment_normalizes_known_aliases_and_preserves_raw_values() -> None:
     parsed = ParseOrderResponse.model_validate(
         {

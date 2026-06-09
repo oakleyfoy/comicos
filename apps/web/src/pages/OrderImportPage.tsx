@@ -16,6 +16,7 @@ import {
 } from "../api/client";
 import { ImportMetadataQuestionsGate } from "../components/imports/ImportMetadataQuestionsGate";
 import { ImportReviewCard } from "../components/imports/ImportReviewCard";
+import { ImportLineCoverPicker } from "../components/imports/ImportLineCoverPicker";
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
@@ -37,6 +38,7 @@ import {
   type ImportMetadataQuestion,
 } from "./importMetadataQuestions";
 import { normalizeMoneyInput } from "../utils/moneyInput";
+import { formatImportCoverSourceLabel } from "../utils/importCoverPresentation";
 
 interface OrderItemDraft {
   publisher: string;
@@ -66,6 +68,10 @@ interface OrderItemDraft {
   hasCoverImage?: boolean;
   coverResolutionDebug?: Record<string, unknown> | null;
   importLineCoverImageId?: number;
+  coverSource?: AiDraftOrderItem["cover_source"];
+  coverConfidence?: number | null;
+  variantConfidence?: number | null;
+  coverVerifiedBy?: AiDraftOrderItem["cover_verified_by"];
 }
 
 interface ItemFieldErrors {
@@ -334,6 +340,10 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               hasCoverImage: item.has_cover_image ?? undefined,
               coverResolutionDebug: item.cover_resolution_debug ?? undefined,
               importLineCoverImageId: item.import_line_cover_image_id ?? undefined,
+              coverSource: item.cover_source ?? undefined,
+              coverConfidence: item.cover_confidence ?? undefined,
+              variantConfidence: item.variant_confidence ?? undefined,
+              coverVerifiedBy: item.cover_verified_by ?? undefined,
             })),
           )
         : [emptyItem()],
@@ -674,6 +684,7 @@ export function OrderImportPage() {
   const [importCoverThumbUrls, setImportCoverThumbUrls] = useState<string[]>([]);
   const [importCoverRegionPreviewUrls, setImportCoverRegionPreviewUrls] = useState<Record<string, string>>({});
   const [lineCoverScanBusyIndex, setLineCoverScanBusyIndex] = useState<number | null>(null);
+  const [coverPickerLineIndex, setCoverPickerLineIndex] = useState<number | null>(null);
   const [importCoverUploadError, setImportCoverUploadError] = useState<string | null>(null);
   const [importCoverActionMessage, setImportCoverActionMessage] = useState<string | null>(null);
   const [importCoverPrimaryBusyId, setImportCoverPrimaryBusyId] = useState<number | null>(null);
@@ -2212,6 +2223,17 @@ export function OrderImportPage() {
                   canScanCover={savedImportId !== null && importStatus === "draft"}
                   scanCoverBusy={lineCoverScanBusyIndex === index}
                   onScanCoverSelected={(file) => void handleLineCoverScan(index, file)}
+                  coverSourceLabel={formatImportCoverSourceLabel(
+                    item.coverSource ?? null,
+                    retailer.trim() || null,
+                  )}
+                  onWrongCoverSearch={() => {
+                    if (savedImportId !== null) {
+                      setCoverPickerLineIndex(index);
+                    } else if (!expandedItemIndexes[index]) {
+                      toggleItemDetails(index);
+                    }
+                  }}
                 />
               ))}
 
@@ -2291,6 +2313,15 @@ export function OrderImportPage() {
             </section>
           </form>
         </>
+        ) : null}
+        {savedImportId !== null && coverPickerLineIndex !== null ? (
+          <ImportLineCoverPicker
+            importId={savedImportId}
+            lineIndex={coverPickerLineIndex}
+            open
+            onClose={() => setCoverPickerLineIndex(null)}
+            onSelected={() => void refreshLoadedImportFromServer()}
+          />
         ) : null}
       </div>
     </AppShell>

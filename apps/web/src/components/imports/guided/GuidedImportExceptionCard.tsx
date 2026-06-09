@@ -34,10 +34,15 @@ export function GuidedImportExceptionCard({ item, importId, onUpdated }: Props):
               <li key={p}>• {p}</li>
             ))}
           </ul>
-          {item.cover_confidence != null ? (
+          {item.cover_source ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              Cover confidence: {Math.round(item.cover_confidence * 100)}%
-              {item.cover_source ? ` · ${item.cover_source}` : ""}
+              Cover source: {item.cover_source}
+              {item.cover_confidence != null
+                ? ` · ${Math.round(item.cover_confidence * 100)}% cover`
+                : ""}
+              {item.variant_confidence != null
+                ? ` · ${Math.round(item.variant_confidence * 100)}% variant`
+                : ""}
             </p>
           ) : null}
         </div>

@@ -80,6 +80,16 @@ class AiDraftOrderItem(BaseModel):
     cover_image_source_id: int | None = None
     has_cover_image: bool | None = None
     cover_resolution_debug: dict[str, Any] | None = None
+    cover_source: Literal["RETAILER", "LOCG", "EXTERNAL_CATALOG", "USER_UPLOAD"] | None = None
+    cover_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    variant_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    cover_source_url: str | None = None
+    cover_source_sku: str | None = None
+    retailer_cover_url: str | None = None
+    retailer_product_url: str | None = None
+    retailer_sku: str | None = None
+    cover_verified_at: datetime | None = None
+    cover_verified_by: Literal["SYSTEM", "USER"] | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None

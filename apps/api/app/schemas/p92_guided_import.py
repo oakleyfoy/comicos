@@ -32,6 +32,7 @@ class GuidedImportExceptionItemRead(BaseModel):
     problems: list[str] = Field(default_factory=list)
     cover_source: str | None = None
     cover_confidence: float | None = None
+    variant_confidence: float | None = None
     catalog_match_score: int | None = None
     suggested_catalog_title: str | None = None
 

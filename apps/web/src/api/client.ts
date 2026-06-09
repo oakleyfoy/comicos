@@ -168,6 +168,13 @@ export interface AiDraftOrderItem {
   cover_image_source_id?: number | null;
   has_cover_image?: boolean | null;
   cover_resolution_debug?: Record<string, unknown> | null;
+  cover_source?: "RETAILER" | "LOCG" | "EXTERNAL_CATALOG" | "USER_UPLOAD" | null;
+  cover_confidence?: number | null;
+  variant_confidence?: number | null;
+  cover_source_url?: string | null;
+  cover_source_sku?: string | null;
+  cover_verified_at?: string | null;
+  cover_verified_by?: "SYSTEM" | "USER" | null;
   import_line_cover_image_id?: number | null;
   order_status?: "ordered" | "preordered" | "shipped" | "received" | "cancelled" | null;
   purchase_date?: string | null;
@@ -1591,6 +1598,15 @@ export interface DraftImportConfirmResponse {
   total_copies_created: number;
   all_in_total: string;
   notices?: string[];
+}
+
+export interface ImportLineCoverCandidateRead {
+  external_variant_id: number;
+  cover_label: string | null;
+  variant_name: string | null;
+  artist: string | null;
+  image_url: string | null;
+  cover_letter: string | null;
 }
 
 export type ImportParseJobStatus =
@@ -12252,6 +12268,7 @@ export interface GuidedImportExceptionItemRead {
   problems: string[];
   cover_source: string | null;
   cover_confidence: number | null;
+  variant_confidence: number | null;
   catalog_match_score: number | null;
   suggested_catalog_title: string | null;
 }
@@ -21578,6 +21595,26 @@ export const apiClient = {
   discardImport(importId: number): Promise<DraftImport> {
     return request<DraftImport>(`/imports/${importId}/discard`, {
       method: "POST",
+    });
+  },
+
+  listImportLineCoverCandidates(
+    importId: number,
+    lineIndex: number,
+  ): Promise<ImportLineCoverCandidateRead[]> {
+    return request<ImportLineCoverCandidateRead[]>(
+      `/imports/${importId}/items/${lineIndex}/cover-candidates`,
+    );
+  },
+
+  selectImportLineCoverCandidate(
+    importId: number,
+    lineIndex: number,
+    externalVariantId: number,
+  ): Promise<void> {
+    return request<void>(`/imports/${importId}/items/${lineIndex}/cover-select`, {
+      method: "POST",
+      body: JSON.stringify({ external_variant_id: externalVariantId }),
     });
   },
 

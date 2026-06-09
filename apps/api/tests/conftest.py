@@ -26,6 +26,7 @@ from app.models.p88_marketplace_monitoring import (  # noqa: F401
     MarketplaceSavedSearch,
 )
 from app.models.p92_import_health import P92ImportHealthEvent  # noqa: F401
+from app.models.p92_import_line_cover import P92ImportLineCoverResolution  # noqa: F401
 from app.tasks import queue as rq_queue_module
 
 

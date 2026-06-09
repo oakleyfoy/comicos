@@ -256,7 +256,15 @@ export function valuesEquivalentForReview(detected: string, canonical: string): 
   if (d === "not provided" && c === "not provided") {
     return true;
   }
-  return d === c && d.length > 0;
+  if (d === c && d.length > 0) {
+    return true;
+  }
+  const dWords = d.split(" ").filter(Boolean).sort();
+  const cWords = c.split(" ").filter(Boolean).sort();
+  if (dWords.length > 0 && dWords.length === cWords.length && dWords.every((w, i) => w === cWords[i])) {
+    return true;
+  }
+  return false;
 }
 
 function recommendedActionFor(

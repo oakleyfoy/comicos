@@ -22,7 +22,30 @@ from app.schemas.p92_guided_import import (
 from app.services.imports import serialize_import
 
 COVER_CONFIDENCE_THRESHOLD = 0.55
+VARIANT_CONFIDENCE_THRESHOLD = 0.55
 CATALOG_MATCH_MIN_SCORE = 70
+
+
+def _cover_source_display_label(item: AiDraftOrderItem, retailer: str | None) -> str | None:
+    kind = item.cover_source
+    if not kind and not item.cover_image_source:
+        return None
+    if kind == "RETAILER":
+        return (retailer or "Retailer").strip() or "Retailer"
+    if kind == "LOCG":
+        return "LoCG"
+    if kind == "EXTERNAL_CATALOG":
+        return "Catalog"
+    if kind == "USER_UPLOAD":
+        return "Your upload"
+    legacy = (item.cover_image_source or "").lower()
+    if "retailer" in legacy:
+        return (retailer or "Retailer").strip() or "Retailer"
+    if "external" in legacy or "locg" in legacy:
+        return "LoCG"
+    if "draft" in legacy or "upload" in legacy or "line" in legacy:
+        return "Your upload"
+    return None
 
 
 def _utc_now() -> datetime:
@@ -106,9 +129,12 @@ def _exception_reasons(item: AiDraftOrderItem) -> list[str]:
         reasons.append("No confident catalog match")
     if item.has_cover_image is False:
         reasons.append("No cover available")
-    conf = item.publisher_autofill_confidence
-    if conf is not None and conf < COVER_CONFIDENCE_THRESHOLD:
-        reasons.append("Low confidence on publisher or cover source")
+    cover_conf = item.cover_confidence
+    if cover_conf is not None and cover_conf < COVER_CONFIDENCE_THRESHOLD:
+        reasons.append("Low confidence on cover image")
+    variant_conf = item.variant_confidence
+    if variant_conf is not None and variant_conf < VARIANT_CONFIDENCE_THRESHOLD:
+        reasons.append("Cover variant may not match your order")
     score = item.catalog_match_score
     if score is not None and score < CATALOG_MATCH_MIN_SCORE and item.catalog_match_matched is not True:
         reasons.append("Low confidence match")
@@ -136,6 +162,7 @@ def _item_is_exception(item: AiDraftOrderItem) -> bool:
 
 def build_guided_import_review(draft_read: DraftImportRead) -> GuidedImportReviewRead:
     payload = draft_read.parsed_payload_json
+    retailer = payload.retailer
     exceptions: list[GuidedImportExceptionItemRead] = []
     auto_count = 0
     for index, item in enumerate(payload.items):
@@ -151,8 +178,9 @@ def build_guided_import_review(draft_read: DraftImportRead) -> GuidedImportRevie
                     release_date=str(item.release_date or item.parsed_release_date or ""),
                     cover_url=item.cover_thumbnail_url or item.cover_image_url,
                     problems=reasons,
-                    cover_source=item.cover_image_source,
-                    cover_confidence=item.publisher_autofill_confidence,
+                    cover_source=_cover_source_display_label(item, retailer),
+                    cover_confidence=item.cover_confidence,
+                    variant_confidence=item.variant_confidence,
                     catalog_match_score=item.catalog_match_score,
                     suggested_catalog_title=item.catalog_match_title,
                 )

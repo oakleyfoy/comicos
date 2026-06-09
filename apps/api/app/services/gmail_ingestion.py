@@ -86,6 +86,7 @@ class GmailReceiptMessage:
     sender: str
     received_at: datetime
     body_text: str
+    body_html: str | None = None
 
 
 def gmail_integration_is_configured() -> bool:
@@ -553,6 +554,27 @@ def _extract_body_text(payload: dict) -> str:
     return ""
 
 
+def _extract_body_html(payload: dict) -> str:
+    mime_type = payload.get("mimeType")
+    body = payload.get("body") or {}
+    body_data = body.get("data")
+
+    if mime_type == "text/html" and isinstance(body_data, str):
+        return _decode_base64url(body_data)
+
+    parts = payload.get("parts") or []
+    if isinstance(parts, list):
+        html_chunks: list[str] = []
+        for part in parts:
+            part_html = _extract_body_html(part)
+            if part_html.strip():
+                html_chunks.append(part_html)
+        if html_chunks:
+            return "\n".join(html_chunks)
+
+    return ""
+
+
 def _parse_received_at(message: dict, headers: list[dict]) -> datetime:
     internal_date = message.get("internalDate")
     if isinstance(internal_date, str) and internal_date.isdigit():
@@ -591,6 +613,7 @@ def list_recent_supported_receipt_emails(
         snippet = str(details.get("snippet") or "").strip()
 
         body_text = _extract_body_text(payload).strip() or snippet
+        body_html = _extract_body_html(payload).strip() or None
         if not body_text:
             continue
 
@@ -625,6 +648,7 @@ def list_recent_supported_receipt_emails(
                 sender=sender,
                 received_at=_parse_received_at(details, headers),
                 body_text=body_text,
+                body_html=body_html,
             )
         )
 
@@ -647,6 +671,13 @@ def _create_gmail_draft_import(
     message: GmailReceiptMessage,
 ) -> DraftImport:
     parsed = parse_order_draft_from_text(message.body_text)
+    from app.services.import_retailer_cover_extract import enrich_parse_order_retailer_covers
+
+    parsed = enrich_parse_order_retailer_covers(
+        parsed,
+        html=message.body_html,
+        retailer=message.provider_name,
+    )
     warning = _gmail_warning(message)
     parsed = ParseOrderResponse.model_validate(
         parsed.model_copy(

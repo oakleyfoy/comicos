@@ -22,6 +22,12 @@ from app.schemas.orders import OrderCreate
 from app.services.ai_order_parser import parse_order_draft_from_text
 from app.services.canonical_creators import get_or_create_canonical_creator
 from app.services.import_cover_resolver import apply_import_cover_to_parse_order
+from app.services.import_line_cover_resolution_service import (
+    attach_line_cover_resolutions_to_order,
+    persist_parse_order_line_cover_resolutions,
+    record_cover_resolution_health_on_confirm,
+)
+from app.services.import_retailer_cover_extract import enrich_parse_order_retailer_covers_from_raw_text
 from app.services.metadata_audits import record_metadata_audit
 from app.services.import_release_lifecycle_service import apply_release_lifecycle_to_parse_order
 from app.services.metadata_enrichment import (
@@ -59,6 +65,7 @@ def normalize_parsed_order_response(
     owner_user_id: int | None = None,
     raw_text: str,
 ) -> ParseOrderResponse:
+    parsed = enrich_parse_order_retailer_covers_from_raw_text(parsed, raw_text)
     return enrich_parse_order_metadata(
         parsed,
         session=session,
@@ -128,6 +135,7 @@ def serialize_import(
     debug_catalog: bool = False,
 ) -> DraftImportRead:
     parsed_payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
+    draft_pk = draft_import.id
     if enrich_metadata:
         normalized_payload = normalize_parsed_order_response(
             parsed_payload,
@@ -151,12 +159,19 @@ def serialize_import(
             owner_user_id=draft_import.user_id,
             draft_import_id=draft_import.id,
         )
+        if draft_pk is not None and draft_import.user_id is not None:
+            persist_parse_order_line_cover_resolutions(
+                session,
+                owner_user_id=int(draft_import.user_id),
+                draft_import_id=int(draft_pk),
+                items=normalized_payload.items,
+            )
+            session.flush()
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required
     )
     release_review_count = _release_date_review_item_count(normalized_payload)
     covers: list[CoverImageRead] = []
-    draft_pk = draft_import.id
 
     if prefetch_cover_images and draft_pk is not None:
         covers = list_cover_reads_for_draft(session, draft_pk)
@@ -499,7 +514,11 @@ def attach_import_line_cover_image(
 
     items = list(parsed.items)
     items[line_index] = items[line_index].model_copy(
-        update={"import_line_cover_image_id": cover_image_id},
+        update={
+            "import_line_cover_image_id": cover_image_id,
+            "cover_verified_by": "USER",
+            "cover_verified_at": utc_now(),
+        },
     )
     parsed = parsed.model_copy(update={"items": items})
 
@@ -508,6 +527,18 @@ def attach_import_line_cover_image(
         session=session,
         owner_user_id=current_user.id,
         raw_text=draft_import.raw_text,
+    )
+    normalized_payload = apply_import_cover_to_parse_order(
+        normalized_payload,
+        session=session,
+        owner_user_id=current_user.id,
+        draft_import_id=draft_import_id,
+    )
+    persist_parse_order_line_cover_resolutions(
+        session,
+        owner_user_id=int(current_user.id),
+        draft_import_id=draft_import_id,
+        items=normalized_payload.items,
     )
     draft_import.parsed_payload_json = normalized_payload.model_dump(mode="json")
     draft_import.updated_at = utc_now()
@@ -723,6 +754,18 @@ def confirm_import_for_user(
                 "total_items": order_response.total_items,
                 "total_copies_created": order_response.total_copies_created,
             },
+        )
+        linked_cover_rows = attach_line_cover_resolutions_to_order(
+            session,
+            draft_import_id=int(draft_import.id or 0),
+            order_id=int(order_response.order_id),
+        )
+        record_cover_resolution_health_on_confirm(
+            session,
+            owner_user_id=int(current_user.id),
+            draft_import_id=int(draft_import.id or 0),
+            linked_count=linked_cover_rows,
+            item_count=order_response.total_items,
         )
         session.commit()
     except Exception as exc:

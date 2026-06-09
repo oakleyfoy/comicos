@@ -530,7 +530,11 @@ def normalize_variant_text(value: str | None) -> NormalizedValue:
             canonical_segments.append(f"Cover {cover_match.group(1).upper()}")
             continue
 
-        if segment.lower() in {"cover", "cvr", "variant"}:
+        if segment.lower() == "variant":
+            canonical_segments.append("Variant")
+            continue
+
+        if segment.lower() in {"cover", "cvr"}:
             notes.append(VARIANT_MALFORMED_REVIEW_NOTE)
 
         normalized_segment = re.sub(r"\bcvr\b", "Cover", segment, flags=re.IGNORECASE)
@@ -540,12 +544,14 @@ def normalize_variant_text(value: str | None) -> NormalizedValue:
             normalized_segment,
             flags=re.IGNORECASE,
         )
+        # Only rewrite isolated cover letters (e.g. "B Cover"), not phrases like "Wonder Man Cover".
         normalized_segment = re.sub(
-            r"\b([A-Za-z0-9]+)\s+cover\b",
-            lambda match: f"Cover {match.group(1).upper()}",
+            r"(?:^|\s)([A-Za-z])\s+cover\b",
+            lambda match: f" Cover {match.group(1).upper()}",
             normalized_segment,
             flags=re.IGNORECASE,
         )
+        normalized_segment = _normalize_spaces(normalized_segment)
         normalized_segment = re.sub(
             r"\bvirgin\s+variant\b",
             "Virgin Variant",

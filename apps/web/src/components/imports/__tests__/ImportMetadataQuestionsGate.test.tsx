@@ -29,5 +29,6 @@ describe("ImportMetadataQuestionsGate", () => {
     expect(screen.getByText("J. Romita Jr")).toBeInTheDocument();
     expect(screen.getByText("ComicOS will use")).toBeInTheDocument();
     expect(screen.getByText("John Romita Jr.")).toBeInTheDocument();
+    expect(screen.getByText(/Compare the highlighted part/)).toBeInTheDocument();
   });
 });

@@ -1,6 +1,11 @@
 import { useState } from "react";
 
 import type { ImportMetadataQuestion } from "../../pages/importMetadataQuestions";
+import {
+  metadataValuesCosmeticallyEquivalent,
+  metadataValuesMatch,
+} from "../../utils/metadataValueDiff";
+import { MetadataConfirmValueDiff } from "./MetadataConfirmValueDiff";
 
 type ImportMetadataQuestionsGateProps = {
   questions: ImportMetadataQuestion[];
@@ -17,7 +22,9 @@ function ConfirmFieldPreview({ question }: { question: ImportMetadataQuestion })
   const fromOrder = question.invoiceValue?.trim();
   const comicOsValue = question.parsedValue?.trim() ?? question.suggestedAnswer?.trim();
   const valuesMatch =
-    fromOrder && comicOsValue && fromOrder.localeCompare(comicOsValue, undefined, { sensitivity: "accent" }) === 0;
+    fromOrder && comicOsValue && metadataValuesMatch(fromOrder, comicOsValue);
+  const cosmeticOnly =
+    fromOrder && comicOsValue && !valuesMatch && metadataValuesCosmeticallyEquivalent(fromOrder, comicOsValue);
 
   if (!fieldLabel && !fromOrder && !comicOsValue) {
     return null;
@@ -33,6 +40,15 @@ function ConfirmFieldPreview({ question }: { question: ImportMetadataQuestion })
       </p>
       {valuesMatch && comicOsValue ? (
         <p className="mt-3 text-base font-semibold text-white">{comicOsValue}</p>
+      ) : cosmeticOnly && comicOsValue ? (
+        <>
+          <p className="mt-3 text-base font-semibold text-white">{comicOsValue}</p>
+          <p className="mt-2 text-sm text-slate-400">
+            Same words as on your order — only spacing or word order changed.
+          </p>
+        </>
+      ) : fromOrder && comicOsValue ? (
+        <MetadataConfirmValueDiff fromOrder={fromOrder} comicOsValue={comicOsValue} />
       ) : (
         <dl className="mt-3 space-y-3 text-sm">
           {fromOrder ? (
@@ -50,9 +66,9 @@ function ConfirmFieldPreview({ question }: { question: ImportMetadataQuestion })
         </dl>
       )}
       <p className="mt-3 text-sm text-slate-400">
-        {valuesMatch
+        {valuesMatch || cosmeticOnly
           ? "If this matches your receipt, confirm below to continue."
-          : "If ComicOS picked the right value, confirm below. You can fix it on the line item after the full order appears."}
+          : "Compare the highlighted part, then confirm if ComicOS got it right. You can edit the line item after the full order appears."}
       </p>
     </div>
   );

@@ -59,6 +59,9 @@ def test_resolve_import_cover_prefers_external_variant_image(session: Session) -
     assert result.cover_image_url == "https://example.com/variant-cover.jpg"
     assert result.cover_image_source == "external_catalog_variant"
     assert result.has_cover_image is True
+    assert result.cover_source == "LOCG"
+    assert result.cover_confidence is not None and result.cover_confidence >= 0.85
+    assert result.variant_confidence is not None and result.variant_confidence >= 0.85
     assert result.cover_resolution_debug is not None
     assert result.cover_resolution_debug.get("outcome") == "external_catalog_variant"
 
@@ -355,30 +358,60 @@ def test_resolve_import_cover_prefers_line_upload_over_draft_fallback(session: S
     assert result.has_cover_image is True
 
 
-def test_resolve_import_cover_prefers_line_upload_over_draft_fallback(session: Session) -> None:
-    cover = CoverImage(
-        draft_import_id=99,
-        source_type="upload",
-        original_filename="scan.jpg",
-        storage_path="cover-images/test/scan.jpg",
-        mime_type="image/jpeg",
-        sha256_hash="scanhash",
+def test_retailer_cover_url_wins_over_catalog_variant(session: Session) -> None:
+    issue = ExternalCatalogIssue(
+        source_name="locg",
+        title="Star #1",
+        publisher="Image",
+        series_name="Star",
+        issue_number="1",
+        release_date=date(2026, 7, 22),
+        cover_image_url="https://example.com/catalog.jpg",
     )
-    session.add(cover)
+    session.add(issue)
     session.commit()
-    session.refresh(cover)
-    assert cover.id is not None
+    session.refresh(issue)
+    assert issue.id is not None
+
+    variant = ExternalCatalogVariant(
+        external_issue_id=issue.id,
+        cover_label="Cover A",
+        image_url="https://example.com/variant-a.jpg",
+    )
+    session.add(variant)
+    session.commit()
 
     result = resolve_import_cover(
         session,
         {
-            "title": "Line Scan",
+            "title": "Star",
             "issue_number": "1",
-            "import_line_cover_image_id": cover.id,
+            "cover_name": "Cover A",
+            "retailer_cover_url": "https://example.com/midtown-a.jpg",
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
         },
-        draft_import_id=99,
-        allow_draft_cover_fallback=False,
     )
-    assert result.cover_image_source == "draft_cover_image"
-    assert result.cover_image_source_id == cover.id
-    assert result.has_cover_image is True
+    assert result.cover_image_url == "https://example.com/midtown-a.jpg"
+    assert result.cover_source == "RETAILER"
+    assert result.cover_confidence is not None and result.cover_confidence >= 0.88
+
+
+def test_user_verified_cover_is_not_replaced(session: Session) -> None:
+    result = resolve_import_cover(
+        session,
+        {
+            "title": "Lock",
+            "issue_number": "1",
+            "cover_verified_by": "USER",
+            "cover_image_url": "https://example.com/user-picked.jpg",
+            "cover_thumbnail_url": "https://example.com/user-picked.jpg",
+            "cover_image_source": "line_upload",
+            "has_cover_image": True,
+            "cover_source": "USER_UPLOAD",
+            "cover_confidence": 1.0,
+            "variant_confidence": 1.0,
+        },
+    )
+    assert result.cover_image_url == "https://example.com/user-picked.jpg"
+    assert result.cover_verified_by == "USER"

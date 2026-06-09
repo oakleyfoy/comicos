@@ -92,3 +92,16 @@ class DraftImportConfirmResponse(BaseModel):
         default_factory=list,
         description="Non-blocking post-confirm messages (e.g. import cover scans not auto-linked).",
     )
+
+
+class ImportLineCoverCandidateRead(BaseModel):
+    external_variant_id: int
+    cover_label: str | None = None
+    variant_name: str | None = None
+    artist: str | None = None
+    image_url: str | None = None
+    cover_letter: str | None = None
+
+
+class ImportLineCoverSelectRequest(BaseModel):
+    external_variant_id: int = Field(ge=1)

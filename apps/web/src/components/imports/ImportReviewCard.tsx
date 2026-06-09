@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/client";
 import { formatCalendarDateWithYear, formatCalendarDateUsShort, normalizeCalendarDateInput } from "../../utils/formatCalendarDate";
 import { normalizeMoneyInput } from "../../utils/moneyInput";
+import { importCoverExceptionBadge, formatImportCoverSourceLabel } from "../../utils/importCoverPresentation";
 
 interface ImportReviewCardItem {
   publisher: string;
@@ -23,6 +24,11 @@ interface ImportReviewCardItem {
   coverThumbnailUrl?: string;
   hasCoverImage?: boolean;
   coverResolutionDebug?: Record<string, unknown> | null;
+  coverSource?: "RETAILER" | "LOCG" | "EXTERNAL_CATALOG" | "USER_UPLOAD" | null;
+  coverConfidence?: number | null;
+  variantConfidence?: number | null;
+  coverVerifiedBy?: "SYSTEM" | "USER" | null;
+  importLineCoverImageId?: number | null;
 }
 
 interface ImportReviewCardFieldErrors {
@@ -69,6 +75,9 @@ interface ImportReviewCardProps {
   canScanCover: boolean;
   scanCoverBusy: boolean;
   onScanCoverSelected: (file: File) => void;
+  coverSourceLabel?: string | null;
+  coverExceptionBadge?: string | null;
+  onWrongCoverSearch?: () => void;
 }
 
 const INPUT_CLASS_NAME =
@@ -266,12 +275,24 @@ export function ImportReviewCard({
   canScanCover,
   scanCoverBusy,
   onScanCoverSelected,
+  coverSourceLabel,
+  coverExceptionBadge,
+  onWrongCoverSearch,
 }: ImportReviewCardProps) {
   const compactCoverLabel = getCompactCoverLabel(item.coverName);
   const scanCoverInputRef = useRef<HTMLInputElement>(null);
   const releaseDateLabel =
     formatCalendarDateWithYear(item.releaseDate) ?? item.releaseDate.trim();
   const coverDebugLine = formatCoverResolutionDebugLine(item.coverResolutionDebug);
+  const resolvedCoverSourceLabel =
+    coverSourceLabel ?? formatImportCoverSourceLabel(item.coverSource ?? null, null);
+  const resolvedExceptionBadge =
+    coverExceptionBadge ??
+    importCoverExceptionBadge({
+      hasCoverImage: item.hasCoverImage,
+      coverConfidence: item.coverConfidence,
+      variantConfidence: item.variantConfidence,
+    });
 
   return (
     <article className={`rounded-2xl border-2 p-4 ${cardSurfaceClassName}`}>
@@ -318,8 +339,16 @@ export function ImportReviewCard({
           {item.catalogReleaseSourceText ? (
             <p className="mt-1 text-sm text-slate-300">{item.catalogReleaseSourceText}</p>
           ) : null}
+          {resolvedCoverSourceLabel ? (
+            <p className="mt-1 text-sm text-cyan-100/90">{resolvedCoverSourceLabel}</p>
+          ) : null}
+          {resolvedExceptionBadge ? (
+            <span className="mt-2 inline-flex rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-100">
+              {resolvedExceptionBadge}
+            </span>
+          ) : null}
           {coverDebugLine ? (
-            <p className="mt-1 font-mono text-[11px] leading-snug text-amber-200/90">{coverDebugLine}</p>
+            <p className="mt-1 font-mono text-[11px] leading-snug text-amber-200/70">{coverDebugLine}</p>
           ) : null}
 
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-200">
@@ -364,6 +393,26 @@ export function ImportReviewCard({
             >
               {scanCoverBusy ? "Uploading scan…" : "Scan cover"}
             </button>
+            {canScanCover || onWrongCoverSearch ? (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => scanCoverInputRef.current?.click()}
+                className="rounded-xl border border-slate-500 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-amber-400/50 hover:bg-slate-700 disabled:opacity-50"
+              >
+                Wrong cover? Replace
+              </button>
+            ) : null}
+            {onWrongCoverSearch ? (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={onWrongCoverSearch}
+                className="rounded-xl border border-slate-500 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-cyan-400/50 hover:bg-slate-700 disabled:opacity-50"
+              >
+                Search catalog
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

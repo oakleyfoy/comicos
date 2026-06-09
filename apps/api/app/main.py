@@ -129,6 +129,8 @@ from app.schemas.imports import (
     DraftImportRead,
     DraftImportStatus,
     DraftImportUpdate,
+    ImportLineCoverCandidateRead,
+    ImportLineCoverSelectRequest,
     ManualDraftImportCreate,
 )
 from app.schemas.inventory import (
@@ -916,6 +918,10 @@ from app.services.gmail_ingestion import (
     serialize_gmail_import_drafts,
     remove_gmail_import_for_user,
     update_gmail_sync_settings_for_user,
+)
+from app.services.import_cover_catalog_search import (
+    apply_import_line_cover_candidate,
+    list_import_line_cover_candidates,
 )
 from app.services.imports import (
     confirm_import_for_user,
@@ -2715,6 +2721,53 @@ def confirm_import(
     current_user: User = Depends(get_current_user),
 ) -> DraftImportConfirmResponse:
     return confirm_import_for_user(session=session, current_user=current_user, import_id=import_id)
+
+
+@app.get(
+    "/imports/{import_id}/items/{line_index}/cover-candidates",
+    response_model=list[ImportLineCoverCandidateRead],
+)
+def get_import_line_cover_candidates(
+    import_id: int,
+    line_index: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[ImportLineCoverCandidateRead]:
+    get_import_for_user(session=session, current_user=current_user, import_id=import_id)
+    rows = list_import_line_cover_candidates(
+        session,
+        owner_user_id=int(current_user.id),
+        draft_import_id=import_id,
+        line_index=line_index,
+    )
+    return [
+        ImportLineCoverCandidateRead(
+            external_variant_id=row.external_variant_id,
+            cover_label=row.cover_label,
+            variant_name=row.variant_name,
+            artist=row.artist,
+            image_url=row.image_url,
+            cover_letter=row.cover_letter,
+        )
+        for row in rows
+    ]
+
+
+@app.post("/imports/{import_id}/items/{line_index}/cover-select", status_code=status.HTTP_204_NO_CONTENT)
+def select_import_line_cover_candidate(
+    import_id: int,
+    line_index: int,
+    payload: ImportLineCoverSelectRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    apply_import_line_cover_candidate(
+        session,
+        current_user=current_user,
+        draft_import_id=import_id,
+        line_index=line_index,
+        external_variant_id=payload.external_variant_id,
+    )
 
 
 @app.post("/imports/{import_id}/discard", response_model=DraftImportRead)
