@@ -93,6 +93,8 @@ function LiveCapturePageInner({
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("Ready to capture.");
   const [stableState, setStableState] = useState(trackerRef.current);
+  const retryTimerRef = useRef<number | null>(null);
+  const sessionAttemptRef = useRef(0);
 
   const currentItem = useMemo(
     () => session?.items.find((item) => item.status !== "CONFIRMED" && item.status !== "SKIPPED") ?? null,
@@ -101,18 +103,39 @@ function LiveCapturePageInner({
 
   useEffect(() => {
     let cancelled = false;
-    async function startSession(): Promise<void> {
+    const startSession = async (): Promise<void> => {
       setLoading(true);
-      setError(null);
       try {
         const created = await apiClient.createReceivingSession({ capture_source: captureSource });
         const detail = await apiClient.getReceivingSession(created.id);
-        if (!cancelled) {
-          setSession(detail);
+        if (cancelled) {
+          return;
         }
+        sessionAttemptRef.current = 0;
+        setSession(detail);
+        setError(null);
+        setStatusMessage("Live capture session ready.");
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Unable to start a live capture session.");
+        if (cancelled) {
+          return;
+        }
+        const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Unable to start a live capture session.";
+        const nextAttempt = sessionAttemptRef.current + 1;
+        sessionAttemptRef.current = nextAttempt;
+        setStatusMessage(`Retrying session creation (${nextAttempt})...`);
+        if (nextAttempt >= 4) {
+          setError(message);
+          return;
+        }
+        if (retryTimerRef.current != null) {
+          window.clearTimeout(retryTimerRef.current);
+        }
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null;
+          void startSession();
+        }, Math.min(1000 * 2 ** (nextAttempt - 1), 8000));
+        if (import.meta.env.DEV) {
+          setError(message);
         }
       } finally {
         if (!cancelled) {
@@ -123,6 +146,9 @@ function LiveCapturePageInner({
     void startSession();
     return () => {
       cancelled = true;
+      if (retryTimerRef.current != null) {
+        window.clearTimeout(retryTimerRef.current);
+      }
     };
   }, [captureSource]);
 

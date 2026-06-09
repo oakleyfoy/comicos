@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
-import { WebcamLiveCapturePage } from "../LiveCapturePage";
+import { MobileLiveCapturePage, WebcamLiveCapturePage } from "../LiveCapturePage";
 
 vi.mock("../../components/StatusBanner", () => ({
   StatusBanner: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -177,6 +177,7 @@ describe("WebcamLiveCapturePage", () => {
       await Promise.resolve();
     });
     expect(apiClient.createReceivingSession).toHaveBeenCalledTimes(1);
+    expect(apiClient.createReceivingSession).toHaveBeenCalledWith({ capture_source: "WEBCAM" });
     expect(intervalCallbacks.length).toBeGreaterThan(0);
 
     for (let index = 0; index < 4; index += 1) {
@@ -199,5 +200,20 @@ describe("WebcamLiveCapturePage", () => {
     expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Camera device")).toBeInTheDocument();
     vi.restoreAllMocks();
+  });
+
+  it("creates a mobile live session with the mobile capture source", async () => {
+    render(
+      <MemoryRouter>
+        <MobileLiveCapturePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(apiClient.createReceivingSession).toHaveBeenCalledTimes(1);
+    expect(apiClient.createReceivingSession).toHaveBeenCalledWith({ capture_source: "MOBILE_CAMERA" });
   });
 });
