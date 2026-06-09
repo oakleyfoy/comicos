@@ -256,7 +256,7 @@ export function ReceivingStationPage(): JSX.Element {
         shipping_amount: shippingAmount || "0",
         tax_amount: taxAmount || "0",
         allocation_method: allocationMethod,
-        manual_allocations,
+        manual_allocations: manualAllocations,
       });
       await apiClient.completeReceivingSession(session.id);
       const refreshed = await apiClient.getReceivingSession(session.id);
