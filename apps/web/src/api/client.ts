@@ -20419,7 +20419,7 @@ export function normalizeReceivingSessionSummaryResponse(
 ): ReceivingSessionSummaryRead {
   const candidate = isPlainObject(response) && isPlainObject(response.session) ? response.session : response;
   if (isPlainObject(candidate) && typeof candidate.id === "number") {
-    return candidate as ReceivingSessionSummaryRead;
+    return candidate as unknown as ReceivingSessionSummaryRead;
   }
   throw new ApiError(`Invalid ${context} response: missing session id.`, 502);
 }
