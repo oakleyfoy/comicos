@@ -44,7 +44,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "receiving_session_item",
-        sa.Column("duplicate_suppressed", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("duplicate_suppressed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
     op.add_column(
         "receiving_session_item",
@@ -55,7 +55,7 @@ def upgrade() -> None:
     op.create_index("ix_receiving_session_item_frame_sequence_index", "receiving_session_item", ["frame_sequence_index"])
     op.create_index("ix_receiving_session_item_duplicate_of_item_id", "receiving_session_item", ["duplicate_of_item_id"])
     op.create_foreign_key(
-        "fk_receiving_session_item_duplicate_of_item_id_receiving_session_item",
+        "fk_receiving_item_dup_of_item_id",
         "receiving_session_item",
         "receiving_session_item",
         ["duplicate_of_item_id"],
@@ -65,7 +65,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(
-        "fk_receiving_session_item_duplicate_of_item_id_receiving_session_item",
+        "fk_receiving_item_dup_of_item_id",
         "receiving_session_item",
         type_="foreignkey",
     )
