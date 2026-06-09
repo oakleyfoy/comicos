@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   ApiError,
   apiClient,
   type RetailerAccountRead,
+  type RetailerAccountSyncResponse,
+  type RetailerLocalSyncCompleteRequest,
   type RetailerOrderSnapshotRead,
   type RetailerSyncRunRead,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import {
+  buildMidtownBookmarkletHref,
+  buildMidtownWindowName,
+  isMidtownHelperMessage,
+  midtownHelperErrorType,
+  midtownHelperMessageType,
+} from "../lib/midtownBrowserHelper";
 
 
 function formatDateTime(value: string | null | undefined): string {
@@ -53,8 +63,67 @@ function statusBadgeClass(status: string): string {
   return "border-amber-400/20 bg-amber-400/10 text-amber-100";
 }
 
+type NeedsAttentionState = {
+  actionRequired: string | null;
+  suggestedNextStep: string | null;
+  retryAllowedAt: string | null;
+  challengeDetected: boolean;
+  errorCode: string | null;
+};
+
+type LocalSyncSession = {
+  accountId: number;
+  syncRunId: number;
+  helperToken: string;
+  limitOrders: number;
+  helperTokenExpiresAt: string;
+  captureUrl: string;
+};
+
+function readSummaryString(summary: Record<string, unknown>, key: string): string | null {
+  const value = summary[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function deriveNeedsAttentionState(run: RetailerSyncRunRead | null): NeedsAttentionState {
+  const summary = (run?.summary_json ?? {}) as Record<string, unknown>;
+  return {
+    actionRequired: readSummaryString(summary, "action_required"),
+    suggestedNextStep: readSummaryString(summary, "suggested_next_step"),
+    retryAllowedAt: readSummaryString(summary, "retry_allowed_at"),
+    challengeDetected: summary["challenge_detected"] === true,
+    errorCode: readSummaryString(summary, "error_code"),
+  };
+}
+
+function isRetryBlocked(retryAllowedAt: string | null): boolean {
+  if (!retryAllowedAt) {
+    return false;
+  }
+  const retryAt = new Date(retryAllowedAt);
+  return Number.isFinite(retryAt.getTime()) && retryAt.getTime() > Date.now();
+}
+
+function readTouchedImportIds(summary: Record<string, unknown>): number[] {
+  const raw = summary["touched_import_ids"];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((value): value is number => typeof value === "number");
+}
+
+function isMidtownOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname.includes("midtowncomics.com");
+  } catch (_error) {
+    return false;
+  }
+}
+
 
 export function ConnectedRetailersPage() {
+  const navigate = useNavigate();
   const [accounts, setAccounts] = useState<RetailerAccountRead[]>([]);
   const [orders, setOrders] = useState<RetailerOrderSnapshotRead[]>([]);
   const [runs, setRuns] = useState<RetailerSyncRunRead[]>([]);
@@ -66,8 +135,20 @@ export function ConnectedRetailersPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("Midtown Comics");
   const [syncEnabled, setSyncEnabled] = useState(false);
+  const [localSyncSession, setLocalSyncSession] = useState<LocalSyncSession | null>(null);
 
   const account = accounts[0] ?? null;
+  const latestRun = runs[0] ?? null;
+  const needsAttention = useMemo(() => deriveNeedsAttentionState(latestRun), [latestRun]);
+  const retryBlocked = useMemo(
+    () => isRetryBlocked(needsAttention.retryAllowedAt),
+    [needsAttention.retryAllowedAt],
+  );
+  const latestTouchedImportIds = useMemo(
+    () => readTouchedImportIds((latestRun?.summary_json ?? {}) as Record<string, unknown>),
+    [latestRun],
+  );
+  const bookmarkletHref = useMemo(() => buildMidtownBookmarkletHref(), []);
 
   async function loadPage(): Promise<void> {
     const [accountResponse, orderResponse] = await Promise.all([
@@ -101,6 +182,60 @@ export function ConnectedRetailersPage() {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleHelperMessage(event: MessageEvent): void {
+      if (!isMidtownOrigin(event.origin) || !isMidtownHelperMessage(event.data)) {
+        return;
+      }
+      if (event.data.type === midtownHelperErrorType()) {
+        setError(event.data.message ?? "Midtown browser sync failed.");
+        setIsWorking(false);
+        return;
+      }
+      if (event.data.type !== midtownHelperMessageType()) {
+        return;
+      }
+      const payload: RetailerLocalSyncCompleteRequest = {
+        helper_token: event.data.helperToken ?? "",
+        history_html: event.data.historyHtml ?? "",
+        detail_pages: event.data.detailPages ?? [],
+      };
+      if (!payload.helper_token || !payload.history_html) {
+        setError("Midtown browser sync returned incomplete data. Start it again from Connected Retailers.");
+        setIsWorking(false);
+        return;
+      }
+      setIsWorking(true);
+      setError(null);
+      setSuccess(null);
+      void apiClient
+        .completeRetailerLocalSync(event.data.accountId, event.data.syncRunId, payload)
+        .then(async (response: RetailerAccountSyncResponse) => {
+          setLocalSyncSession(null);
+          await refreshWithMessage(
+            response.run.status === "succeeded"
+              ? "Midtown browser sync complete. Review the updated import items."
+              : "Midtown browser sync finished but needs attention.",
+          );
+        })
+        .catch((completeError: unknown) => {
+          if (completeError instanceof ApiError || completeError instanceof Error) {
+            setError(completeError.message);
+          } else {
+            setError("Unable to finish Midtown browser sync.");
+          }
+        })
+        .finally(() => {
+          setIsWorking(false);
+        });
+    }
+
+    window.addEventListener("message", handleHelperMessage);
+    return () => {
+      window.removeEventListener("message", handleHelperMessage);
     };
   }, []);
 
@@ -206,6 +341,53 @@ export function ConnectedRetailersPage() {
     }
   }
 
+  async function handleStartBrowserSync(): Promise<void> {
+    if (!account) {
+      return;
+    }
+    const helperWindow = window.open("about:blank", "comicos-midtown-browser-sync");
+    if (!helperWindow) {
+      setError("Allow pop-ups to open Midtown in your browser, then try again.");
+      return;
+    }
+    helperWindow.document.write("<title>Opening Midtown…</title><p>Opening Midtown orders…</p>");
+    setIsWorking(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await apiClient.startRetailerLocalSync(account.id, { limit_orders: 25 });
+      const session: LocalSyncSession = {
+        accountId: account.id,
+        syncRunId: response.run.id,
+        helperToken: response.helper_token,
+        helperTokenExpiresAt: response.helper_token_expires_at,
+        limitOrders: 25,
+        captureUrl: response.capture_url,
+      };
+      setLocalSyncSession(session);
+      helperWindow.name = buildMidtownWindowName({
+        accountId: session.accountId,
+        syncRunId: session.syncRunId,
+        helperToken: session.helperToken,
+        limitOrders: session.limitOrders,
+        appOrigin: window.location.origin,
+      });
+      helperWindow.location.href = session.captureUrl;
+      await refreshWithMessage(
+        "Midtown browser sync started. In the Midtown tab, finish any login or verification, then click the Comicos Midtown Sync bookmark.",
+      );
+    } catch (startError) {
+      helperWindow.close();
+      if (startError instanceof ApiError || startError instanceof Error) {
+        setError(startError.message);
+      } else {
+        setError("Unable to start Midtown browser sync.");
+      }
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
   async function handleDisconnect(): Promise<void> {
     if (!account) {
       return;
@@ -304,6 +486,26 @@ export function ConnectedRetailersPage() {
                   <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-rose-100">
                     <p className="font-semibold">Last sync error</p>
                     <p className="mt-2 text-sm">{account.last_error}</p>
+                    {needsAttention.actionRequired ? (
+                      <p className="mt-3 text-sm text-rose-50">{needsAttention.actionRequired}</p>
+                    ) : null}
+                    {needsAttention.retryAllowedAt ? (
+                      <p className="mt-2 text-sm text-rose-50">
+                        Retry after: {formatDateTime(needsAttention.retryAllowedAt)}
+                      </p>
+                    ) : null}
+                    {needsAttention.suggestedNextStep ? (
+                      <p className="mt-2 text-sm text-rose-50">{needsAttention.suggestedNextStep}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {needsAttention.challengeDetected ? (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-amber-100">
+                    <p className="font-semibold">Midtown challenge handling</p>
+                    <p className="mt-2 text-sm">
+                      The app now keeps the account in <code>needs_attention</code> and uses a
+                      safer retry path. Avoid repeated retries until the cooldown passes.
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -360,19 +562,27 @@ export function ConnectedRetailersPage() {
               </button>
               <button
                 type="button"
-                disabled={isLoading || isWorking || !account}
+                disabled={isLoading || isWorking || !account || retryBlocked}
                 onClick={() => void handleTestConnection()}
                 className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Test Connection
+                {retryBlocked ? "Retry Later" : "Test Connection"}
+              </button>
+              <button
+                type="button"
+                disabled={isLoading || isWorking || !account || retryBlocked}
+                onClick={() => void handleSyncNow()}
+                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {retryBlocked ? "Sync Paused" : "Sync Now"}
               </button>
               <button
                 type="button"
                 disabled={isLoading || isWorking || !account}
-                onClick={() => void handleSyncNow()}
-                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleStartBrowserSync()}
+                className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Sync Now
+                Start Browser Sync
               </button>
               <button
                 type="button"
@@ -382,6 +592,53 @@ export function ConnectedRetailersPage() {
               >
                 Disconnect
               </button>
+            </div>
+            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-200">
+              <p className="font-semibold text-white">Browser-assisted Midtown sync</p>
+              <p className="mt-2">
+                Drag this bookmarklet to your bookmarks bar once, then use it whenever Comicos opens
+                Midtown in your browser:
+              </p>
+              <p className="mt-3">
+                <a
+                  href="#bookmarklet-install"
+                  ref={(node) => {
+                    if (node) {
+                      node.setAttribute("href", bookmarkletHref);
+                    }
+                  }}
+                  className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10"
+                >
+                  Comicos Midtown Sync
+                </a>
+              </p>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-300">
+                <li>Click <span className="font-medium text-white">Start Browser Sync</span>.</li>
+                <li>In the Midtown tab, sign in or finish any verification if Midtown asks.</li>
+                <li>Once the Midtown orders page is visible, click the bookmark above from your bookmarks bar.</li>
+                <li>Return here and review the updated drafts in Import Review.</li>
+              </ol>
+              {localSyncSession ? (
+                <p className="mt-3 text-cyan-100">
+                  Waiting for Midtown browser capture. Helper token expires{" "}
+                  {formatDateTime(localSyncSession.helperTokenExpiresAt)}.
+                </p>
+              ) : null}
+              {latestTouchedImportIds.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <p className="text-slate-300">
+                    Last browser-assisted sync touched {latestTouchedImportIds.length} draft import
+                    {latestTouchedImportIds.length === 1 ? "" : "s"}.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/orders/import")}
+                    className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white hover:bg-white/5"
+                  >
+                    Open Import Review
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -447,6 +704,16 @@ export function ConnectedRetailersPage() {
                     Imported {run.orders_imported} orders, created {run.items_imported} items, updated {run.items_updated} items.
                   </p>
                   {run.error_message ? <p className="mt-2 text-sm text-rose-200">{run.error_message}</p> : null}
+                  {run.summary_json["action_required"] ? (
+                    <p className="mt-2 text-sm text-amber-100">
+                      {String(run.summary_json["action_required"])}
+                    </p>
+                  ) : null}
+                  {run.summary_json["retry_allowed_at"] ? (
+                    <p className="mt-2 text-sm text-slate-300">
+                      Retry after: {formatDateTime(String(run.summary_json["retry_allowed_at"]))}
+                    </p>
+                  ) : null}
                 </article>
               ))
             )}

@@ -11,17 +11,57 @@ from app.models import (
     RetailerOrderSnapshot,
     RetailerSyncRun,
 )
-from app.schemas.retailer_accounts import RetailerAccountCreate, RetailerAccountUpdate
+from app.schemas.retailer_accounts import (
+    RetailerAccountCreate,
+    RetailerAccountUpdate,
+    RetailerLocalSyncCompleteRequest,
+    RetailerLocalSyncStartRequest,
+)
 from app.services.retailer_credentials import (
     encrypt_retailer_password,
     mask_retailer_username,
     validate_retailer_credential_key,
 )
-from app.services.retailer_sync.midtown_account_sync import MidtownSyncResult, sync_midtown_account
+from app.services.retailer_sync.midtown_account_sync import (
+    MidtownLocalSyncCapture,
+    MidtownLocalSyncStart,
+    MidtownSyncResult,
+    complete_midtown_browser_sync,
+    start_midtown_browser_sync,
+    sync_midtown_account,
+)
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _latest_sync_run_for_account(session: Session, *, account_id: int) -> RetailerSyncRun | None:
+    return session.exec(
+        select(RetailerSyncRun)
+        .where(RetailerSyncRun.retailer_account_id == account_id)
+        .order_by(RetailerSyncRun.started_at.desc(), RetailerSyncRun.id.desc())
+    ).first()
+
+
+def _retry_cooldown_message(summary_json: dict | None) -> str | None:
+    if not isinstance(summary_json, dict):
+        return None
+    error_code = str(summary_json.get("error_code") or "").strip().lower()
+    retry_allowed_at = str(summary_json.get("retry_allowed_at") or "").strip()
+    if error_code != "captcha_or_security" or not retry_allowed_at:
+        return None
+    try:
+        retry_at = datetime.fromisoformat(retry_allowed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if retry_at <= utc_now():
+        return None
+    retry_text = retry_at.astimezone(timezone.utc).isoformat()
+    return (
+        "Midtown recently presented a CAPTCHA or security challenge. "
+        f"Please wait until {retry_text} before retrying."
+    )
 
 
 def get_retailer_account_for_user_or_404(
@@ -103,6 +143,9 @@ def update_retailer_account(
         account.sync_enabled = payload.sync_enabled
     if payload.status is not None:
         account.status = payload.status
+    if payload.username is not None or payload.password is not None:
+        account.status = "connected"
+        account.last_error = None
     account.updated_at = utc_now()
     session.add(account)
     session.commit()
@@ -160,6 +203,10 @@ def run_retailer_account_test(
     account = get_retailer_account_for_user_or_404(
         session, owner_user_id=owner_user_id, account_id=account_id
     )
+    latest_run = _latest_sync_run_for_account(session, account_id=account_id)
+    cooldown_message = _retry_cooldown_message(latest_run.summary_json if latest_run else None)
+    if cooldown_message:
+        raise HTTPException(status_code=409, detail=cooldown_message)
     return sync_midtown_account(session, account=account, limit_orders=1, test_only=True)
 
 
@@ -173,8 +220,57 @@ def run_retailer_account_sync(
     account = get_retailer_account_for_user_or_404(
         session, owner_user_id=owner_user_id, account_id=account_id
     )
+    latest_run = _latest_sync_run_for_account(session, account_id=account_id)
+    cooldown_message = _retry_cooldown_message(latest_run.summary_json if latest_run else None)
+    if cooldown_message:
+        raise HTTPException(status_code=409, detail=cooldown_message)
     return sync_midtown_account(
         session, account=account, limit_orders=limit_orders, test_only=False
+    )
+
+
+def start_retailer_account_local_sync(
+    session: Session,
+    *,
+    owner_user_id: int,
+    account_id: int,
+    payload: RetailerLocalSyncStartRequest,
+) -> MidtownLocalSyncStart:
+    account = get_retailer_account_for_user_or_404(
+        session, owner_user_id=owner_user_id, account_id=account_id
+    )
+    return start_midtown_browser_sync(
+        session,
+        account=account,
+        limit_orders=payload.limit_orders,
+    )
+
+
+def complete_retailer_account_local_sync(
+    session: Session,
+    *,
+    owner_user_id: int,
+    account_id: int,
+    sync_run_id: int,
+    payload: RetailerLocalSyncCompleteRequest,
+) -> MidtownSyncResult:
+    account = get_retailer_account_for_user_or_404(
+        session, owner_user_id=owner_user_id, account_id=account_id
+    )
+    return complete_midtown_browser_sync(
+        session,
+        account=account,
+        sync_run_id=sync_run_id,
+        helper_token=payload.helper_token,
+        history_html=payload.history_html,
+        detail_pages=[
+            MidtownLocalSyncCapture(
+                detail_url=page.detail_url,
+                html=page.html,
+                fallback_order_number=page.fallback_order_number,
+            )
+            for page in payload.detail_pages
+        ],
     )
 
 

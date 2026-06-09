@@ -348,9 +348,34 @@ export interface RetailerAccountSyncRequest {
   limit_orders?: number;
 }
 
+export interface RetailerLocalSyncStartRequest {
+  limit_orders?: number;
+}
+
+export interface RetailerLocalSyncDetailPageCapture {
+  detail_url: string;
+  html: string;
+  fallback_order_number?: string | null;
+}
+
+export interface RetailerLocalSyncCompleteRequest {
+  helper_token: string;
+  history_html: string;
+  detail_pages: RetailerLocalSyncDetailPageCapture[];
+}
+
 export interface RetailerAccountTestResponse {
   account: RetailerAccountRead;
   run: RetailerSyncRunRead;
+}
+
+export interface RetailerLocalSyncStartResponse {
+  account: RetailerAccountRead;
+  run: RetailerSyncRunRead;
+  helper_token: string;
+  helper_token_expires_at: string;
+  capture_url: string;
+  helper_mode: string;
 }
 
 export interface RetailerAccountSyncResponse {
@@ -20650,6 +20675,33 @@ export const apiClient = {
 
   getRetailerAccountSyncRuns(accountId: number): Promise<RetailerSyncRunListResponse> {
     return request<RetailerSyncRunListResponse>(`/api/v1/retailer-accounts/${accountId}/sync-runs`);
+  },
+
+  startRetailerLocalSync(
+    accountId: number,
+    payload: RetailerLocalSyncStartRequest = {},
+  ): Promise<RetailerLocalSyncStartResponse> {
+    return request<RetailerLocalSyncStartResponse>(
+      `/api/v1/retailer-accounts/${accountId}/local-sync/start`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  completeRetailerLocalSync(
+    accountId: number,
+    syncRunId: number,
+    payload: RetailerLocalSyncCompleteRequest,
+  ): Promise<RetailerAccountSyncResponse> {
+    return request<RetailerAccountSyncResponse>(
+      `/api/v1/retailer-accounts/${accountId}/local-sync/${syncRunId}/complete`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
   },
 
   getRetailerOrders(): Promise<RetailerOrderListResponse> {

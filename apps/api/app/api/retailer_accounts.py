@@ -10,6 +10,9 @@ from app.schemas.retailer_accounts import (
     RetailerAccountCreate,
     RetailerAccountRead,
     RetailerAccountsListResponse,
+    RetailerLocalSyncCompleteRequest,
+    RetailerLocalSyncStartRequest,
+    RetailerLocalSyncStartResponse,
     RetailerAccountSyncRequest,
     RetailerAccountSyncResponse,
     RetailerAccountTestResponse,
@@ -21,6 +24,7 @@ from app.schemas.retailer_accounts import (
     RetailerSyncRunRead,
 )
 from app.services.retailer_accounts import (
+    complete_retailer_account_local_sync,
     delete_retailer_account,
     get_retailer_account_for_user_or_404,
     get_retailer_order_for_user_or_404,
@@ -32,6 +36,7 @@ from app.services.retailer_accounts import (
     run_retailer_account_sync,
     run_retailer_account_test,
     save_retailer_account,
+    start_retailer_account_local_sync,
     update_retailer_account,
 )
 
@@ -192,6 +197,64 @@ def sync_retailer_account(
     related_orders = [order for order in recent_orders if order.retailer_account_id == account_id][
         : payload.limit_orders
     ]
+    return RetailerAccountSyncResponse(
+        account=_serialize_account(account),
+        run=_serialize_run(result.run),
+        orders=[_serialize_order(order, session=session) for order in related_orders],
+    )
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-accounts/{account_id}/local-sync/start",
+    response_model=RetailerLocalSyncStartResponse,
+)
+def start_retailer_local_sync(
+    account_id: int,
+    payload: RetailerLocalSyncStartRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RetailerLocalSyncStartResponse:
+    assert current_user.id is not None
+    result = start_retailer_account_local_sync(
+        session,
+        owner_user_id=int(current_user.id),
+        account_id=account_id,
+        payload=payload,
+    )
+    return RetailerLocalSyncStartResponse(
+        account=_serialize_account(result.account),
+        run=_serialize_run(result.run),
+        helper_token=result.helper_token,
+        helper_token_expires_at=result.helper_token_expires_at,
+        capture_url=result.capture_url,
+        helper_mode="bookmarklet",
+    )
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-accounts/{account_id}/local-sync/{sync_run_id}/complete",
+    response_model=RetailerAccountSyncResponse,
+)
+def complete_retailer_local_sync(
+    account_id: int,
+    sync_run_id: int,
+    payload: RetailerLocalSyncCompleteRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RetailerAccountSyncResponse:
+    assert current_user.id is not None
+    result = complete_retailer_account_local_sync(
+        session,
+        owner_user_id=int(current_user.id),
+        account_id=account_id,
+        sync_run_id=sync_run_id,
+        payload=payload,
+    )
+    account = get_retailer_account_for_user_or_404(
+        session, owner_user_id=int(current_user.id), account_id=account_id
+    )
+    recent_orders = list_retailer_orders(session, owner_user_id=int(current_user.id))
+    related_orders = [order for order in recent_orders if order.retailer_account_id == account_id][:25]
     return RetailerAccountSyncResponse(
         account=_serialize_account(account),
         run=_serialize_run(result.run),

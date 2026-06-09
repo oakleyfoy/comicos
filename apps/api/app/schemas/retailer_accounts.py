@@ -106,9 +106,34 @@ class RetailerAccountSyncRequest(BaseModel):
     limit_orders: int = Field(default=25, ge=1, le=100)
 
 
+class RetailerLocalSyncStartRequest(BaseModel):
+    limit_orders: int = Field(default=25, ge=1, le=100)
+
+
+class RetailerLocalSyncDetailPageCapture(BaseModel):
+    detail_url: str = Field(min_length=1, max_length=2048)
+    html: str = Field(min_length=1)
+    fallback_order_number: str | None = Field(default=None, max_length=128)
+
+
+class RetailerLocalSyncCompleteRequest(BaseModel):
+    helper_token: str = Field(min_length=1, max_length=512)
+    history_html: str = Field(min_length=1)
+    detail_pages: list[RetailerLocalSyncDetailPageCapture] = Field(default_factory=list)
+
+
 class RetailerAccountTestResponse(BaseModel):
     account: RetailerAccountRead
     run: RetailerSyncRunRead
+
+
+class RetailerLocalSyncStartResponse(BaseModel):
+    account: RetailerAccountRead
+    run: RetailerSyncRunRead
+    helper_token: str
+    helper_token_expires_at: datetime
+    capture_url: str
+    helper_mode: str = "bookmarklet"
 
 
 class RetailerAccountSyncResponse(BaseModel):
