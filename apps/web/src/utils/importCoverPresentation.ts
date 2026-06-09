@@ -3,6 +3,26 @@ export type ImportCoverSourceKind = "RETAILER" | "LOCG" | "EXTERNAL_CATALOG" | "
 const COVER_CONFIDENCE_EXCEPTION = 0.55;
 const VARIANT_CONFIDENCE_EXCEPTION = 0.55;
 
+export function resolveImportLineCoverUrl(input: {
+  coverUrl?: string | null;
+  coverThumbnailUrl?: string | null;
+  coverImageUrl?: string | null;
+  retailerCoverUrl?: string | null;
+}): string | null {
+  for (const value of [
+    input.coverUrl,
+    input.coverThumbnailUrl,
+    input.coverImageUrl,
+    input.retailerCoverUrl,
+  ]) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 export function formatImportCoverSourceLabel(
   coverSource: ImportCoverSourceKind | string | null | undefined,
   retailerName: string | null | undefined,

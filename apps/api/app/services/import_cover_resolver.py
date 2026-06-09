@@ -26,6 +26,7 @@ from app.services.import_cover_verification import (
     item_cover_user_locked,
 )
 from app.services.import_locg_hydrate_service import ImportLocgHydrateResult
+from app.services.import_cover_display import cover_display_fields_from_urls
 
 
 LOGGER = logging.getLogger(__name__)
@@ -781,14 +782,20 @@ def apply_import_cover_to_parse_order(
             draft_import_id=draft_import_id,
             allow_draft_cover_fallback=allow_draft_cover,
         )
+        display_fields = cover_display_fields_from_urls(
+            cover_image_url=cover.cover_image_url or item.retailer_cover_url,
+            cover_thumbnail_url=cover.cover_thumbnail_url or item.retailer_cover_url,
+            retailer_cover_url=item.retailer_cover_url,
+        )
         enriched_items.append(
             item.model_copy(
                 update={
-                    "cover_image_url": cover.cover_image_url,
-                    "cover_thumbnail_url": cover.cover_thumbnail_url,
+                    "cover_image_url": display_fields["cover_image_url"],
+                    "cover_thumbnail_url": display_fields["cover_thumbnail_url"],
+                    "cover_url": display_fields["cover_url"],
                     "cover_image_source": cover.cover_image_source,
                     "cover_image_source_id": cover.cover_image_source_id,
-                    "has_cover_image": cover.has_cover_image,
+                    "has_cover_image": display_fields["has_cover_image"] or cover.has_cover_image,
                     "cover_resolution_debug": cover.cover_resolution_debug,
                     "cover_source": cover.cover_source,
                     "cover_confidence": cover.cover_confidence,

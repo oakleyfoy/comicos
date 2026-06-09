@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { GuidedImportExceptionItemRead } from "../../../api/client";
+import { resolveImportLineCoverUrl } from "../../../utils/importCoverPresentation";
 
 type Props = {
   item: GuidedImportExceptionItemRead;
@@ -9,11 +10,12 @@ type Props = {
 };
 
 export function GuidedImportExceptionCard({ item, importId, onUpdated }: Props): JSX.Element {
+  const coverSrc = resolveImportLineCoverUrl({ coverUrl: item.cover_url });
   return (
     <li className="rounded-xl border border-slate-700 bg-slate-900/80 p-4">
       <div className="flex gap-4">
-        {item.cover_url ? (
-          <img src={item.cover_url} alt="" className="h-24 w-16 rounded object-cover bg-slate-800" />
+        {coverSrc ? (
+          <img src={coverSrc} alt="" className="h-24 w-16 rounded object-cover bg-slate-800" />
         ) : (
           <div className="flex h-24 w-16 items-center justify-center rounded bg-slate-800 text-[10px] text-slate-500">
             NO COVER

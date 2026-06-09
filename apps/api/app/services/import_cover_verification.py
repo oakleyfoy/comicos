@@ -139,7 +139,9 @@ def cover_fields_from_item_snapshot(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def item_cover_user_locked(item: dict[str, Any]) -> bool:
-    return item.get("cover_verified_by") == "USER"
+    from app.services.import_cover_display import item_has_verified_cover_lock
+
+    return item_has_verified_cover_lock(item)
 
 
 def build_cover_item_updates(

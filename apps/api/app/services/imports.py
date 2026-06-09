@@ -22,8 +22,10 @@ from app.schemas.orders import OrderCreate
 from app.services.ai_order_parser import parse_order_draft_from_text
 from app.services.canonical_creators import get_or_create_canonical_creator
 from app.services.import_cover_resolver import apply_import_cover_to_parse_order
+from app.services.import_cover_display import cover_display_fields_from_urls, effective_import_cover_url
 from app.services.import_line_cover_resolution_service import (
     attach_line_cover_resolutions_to_order,
+    hydrate_item_from_stored_cover_resolution,
     persist_parse_order_line_cover_resolutions,
     record_cover_resolution_health_on_confirm,
 )
@@ -47,6 +49,47 @@ from app.services.cover_images import (
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _item_cover_snapshot(item: dict) -> dict:
+    return {
+        key: item.get(key)
+        for key in (
+            "cover_url",
+            "cover_image_url",
+            "cover_thumbnail_url",
+            "retailer_cover_url",
+            "has_cover_image",
+            "cover_source",
+            "cover_confidence",
+            "variant_confidence",
+            "cover_resolution_debug",
+        )
+    }
+
+
+def _persist_resolved_cover_payload_if_changed(
+    session: Session,
+    draft_import: DraftImport,
+    normalized_payload: ParseOrderResponse,
+) -> bool:
+    new_dump = normalized_payload.model_dump(mode="json")
+    old_items = (draft_import.parsed_payload_json or {}).get("items") or []
+    new_items = new_dump.get("items") or []
+    if len(old_items) != len(new_items):
+        draft_import.parsed_payload_json = new_dump
+        draft_import.updated_at = utc_now()
+        session.add(draft_import)
+        return True
+    for old_item, new_item in zip(old_items, new_items, strict=False):
+        if _item_cover_snapshot(old_item if isinstance(old_item, dict) else {}) != _item_cover_snapshot(
+            new_item if isinstance(new_item, dict) else {}
+        ):
+            draft_import.parsed_payload_json = new_dump
+            draft_import.updated_at = utc_now()
+            session.add(draft_import)
+            return True
+    return False
 
 
 def _release_date_review_item_count(normalized_payload: ParseOrderResponse) -> int:
@@ -152,6 +195,17 @@ def serialize_import(
             owner_user_id=draft_import.user_id,
             debug_catalog=debug_catalog,
         )
+    if session is not None and draft_pk is not None and (enrich_metadata or enrich_lifecycle):
+        hydrated_items = [
+            hydrate_item_from_stored_cover_resolution(
+                session,
+                draft_import_id=int(draft_pk),
+                line_index=line_index,
+                item=item,
+            )
+            for line_index, item in enumerate(normalized_payload.items)
+        ]
+        normalized_payload = normalized_payload.model_copy(update={"items": hydrated_items})
     if session is not None and (enrich_metadata or enrich_lifecycle):
         normalized_payload = apply_import_cover_to_parse_order(
             normalized_payload,
@@ -167,6 +221,10 @@ def serialize_import(
                 items=normalized_payload.items,
             )
             session.flush()
+        if draft_import.status == "draft" and draft_pk is not None:
+            if _persist_resolved_cover_payload_if_changed(session, draft_import, normalized_payload):
+                session.commit()
+                session.refresh(draft_import)
     metadata_review_item_count = sum(
         1 for item in normalized_payload.items if item.metadata_review_required
     )
@@ -361,6 +419,44 @@ def get_import_for_user(
         get_import_for_user_or_404(session, current_user, import_id),
         debug_catalog=debug_catalog,
     )
+
+
+def re_resolve_import_covers_for_user(
+    session: Session,
+    current_user: User,
+    import_id: int,
+) -> DraftImportRead:
+    draft_import = get_import_for_user_or_404(session, current_user, import_id)
+    if draft_import.status != "draft":
+        raise HTTPException(status_code=409, detail="Only draft imports can re-resolve covers.")
+
+    parsed = ParseOrderResponse.model_validate(draft_import.parsed_payload_json)
+    cleared_items = []
+    for item in parsed.items:
+        if item.cover_verified_by == "USER" and effective_import_cover_url(item):
+            cleared_items.append(item)
+            continue
+        cleared_items.append(
+            item.model_copy(
+                update={
+                    "cover_verified_by": None,
+                    "cover_verified_at": None,
+                    "cover_image_url": None,
+                    "cover_thumbnail_url": None,
+                    "cover_url": None,
+                    "has_cover_image": False,
+                    "cover_resolution_debug": None,
+                }
+            )
+        )
+    draft_import.parsed_payload_json = parsed.model_copy(update={"items": cleared_items}).model_dump(
+        mode="json"
+    )
+    draft_import.updated_at = utc_now()
+    session.add(draft_import)
+    session.commit()
+    session.refresh(draft_import)
+    return serialize_import(session, draft_import)
 
 
 def persist_draft_import(

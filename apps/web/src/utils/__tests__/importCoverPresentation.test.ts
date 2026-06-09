@@ -4,6 +4,7 @@ import {
   formatImportCoverSourceLabel,
   importCoverExceptionBadge,
   importCoverNeedsAttention,
+  resolveImportLineCoverUrl,
 } from "../importCoverPresentation";
 
 describe("importCoverPresentation", () => {
@@ -23,5 +24,16 @@ describe("importCoverPresentation", () => {
       }),
     ).toBe("Variant mismatch risk");
     expect(importCoverNeedsAttention({ hasCoverImage: true, variantConfidence: 0.3 })).toBe(true);
+  });
+
+  it("falls back through cover_url, thumbnail, image, and retailer", () => {
+    expect(
+      resolveImportLineCoverUrl({
+        coverUrl: null,
+        coverThumbnailUrl: null,
+        coverImageUrl: null,
+        retailerCoverUrl: "https://example.com/r.jpg",
+      }),
+    ).toBe("https://example.com/r.jpg");
   });
 });

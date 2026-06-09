@@ -68,6 +68,8 @@ interface OrderItemDraft {
   hasCoverImage?: boolean;
   coverResolutionDebug?: Record<string, unknown> | null;
   importLineCoverImageId?: number;
+  coverUrl?: string | null;
+  retailerCoverUrl?: string | null;
   coverSource?: AiDraftOrderItem["cover_source"];
   coverConfidence?: number | null;
   variantConfidence?: number | null;
@@ -337,6 +339,8 @@ function mapAiDraftToForm(draft: AiParseOrderResponse) {
               catalogMatchPossible: item.catalog_match_possible ?? undefined,
               coverImageUrl: item.cover_image_url ?? undefined,
               coverThumbnailUrl: item.cover_thumbnail_url ?? undefined,
+              coverUrl: item.cover_url ?? undefined,
+              retailerCoverUrl: item.retailer_cover_url ?? undefined,
               hasCoverImage: item.has_cover_image ?? undefined,
               coverResolutionDebug: item.cover_resolution_debug ?? undefined,
               importLineCoverImageId: item.import_line_cover_image_id ?? undefined,

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/client";
 import { formatCalendarDateWithYear, formatCalendarDateUsShort, normalizeCalendarDateInput } from "../../utils/formatCalendarDate";
 import { normalizeMoneyInput } from "../../utils/moneyInput";
-import { importCoverExceptionBadge, formatImportCoverSourceLabel } from "../../utils/importCoverPresentation";
+import { importCoverExceptionBadge, formatImportCoverSourceLabel, resolveImportLineCoverUrl } from "../../utils/importCoverPresentation";
 
 interface ImportReviewCardItem {
   publisher: string;
@@ -22,6 +22,8 @@ interface ImportReviewCardItem {
   catalogReleaseSourceText?: string;
   coverImageUrl?: string;
   coverThumbnailUrl?: string;
+  coverUrl?: string | null;
+  retailerCoverUrl?: string | null;
   hasCoverImage?: boolean;
   coverResolutionDebug?: Record<string, unknown> | null;
   coverSource?: "RETAILER" | "LOCG" | "EXTERNAL_CATALOG" | "USER_UPLOAD" | null;
@@ -188,7 +190,12 @@ function coverFetchPath(url: string): string {
 }
 
 function CoverThumbnail({ item }: { item: ImportReviewCardItem }) {
-  const rawSrc = item.coverThumbnailUrl || item.coverImageUrl || null;
+  const rawSrc = resolveImportLineCoverUrl({
+    coverUrl: item.coverUrl,
+    coverThumbnailUrl: item.coverThumbnailUrl,
+    coverImageUrl: item.coverImageUrl,
+    retailerCoverUrl: item.retailerCoverUrl,
+  });
   const alt = titleIssueLabel(item);
   const [displaySrc, setDisplaySrc] = useState<string | null>(
     rawSrc && isDirectCoverUrl(rawSrc) ? rawSrc : null,

@@ -415,3 +415,33 @@ def test_user_verified_cover_is_not_replaced(session: Session) -> None:
     )
     assert result.cover_image_url == "https://example.com/user-picked.jpg"
     assert result.cover_verified_by == "USER"
+
+
+def test_user_lock_without_image_url_does_not_block_resolution(session: Session) -> None:
+    issue = ExternalCatalogIssue(
+        source_name="locg",
+        title="Ghost #1",
+        publisher="Image",
+        series_name="Ghost",
+        issue_number="1",
+        release_date=date(2026, 7, 22),
+        cover_image_url="https://example.com/ghost.jpg",
+    )
+    session.add(issue)
+    session.commit()
+    session.refresh(issue)
+    assert issue.id is not None
+
+    result = resolve_import_cover(
+        session,
+        {
+            "title": "Ghost",
+            "issue_number": "1",
+            "cover_verified_by": "USER",
+            "has_cover_image": False,
+            "catalog_match_source": "ExternalCatalogIssue",
+            "catalog_match_source_id": issue.id,
+        },
+    )
+    assert result.cover_image_url == "https://example.com/ghost.jpg"
+    assert result.has_cover_image is True

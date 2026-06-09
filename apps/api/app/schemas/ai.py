@@ -90,6 +90,7 @@ class AiDraftOrderItem(BaseModel):
     retailer_sku: str | None = None
     cover_verified_at: datetime | None = None
     cover_verified_by: Literal["SYSTEM", "USER"] | None = None
+    cover_url: str | None = None
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"] | None = None
     purchase_date: date | None = None
     expected_ship_date: date | None = None

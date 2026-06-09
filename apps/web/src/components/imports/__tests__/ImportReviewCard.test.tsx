@@ -91,6 +91,34 @@ describe("ImportReviewCard", () => {
     );
   });
 
+  it("renders retailer cover when primary cover fields are empty", () => {
+    render(
+      <ImportReviewCard
+        item={buildItem({
+          coverImageUrl: undefined,
+          coverThumbnailUrl: undefined,
+          retailerCoverUrl: "https://example.com/retailer-only.jpg",
+        })}
+        isExpanded={false}
+        canRemove={false}
+        isSubmitting={false}
+        lifecycleBadge={null}
+        cardSurfaceClassName="border-slate-600"
+        onToggleDetails={() => undefined}
+        onRemove={() => undefined}
+        onUpdate={() => undefined}
+        clearItemError={() => undefined}
+        canScanCover={false}
+        scanCoverBusy={false}
+        onScanCoverSelected={() => undefined}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "Terminal #1" })).toHaveAttribute(
+      "src",
+      "https://example.com/retailer-only.jpg",
+    );
+  });
+
   it("shows cover resolution debug when provided", () => {
     render(<Harness />);
     expect(screen.getByText(/Cover debug: none/)).toBeInTheDocument();

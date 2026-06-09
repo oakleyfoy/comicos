@@ -20,6 +20,7 @@ from app.schemas.p92_guided_import import (
     GuidedImportSummaryRead,
 )
 from app.services.imports import serialize_import
+from app.services.import_cover_display import effective_import_cover_url
 
 COVER_CONFIDENCE_THRESHOLD = 0.55
 VARIANT_CONFIDENCE_THRESHOLD = 0.55
@@ -176,7 +177,7 @@ def build_guided_import_review(draft_read: DraftImportRead) -> GuidedImportRevie
                     publisher=item.publisher or item.canonical_publisher or "",
                     variant_label=item.cover_name or item.variant_type or "",
                     release_date=str(item.release_date or item.parsed_release_date or ""),
-                    cover_url=item.cover_thumbnail_url or item.cover_image_url,
+                    cover_url=effective_import_cover_url(item),
                     problems=reasons,
                     cover_source=_cover_source_display_label(item, retailer),
                     cover_confidence=item.cover_confidence,

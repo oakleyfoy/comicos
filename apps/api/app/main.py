@@ -930,6 +930,7 @@ from app.services.imports import (
     discard_import_for_user,
     get_import_for_user,
     list_imports_for_user,
+    re_resolve_import_covers_for_user,
     update_import_for_user,
     attach_import_line_cover_image,
 )
@@ -2721,6 +2722,19 @@ def confirm_import(
     current_user: User = Depends(get_current_user),
 ) -> DraftImportConfirmResponse:
     return confirm_import_for_user(session=session, current_user=current_user, import_id=import_id)
+
+
+@app.post("/imports/{import_id}/re-resolve-covers", response_model=DraftImportRead)
+def re_resolve_import_covers(
+    import_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DraftImportRead:
+    return re_resolve_import_covers_for_user(
+        session=session,
+        current_user=current_user,
+        import_id=import_id,
+    )
 
 
 @app.get(

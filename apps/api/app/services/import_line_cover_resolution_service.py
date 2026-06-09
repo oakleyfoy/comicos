@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 
 from app.models.p92_import_line_cover import P92ImportLineCoverResolution
 from app.schemas.ai import AiDraftOrderItem
+from app.services.import_cover_display import cover_display_fields_from_urls, effective_import_cover_url
 from app.services.import_cover_resolver import ImportCoverResolutionResultPayload
 
 
@@ -38,9 +39,14 @@ def upsert_line_cover_resolution_from_item(
     item: AiDraftOrderItem,
     cover: ImportCoverResolutionResultPayload | None = None,
 ) -> None:
-    cover_url = item.cover_thumbnail_url or item.cover_image_url
+    cover_url = effective_import_cover_url(item)
     if cover is not None:
-        cover_url = cover.cover_thumbnail_url or cover.cover_image_url or cover_url
+        cover_url = effective_import_cover_url(
+            {
+                "cover_thumbnail_url": cover.cover_thumbnail_url,
+                "cover_image_url": cover.cover_image_url,
+            }
+        ) or cover_url
 
     row = session.exec(
         select(P92ImportLineCoverResolution).where(
@@ -84,6 +90,61 @@ def upsert_line_cover_resolution_from_item(
             setattr(row, key, value)
         session.add(row)
     session.flush()
+
+
+def hydrate_item_from_stored_cover_resolution(
+    session: Session,
+    *,
+    draft_import_id: int,
+    line_index: int,
+    item: AiDraftOrderItem,
+) -> AiDraftOrderItem:
+    """Fill missing line cover fields from p92_import_line_cover_resolution."""
+    if effective_import_cover_url(item):
+        display = effective_import_cover_url(item)
+        return item.model_copy(
+            update=cover_display_fields_from_urls(
+                cover_image_url=item.cover_image_url or display,
+                cover_thumbnail_url=item.cover_thumbnail_url or display,
+                retailer_cover_url=item.retailer_cover_url,
+            )
+        )
+
+    row = session.exec(
+        select(P92ImportLineCoverResolution).where(
+            P92ImportLineCoverResolution.draft_import_id == draft_import_id,
+            P92ImportLineCoverResolution.line_index == line_index,
+        )
+    ).first()
+    if row is None or not row.cover_url:
+        retailer = (item.retailer_cover_url or "").strip() or None
+        if retailer:
+            return item.model_copy(
+                update={
+                    **cover_display_fields_from_urls(
+                        cover_image_url=retailer,
+                        cover_thumbnail_url=retailer,
+                        retailer_cover_url=retailer,
+                    ),
+                    "has_cover_image": True,
+                }
+            )
+        return item
+
+    updates: dict[str, Any] = cover_display_fields_from_urls(
+        cover_image_url=item.cover_image_url or row.cover_url,
+        cover_thumbnail_url=item.cover_thumbnail_url or row.cover_url,
+        retailer_cover_url=item.retailer_cover_url,
+    )
+    if row.cover_source and not item.cover_source:
+        updates["cover_source"] = row.cover_source
+    if row.cover_confidence is not None and item.cover_confidence is None:
+        updates["cover_confidence"] = row.cover_confidence
+    if row.variant_confidence is not None and item.variant_confidence is None:
+        updates["variant_confidence"] = row.variant_confidence
+    if row.verified_by and not item.cover_verified_by:
+        updates["cover_verified_by"] = row.verified_by
+    return item.model_copy(update=updates)
 
 
 def persist_parse_order_line_cover_resolutions(

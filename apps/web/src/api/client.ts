@@ -164,6 +164,8 @@ export interface AiDraftOrderItem {
   catalog_resolution_debug?: Record<string, unknown> | null;
   cover_image_url?: string | null;
   cover_thumbnail_url?: string | null;
+  cover_url?: string | null;
+  retailer_cover_url?: string | null;
   cover_image_source?: string | null;
   cover_image_source_id?: number | null;
   has_cover_image?: boolean | null;
