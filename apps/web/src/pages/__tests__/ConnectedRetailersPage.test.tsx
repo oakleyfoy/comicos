@@ -80,12 +80,37 @@ describe("ConnectedRetailersPage", () => {
           order_status: "Shipped",
           order_total: "9.98",
           source_url: "https://www.midtowncomics.com/account/orders/view/ABC123",
+          draft_import_id: 101,
           updated_at: "2026-06-09T10:01:00Z",
           items: [
             {
               id: 1,
               retailer_item_id: "SKU-1",
               title: "Immortal Thor #1 Cover A",
+              quantity: 1,
+              unit_price: "4.99",
+              updated_at: "2026-06-09T10:01:00Z",
+            },
+            {
+              id: 2,
+              retailer_item_id: "SKU-2",
+              title: "Immortal Thor #2 Cover A",
+              quantity: 1,
+              unit_price: "4.99",
+              updated_at: "2026-06-09T10:01:00Z",
+            },
+            {
+              id: 3,
+              retailer_item_id: "SKU-3",
+              title: "Immortal Thor #3 Cover A",
+              quantity: 1,
+              unit_price: "4.99",
+              updated_at: "2026-06-09T10:01:00Z",
+            },
+            {
+              id: 4,
+              retailer_item_id: "SKU-4",
+              title: "Immortal Thor #4 Cover A",
               quantity: 1,
               unit_price: "4.99",
               updated_at: "2026-06-09T10:01:00Z",
@@ -215,6 +240,7 @@ describe("ConnectedRetailersPage", () => {
       expect(screen.getByText("Stored username:")).toBeInTheDocument();
       expect(screen.getByText(/co\*+/)).toBeInTheDocument();
       expect(screen.getByText("Order #ABC123")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Review Import" })).toBeInTheDocument();
       expect(screen.getByText("Sync History")).toBeInTheDocument();
     });
   });
@@ -414,5 +440,89 @@ describe("ConnectedRetailersPage", () => {
     const [openReviewButton] = await screen.findAllByRole("button", { name: "Open Import Review" });
     fireEvent.click(openReviewButton);
     expect(navigateMock).toHaveBeenCalledWith("/orders/import?importId=101");
+  });
+
+  it("expands the order card to show all snapshot items", async () => {
+    render(
+      <MemoryRouter>
+        <ConnectedRetailersPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Immortal Thor #4 Cover A")).not.toBeInTheDocument();
+
+    const [viewDetailsButton] = await screen.findAllByRole("button", { name: "View Details" });
+    fireEvent.click(viewDetailsButton);
+
+    expect(await screen.findByText(/Immortal Thor #4 Cover A/)).toBeInTheDocument();
+  });
+
+  it("creates a review draft when the order has no draft yet", async () => {
+    vi.spyOn(apiClient, "getRetailerOrders").mockResolvedValueOnce({
+      items: [
+        {
+          id: 2,
+          retailer_account_id: 1,
+          retailer: "midtown",
+          retailer_order_number: "4272232",
+          order_date: "2026-06-08",
+          order_status: "Shipped",
+          order_total: "104.79",
+          source_url: "https://www.midtowncomics.com/account/orders/view/4272232",
+          draft_import_id: null,
+          updated_at: "2026-06-09T10:01:00Z",
+          items: [
+            {
+              id: 1,
+              retailer_item_id: "SKU-1",
+              title: "Absolute Batman #1 Cover A",
+              quantity: 1,
+              unit_price: "4.99",
+              updated_at: "2026-06-09T10:01:00Z",
+            },
+          ],
+        },
+      ],
+    });
+    vi.spyOn(apiClient, "createRetailerOrderReviewDraft").mockResolvedValue({
+      id: 202,
+      raw_text: "Retailer account sync import for Midtown Comics order #4272232.",
+      parsed_payload_json: {
+        retailer: "Midtown Comics",
+        order_date: "2026-06-08",
+        source_type: "retailer_account",
+        shipping_amount: "0.00",
+        tax_amount: "0.00",
+        order_total: "104.79",
+        total_books: 1,
+        warnings: [],
+        confidence_score: 1,
+        items: [],
+      } as never,
+      confidence_score: "1.00",
+      status: "draft",
+      order_id: null,
+      created_at: "2026-06-09T10:00:00Z",
+      updated_at: "2026-06-09T10:00:00Z",
+      cover_images: [],
+      cover_image_count: 0,
+    });
+
+    render(
+      <MemoryRouter>
+        <ConnectedRetailersPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create Review Draft" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Review Draft" }));
+
+    await waitFor(() => {
+      expect(apiClient.createRetailerOrderReviewDraft).toHaveBeenCalledWith(2);
+      expect(navigateMock).toHaveBeenCalledWith("/orders/import?importId=202");
+    });
   });
 });

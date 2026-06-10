@@ -120,6 +120,8 @@ export function ConnectedRetailersPage() {
   const [runs, setRuns] = useState<RetailerSyncRunRead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
+  const [reviewDraftBusyOrderId, setReviewDraftBusyOrderId] = useState<number | null>(null);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<number, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAnotherMidtownPrompt, setShowAnotherMidtownPrompt] = useState(false);
@@ -258,6 +260,33 @@ export function ConnectedRetailersPage() {
     if (message) {
       setSuccess(message);
     }
+  }
+
+  async function openReviewDraftForOrder(order: RetailerOrderSnapshotRead): Promise<void> {
+    const draftImportId = order.draft_import_id;
+    if (draftImportId) {
+      navigate(`/orders/import?importId=${draftImportId}`);
+      return;
+    }
+
+    setReviewDraftBusyOrderId(order.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const draft = await apiClient.createRetailerOrderReviewDraft(order.id);
+      navigate(`/orders/import?importId=${draft.id}`);
+    } catch (createError) {
+      setError(createError instanceof ApiError ? createError.message : "Unable to create review draft.");
+    } finally {
+      setReviewDraftBusyOrderId(null);
+    }
+  }
+
+  function toggleOrderDetails(orderId: number): void {
+    setExpandedOrderIds((current) => ({
+      ...current,
+      [orderId]: !current[orderId],
+    }));
   }
 
   async function handleSaveAccount(): Promise<void> {
@@ -745,7 +774,19 @@ export function ConnectedRetailersPage() {
               <p className="text-sm text-slate-400">No synced retailer orders yet.</p>
             ) : (
               visibleOrders.map((order) => (
-                <article key={order.id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <article
+                  key={order.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void openReviewDraftForOrder(order)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void openReviewDraftForOrder(order);
+                    }
+                  }}
+                  className="cursor-pointer rounded-2xl border border-white/10 bg-slate-950/50 p-4 transition hover:border-cyan-300/40 hover:bg-slate-950/70 focus:outline-none focus:ring-2 focus:ring-cyan-300/50"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-white">Order #{order.retailer_order_number}</p>
@@ -759,12 +800,46 @@ export function ConnectedRetailersPage() {
                   </div>
                   <p className="mt-3 text-sm text-slate-300">Total: <span className="font-medium text-white">{formatMoney(order.order_total)}</span></p>
                   <div className="mt-3 space-y-2 text-sm text-slate-300">
-                    {order.items.slice(0, 3).map((item) => (
+                    {(expandedOrderIds[order.id] ? order.items : order.items.slice(0, 3)).map((item) => (
                       <div key={item.id} className="flex items-center justify-between gap-4">
-                        <span className="truncate">{item.quantity} x {item.title}</span>
+                        <span className="truncate">
+                          {item.quantity} x {item.title}
+                        </span>
                         <span className="shrink-0 text-slate-400">{formatMoney(item.unit_price)}</span>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={reviewDraftBusyOrderId === order.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void openReviewDraftForOrder(order);
+                      }}
+                      className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {reviewDraftBusyOrderId === order.id
+                        ? "Opening…"
+                        : order.draft_import_id
+                          ? "Review Import"
+                          : "Create Review Draft"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleOrderDetails(order.id);
+                      }}
+                      className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white transition hover:bg-white/5"
+                    >
+                      {expandedOrderIds[order.id] ? "Hide Details" : "View Details"}
+                    </button>
+                    {order.draft_import_id ? (
+                      <span className="text-xs uppercase tracking-[0.16em] text-cyan-200/80">
+                        Draft #{order.draft_import_id}
+                      </span>
+                    ) : null}
                   </div>
                 </article>
               ))

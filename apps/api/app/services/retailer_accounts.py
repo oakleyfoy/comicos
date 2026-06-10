@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlmodel import Session, delete, select
 
 from app.models import (
+    DraftImport,
     RetailerAccount,
     RetailerOrderItemSnapshot,
     RetailerOrderSnapshot,
@@ -285,6 +286,33 @@ def list_retailer_orders(
         .where(RetailerOrderSnapshot.owner_user_id == owner_user_id)
         .order_by(RetailerOrderSnapshot.order_date.desc(), RetailerOrderSnapshot.id.desc())
     ).all()
+
+
+def get_retailer_order_review_draft_id(
+    session: Session,
+    *,
+    owner_user_id: int,
+    retailer_order_number: str,
+) -> int | None:
+    candidate_imports = session.exec(
+        select(DraftImport).where(
+            DraftImport.user_id == owner_user_id,
+            DraftImport.status == "draft",
+        )
+    ).all()
+    for draft in candidate_imports:
+        payload = draft.parsed_payload_json or {}
+        if not isinstance(payload, dict):
+            continue
+        items = payload.get("items")
+        if not isinstance(items, list):
+            continue
+        if any(
+            isinstance(item, dict) and item.get("retailer_order_number") == retailer_order_number
+            for item in items
+        ):
+            return int(draft.id)
+    return None
 
 
 def get_retailer_order_for_user_or_404(

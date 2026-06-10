@@ -5,7 +5,7 @@ from sqlmodel import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_session
-from app.models import User
+from app.models import DraftImport, User
 from app.schemas.retailer_accounts import (
     RetailerAccountCreate,
     RetailerAccountRead,
@@ -23,9 +23,11 @@ from app.schemas.retailer_accounts import (
     RetailerSyncRunListResponse,
     RetailerSyncRunRead,
 )
+from app.schemas.imports import DraftImportRead
 from app.services.retailer_accounts import (
     complete_retailer_account_local_sync,
     delete_retailer_account,
+    get_retailer_order_review_draft_id,
     get_retailer_account_for_user_or_404,
     get_retailer_order_for_user_or_404,
     list_retailer_accounts,
@@ -39,6 +41,8 @@ from app.services.retailer_accounts import (
     start_retailer_account_local_sync,
     update_retailer_account,
 )
+from app.services.retailer_sync.retailer_import_enrichment import enrich_drafts_from_retailer_orders
+from app.services.imports import serialize_import
 
 retailer_accounts_v1_router = APIRouter(
     prefix="/api/v1", tags=["Retailer Accounts API v1 (P91-01)"]
@@ -76,6 +80,11 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
 
 def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
     items = list_retailer_order_items(session, order_snapshot_id=int(order.id))
+    draft_import_id = get_retailer_order_review_draft_id(
+        session,
+        owner_user_id=int(order.owner_user_id),
+        retailer_order_number=order.retailer_order_number,
+    )
     return RetailerOrderSnapshotRead(
         id=int(order.id),
         retailer_account_id=order.retailer_account_id,
@@ -85,6 +94,7 @@ def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
         order_status=order.order_status,
         order_total=order.order_total,
         source_url=order.source_url,
+        draft_import_id=draft_import_id,
         updated_at=order.updated_at,
         items=[_serialize_order_item(item) for item in items],
     )
@@ -302,3 +312,35 @@ def get_retailer_order(
         session, owner_user_id=int(current_user.id), order_id=order_id
     )
     return _serialize_order(order, session=session)
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/{order_id}/review-draft",
+    response_model=DraftImportRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_retailer_order_review_draft(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DraftImportRead:
+    assert current_user.id is not None
+    order = get_retailer_order_for_user_or_404(
+        session, owner_user_id=int(current_user.id), order_id=order_id
+    )
+    account = get_retailer_account_for_user_or_404(
+        session,
+        owner_user_id=int(current_user.id),
+        account_id=int(order.retailer_account_id),
+    )
+    touched_import_ids = enrich_drafts_from_retailer_orders(
+        session,
+        account=account,
+        order_snapshots=[order],
+    )
+    if not touched_import_ids:
+        raise HTTPException(status_code=404, detail="No review draft was created for this order.")
+    draft_import = session.get(DraftImport, touched_import_ids[0])
+    if draft_import is None:
+        raise HTTPException(status_code=404, detail="Review draft not found.")
+    return serialize_import(session, draft_import)

@@ -156,6 +156,38 @@ def test_retailer_account_routes_are_user_scoped(client) -> None:
     assert denied.status_code == 404, denied.text
 
 
+def test_retailer_account_review_draft_endpoint_creates_and_links_draft(client, session) -> None:
+    token = register_and_login(client, "retailer-review-draft@example.com")
+    created = client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+        },
+    )
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+    account = session.exec(select(RetailerAccount).where(RetailerAccount.id == account_id)).one()
+    _persist_fake_sync(session, account=account)
+
+    initial_orders = client.get("/api/v1/retailer-orders", headers=auth_headers(token))
+    assert initial_orders.status_code == 200, initial_orders.text
+    assert initial_orders.json()["items"][0]["draft_import_id"] is None
+
+    created_draft = client.post(
+        f"/api/v1/retailer-orders/{initial_orders.json()['items'][0]['id']}/review-draft",
+        headers=auth_headers(token),
+    )
+    assert created_draft.status_code == 201, created_draft.text
+    draft_id = created_draft.json()["id"]
+
+    linked_order = client.get("/api/v1/retailer-orders", headers=auth_headers(token))
+    assert linked_order.status_code == 200, linked_order.text
+    assert linked_order.json()["items"][0]["draft_import_id"] == draft_id
+
+
 def test_retailer_account_sync_respects_challenge_cooldown(client, session) -> None:
     token = register_and_login(client, "retailer-cooldown@example.com")
     created = client.post(

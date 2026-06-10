@@ -328,6 +328,7 @@ export interface RetailerOrderSnapshotRead {
   order_status?: string | null;
   order_total?: string | null;
   source_url?: string | null;
+  draft_import_id?: number | null;
   updated_at: string;
   items: RetailerOrderItemSnapshotRead[];
 }
@@ -20726,6 +20727,12 @@ export const apiClient = {
 
   getRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
     return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}`);
+  },
+
+  createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {
+    return request<DraftImport>(`/api/v1/retailer-orders/${orderId}/review-draft`, {
+      method: "POST",
+    });
   },
 
   syncGmail(): Promise<GmailSyncEnqueueResponse> {

@@ -98,6 +98,7 @@ class RetailerOrderSnapshotRead(BaseModel):
     order_status: str | None = None
     order_total: Decimal | None = None
     source_url: str | None = None
+    draft_import_id: int | None = None
     updated_at: datetime
     items: list[RetailerOrderItemSnapshotRead] = Field(default_factory=list)
 
