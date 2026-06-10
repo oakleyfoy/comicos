@@ -159,12 +159,11 @@ def _local_sync_start_summary(
         "helper_token_expires_at": helper_token_expires_at.isoformat(),
         "action_required": (
             "Open Midtown in your browser, finish any login or verification, "
-            "then click the Comicos Midtown Sync bookmark on the Midtown orders page."
+            "then click the Comicos Midtown Sync bookmark on the Midtown order detail page."
         ),
         "suggested_next_step": (
-            "Make sure the Midtown order history page inside your account is fully visible before running "
-            "the bookmark. The bookmark will capture the order history and recent "
-            "detail pages from your current browser session."
+            "Open the Midtown order detail page for the order you want imported before running the bookmark. "
+            "The bookmark will capture that single order detail page from your current browser session."
         ),
     }
 
@@ -175,7 +174,7 @@ def _browser_capture_failure_summary(message: str) -> dict:
         "user_message": message,
         "action_required": "Start browser sync again from Connected Retailers.",
         "suggested_next_step": (
-            "Open Midtown in your browser, wait until the orders page is visible, "
+            "Open Midtown in your browser, wait until the order detail page is visible, "
             "then click the Comicos Midtown Sync bookmark again."
         ),
     }
@@ -479,7 +478,7 @@ def complete_midtown_browser_sync(
                 )
         if not orders:
             raise MidtownNeedsAttentionError(
-                "Midtown browser sync captured the orders page but no order details were uploaded."
+                "Midtown browser sync captured the Midtown page but no order details were uploaded."
             )
         _, touched_import_ids = _persist_success(
             session,
