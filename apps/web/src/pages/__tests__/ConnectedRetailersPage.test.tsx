@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
 import {
@@ -30,6 +30,7 @@ vi.mock("../../components/StatusBanner", () => ({
 describe("ConnectedRetailersPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.stubEnv("VITE_MIDTOWN_EXTENSION_INSTALL_URL", "https://example.com/midtown-extension");
     vi.spyOn(window, "open").mockImplementation(
       () =>
         ({
@@ -187,6 +188,10 @@ describe("ConnectedRetailersPage", () => {
     });
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("renders connected retailer account details and orders", async () => {
     render(
       <MemoryRouter>
@@ -274,6 +279,22 @@ describe("ConnectedRetailersPage", () => {
     expect(screen.getByRole("button", { name: "Sync Paused" })).toBeDisabled();
   });
 
+  it("explains the first-time setup when the install URL is missing", async () => {
+    vi.unstubAllEnvs();
+
+    render(
+      <MemoryRouter>
+        <ConnectedRetailersPage />
+      </MemoryRouter>,
+    );
+
+    const headings = await screen.findAllByText("New here? Follow these 3 steps.");
+    expect(headings.length).toBeGreaterThan(0);
+    expect(screen.getByText(/The install link is missing/i)).toBeInTheDocument();
+    const statusLabels = await screen.findAllByText("Extension not detected");
+    expect(statusLabels.length).toBeGreaterThan(0);
+  });
+
   it("starts Midtown capture when the extension is ready", async () => {
     render(
       <MemoryRouter>
@@ -295,6 +316,7 @@ describe("ConnectedRetailersPage", () => {
       expect(apiClient.startRetailerLocalSync).toHaveBeenCalledWith(1, { limit_orders: 1 });
       expect(screen.getByText(/Midtown capture started/i)).toBeInTheDocument();
       expect(screen.getByText(/Waiting for Midtown capture/i)).toBeInTheDocument();
+      expect(screen.getAllByText("Extension connected").length).toBeGreaterThan(0);
     });
   });
 

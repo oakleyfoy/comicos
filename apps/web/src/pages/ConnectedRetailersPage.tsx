@@ -411,12 +411,12 @@ export function ConnectedRetailersPage() {
       setUsername("");
       setPassword("");
       setSyncEnabled(false);
-      await refreshWithMessage("Midtown account disconnected.");
+      await refreshWithMessage("Midtown account removed. Add it again whenever you're ready.");
     } catch (disconnectError) {
       if (disconnectError instanceof ApiError || disconnectError instanceof Error) {
         setError(disconnectError.message);
       } else {
-        setError("Unable to disconnect Midtown account.");
+        setError("Unable to remove Midtown account.");
       }
     } finally {
       setIsWorking(false);
@@ -601,41 +601,77 @@ export function ConnectedRetailersPage() {
                 onClick={() => void handleDisconnect()}
                 className="rounded-2xl border border-rose-400/30 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Disconnect
+                Remove Midtown and start over
               </button>
             </div>
             <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-white">Midtown extension</p>
+              <p className="font-semibold text-white">New here? Follow these 3 steps.</p>
               <p className="mt-2">
-                Install this once, refresh Comicos, then use the capture button whenever you have a
-                Midtown order detail page open:
+                Comicos uses a small Chrome extension to read the Midtown order detail page you
+                already have open, then sends it back here for import.
               </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                {midtownExtensionInstallUrl ? (
-                  <a
-                    href={midtownExtensionInstallUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10"
-                  >
-                    Install Midtown Extension
-                  </a>
-                ) : (
-                  <span className="inline-flex rounded-xl border border-white/10 px-4 py-2 font-semibold text-slate-300">
-                    Midtown extension install URL not configured
-                  </span>
-                )}
-                <span className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${midtownExtensionReady ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}>
-                  {midtownExtensionReady ? "Extension connected" : "Extension not detected"}
-                </span>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 1</p>
+                  <p className="mt-1 font-semibold text-white">Install the Midtown extension</p>
+                  {midtownExtensionInstallUrl ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <a
+                        href={midtownExtensionInstallUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10"
+                      >
+                        Install Midtown Extension
+                      </a>
+                      <p className="text-slate-300">
+                        Install it once, then come back here and refresh Comicos.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-amber-100">
+                      The install link is missing. Ask the app owner to set
+                      <code className="mx-1 rounded bg-black/20 px-1.5 py-0.5 text-xs">
+                        VITE_MIDTOWN_EXTENSION_INSTALL_URL
+                      </code>
+                      , then reload Comicos.
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 2</p>
+                  <p className="mt-1 font-semibold text-white">
+                    Refresh Comicos until the extension is detected
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
+                        midtownExtensionReady
+                          ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                          : "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                      }`}
+                    >
+                      {midtownExtensionReady ? "Extension connected" : "Extension not detected"}
+                    </span>
+                    <p className="text-slate-300">
+                      {midtownExtensionReady
+                        ? "You are ready to capture an order."
+                        : "If this still says not detected, the extension is not installed in this browser yet."}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 3</p>
+                  <p className="mt-1 font-semibold text-white">
+                    Open the Midtown order detail page and capture it
+                  </p>
+                  <p className="mt-2 text-slate-300">
+                    Open the order you want imported, then click{" "}
+                    <span className="font-medium text-white">Capture Midtown Order</span>. After
+                    import, choose whether to import another Midtown order or finish.
+                  </p>
+                </div>
               </div>
-              <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-300">
-                <li>Install the Midtown extension once.</li>
-                <li>Refresh Comicos so it detects the extension.</li>
-                <li>Open the Midtown order detail page you want imported.</li>
-                <li>Click <span className="font-medium text-white">Capture Midtown Order</span>.</li>
-                <li>After import, choose whether to import another Midtown order or finish.</li>
-              </ol>
               {localSyncSession ? (
                 <p className="mt-3 text-cyan-100">
                   Waiting for Midtown capture. Capture token expires{" "}
