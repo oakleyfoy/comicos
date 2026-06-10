@@ -16,6 +16,7 @@ _KNOWN_LABELS = (
     "Date|Status|Total|Publisher|Qty|Price|Line Total|Item Status|Shipped|Backordered|"
     "Unavailable|Returned|SKU|Variant|Cover Artist|Item #"
 )
+_ORDER_NUMBER_RE = re.compile(r"\border\s*#\s*([0-9]{4,})\b", flags=re.IGNORECASE)
 
 
 def _json_safe(value):
@@ -156,6 +157,17 @@ def _match_after_label(fragment: str, label: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def _extract_order_number(*values: str | None) -> str | None:
+    for value in values:
+        if not value:
+            continue
+        cleaned = _clean_html_text(value)
+        match = _ORDER_NUMBER_RE.search(cleaned)
+        if match and match.group(1):
+            return match.group(1).strip()
+    return None
+
+
 def parse_midtown_order_history(html_text: str) -> list[MidtownOrderHistoryEntry]:
     results: list[MidtownOrderHistoryEntry] = []
     seen_numbers: set[str] = set()
@@ -167,12 +179,9 @@ def parse_midtown_order_history(html_text: str) -> list[MidtownOrderHistoryEntry
         end = min(match.end() + 1500, len(html_text))
         fragment = html_text[start:end]
         text = _clean_html_text(fragment)
-        number_match = re.search(r"Order\s*#?\s*([A-Z0-9\-]+)", text, flags=re.IGNORECASE)
-        if number_match is None:
-            number_match = re.search(r"([A-Z0-9]{5,})", text)
-        if number_match is None:
+        order_number = _extract_order_number(text)
+        if order_number is None:
             continue
-        order_number = number_match.group(1).strip()
         if order_number in seen_numbers:
             continue
         seen_numbers.add(order_number)
@@ -235,12 +244,9 @@ def _extract_title(fragment: str, product_url: str | None) -> str:
 def parse_midtown_order_detail(
     html_text: str, *, fallback_order_number: str | None = None, detail_url: str | None = None
 ) -> MidtownOrderDetail:
-    page_text = _clean_html_text(html_text)
-    number_match = re.search(r"Order\s*#?\s*([A-Z0-9\-]+)", page_text, flags=re.IGNORECASE)
     retailer_order_number = (
-        number_match.group(1).strip()
-        if number_match is not None
-        else (fallback_order_number or "").strip()
+        _extract_order_number(html_text, fallback_order_number, detail_url)
+        or (fallback_order_number or "").strip()
     )
     detail = MidtownOrderDetail(
         retailer_order_number=retailer_order_number,

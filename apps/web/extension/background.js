@@ -9,15 +9,20 @@ function normalizeWhitespace(value) {
 }
 
 function extractPlainTextFromHtml(html) {
-  return normalizeWhitespace(String(html || "").replace(/<[^>]+>/g, " "));
+  return normalizeWhitespace(
+    String(html || "")
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  );
 }
 
 function extractOrderNumberFromText(text) {
   const normalized = normalizeWhitespace(text);
   const patterns = [
-    /order\s*#\s*([a-z0-9-]+)/i,
-    /order\s+number\s*[:#]?\s*([a-z0-9-]+)/i,
-    /order\s+([0-9]{4,})/i,
+    /\border\s*#\s*([0-9]{4,})\b/i,
+    /\border\s+number\s*[:#]?\s*([0-9]{4,})\b/i,
+    /\border\s+([0-9]{4,})\b/i,
   ];
   for (const pattern of patterns) {
     const match = normalized.match(pattern);

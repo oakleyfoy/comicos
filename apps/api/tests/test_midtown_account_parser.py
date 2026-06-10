@@ -12,7 +12,7 @@ def test_parse_midtown_order_history_extracts_rows() -> None:
     html = """
     <table>
       <tr>
-        <td><a href="/account/orders/view/ABC123">Order #ABC123</a></td>
+        <td><a href="/account/orders/view/4272232">Order #4272232</a></td>
         <td>Date: 06/08/2026</td>
         <td>Status: Shipped</td>
         <td>Total: $14.98</td>
@@ -21,16 +21,19 @@ def test_parse_midtown_order_history_extracts_rows() -> None:
     """
     rows = parse_midtown_order_history(html)
     assert len(rows) == 1
-    assert rows[0].retailer_order_number == "ABC123"
+    assert rows[0].retailer_order_number == "4272232"
     assert rows[0].order_status == "Shipped"
     assert rows[0].order_total == Decimal("14.98")
-    assert rows[0].detail_url == "https://www.midtowncomics.com/account/orders/view/ABC123"
+    assert rows[0].detail_url == "https://www.midtowncomics.com/account/orders/view/4272232"
 
 
 def test_parse_midtown_order_detail_extracts_items() -> None:
     html = """
     <div>
-      <h1>Order #ABC123</h1>
+      <style>
+        .card { border-radius: 12px; }
+      </style>
+      <h1>Order #4272232</h1>
       <p>Date: 06/08/2026</p>
       <p>Status: Shipped</p>
       <p>Total: $14.98</p>
@@ -51,10 +54,10 @@ def test_parse_midtown_order_detail_extracts_items() -> None:
     """
     detail = parse_midtown_order_detail(
         html,
-        fallback_order_number="ABC123",
-        detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+        fallback_order_number="4272232",
+        detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
     )
-    assert detail.retailer_order_number == "ABC123"
+    assert detail.retailer_order_number == "4272232"
     assert detail.order_total == Decimal("14.98")
     assert len(detail.items) == 1
     item = detail.items[0]
@@ -67,3 +70,23 @@ def test_parse_midtown_order_detail_extracts_items() -> None:
     assert item.total_price == Decimal("9.98")
     assert item.shipped_qty == 2
     assert item.product_url == "https://www.midtowncomics.com/product/1234/immortal-thor-1-cover-a"
+
+
+def test_parse_midtown_order_detail_ignores_border_radius_noise() -> None:
+    html = """
+    <div>
+      <style>
+        .card { border-radius: 12px; }
+      </style>
+      <h1>Order #4272232</h1>
+      <p>Date: 06/09/2026</p>
+      <p>Status: Pending</p>
+      <p>Total: $5.99</p>
+    </div>
+    """
+    detail = parse_midtown_order_detail(
+        html,
+        fallback_order_number=None,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
+    )
+    assert detail.retailer_order_number == "4272232"
