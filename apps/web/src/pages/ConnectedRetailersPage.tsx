@@ -141,6 +141,7 @@ export function ConnectedRetailersPage() {
     () => readTouchedImportIds((latestRun?.summary_json ?? {}) as Record<string, unknown>),
     [latestRun],
   );
+  const latestTouchedImportId = latestTouchedImportIds[0] ?? null;
   const midtownExtensionInstallUrl = useMemo(() => getMidtownExtensionInstallUrl(), []);
 
   async function loadPage(): Promise<void> {
@@ -614,8 +615,8 @@ export function ConnectedRetailersPage() {
                 <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 1</p>
                   <p className="mt-1 font-semibold text-white">Install the Midtown extension</p>
-                  {midtownExtensionInstallUrl ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {midtownExtensionInstallUrl ? (
                       <a
                         href={midtownExtensionInstallUrl}
                         target="_blank"
@@ -624,19 +625,28 @@ export function ConnectedRetailersPage() {
                       >
                         Install Midtown Extension
                       </a>
-                      <p className="text-slate-300">
-                        Install it once, then come back here and refresh Comicos.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-amber-100">
-                      The install link is missing. Ask the app owner to set
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex cursor-not-allowed rounded-xl border border-slate-500/40 px-4 py-2 font-semibold text-slate-400 opacity-70"
+                      >
+                        Install Midtown Extension
+                      </button>
+                    )}
+                    <p className="text-slate-300">
+                      Install it once, then come back here and refresh Comicos.
+                    </p>
+                  </div>
+                  {!midtownExtensionInstallUrl ? (
+                    <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-amber-100">
+                      The store link is not configured yet. When Chrome review is approved, set{" "}
                       <code className="mx-1 rounded bg-black/20 px-1.5 py-0.5 text-xs">
                         VITE_MIDTOWN_EXTENSION_INSTALL_URL
-                      </code>
-                      , then reload Comicos.
+                      </code>{" "}
+                      in the frontend environment and redeploy so this button opens the Chrome Web Store page.
                     </p>
-                  )}
+                  ) : null}
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 2</p>
@@ -686,7 +696,13 @@ export function ConnectedRetailersPage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => navigate("/orders/import")}
+                    onClick={() =>
+                      navigate(
+                        latestTouchedImportId
+                          ? `/orders/import?importId=${latestTouchedImportId}`
+                          : "/orders/import",
+                      )
+                    }
                     className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white hover:bg-white/5"
                   >
                     Open Import Review

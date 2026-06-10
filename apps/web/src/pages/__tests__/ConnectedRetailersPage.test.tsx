@@ -10,6 +10,16 @@ import {
 } from "../../lib/midtownExtensionBridge";
 import { ConnectedRetailersPage } from "../ConnectedRetailersPage";
 
+let navigateMock = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock("../../components/AppShell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
@@ -30,6 +40,7 @@ vi.mock("../../components/StatusBanner", () => ({
 describe("ConnectedRetailersPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    navigateMock = vi.fn();
     vi.stubEnv("VITE_MIDTOWN_EXTENSION_INSTALL_URL", "https://example.com/midtown-extension");
     vi.spyOn(window, "open").mockImplementation(
       () =>
@@ -98,7 +109,7 @@ describe("ConnectedRetailersPage", () => {
           items_imported: 1,
           items_updated: 0,
           errors_count: 0,
-          summary_json: {},
+          summary_json: { touched_import_ids: [101] },
           error_message: null,
         },
       ],
@@ -290,7 +301,8 @@ describe("ConnectedRetailersPage", () => {
 
     const headings = await screen.findAllByText("New here? Follow these 3 steps.");
     expect(headings.length).toBeGreaterThan(0);
-    expect(screen.getByText(/The install link is missing/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install Midtown Extension" })).toBeDisabled();
+    expect(screen.getByText(/The store link is not configured yet/i)).toBeInTheDocument();
     const statusLabels = await screen.findAllByText("Extension not detected");
     expect(statusLabels.length).toBeGreaterThan(0);
   });
@@ -367,5 +379,40 @@ describe("ConnectedRetailersPage", () => {
         ],
       });
     });
+  });
+
+  it("opens import review for the touched Midtown draft", async () => {
+    render(
+      <MemoryRouter>
+        <ConnectedRetailersPage />
+      </MemoryRouter>,
+    );
+
+    window.dispatchEvent(new Event(MIDTOWN_EXTENSION_READY_EVENT));
+    const [captureButton] = await screen.findAllByRole("button", { name: "Capture Midtown Order" });
+    fireEvent.click(captureButton);
+    window.dispatchEvent(
+      new CustomEvent(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, {
+        detail: {
+          type: MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
+          accountId: 1,
+          syncRunId: 3,
+          captureToken: "capture-token",
+          historyHtml: "<html>history</html>",
+          detailPages: [
+            {
+              detail_url: "https://www.midtowncomics.com/account/orders/view/4272232",
+              retailer_order_number: "4272232",
+              fallback_order_number: "4272232",
+              html: "<html>detail</html>",
+            },
+          ],
+        },
+      }),
+    );
+
+    const [openReviewButton] = await screen.findAllByRole("button", { name: "Open Import Review" });
+    fireEvent.click(openReviewButton);
+    expect(navigateMock).toHaveBeenCalledWith("/orders/import?importId=101");
   });
 });
