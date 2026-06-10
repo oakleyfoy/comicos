@@ -2,6 +2,75 @@ const REQUEST_EVENT = "comicos_midtown_capture_request";
 const RESULT_EVENT = "comicos_midtown_capture_result";
 const ERROR_EVENT = "comicos_midtown_capture_error";
 
+function normalizeWhitespace(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPlainTextFromHtml(html) {
+  return normalizeWhitespace(String(html || "").replace(/<[^>]+>/g, " "));
+}
+
+function extractOrderNumberFromText(text) {
+  const normalized = normalizeWhitespace(text);
+  const patterns = [
+    /order\s*#\s*([a-z0-9-]+)/i,
+    /order\s+number\s*[:#]?\s*([a-z0-9-]+)/i,
+    /order\s+([0-9]{4,})/i,
+  ];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function extractOrderNumberFromUrl(url) {
+  if (!url) {
+    return null;
+  }
+  const match = String(url).match(/\/([0-9]{4,})(?:[/?#]|$)/);
+  return match && match[1] ? match[1].trim() : null;
+}
+
+function buildMidtownPayload(pageHtml, pageUrl, pageTitle, pageText) {
+  const bodyText = normalizeWhitespace(pageText).toLowerCase();
+  const htmlText = extractPlainTextFromHtml(pageHtml).toLowerCase();
+  const titleText = normalizeWhitespace(pageTitle).toLowerCase();
+  const orderNumber =
+    extractOrderNumberFromText(bodyText) ||
+    extractOrderNumberFromText(htmlText) ||
+    extractOrderNumberFromText(titleText) ||
+    extractOrderNumberFromUrl(pageUrl);
+  const looksLikeDetailPage =
+    /order\s*#?/i.test(bodyText) ||
+    /tracking info/i.test(bodyText) ||
+    /item status/i.test(bodyText) ||
+    /order item details/i.test(bodyText) ||
+    /approved/i.test(bodyText) ||
+    /qty\s*:\s*\d+/i.test(bodyText) ||
+    /each\s*:\s*\$?\d+/i.test(bodyText) ||
+    /back-ordered|returned|not available/i.test(bodyText) ||
+    /order\s*#?/i.test(titleText) ||
+    /order\s*#?/i.test(htmlText);
+
+  if (!looksLikeDetailPage) {
+    throw new Error("Open the Midtown order detail page before capturing.");
+  }
+
+  return JSON.parse(
+    JSON.stringify({
+      detail_url: pageUrl || location.href,
+      retailer_order_number: orderNumber,
+      fallback_order_number: orderNumber,
+      html: pageHtml,
+    }),
+  );
+}
+
 function describeError(error) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -25,26 +94,23 @@ function describeError(error) {
 
 function captureMidtownDetailPage() {
   const pageHtml = document.documentElement.outerHTML;
-  const pageText = (document.body && document.body.innerText ? document.body.innerText : "").toLowerCase();
-  const orderNumberMatch = pageText.match(/order\s*#\s*([a-z0-9-]+)/i) || pageHtml.match(/order\s*#\s*([a-z0-9-]+)/i);
-  const orderNumber = orderNumberMatch && orderNumberMatch[1] ? orderNumberMatch[1].trim() : null;
-  const looksLikeDetailPage =
-    pageText.includes("order #") &&
-    (pageText.includes("tracking info") ||
-      pageText.includes("item status") ||
-      pageText.includes("order item details") ||
-      pageText.includes("status:"));
+  const pageText = document.body && document.body.innerText ? document.body.innerText : "";
+  return buildMidtownPayload(pageHtml, location.href, document.title, pageText);
+}
 
-  if (!looksLikeDetailPage) {
-    throw new Error("Open the Midtown order detail page before capturing.");
+async function captureMidtownDetailPageFromTab(tab) {
+  if (!tab || typeof tab.url !== "string" || !tab.url) {
+    throw new Error("Midtown order tab was not found.");
   }
-
-  return {
-    detail_url: location.href,
-    retailer_order_number: orderNumber,
-    fallback_order_number: orderNumber,
-    html: pageHtml,
-  };
+  const response = await fetch(tab.url, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Midtown detail page request failed (${response.status}).`);
+  }
+  const pageHtml = await response.text();
+  return buildMidtownPayload(pageHtml, tab.url, tab.title || "", extractPlainTextFromHtml(pageHtml));
 }
 
 async function sendCaptureResult(targetTabId, message) {
@@ -78,7 +144,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     const payload = results[0]?.result;
     if (!payload) {
-      throw new Error("Midtown detail capture returned no data.");
+      const fallbackPayload = await captureMidtownDetailPageFromTab(selectedTab);
+      if (!fallbackPayload) {
+        throw new Error("Midtown detail capture returned no data.");
+      }
+      await sendCaptureResult(sender.tab?.id ?? null, {
+        type: RESULT_EVENT,
+        accountId: message.payload.accountId,
+        syncRunId: message.payload.syncRunId,
+        captureToken: message.payload.captureToken,
+        historyHtml: fallbackPayload.html,
+        detailPages: [fallbackPayload],
+      });
+      sendResponse({ ok: true, usedFallback: true });
+      return;
     }
 
     await sendCaptureResult(sender.tab?.id ?? null, {
