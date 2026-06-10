@@ -21,6 +21,7 @@ import { OrderNewPage } from "./pages/OrderNewPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 import { ScanIngestionPage } from "./pages/ScanIngestionPage";
 import { ScanNormalizationPage } from "./pages/ScanNormalizationPage";
 import { ScanBoundaryPage } from "./pages/ScanBoundaryPage";
@@ -246,6 +247,7 @@ export default function App() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<CollectorOnboardingGate />}>

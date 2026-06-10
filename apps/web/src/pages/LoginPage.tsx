@@ -62,6 +62,10 @@ export function LoginPage() {
           New to ComicOS?{" "}
           <Link to="/register" className="font-semibold text-patriot-blue hover:text-patriot-red">
             Create an account
+          </Link>{" "}
+          ·{" "}
+          <Link to="/privacy" className="font-semibold text-patriot-blue hover:text-patriot-red">
+            Privacy Policy
           </Link>
         </>
       }

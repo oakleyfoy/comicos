@@ -51,6 +51,10 @@ export function RegisterPage() {
           Already have an account?{" "}
           <Link to="/login" className="font-semibold text-cyan-300 hover:text-cyan-200">
             Sign in
+          </Link>{" "}
+          ·{" "}
+          <Link to="/privacy" className="font-semibold text-cyan-300 hover:text-cyan-200">
+            Privacy Policy
           </Link>
         </>
       }
