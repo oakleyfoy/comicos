@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from decimal import Decimal
 
 from app.services.retailer_sync.midtown_parser import (
@@ -70,6 +71,27 @@ def test_parse_midtown_order_detail_extracts_items() -> None:
     assert item.total_price == Decimal("9.98")
     assert item.shipped_qty == 2
     assert item.product_url == "https://www.midtowncomics.com/product/1234/immortal-thor-1-cover-a"
+
+
+def test_parse_midtown_order_detail_fixture_extracts_all_item_rows() -> None:
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "midtown" / "order_4272232_detail.html"
+    html = fixture_path.read_text(encoding="utf-8")
+    detail = parse_midtown_order_detail(
+        html,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
+    )
+    assert detail.retailer_order_number == "4272232"
+    assert detail.order_status == "Shipped"
+    assert len(detail.items) == 21
+    assert detail.items[0].title == "Absolute Batman #1 Cover A"
+    assert detail.items[-1].title == "Absolute Batman #21 Cover C"
+    assert detail.items[0].product_url == "https://www.midtowncomics.com/product/4272232-001/absolute-batman-1-cover-a"
+    assert detail.items[-1].product_url == "https://www.midtowncomics.com/product/4272232-021/absolute-batman-21-cover-c"
+    assert detail.parse_diagnostics["item_blocks_found"] >= 21
+    assert detail.parse_diagnostics["items_parsed"] == 21
+    assert detail.parse_diagnostics["items_skipped"] == 0
+    assert detail.parse_diagnostics["skipped_reasons"] == {}
+    assert detail.items[0].parse_diagnostics["fields_missing"] == []
 
 
 def test_parse_midtown_order_detail_uses_header_number_not_item_status_text() -> None:

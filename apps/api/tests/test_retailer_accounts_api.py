@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sqlmodel import select
 from test_inventory import auth_headers, register_and_login
@@ -592,3 +593,65 @@ def test_retailer_account_browser_sync_detail_page_only_captures_successfully(
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "succeeded"
     assert completed.json()["orders"][0]["retailer_order_number"] == "4272232"
+
+
+def test_retailer_account_browser_sync_fixture_persists_all_midtown_items(
+    client, session
+) -> None:
+    token = register_and_login(client, "retailer-browser-sync-fixture@example.com")
+    created = client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+        },
+    )
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+
+    fixture_path = (
+        Path(__file__).resolve().parent / "fixtures" / "midtown" / "order_4272232_detail.html"
+    )
+    html = fixture_path.read_text(encoding="utf-8")
+
+    started = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/start",
+        headers=auth_headers(token),
+        json={"limit_orders": 5},
+    )
+    assert started.status_code == 200, started.text
+
+    completed = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/{started.json()['run']['id']}/complete",
+        headers=auth_headers(token),
+        json={
+            "helper_token": started.json()["helper_token"],
+            "history_html": """
+                <table>
+                  <tr>
+                    <td><a href='/account/orders/view/4272232'>Order #4272232</a></td>
+                    <td>Date: 06/08/2026</td>
+                    <td>Status: Shipped</td>
+                    <td>Total: $104.79</td>
+                  </tr>
+                </table>
+            """,
+            "detail_pages": [
+                {
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
+                    "html": html,
+                }
+            ],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["run"]["status"] == "succeeded"
+    assert completed.json()["orders"][0]["retailer_order_number"] == "4272232"
+    assert len(completed.json()["orders"][0]["items"]) == 21
+    assert completed.json()["orders"][0]["items"][0]["title"] == "Absolute Batman #1 Cover A"
+    assert completed.json()["orders"][0]["items"][-1]["title"] == "Absolute Batman #21 Cover C"
+    assert completed.json()["run"]["summary_json"]["parser_quality_report"][0]["items_parsed"] == 21

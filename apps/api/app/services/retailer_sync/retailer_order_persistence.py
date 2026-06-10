@@ -86,6 +86,7 @@ def _apply_item_snapshot(
     existing.unit_price = item.unit_price
     existing.total_price = item.total_price
     existing.item_status = item.item_status
+    existing.release_date = item.release_date
     existing.shipped_qty = item.shipped_qty
     existing.backordered_qty = item.backordered_qty
     existing.unavailable_qty = item.unavailable_qty

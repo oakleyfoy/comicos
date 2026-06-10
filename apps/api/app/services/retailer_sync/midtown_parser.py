@@ -66,10 +66,12 @@ class MidtownOrderItem:
     unit_price: Decimal | None = None
     total_price: Decimal | None = None
     item_status: str | None = None
+    release_date: date | None = None
     shipped_qty: int | None = None
     backordered_qty: int | None = None
     unavailable_qty: int | None = None
     returned_qty: int | None = None
+    parse_diagnostics: dict = field(default_factory=dict)
     raw_fragment: str = ""
 
     def to_dict(self) -> dict:
@@ -84,6 +86,7 @@ class MidtownOrderDetail:
     order_total: Decimal | None = None
     detail_url: str | None = None
     items: list[MidtownOrderItem] = field(default_factory=list)
+    parse_diagnostics: dict = field(default_factory=dict)
     raw_html: str = ""
 
     def to_dict(self) -> dict:
@@ -95,6 +98,7 @@ class MidtownOrderDetail:
                 "order_total": self.order_total,
                 "detail_url": self.detail_url,
                 "items": [item.to_dict() for item in self.items],
+                "parse_diagnostics": _json_safe(self.parse_diagnostics),
             }
         )
 
@@ -169,6 +173,41 @@ def _extract_order_status(html_text: str) -> str | None:
         flags=re.IGNORECASE,
     )
     return match.group(1).strip() if match else None
+
+
+def _extract_release_date(fragment: str) -> date | None:
+    return _parse_date(
+        _match_after_label(fragment, "Release Date")
+        or _match_after_label(fragment, "Ship Date")
+        or _match_after_label(fragment, "Pub Date")
+    )
+
+
+def _extract_item_quality_snapshot(item: MidtownOrderItem) -> dict:
+    fields = {
+        "retailer_item_id": item.retailer_item_id,
+        "product_url": item.product_url,
+        "image_url": item.image_url,
+        "title": item.title,
+        "publisher": item.publisher,
+        "issue_number": item.issue_number,
+        "cover_name": item.cover_name,
+        "variant_type": item.variant_type,
+        "cover_artist": item.cover_artist,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "total_price": item.total_price,
+        "item_status": item.item_status,
+        "release_date": item.release_date,
+    }
+    extracted = [name for name, value in fields.items() if value not in (None, "", [])]
+    missing = [name for name, value in fields.items() if value in (None, "", [])]
+    return {
+        "fields_extracted": extracted,
+        "fields_missing": missing,
+        "fields_extracted_count": len(extracted),
+        "fields_total": len(fields),
+    }
 
 
 def _extract_order_number_from_text(*values: str | None) -> str | None:
@@ -249,15 +288,7 @@ def _extract_item_fragments(html_text: str) -> list[str]:
         div_end = html_text.find("</div>", anchor.end())
         if div_start != -1 and div_end != -1:
             fragments.append(html_text[div_start : div_end + len("</div>")])
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for fragment in fragments:
-        key = fragment[:300]
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(fragment)
-    return deduped
+    return fragments
 
 
 def _extract_title(fragment: str, product_url: str | None) -> str:
@@ -296,41 +327,62 @@ def parse_midtown_order_detail(
         detail_url=detail_url,
         raw_html=html_text,
     )
-    for fragment in _extract_item_fragments(html_text):
+    item_fragments = _extract_item_fragments(html_text)
+    seen_item_keys: set[str] = set()
+    skipped_reasons: dict[str, int] = {}
+    for fragment in item_fragments:
         product_match = re.search(
             r'href=["\']([^"\']*/product/[^"\']+)["\']', fragment, flags=re.IGNORECASE
         )
+        item_key = _absolute_url(product_match.group(1)) if product_match else None
+        if item_key and item_key in seen_item_keys:
+            skipped_reasons["duplicate_item_block"] = skipped_reasons.get("duplicate_item_block", 0) + 1
+            continue
+        if item_key:
+            seen_item_keys.add(item_key)
         image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
         title = _extract_title(
             fragment, _absolute_url(product_match.group(1)) if product_match else None
         )
         if not title:
+            skipped_reasons["missing_title"] = skipped_reasons.get("missing_title", 0) + 1
             continue
         issue_number, cover_name = _parse_issue_and_cover(title)
-        detail.items.append(
-            MidtownOrderItem(
-                retailer_item_id=_match_after_label(fragment, "Item #")
-                or _match_after_label(fragment, "SKU"),
-                product_url=_absolute_url(product_match.group(1)) if product_match else None,
-                image_url=_absolute_url(image_match.group(1)) if image_match else None,
-                thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
-                title=title,
-                publisher=_match_after_label(fragment, "Publisher"),
-                issue_number=issue_number,
-                cover_name=cover_name,
-                variant_type=_match_after_label(fragment, "Variant"),
-                cover_artist=_match_after_label(fragment, "Cover Artist"),
-                quantity=_parse_int(_match_after_label(fragment, "Qty")) or 1,
-                unit_price=_parse_price(_match_after_label(fragment, "Price")),
-                total_price=_parse_price(_match_after_label(fragment, "Line Total"))
-                or _parse_price(_match_after_label(fragment, "Total")),
-                item_status=_match_after_label(fragment, "Item Status")
-                or _match_after_label(fragment, "Status"),
-                shipped_qty=_parse_int(_match_after_label(fragment, "Shipped")),
-                backordered_qty=_parse_int(_match_after_label(fragment, "Backordered")),
-                unavailable_qty=_parse_int(_match_after_label(fragment, "Unavailable")),
-                returned_qty=_parse_int(_match_after_label(fragment, "Returned")),
-                raw_fragment=fragment,
-            )
+        variant_type = _match_after_label(fragment, "Variant")
+        cover_artist = _match_after_label(fragment, "Cover Artist")
+        release_date = _extract_release_date(fragment)
+        item = MidtownOrderItem(
+            retailer_item_id=_match_after_label(fragment, "Item #") or _match_after_label(fragment, "SKU"),
+            product_url=_absolute_url(product_match.group(1)) if product_match else None,
+            image_url=_absolute_url(image_match.group(1)) if image_match else None,
+            thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
+            title=title,
+            publisher=_match_after_label(fragment, "Publisher"),
+            issue_number=issue_number,
+            cover_name=cover_name,
+            variant_type=variant_type,
+            cover_artist=cover_artist,
+            quantity=_parse_int(_match_after_label(fragment, "Qty")) or 1,
+            unit_price=_parse_price(_match_after_label(fragment, "Price")),
+            total_price=_parse_price(_match_after_label(fragment, "Line Total"))
+            or _parse_price(_match_after_label(fragment, "Total")),
+            item_status=_match_after_label(fragment, "Item Status") or _match_after_label(fragment, "Status"),
+            release_date=release_date,
+            shipped_qty=_parse_int(_match_after_label(fragment, "Shipped")),
+            backordered_qty=_parse_int(_match_after_label(fragment, "Backordered")),
+            unavailable_qty=_parse_int(_match_after_label(fragment, "Unavailable")),
+            returned_qty=_parse_int(_match_after_label(fragment, "Returned")),
+            raw_fragment=fragment,
         )
+        item.parse_diagnostics = _extract_item_quality_snapshot(item)
+        item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
+        detail.items.append(
+            item
+        )
+    detail.parse_diagnostics = {
+        "item_blocks_found": len(item_fragments),
+        "items_parsed": len(detail.items),
+        "items_skipped": len(item_fragments) - len(detail.items),
+        "skipped_reasons": skipped_reasons,
+    }
     return detail

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlmodel import select
@@ -189,38 +190,10 @@ def test_upsert_retailer_order_snapshots_handles_midtown_failing_payload(session
     session.commit()
     session.refresh(sync_run)
 
-    html = """
-    <html>
-      <head>
-        <title>Order #4272232 - Midtown Comics</title>
-      </head>
-      <body>
-        <header>
-          <h1>Order #4272232</h1>
-          <div class="order-status-summary">
-            Pending 0 Shipped 0 Back-Ordered 0 Not Available 0 Returned
-          </div>
-        </header>
-        <section>
-          <table>
-            <tr>
-              <td><img src="/images/absolute-batman.jpg" /></td>
-              <td><a href="/product/9999/absolute-batman-1-cover-a">Absolute Batman #1 Cover A</a></td>
-              <td>Publisher: DC</td>
-              <td>Qty: 1</td>
-              <td>Price: $4.99</td>
-              <td>Line Total: $4.99</td>
-              <td>Status: Pending</td>
-              <td>Shipped: 0</td>
-              <td>Backordered: 0</td>
-              <td>Unavailable: 0</td>
-              <td>Returned: 0</td>
-            </tr>
-          </table>
-        </section>
-      </body>
-    </html>
-    """
+    fixture_path = (
+        Path(__file__).resolve().parent / "fixtures" / "midtown" / "order_4272232_detail.html"
+    )
+    html = fixture_path.read_text(encoding="utf-8")
     order = parse_midtown_order_detail(
         html,
         detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
@@ -232,5 +205,8 @@ def test_upsert_retailer_order_snapshots_handles_midtown_failing_payload(session
     assert summary.orders_imported == 1
     snapshot = session.exec(select(RetailerOrderSnapshot)).one()
     assert snapshot.retailer_order_number == "4272232"
-    assert snapshot.order_status == "Pending"
+    assert snapshot.order_status == "Shipped"
+    assert len(snapshot.raw_snapshot_json["items"]) == 21
     assert snapshot.raw_snapshot_json["items"][0]["title"] == "Absolute Batman #1 Cover A"
+    assert snapshot.raw_snapshot_json["items"][-1]["title"] == "Absolute Batman #21 Cover C"
+    assert snapshot.raw_snapshot_json["parse_diagnostics"]["items_parsed"] == 21

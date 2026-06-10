@@ -132,6 +132,7 @@ def _success_summary(
     items_imported: int,
     items_updated: int,
     touched_import_ids: list[int],
+    parser_quality_report: list[dict],
     sync_path: str,
 ) -> dict:
     return {
@@ -142,6 +143,7 @@ def _success_summary(
         "items_imported": items_imported,
         "items_updated": items_updated,
         "touched_import_ids": touched_import_ids,
+        "parser_quality_report": parser_quality_report,
     }
 
 
@@ -310,6 +312,39 @@ def _parse_midtown_detail_or_raise(
         raise MidtownNeedsAttentionError(str(exc)) from exc
 
 
+def _build_parser_quality_report(order: MidtownOrderDetail) -> dict:
+    order_fields = {
+        "retailer_order_number": order.retailer_order_number,
+        "order_date": order.order_date,
+        "order_status": order.order_status,
+        "order_total": order.order_total,
+        "detail_url": order.detail_url,
+    }
+    order_fields_extracted = [name for name, value in order_fields.items() if value not in (None, "", [])]
+    order_fields_missing = [name for name, value in order_fields.items() if value in (None, "", [])]
+    item_fields_extracted = 0
+    item_fields_total = 0
+    item_fields_missing: set[str] = set()
+    for item in order.items:
+        diagnostics = item.parse_diagnostics or {}
+        item_fields_extracted += int(diagnostics.get("fields_extracted_count") or 0)
+        item_fields_total += int(diagnostics.get("fields_total") or 0)
+        item_fields_missing.update(str(field) for field in diagnostics.get("fields_missing") or [])
+    return {
+        "retailer_order_number": order.retailer_order_number,
+        "order_fields_extracted_count": len(order_fields_extracted),
+        "order_fields_total": len(order_fields),
+        "order_fields_missing": order_fields_missing,
+        "item_blocks_found": int((order.parse_diagnostics or {}).get("item_blocks_found") or 0),
+        "items_parsed": int((order.parse_diagnostics or {}).get("items_parsed") or 0),
+        "items_skipped": int((order.parse_diagnostics or {}).get("items_skipped") or 0),
+        "skipped_reasons": dict((order.parse_diagnostics or {}).get("skipped_reasons") or {}),
+        "item_fields_extracted_count": item_fields_extracted,
+        "item_fields_total": item_fields_total,
+        "item_fields_missing": sorted(item_fields_missing),
+    }
+
+
 def _persist_success(
     session: Session,
     *,
@@ -319,6 +354,7 @@ def _persist_success(
     test_only: bool,
     sync_path: str,
 ) -> tuple[list[RetailerOrderSnapshot], list[int]]:
+    parser_quality_report = [_build_parser_quality_report(order) for order in orders]
     if test_only:
         run.orders_seen = len(orders)
         run.items_seen = sum(len(order.items) for order in orders)
@@ -327,6 +363,7 @@ def _persist_success(
             "items_seen": run.items_seen,
             "mode": "test",
             "sync_path": sync_path,
+            "parser_quality_report": parser_quality_report,
         }
         session.add(run)
         session.flush()
@@ -356,6 +393,7 @@ def _persist_success(
         items_imported=run.items_imported,
         items_updated=run.items_updated,
         touched_import_ids=touched_import_ids,
+        parser_quality_report=parser_quality_report,
         sync_path=sync_path,
     )
     session.add(run)
