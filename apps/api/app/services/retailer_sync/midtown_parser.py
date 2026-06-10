@@ -5,7 +5,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 _MIDTOWN_BASE_URL = "https://www.midtowncomics.com"
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -17,6 +17,10 @@ _KNOWN_LABELS = (
     "Unavailable|Returned|SKU|Variant|Cover Artist|Item #"
 )
 _ORDER_NUMBER_RE = re.compile(r"\border\s*#\s*([0-9]{4,})\b", flags=re.IGNORECASE)
+
+
+class MidtownOrderNumberError(RuntimeError):
+    """Raised when a Midtown order number cannot be found or validated."""
 
 
 def _json_safe(value):
@@ -157,7 +161,7 @@ def _match_after_label(fragment: str, label: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def _extract_order_number(*values: str | None) -> str | None:
+def _extract_order_number_from_text(*values: str | None) -> str | None:
     for value in values:
         if not value:
             continue
@@ -165,6 +169,29 @@ def _extract_order_number(*values: str | None) -> str | None:
         match = _ORDER_NUMBER_RE.search(cleaned)
         if match and match.group(1):
             return match.group(1).strip()
+    return None
+
+
+def _extract_order_number_from_url(detail_url: str | None) -> str | None:
+    if not detail_url:
+        return None
+    parsed = urlparse(detail_url)
+    for segment in reversed([segment for segment in parsed.path.split("/") if segment]):
+        if re.fullmatch(r"[0-9]{4,}", segment):
+            return segment
+    return None
+
+
+def _extract_order_number_from_header(html_text: str) -> str | None:
+    for match in re.finditer(
+        r"<(?:title|h1|h2|h3)[^>]*>(.*?)</(?:title|h1|h2|h3)>",
+        html_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        text = _clean_html_text(match.group(1))
+        order_number = _extract_order_number_from_text(text)
+        if order_number:
+            return order_number
     return None
 
 
@@ -179,7 +206,7 @@ def parse_midtown_order_history(html_text: str) -> list[MidtownOrderHistoryEntry
         end = min(match.end() + 1500, len(html_text))
         fragment = html_text[start:end]
         text = _clean_html_text(fragment)
-        order_number = _extract_order_number(text)
+        order_number = _extract_order_number_from_text(text)
         if order_number is None:
             continue
         if order_number in seen_numbers:
@@ -244,10 +271,13 @@ def _extract_title(fragment: str, product_url: str | None) -> str:
 def parse_midtown_order_detail(
     html_text: str, *, fallback_order_number: str | None = None, detail_url: str | None = None
 ) -> MidtownOrderDetail:
-    retailer_order_number = (
-        _extract_order_number(html_text, fallback_order_number, detail_url)
-        or (fallback_order_number or "").strip()
+    retailer_order_number = _extract_order_number_from_header(html_text) or _extract_order_number_from_url(
+        detail_url
     )
+    if not retailer_order_number:
+        raise MidtownOrderNumberError(
+            "parser_no_order_number: Midtown order number was not found in the page header or URL."
+        )
     detail = MidtownOrderDetail(
         retailer_order_number=retailer_order_number,
         order_date=_parse_date(_match_after_label(html_text, "Date")),

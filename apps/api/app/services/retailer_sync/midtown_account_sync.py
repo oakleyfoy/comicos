@@ -17,6 +17,7 @@ from app.services.retailer_credentials import (
 )
 from app.services.retailer_sync.midtown_parser import (
     MidtownOrderDetail,
+    MidtownOrderNumberError,
     parse_midtown_order_detail,
     parse_midtown_order_history,
 )
@@ -284,13 +285,29 @@ def _load_recent_order_details(
         if _has_midtown_challenge(page):
             raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
         details.append(
-            parse_midtown_order_detail(
+            _parse_midtown_detail_or_raise(
                 page.content(),
                 fallback_order_number=entry.retailer_order_number,
                 detail_url=entry.detail_url,
             )
         )
     return details
+
+
+def _parse_midtown_detail_or_raise(
+    html_text: str,
+    *,
+    fallback_order_number: str | None = None,
+    detail_url: str | None = None,
+) -> MidtownOrderDetail:
+    try:
+        return parse_midtown_order_detail(
+            html_text,
+            fallback_order_number=fallback_order_number,
+            detail_url=detail_url,
+        )
+    except MidtownOrderNumberError as exc:
+        raise MidtownNeedsAttentionError(str(exc)) from exc
 
 
 def _persist_success(
@@ -450,7 +467,7 @@ def complete_midtown_browser_sync(
             if detail_capture is None:
                 continue
             orders.append(
-                parse_midtown_order_detail(
+                _parse_midtown_detail_or_raise(
                     detail_capture.html,
                     fallback_order_number=entry.retailer_order_number,
                     detail_url=detail_capture.detail_url or entry.detail_url,
@@ -466,7 +483,7 @@ def complete_midtown_browser_sync(
                     or None
                 )
                 orders.append(
-                    parse_midtown_order_detail(
+                    _parse_midtown_detail_or_raise(
                         detail_capture.html,
                         fallback_order_number=fallback_order_number,
                         detail_url=detail_capture.detail_url or None,
@@ -476,14 +493,17 @@ def complete_midtown_browser_sync(
             raise MidtownNeedsAttentionError(
                 "Midtown browser sync captured the Midtown page but no order details were uploaded."
             )
-        _, touched_import_ids = _persist_success(
-            session,
-            account=account,
-            run=run,
-            orders=orders,
-            test_only=False,
-            sync_path="browser_assisted",
-        )
+        try:
+            _, touched_import_ids = _persist_success(
+                session,
+                account=account,
+                run=run,
+                orders=orders,
+                test_only=False,
+                sync_path="browser_assisted",
+            )
+        except MidtownOrderNumberError as exc:
+            raise MidtownNeedsAttentionError(str(exc)) from exc
         run.status = "succeeded"
         run.finished_at = utc_now()
         account.status = "connected"
@@ -602,14 +622,17 @@ def sync_midtown_account(
                 context.close()
                 browser.close()
 
-        _, touched_import_ids = _persist_success(
-            session,
-            account=account,
-            run=run,
-            orders=orders,
-            test_only=test_only,
-            sync_path="server_playwright",
-        )
+        try:
+            _, touched_import_ids = _persist_success(
+                session,
+                account=account,
+                run=run,
+                orders=orders,
+                test_only=test_only,
+                sync_path="server_playwright",
+            )
+        except MidtownOrderNumberError as exc:
+            raise MidtownNeedsAttentionError(str(exc)) from exc
         run.status = "succeeded"
         run.finished_at = utc_now()
         account.status = "connected"

@@ -72,6 +72,48 @@ def test_parse_midtown_order_detail_extracts_items() -> None:
     assert item.product_url == "https://www.midtowncomics.com/product/1234/immortal-thor-1-cover-a"
 
 
+def test_parse_midtown_order_detail_uses_header_number_not_item_status_text() -> None:
+    html = """
+    <html>
+      <head>
+        <title>Order #4272232 - Midtown Comics</title>
+      </head>
+      <body>
+        <header>
+          <h1>Order #4272232</h1>
+          <div class="order-status-summary">
+            Pending 0 Shipped 0 Back-Ordered 0 Not Available 0 Returned
+          </div>
+        </header>
+        <section>
+          <table>
+            <tr>
+              <td><img src="/images/absolute-batman.jpg" /></td>
+              <td><a href="/product/9999/absolute-batman-1-cover-a">Absolute Batman #1 Cover A</a></td>
+              <td>Publisher: DC</td>
+              <td>Qty: 1</td>
+              <td>Price: $4.99</td>
+              <td>Line Total: $4.99</td>
+              <td>Status: Pending</td>
+              <td>Shipped: 0</td>
+              <td>Backordered: 0</td>
+              <td>Unavailable: 0</td>
+              <td>Returned: 0</td>
+            </tr>
+          </table>
+        </section>
+      </body>
+    </html>
+    """
+    detail = parse_midtown_order_detail(
+        html,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
+    )
+    assert detail.retailer_order_number == "4272232"
+    assert "Pending" not in detail.retailer_order_number
+    assert detail.items[0].title.startswith("Absolute Batman")
+
+
 def test_parse_midtown_order_detail_ignores_border_radius_noise() -> None:
     html = """
     <div>

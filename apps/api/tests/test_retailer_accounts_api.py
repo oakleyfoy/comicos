@@ -41,7 +41,7 @@ def _persist_fake_sync(session, *, account: RetailerAccount) -> MidtownSyncResul
         select(RetailerOrderSnapshot).where(
             RetailerOrderSnapshot.owner_user_id == account.owner_user_id,
             RetailerOrderSnapshot.retailer_account_id == int(account.id),
-            RetailerOrderSnapshot.retailer_order_number == "ABC123",
+            RetailerOrderSnapshot.retailer_order_number == "4272232",
         )
     ).first()
     if order is None:
@@ -49,7 +49,7 @@ def _persist_fake_sync(session, *, account: RetailerAccount) -> MidtownSyncResul
             owner_user_id=account.owner_user_id,
             retailer_account_id=int(account.id),
             retailer=account.retailer,
-            retailer_order_number="ABC123",
+            retailer_order_number="4272232",
             order_date=date(2026, 6, 8),
             order_status="Shipped",
             order_total=Decimal("9.98"),
@@ -61,7 +61,7 @@ def _persist_fake_sync(session, *, account: RetailerAccount) -> MidtownSyncResul
             owner_user_id=account.owner_user_id,
             retailer_order_snapshot_id=int(order.id),
             retailer=account.retailer,
-            retailer_order_number="ABC123",
+            retailer_order_number="4272232",
             retailer_item_id="SKU-1",
             title="Immortal Thor #1 Cover A",
             quantity=1,
@@ -122,7 +122,7 @@ def test_retailer_account_api_lifecycle(client, session, monkeypatch) -> None:
         json={"limit_orders": 5},
     )
     assert synced.status_code == 200, synced.text
-    assert synced.json()["orders"][0]["retailer_order_number"] == "ABC123"
+    assert synced.json()["orders"][0]["retailer_order_number"] == "4272232"
 
     deleted = client.delete(f"/api/v1/retailer-accounts/{account_id}", headers=auth_headers(token))
     assert deleted.status_code == 204, deleted.text
@@ -214,11 +214,11 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
         lambda html_text: [
             MidtownOrderHistoryEntry(
-                retailer_order_number="ABC123",
+                retailer_order_number="4272232",
                 order_date=date(2026, 6, 8),
                 order_status="Shipped",
                 order_total=Decimal("9.98"),
-                detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+                detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
                 raw_fragment=html_text,
             )
         ],
@@ -226,7 +226,7 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
     monkeypatch.setattr(
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
         lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
-            retailer_order_number=fallback_order_number or "ABC123",
+            retailer_order_number=fallback_order_number or "4272232",
             order_date=date(2026, 6, 8),
             order_status="Shipped",
             order_total=Decimal("9.98"),
@@ -263,9 +263,9 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
             "history_html": "<html>history</html>",
             "detail_pages": [
                 {
-                    "detail_url": "https://www.midtowncomics.com/account/orders/view/ABC123",
-                    "retailer_order_number": "ABC123",
-                    "fallback_order_number": "ABC123",
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
                     "html": "<html>detail</html>",
                 }
             ],
@@ -274,7 +274,7 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "succeeded"
     assert completed.json()["run"]["summary_json"]["sync_path"] == "browser_assisted"
-    assert completed.json()["orders"][0]["retailer_order_number"] == "ABC123"
+    assert completed.json()["orders"][0]["retailer_order_number"] == "4272232"
 
 
 def test_retailer_account_browser_sync_invalid_helper_token_returns_needs_attention(
@@ -297,11 +297,11 @@ def test_retailer_account_browser_sync_invalid_helper_token_returns_needs_attent
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
         lambda html_text: [
             MidtownOrderHistoryEntry(
-                retailer_order_number="ABC123",
+                retailer_order_number="4272232",
                 order_date=date(2026, 6, 8),
                 order_status="Shipped",
                 order_total=Decimal("9.98"),
-                detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+                detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
                 raw_fragment=html_text,
             )
         ],
@@ -309,7 +309,7 @@ def test_retailer_account_browser_sync_invalid_helper_token_returns_needs_attent
     monkeypatch.setattr(
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
         lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
-            retailer_order_number=fallback_order_number or "ABC123",
+            retailer_order_number=fallback_order_number or "4272232",
             order_date=date(2026, 6, 8),
             order_status="Shipped",
             order_total=Decimal("9.98"),
@@ -344,9 +344,9 @@ def test_retailer_account_browser_sync_invalid_helper_token_returns_needs_attent
             "history_html": "<html>history</html>",
             "detail_pages": [
                 {
-                    "detail_url": "https://www.midtowncomics.com/account/orders/view/ABC123",
-                    "retailer_order_number": "ABC123",
-                    "fallback_order_number": "ABC123",
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
                     "html": "<html>detail</html>",
                 }
             ],
@@ -377,11 +377,11 @@ def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
         lambda html_text: [
             MidtownOrderHistoryEntry(
-                retailer_order_number="ABC123",
+                retailer_order_number="4272232",
                 order_date=date(2026, 6, 8),
                 order_status="Shipped",
                 order_total=Decimal("9.98"),
-                detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+                detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
                 raw_fragment=html_text,
             )
         ],
@@ -389,7 +389,7 @@ def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
     monkeypatch.setattr(
         "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
         lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
-            retailer_order_number=fallback_order_number or "ABC123",
+            retailer_order_number=fallback_order_number or "4272232",
             order_date=date(2026, 6, 8),
             order_status="Shipped",
             order_total=Decimal("9.98"),
@@ -428,9 +428,9 @@ def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
             "history_html": "<html>history</html>",
             "detail_pages": [
                 {
-                    "detail_url": "https://www.midtowncomics.com/account/orders/view/ABC123",
-                    "retailer_order_number": "ABC123",
-                    "fallback_order_number": "ABC123",
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
                     "html": "<html>detail</html>",
                 }
             ],
@@ -439,6 +439,88 @@ def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "failed"
     assert completed.json()["run"]["summary_json"]["error_code"] == "browser_sync_failed"
+
+
+def test_retailer_account_browser_sync_rejects_overlong_order_number_before_db_insert(
+    client, session, monkeypatch
+) -> None:
+    token = register_and_login(client, "retailer-browser-sync-overlong@example.com")
+    created = client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+        },
+    )
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
+        lambda html_text: [
+            MidtownOrderHistoryEntry(
+                retailer_order_number="4272232",
+                order_date=date(2026, 6, 8),
+                order_status="Shipped",
+                order_total=Decimal("9.98"),
+                detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
+                raw_fragment=html_text,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
+        lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
+            retailer_order_number="9" * 129,
+            order_date=date(2026, 6, 8),
+            order_status="Shipped",
+            order_total=Decimal("9.98"),
+            detail_url=detail_url,
+            items=[
+                MidtownOrderItem(
+                    retailer_item_id="SKU-1",
+                    title="Absolute Batman #1 Cover A",
+                    quantity=1,
+                    unit_price=Decimal("4.99"),
+                    total_price=Decimal("4.99"),
+                    item_status="Shipped",
+                    raw_fragment=html_text,
+                )
+            ],
+            raw_html=html_text,
+        ),
+    )
+
+    started = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/start",
+        headers=auth_headers(token),
+        json={"limit_orders": 5},
+    )
+    assert started.status_code == 200, started.text
+
+    completed = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/{started.json()['run']['id']}/complete",
+        headers=auth_headers(token),
+        json={
+            "helper_token": started.json()["helper_token"],
+            "history_html": "<html><h1>Order #4272232</h1></html>",
+            "detail_pages": [
+                {
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
+                    "html": "<html><h1>Order #4272232</h1></html>",
+                }
+            ],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["run"]["status"] == "needs_attention"
+    assert completed.json()["run"]["summary_json"]["error_code"] == "browser_capture_failed"
+    assert "parser_no_order_number" in completed.json()["run"]["error_message"]
+    assert session.exec(select(RetailerOrderSnapshot)).all() == []
 
 
 def test_retailer_account_browser_sync_detail_page_only_captures_successfully(

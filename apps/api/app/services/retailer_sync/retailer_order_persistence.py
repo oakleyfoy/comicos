@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -11,7 +12,10 @@ from app.models import (
     RetailerOrderSnapshot,
     RetailerSyncRun,
 )
-from app.services.retailer_sync.midtown_parser import MidtownOrderDetail
+from app.services.retailer_sync.midtown_parser import (
+    MidtownOrderDetail,
+    MidtownOrderNumberError,
+)
 
 
 def utc_now() -> datetime:
@@ -44,6 +48,23 @@ def _match_existing_item(
         ):
             return existing
     return None
+
+
+def _validate_midtown_order_number(value: str | None) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise MidtownOrderNumberError(
+            "parser_no_order_number: retailer_order_number is required before persistence."
+        )
+    if len(cleaned) > 128:
+        raise MidtownOrderNumberError(
+            "parser_no_order_number: retailer_order_number must be 128 characters or fewer."
+        )
+    if not re.fullmatch(r"[0-9]+", cleaned):
+        raise MidtownOrderNumberError(
+            "parser_no_order_number: retailer_order_number must contain only the numeric order id."
+        )
+    return cleaned
 
 
 def _apply_item_snapshot(
@@ -84,11 +105,12 @@ def upsert_retailer_order_snapshots(
     for order in orders:
         summary.orders_seen += 1
         summary.items_seen += len(order.items)
+        order_number = _validate_midtown_order_number(order.retailer_order_number)
         snapshot = session.exec(
             select(RetailerOrderSnapshot).where(
                 RetailerOrderSnapshot.owner_user_id == account.owner_user_id,
                 RetailerOrderSnapshot.retailer == account.retailer,
-                RetailerOrderSnapshot.retailer_order_number == order.retailer_order_number,
+                RetailerOrderSnapshot.retailer_order_number == order_number,
             )
         ).first()
         created = snapshot is None
@@ -97,7 +119,7 @@ def upsert_retailer_order_snapshots(
                 owner_user_id=account.owner_user_id,
                 retailer_account_id=account.id,
                 retailer=account.retailer,
-                retailer_order_number=order.retailer_order_number,
+                retailer_order_number=order_number,
                 created_at=utc_now(),
                 updated_at=utc_now(),
                 raw_snapshot_json={},
@@ -127,7 +149,7 @@ def upsert_retailer_order_snapshots(
                     owner_user_id=account.owner_user_id,
                     retailer_order_snapshot_id=snapshot.id,
                     retailer=account.retailer,
-                    retailer_order_number=order.retailer_order_number,
+                    retailer_order_number=order_number,
                     title=parsed_item.title,
                     quantity=parsed_item.quantity,
                     raw_item_json={},

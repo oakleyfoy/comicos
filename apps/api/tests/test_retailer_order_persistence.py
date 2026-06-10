@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlmodel import select
 
 from app.models import (
@@ -12,7 +13,11 @@ from app.models import (
     RetailerSyncRun,
     User,
 )
-from app.services.retailer_sync.midtown_parser import MidtownOrderDetail, MidtownOrderItem
+from app.services.retailer_sync.midtown_parser import (
+    MidtownOrderDetail,
+    MidtownOrderItem,
+    MidtownOrderNumberError,
+)
 from app.services.retailer_sync.retailer_order_persistence import upsert_retailer_order_snapshots
 
 
@@ -49,11 +54,11 @@ def test_upsert_retailer_order_snapshots_creates_and_updates_rows(session) -> No
 
     orders = [
         MidtownOrderDetail(
-            retailer_order_number="ABC123",
+            retailer_order_number="4272232",
             order_date=date(2026, 6, 8),
             order_status="Shipped",
             order_total=Decimal("9.98"),
-            detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+            detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
             items=[
                 MidtownOrderItem(
                     retailer_item_id="SKU-1",
@@ -83,7 +88,7 @@ def test_upsert_retailer_order_snapshots_creates_and_updates_rows(session) -> No
     assert summary.items_imported == 1
 
     snapshot = session.exec(select(RetailerOrderSnapshot)).one()
-    assert snapshot.retailer_order_number == "ABC123"
+    assert snapshot.retailer_order_number == "4272232"
     item = session.exec(select(RetailerOrderItemSnapshot)).one()
     assert item.quantity == 2
     assert item.image_url == "https://img.example/immortal.jpg"
@@ -99,3 +104,54 @@ def test_upsert_retailer_order_snapshots_creates_and_updates_rows(session) -> No
     item = session.exec(select(RetailerOrderItemSnapshot)).one()
     assert item.quantity == 3
     assert item.total_price == Decimal("14.97")
+
+
+def test_upsert_retailer_order_snapshots_rejects_overlong_order_number_before_insert(session) -> None:
+    user = User(email="retailer-persist-long@example.com", password_hash="hash")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    account = RetailerAccount(
+        owner_user_id=int(user.id),
+        retailer="midtown",
+        display_name="Midtown Comics",
+        username="collector@example.com",
+        encrypted_password="encrypted",
+        credential_version=1,
+        status="connected",
+        sync_enabled=True,
+    )
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+
+    sync_run = RetailerSyncRun(
+        owner_user_id=int(user.id),
+        retailer_account_id=int(account.id),
+        retailer="midtown",
+        status="running",
+        summary_json={},
+    )
+    session.add(sync_run)
+    session.commit()
+    session.refresh(sync_run)
+
+    orders = [
+        MidtownOrderDetail(
+            retailer_order_number="9" * 129,
+            order_date=date(2026, 6, 8),
+            order_status="Shipped",
+            order_total=Decimal("9.98"),
+            detail_url="https://www.midtowncomics.com/account/orders/view/9999999",
+            items=[],
+        )
+    ]
+
+    with pytest.raises(MidtownOrderNumberError) as exc_info:
+        upsert_retailer_order_snapshots(
+            session, account=account, sync_run=sync_run, orders=orders
+        )
+
+    assert "parser_no_order_number" in str(exc_info.value)
+    assert session.exec(select(RetailerOrderSnapshot)).all() == []
