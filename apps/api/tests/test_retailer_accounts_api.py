@@ -355,3 +355,87 @@ def test_retailer_account_browser_sync_invalid_helper_token_returns_needs_attent
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "needs_attention"
     assert completed.json()["run"]["summary_json"]["error_code"] == "browser_capture_failed"
+
+
+def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
+    client, session, monkeypatch
+) -> None:
+    token = register_and_login(client, "retailer-browser-sync-failure@example.com")
+    created = client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+        },
+    )
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
+        lambda html_text: [
+            MidtownOrderHistoryEntry(
+                retailer_order_number="ABC123",
+                order_date=date(2026, 6, 8),
+                order_status="Shipped",
+                order_total=Decimal("9.98"),
+                detail_url="https://www.midtowncomics.com/account/orders/view/ABC123",
+                raw_fragment=html_text,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
+        lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
+            retailer_order_number=fallback_order_number or "ABC123",
+            order_date=date(2026, 6, 8),
+            order_status="Shipped",
+            order_total=Decimal("9.98"),
+            detail_url=detail_url,
+            items=[
+                MidtownOrderItem(
+                    retailer_item_id="SKU-1",
+                    title="Immortal Thor #1 Cover A",
+                    quantity=1,
+                    unit_price=Decimal("4.99"),
+                    total_price=Decimal("4.99"),
+                    item_status="Shipped",
+                    raw_fragment=html_text,
+                )
+            ],
+            raw_html=html_text,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync._persist_success",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    started = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/start",
+        headers=auth_headers(token),
+        json={"limit_orders": 5},
+    )
+    assert started.status_code == 200, started.text
+
+    completed = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/{started.json()['run']['id']}/complete",
+        headers=auth_headers(token),
+        json={
+            "helper_token": started.json()["helper_token"],
+            "history_html": "<html>history</html>",
+            "detail_pages": [
+                {
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/ABC123",
+                    "retailer_order_number": "ABC123",
+                    "fallback_order_number": "ABC123",
+                    "html": "<html>detail</html>",
+                }
+            ],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["run"]["status"] == "failed"
+    assert completed.json()["run"]["summary_json"]["error_code"] == "browser_sync_failed"

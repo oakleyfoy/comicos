@@ -507,6 +507,7 @@ def complete_midtown_browser_sync(
             touched_import_ids=touched_import_ids,
         )
     except MidtownNeedsAttentionError as exc:
+        session.rollback()
         run.status = "needs_attention"
         run.finished_at = utc_now()
         run.error_message = _sanitize_error(str(exc), username=account.username)
@@ -523,6 +524,7 @@ def complete_midtown_browser_sync(
         session.refresh(run)
         return MidtownSyncResult(account=account, run=run, orders=[])
     except Exception as exc:
+        session.rollback()
         run.status = "failed"
         run.finished_at = utc_now()
         run.error_message = _sanitize_error(str(exc), username=account.username)
