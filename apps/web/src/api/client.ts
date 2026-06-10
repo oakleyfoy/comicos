@@ -1,6 +1,7 @@
 import { normalizeInventoryQueryParams } from "../lib/inventoryQueryParams";
 import { handleApi401Response } from "../lib/auth401Policy";
 import { ApiError } from "./apiError";
+import type { MidtownExtensionCaptureDiagnostics } from "../lib/midtownExtensionBridge";
 
 function resolveApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL;
@@ -358,7 +359,7 @@ export interface RetailerLocalSyncDetailPageCapture {
   html: string;
   retailer_order_number?: string | null;
   fallback_order_number?: string | null;
-  capture_diagnostics?: Record<string, unknown> | null;
+  capture_diagnostics?: MidtownExtensionCaptureDiagnostics | null;
 }
 
 export interface RetailerLocalSyncCompleteRequest {

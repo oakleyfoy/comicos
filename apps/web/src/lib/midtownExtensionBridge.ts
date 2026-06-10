@@ -11,7 +11,7 @@ export interface MidtownExtensionCaptureRequest {
   appOrigin: string;
 }
 
-export interface MidtownExtensionCaptureDiagnostics {
+export interface MidtownExtensionCaptureDiagnostics extends Record<string, unknown> {
   current_url: string;
   ready_state: string;
   html_length: number;
@@ -37,7 +37,11 @@ export interface MidtownExtensionDetailPageCapture {
   capture_diagnostics?: MidtownExtensionCaptureDiagnostics | null;
 }
 
-export interface MidtownExtensionCaptureResult extends MidtownExtensionCaptureRequest {
+export interface MidtownExtensionCaptureResult {
+  accountId: number;
+  syncRunId: number;
+  captureToken: string;
+  appOrigin?: string;
   historyHtml: string;
   detailPages: MidtownExtensionDetailPageCapture[];
 }
