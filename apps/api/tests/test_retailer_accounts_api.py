@@ -264,6 +264,7 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
             "detail_pages": [
                 {
                     "detail_url": "https://www.midtowncomics.com/account/orders/view/ABC123",
+                    "retailer_order_number": "ABC123",
                     "fallback_order_number": "ABC123",
                     "html": "<html>detail</html>",
                 }

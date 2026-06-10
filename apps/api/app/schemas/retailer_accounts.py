@@ -113,6 +113,7 @@ class RetailerLocalSyncStartRequest(BaseModel):
 class RetailerLocalSyncDetailPageCapture(BaseModel):
     detail_url: str = Field(min_length=1, max_length=2048)
     html: str = Field(min_length=1)
+    retailer_order_number: str | None = Field(default=None, max_length=128)
     fallback_order_number: str | None = Field(default=None, max_length=128)
 
 

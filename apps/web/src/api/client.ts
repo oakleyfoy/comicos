@@ -355,6 +355,7 @@ export interface RetailerLocalSyncStartRequest {
 export interface RetailerLocalSyncDetailPageCapture {
   detail_url: string;
   html: string;
+  retailer_order_number?: string | null;
   fallback_order_number?: string | null;
 }
 

@@ -267,6 +267,7 @@ def complete_retailer_account_local_sync(
             MidtownLocalSyncCapture(
                 detail_url=page.detail_url,
                 html=page.html,
+                retailer_order_number=page.retailer_order_number,
                 fallback_order_number=page.fallback_order_number,
             )
             for page in payload.detail_pages

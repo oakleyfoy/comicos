@@ -64,6 +64,7 @@ class MidtownLocalSyncStart:
 class MidtownLocalSyncCapture:
     detail_url: str
     html: str
+    retailer_order_number: str | None = None
     fallback_order_number: str | None = None
 
 
@@ -434,6 +435,11 @@ def complete_midtown_browser_sync(
             for page in detail_pages
             if page.detail_url and page.html
         }
+        detail_by_order_number_exact = {
+            page.retailer_order_number: page
+            for page in detail_pages
+            if page.retailer_order_number and page.html
+        }
         detail_by_order_number = {
             page.fallback_order_number: page
             for page in detail_pages
@@ -442,6 +448,8 @@ def complete_midtown_browser_sync(
         orders: list[MidtownOrderDetail] = []
         for entry in history:
             detail_capture = detail_by_url.get(entry.detail_url or "")
+            if detail_capture is None:
+                detail_capture = detail_by_order_number_exact.get(entry.retailer_order_number)
             if detail_capture is None:
                 detail_capture = detail_by_order_number.get(entry.retailer_order_number)
             if detail_capture is None:
