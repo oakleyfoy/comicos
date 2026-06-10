@@ -131,6 +131,7 @@ export function ConnectedRetailersPage() {
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showAnotherMidtownPrompt, setShowAnotherMidtownPrompt] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("Midtown Comics");
@@ -211,13 +212,15 @@ export function ConnectedRetailersPage() {
       setIsWorking(true);
       setError(null);
       setSuccess(null);
+      setShowAnotherMidtownPrompt(false);
       void apiClient
         .completeRetailerLocalSync(event.data.accountId, event.data.syncRunId, payload)
         .then(async (response: RetailerAccountSyncResponse) => {
           setLocalSyncSession(null);
+          setShowAnotherMidtownPrompt(true);
           await refreshWithMessage(
             response.run.status === "succeeded"
-              ? "Midtown browser sync complete. Review the updated import items."
+              ? "Midtown order imported. Import another Midtown order or finish when you're done."
               : "Midtown browser sync finished but needs attention.",
           );
         })
@@ -354,6 +357,7 @@ export function ConnectedRetailersPage() {
     setIsWorking(true);
     setError(null);
     setSuccess(null);
+    setShowAnotherMidtownPrompt(false);
     try {
       const response = await apiClient.startRetailerLocalSync(account.id, { limit_orders: 25 });
       const session: LocalSyncSession = {
@@ -374,7 +378,7 @@ export function ConnectedRetailersPage() {
       });
       helperWindow.location.href = session.captureUrl;
       await refreshWithMessage(
-        "Midtown browser sync started. In the Midtown tab, finish any login or verification, then click the Comicos Midtown Sync bookmark.",
+        "Midtown browser sync started. In the Midtown tab, open the order detail page for the order you want imported, then click the Comicos Midtown Sync bookmark.",
       );
     } catch (startError) {
       helperWindow.close();
@@ -386,6 +390,11 @@ export function ConnectedRetailersPage() {
     } finally {
       setIsWorking(false);
     }
+  }
+
+  async function handleImportAnotherMidtownOrder(): Promise<void> {
+    setShowAnotherMidtownPrompt(false);
+    await handleStartBrowserSync();
   }
 
   async function handleDisconnect(): Promise<void> {
@@ -614,9 +623,9 @@ export function ConnectedRetailersPage() {
               </p>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-300">
                 <li>Click <span className="font-medium text-white">Start Browser Sync</span>.</li>
-                <li>In the Midtown tab, sign in or finish any verification if Midtown asks.</li>
-                <li>Once the Midtown orders page is visible, click the bookmark above from your bookmarks bar.</li>
-                <li>Return here and review the updated drafts in Import Review.</li>
+                <li>In the Midtown tab, choose the order number you want and open its detail page.</li>
+                <li>Once the order detail page is visible, click the bookmark above from your bookmarks bar.</li>
+                <li>Return here to review the imported order, then choose whether to import another Midtown order.</li>
               </ol>
               {localSyncSession ? (
                 <p className="mt-3 text-cyan-100">
@@ -637,6 +646,28 @@ export function ConnectedRetailersPage() {
                   >
                     Open Import Review
                   </button>
+                </div>
+              ) : null}
+              {showAnotherMidtownPrompt ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                  <p className="text-sm text-slate-200">Import another Midtown order?</p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={isLoading || isWorking || !account}
+                      onClick={() => void handleImportAnotherMidtownOrder()}
+                      className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Yes, import another
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAnotherMidtownPrompt(false)}
+                      className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+                    >
+                      No, I&apos;m done
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>

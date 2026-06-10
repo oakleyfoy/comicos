@@ -461,6 +461,22 @@ def complete_midtown_browser_sync(
                     detail_url=detail_capture.detail_url or entry.detail_url,
                 )
             )
+        if not orders and detail_pages:
+            for detail_capture in detail_pages:
+                if not detail_capture.html:
+                    continue
+                fallback_order_number = (
+                    detail_capture.retailer_order_number
+                    or detail_capture.fallback_order_number
+                    or None
+                )
+                orders.append(
+                    parse_midtown_order_detail(
+                        detail_capture.html,
+                        fallback_order_number=fallback_order_number,
+                        detail_url=detail_capture.detail_url or None,
+                    )
+                )
         if not orders:
             raise MidtownNeedsAttentionError(
                 "Midtown browser sync captured the orders page but no order details were uploaded."

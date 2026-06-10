@@ -22,31 +22,14 @@ function helperScriptSource(): string {
     "const hasOrderTableText=(pageText.includes('my orders')&&(pageText.includes('order #')||pageText.includes('order number'))&&pageText.includes('date')&&pageText.includes('total'))||pageText.includes('orders in process')||pageText.includes('orders processed / shipped & completed')||pageText.includes('order date');",
     "const onOrderHistoryPage=hasOrderTableText&&!location.pathname.includes('/view/');",
     "if(!onOrderHistoryPage){fail('Open the Midtown page that shows My Orders or your account order history, then run the Comicos Midtown Sync bookmark.',syncData);return;}",
-    "const abs=(href)=>{try{return new URL(href,location.origin).toString();}catch(error){return null;}};",
-    "const orderAnchors=[...document.querySelectorAll('a[href]')].map((anchor)=>{const rawHref=anchor.getAttribute('href')||'';const href=rawHref.toLowerCase().startsWith('javascript:')?rawHref:abs(rawHref);const text=(anchor.textContent||'').trim();const jsMatch=rawHref.match(/ord_info\\((\\d+),\\s*['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);return {href,text,rawHref,orderNumber:jsMatch?jsMatch[1]:null,ordFlag:jsMatch?jsMatch[2]:null};})",
-    ".filter(({href,text,orderNumber})=>href&&text&&!/view all/i.test(text)&&((/^[0-9]{5,}$/.test(text))||Boolean(orderNumber)||(/^[a-z]+:\\/\\//i.test(String(href))&&new URL(String(href)).hostname.includes('midtowncomics.com'))));",
-    "const detailTargets=[];",
-    "for(const anchor of orderAnchors){",
-    "if(anchor.orderNumber){detailTargets.push({mode:'ord_info',orderNumber:anchor.orderNumber,ordFlag:anchor.ordFlag||'0',label:anchor.text,rawHref:anchor.rawHref});continue;}",
-    "if(typeof anchor.href==='string'&&/^[a-z]+:\\/\\//i.test(anchor.href)&&anchor.href!==location.href&&((/\\/account-orders\\//.test(anchor.href))||(/\\/account\\/orders\\//.test(anchor.href))||(/\\/account-settings/.test(anchor.href)&&(/order/i.test(anchor.text)||/#?order/i.test(anchor.href))))){detailTargets.push({mode:'url',detail_url:anchor.href,label:anchor.text});}",
-    "}",
-    "const uniqueTargets=[];const seenTargets=new Set();",
-    "for(const target of detailTargets){const key=target.mode==='ord_info'?`ord:${target.orderNumber}:${target.ordFlag}`:`url:${target.detail_url}`;if(!seenTargets.has(key)){seenTargets.add(key);uniqueTargets.push(target);}}",
-    "const targets=uniqueTargets.slice(0,Number(syncData.limitOrders)||25);",
-    "if(!targets.length){fail('No Midtown order detail links were found. Make sure the My Orders table is fully visible before running the bookmark.',syncData);return;}",
-    "const orderNo=(url)=>{const match=String(url).match(/([A-Z0-9-]{5,})$/i);return match?match[1]:null;};",
-    "const historyHtml=document.documentElement.outerHTML;",
-    "const detailPages=[];",
+    "const pageHtml=document.documentElement.outerHTML;",
+    "const pageText=(document.body&&document.body.innerText||'').toLowerCase();",
     "const describeError=(error)=>{if(error instanceof Error&&error.message){return error.message;}if(typeof error==='string'&&error){return error;}if(error&&typeof error==='object'&&typeof error.message==='string'&&error.message){return error.message;}try{const text=JSON.stringify(error);if(text&&text!=='{}'){return text;}}catch(jsonError){}return 'Midtown browser sync failed.';};",
-    "const waitForLoaded=(win)=>new Promise((resolve,reject)=>{const started=Date.now();const tick=()=>{try{if(!win||win.closed){reject(new Error('Midtown detail window closed before capture finished.'));return;}if(win.document&&win.document.readyState==='complete'){resolve();return;}}catch(error){}if(Date.now()-started>15000){reject(new Error('Timed out waiting for Midtown order detail page.'));return;}setTimeout(tick,200);};tick();});",
-    "const isDetailHtml=(win)=>{const html=win.document.documentElement.outerHTML;const text=(win.document.body&&win.document.body.innerText||'').toLowerCase();return text.includes('item status')||text.includes('line total')||text.includes('cover artist')||html.includes('/product/');};",
-    "const postOrdInfo=async(target)=>{const response=await fetch('/ord-info',{method:'POST',credentials:'include',headers:{'content-type':'application/x-www-form-urlencoded; charset=UTF-8','x-requested-with':'XMLHttpRequest'},body:new URLSearchParams({od_id:String(target.orderNumber),is_archived:String(target.ordFlag||'0')}).toString()});if(!response.ok){throw new Error(`Midtown order ${target.orderNumber} detail request failed with ${response.status}.`);}const html=await response.text();if(!html||!html.includes('Order #')){throw new Error(`Midtown order ${target.orderNumber} detail response was empty.`);}return {detail_url:`https://www.midtowncomics.com/ord-info`,retailer_order_number:String(target.orderNumber),fallback_order_number:target.orderNumber,html};};",
-    "const captureOrdInfoTarget=async(target)=>{return postOrdInfo(target);};",
-    "for(const target of targets){",
-    "if(target.mode==='url'){const response=await fetch(target.detail_url,{credentials:'include'});if(!response.ok){throw new Error('Failed to load Midtown order detail page.');}const retailerOrderNumber=orderNo(target.detail_url);detailPages.push({detail_url:target.detail_url,retailer_order_number:retailerOrderNumber,fallback_order_number:retailerOrderNumber,html:await response.text()});continue;}",
-    "detailPages.push(await captureOrdInfoTarget(target));",
-    "}",
-    "ok({appOrigin:syncData.appOrigin,accountId:syncData.accountId,syncRunId:syncData.syncRunId,helperToken:syncData.helperToken,historyHtml,detailPages});",
+    "const captureDetailNumber=()=>{const match=pageText.match(/order\\s*#\\s*([a-z0-9-]+)/i)||pageHtml.match(/order\\s*#\\s*([a-z0-9-]+)/i);return match&&match[1]?match[1].trim():null;};",
+    "const orderNumber=captureDetailNumber();",
+    "const looksLikeDetailPage=pageText.includes('order #')&&(pageText.includes('tracking info')||pageText.includes('item status')||pageText.includes('order item details'));",
+    "if(!looksLikeDetailPage){fail('Open the Midtown order detail page for the order you want imported, then click the Comicos Midtown Sync bookmark again.',syncData);return;}",
+    "ok({appOrigin:syncData.appOrigin,accountId:syncData.accountId,syncRunId:syncData.syncRunId,helperToken:syncData.helperToken,historyHtml:pageHtml,detailPages:[{detail_url:location.href,retailer_order_number:orderNumber,fallback_order_number:orderNumber,html:pageHtml}]});",
     "alert('Midtown order data was sent back to Comicos. Return to the Comicos tab to finish the sync.');",
     "})().catch((error)=>{",
     "let syncData;",
@@ -70,7 +53,12 @@ export function isMidtownHelperMessage(data: unknown): data is {
   syncRunId: number;
   helperToken?: string;
   historyHtml?: string;
-  detailPages?: Array<{ detail_url: string; html: string; fallback_order_number?: string | null }>;
+  detailPages?: Array<{
+    detail_url: string;
+    html: string;
+    retailer_order_number?: string | null;
+    fallback_order_number?: string | null;
+  }>;
   message?: string;
 } {
   if (!data || typeof data !== "object") {
