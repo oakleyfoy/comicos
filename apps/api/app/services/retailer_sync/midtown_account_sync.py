@@ -159,11 +159,11 @@ def _local_sync_start_summary(
         "helper_token_expires_at": helper_token_expires_at.isoformat(),
         "action_required": (
             "Open Midtown in your browser, finish any login or verification, "
-            "then click the Comicos Midtown Sync bookmark on the Midtown order detail page."
+            "then click the Comicos Midtown capture button on the Midtown order detail page."
         ),
         "suggested_next_step": (
-            "Open the Midtown order detail page for the order you want imported before running the bookmark. "
-            "The bookmark will capture that single order detail page from your current browser session."
+            "Open the Midtown order detail page for the order you want imported before using the capture button. "
+            "The capture button will capture that single order detail page from your current browser session."
         ),
     }
 
@@ -175,7 +175,7 @@ def _browser_capture_failure_summary(message: str) -> dict:
         "action_required": "Start browser sync again from Connected Retailers.",
         "suggested_next_step": (
             "Open Midtown in your browser, wait until the order detail page is visible, "
-            "then click the Comicos Midtown Sync bookmark again."
+            "then click the Comicos Midtown capture button again."
         ),
     }
 

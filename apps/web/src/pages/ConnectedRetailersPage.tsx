@@ -14,12 +14,15 @@ import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 import {
-  buildMidtownBookmarkletHref,
-  buildMidtownWindowName,
-  isMidtownHelperMessage,
-  midtownHelperErrorType,
-  midtownHelperMessageType,
-} from "../lib/midtownBrowserHelper";
+  getMidtownExtensionInstallUrl,
+  isMidtownExtensionCaptureError,
+  isMidtownExtensionCaptureResult,
+  MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT,
+  MIDTOWN_EXTENSION_CAPTURE_REQUEST_EVENT,
+  MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
+  MIDTOWN_EXTENSION_PING_EVENT,
+  MIDTOWN_EXTENSION_READY_EVENT,
+} from "../lib/midtownExtensionBridge";
 
 
 function formatDateTime(value: string | null | undefined): string {
@@ -74,10 +77,8 @@ type NeedsAttentionState = {
 type LocalSyncSession = {
   accountId: number;
   syncRunId: number;
-  helperToken: string;
-  limitOrders: number;
-  helperTokenExpiresAt: string;
-  captureUrl: string;
+  captureToken: string;
+  captureTokenExpiresAt: string;
 };
 
 function readSummaryString(summary: Record<string, unknown>, key: string): string | null {
@@ -112,16 +113,6 @@ function readTouchedImportIds(summary: Record<string, unknown>): number[] {
   return raw.filter((value): value is number => typeof value === "number");
 }
 
-function isMidtownOrigin(origin: string): boolean {
-  try {
-    const parsed = new URL(origin);
-    return parsed.hostname.includes("midtowncomics.com");
-  } catch (_error) {
-    return false;
-  }
-}
-
-
 export function ConnectedRetailersPage() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<RetailerAccountRead[]>([]);
@@ -132,6 +123,7 @@ export function ConnectedRetailersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAnotherMidtownPrompt, setShowAnotherMidtownPrompt] = useState(false);
+  const [midtownExtensionReady, setMidtownExtensionReady] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("Midtown Comics");
@@ -149,7 +141,7 @@ export function ConnectedRetailersPage() {
     () => readTouchedImportIds((latestRun?.summary_json ?? {}) as Record<string, unknown>),
     [latestRun],
   );
-  const bookmarkletHref = useMemo(() => buildMidtownBookmarkletHref(), []);
+  const midtownExtensionInstallUrl = useMemo(() => getMidtownExtensionInstallUrl(), []);
 
   async function loadPage(): Promise<void> {
     const [accountResponse, orderResponse] = await Promise.all([
@@ -187,25 +179,22 @@ export function ConnectedRetailersPage() {
   }, []);
 
   useEffect(() => {
-    function handleHelperMessage(event: MessageEvent): void {
-      if (!isMidtownOrigin(event.origin) || !isMidtownHelperMessage(event.data)) {
-        return;
-      }
-      if (event.data.type === midtownHelperErrorType()) {
-        setError(event.data.message ?? "Midtown browser sync failed.");
-        setIsWorking(false);
-        return;
-      }
-      if (event.data.type !== midtownHelperMessageType()) {
+    function handleExtensionReady(): void {
+      setMidtownExtensionReady(true);
+    }
+
+    function handleCaptureResult(event: Event): void {
+      const customEvent = event as CustomEvent<unknown>;
+      if (!isMidtownExtensionCaptureResult(customEvent.detail)) {
         return;
       }
       const payload: RetailerLocalSyncCompleteRequest = {
-        helper_token: event.data.helperToken ?? "",
-        history_html: event.data.historyHtml ?? "",
-        detail_pages: event.data.detailPages ?? [],
+        helper_token: customEvent.detail.captureToken,
+        history_html: customEvent.detail.historyHtml,
+        detail_pages: customEvent.detail.detailPages,
       };
       if (!payload.helper_token || !payload.history_html) {
-        setError("Midtown browser sync returned incomplete data. Start it again from Connected Retailers.");
+        setError("Midtown extension returned incomplete data. Open the Midtown order detail page and try again.");
         setIsWorking(false);
         return;
       }
@@ -214,21 +203,21 @@ export function ConnectedRetailersPage() {
       setSuccess(null);
       setShowAnotherMidtownPrompt(false);
       void apiClient
-        .completeRetailerLocalSync(event.data.accountId, event.data.syncRunId, payload)
+        .completeRetailerLocalSync(customEvent.detail.accountId, customEvent.detail.syncRunId, payload)
         .then(async (response: RetailerAccountSyncResponse) => {
           setLocalSyncSession(null);
           setShowAnotherMidtownPrompt(true);
           await refreshWithMessage(
             response.run.status === "succeeded"
               ? "Midtown order imported. Import another Midtown order or finish when you're done."
-              : "Midtown browser sync finished but needs attention.",
+              : "Midtown browser capture finished but needs attention.",
           );
         })
         .catch((completeError: unknown) => {
           if (completeError instanceof ApiError || completeError instanceof Error) {
             setError(completeError.message);
           } else {
-            setError("Unable to finish Midtown browser sync.");
+            setError("Unable to finish Midtown capture.");
           }
         })
         .finally(() => {
@@ -236,9 +225,24 @@ export function ConnectedRetailersPage() {
         });
     }
 
-    window.addEventListener("message", handleHelperMessage);
+    function handleCaptureError(event: Event): void {
+      const customEvent = event as CustomEvent<unknown>;
+      if (!isMidtownExtensionCaptureError(customEvent.detail)) {
+        return;
+      }
+      setLocalSyncSession(null);
+      setError(customEvent.detail.message);
+      setIsWorking(false);
+    }
+
+    window.addEventListener(MIDTOWN_EXTENSION_READY_EVENT, handleExtensionReady);
+    window.addEventListener(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, handleCaptureResult);
+    window.addEventListener(MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT, handleCaptureError);
+    window.dispatchEvent(new CustomEvent(MIDTOWN_EXTENSION_PING_EVENT));
     return () => {
-      window.removeEventListener("message", handleHelperMessage);
+      window.removeEventListener(MIDTOWN_EXTENSION_READY_EVENT, handleExtensionReady);
+      window.removeEventListener(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, handleCaptureResult);
+      window.removeEventListener(MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT, handleCaptureError);
     };
   }, []);
 
@@ -344,57 +348,55 @@ export function ConnectedRetailersPage() {
     }
   }
 
-  async function handleStartBrowserSync(): Promise<void> {
+  async function handleCaptureMidtownOrder(): Promise<void> {
     if (!account) {
       return;
     }
-    const helperWindow = window.open("about:blank", "comicos-midtown-browser-sync");
-    if (!helperWindow) {
-      setError("Allow pop-ups to open Midtown in your browser, then try again.");
+    if (!midtownExtensionReady) {
+      setError(
+        midtownExtensionInstallUrl
+          ? "Install the Midtown extension, then refresh Comicos so the capture button can connect."
+          : "Set the Midtown extension install URL, then reload Comicos after installing the extension.",
+      );
       return;
     }
-    helperWindow.document.write("<title>Opening Midtown…</title><p>Opening Midtown orders…</p>");
     setIsWorking(true);
     setError(null);
     setSuccess(null);
     setShowAnotherMidtownPrompt(false);
     try {
-      const response = await apiClient.startRetailerLocalSync(account.id, { limit_orders: 25 });
+      const response = await apiClient.startRetailerLocalSync(account.id, { limit_orders: 1 });
       const session: LocalSyncSession = {
         accountId: account.id,
         syncRunId: response.run.id,
-        helperToken: response.helper_token,
-        helperTokenExpiresAt: response.helper_token_expires_at,
-        limitOrders: 25,
-        captureUrl: response.capture_url,
+        captureToken: response.helper_token,
+        captureTokenExpiresAt: response.helper_token_expires_at,
       };
       setLocalSyncSession(session);
-      helperWindow.name = buildMidtownWindowName({
-        accountId: session.accountId,
-        syncRunId: session.syncRunId,
-        helperToken: session.helperToken,
-        limitOrders: session.limitOrders,
-        appOrigin: window.location.origin,
-      });
-      helperWindow.location.href = session.captureUrl;
-      await refreshWithMessage(
-        "Midtown browser sync started. In the Midtown tab, open the order detail page for the order you want imported, then click the Comicos Midtown Sync bookmark.",
+      window.dispatchEvent(
+        new CustomEvent(MIDTOWN_EXTENSION_CAPTURE_REQUEST_EVENT, {
+          detail: {
+            accountId: session.accountId,
+            syncRunId: session.syncRunId,
+            captureToken: session.captureToken,
+            appOrigin: window.location.origin,
+          },
+        }),
       );
+      await refreshWithMessage("Midtown capture started. The extension is reading the open Midtown order detail page.");
     } catch (startError) {
-      helperWindow.close();
+      setIsWorking(false);
       if (startError instanceof ApiError || startError instanceof Error) {
         setError(startError.message);
       } else {
-        setError("Unable to start Midtown browser sync.");
+        setError("Unable to start Midtown capture.");
       }
-    } finally {
-      setIsWorking(false);
     }
   }
 
   async function handleImportAnotherMidtownOrder(): Promise<void> {
     setShowAnotherMidtownPrompt(false);
-    await handleStartBrowserSync();
+    await handleCaptureMidtownOrder();
   }
 
   async function handleDisconnect(): Promise<void> {
@@ -449,7 +451,7 @@ export function ConnectedRetailersPage() {
       <PageHeader
         eyebrow="Settings"
         title="Connected Retailers"
-        description="Connect a user-owned Midtown Comics account, test credentials, and run bounded inline syncs that enrich draft imports with exact retailer order data."
+        description="Connect a user-owned Midtown Comics account, install the Midtown extension once, and capture exact order details one Midtown order at a time."
       />
 
       {error ? (
@@ -587,11 +589,11 @@ export function ConnectedRetailersPage() {
               </button>
               <button
                 type="button"
-                disabled={isLoading || isWorking || !account}
-                onClick={() => void handleStartBrowserSync()}
+                disabled={isLoading || isWorking || !account || !midtownExtensionReady}
+                onClick={() => void handleCaptureMidtownOrder()}
                 className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Start Browser Sync
+                Capture Midtown Order
               </button>
               <button
                 type="button"
@@ -603,40 +605,47 @@ export function ConnectedRetailersPage() {
               </button>
             </div>
             <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-white">Browser-assisted Midtown sync</p>
+              <p className="font-semibold text-white">Midtown extension</p>
               <p className="mt-2">
-                Drag this bookmarklet to your bookmarks bar once, then use it whenever Comicos opens
-                Midtown in your browser:
+                Install this once, refresh Comicos, then use the capture button whenever you have a
+                Midtown order detail page open:
               </p>
-              <p className="mt-3">
-                <a
-                  href="#bookmarklet-install"
-                  ref={(node) => {
-                    if (node) {
-                      node.setAttribute("href", bookmarkletHref);
-                    }
-                  }}
-                  className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10"
-                >
-                  Comicos Midtown Sync
-                </a>
-              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {midtownExtensionInstallUrl ? (
+                  <a
+                    href={midtownExtensionInstallUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10"
+                  >
+                    Install Midtown Extension
+                  </a>
+                ) : (
+                  <span className="inline-flex rounded-xl border border-white/10 px-4 py-2 font-semibold text-slate-300">
+                    Midtown extension install URL not configured
+                  </span>
+                )}
+                <span className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${midtownExtensionReady ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}>
+                  {midtownExtensionReady ? "Extension connected" : "Extension not detected"}
+                </span>
+              </div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-300">
-                <li>Click <span className="font-medium text-white">Start Browser Sync</span>.</li>
-                <li>In the Midtown tab, choose the order number you want and open its detail page.</li>
-                <li>Once the order detail page is visible, click the bookmark above from your bookmarks bar.</li>
-                <li>Return here to review the imported order, then choose whether to import another Midtown order.</li>
+                <li>Install the Midtown extension once.</li>
+                <li>Refresh Comicos so it detects the extension.</li>
+                <li>Open the Midtown order detail page you want imported.</li>
+                <li>Click <span className="font-medium text-white">Capture Midtown Order</span>.</li>
+                <li>After import, choose whether to import another Midtown order or finish.</li>
               </ol>
               {localSyncSession ? (
                 <p className="mt-3 text-cyan-100">
-                  Waiting for Midtown browser capture. Helper token expires{" "}
-                  {formatDateTime(localSyncSession.helperTokenExpiresAt)}.
+                  Waiting for Midtown capture. Capture token expires{" "}
+                  {formatDateTime(localSyncSession.captureTokenExpiresAt)}.
                 </p>
               ) : null}
               {latestTouchedImportIds.length > 0 ? (
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <p className="text-slate-300">
-                    Last browser-assisted sync touched {latestTouchedImportIds.length} draft import
+                    Last Midtown capture touched {latestTouchedImportIds.length} draft import
                     {latestTouchedImportIds.length === 1 ? "" : "s"}.
                   </p>
                   <button

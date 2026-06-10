@@ -8,7 +8,7 @@
 
 | Mechanism | Behavior |
 |-----------|----------|
-| **Render API boot** | `apps/api/scripts/render_web_start.py` runs `alembic upgrade head` in a **subprocess** when `APP_ENV=production` and `DISABLE_STARTUP_MIGRATIONS` is not set (`app/db/startup_migrations.py`). Uvicorn starts **after** migrations complete. |
+| **Render API boot** | `apps/api/scripts/render_web_start.py` runs `alembic upgrade head` in a **subprocess** when `APP_ENV=production` (`app/db/startup_migrations.py`). Uvicorn starts **after** migrations complete. |
 | **GitHub Actions** | [`.github/workflows/migrate-production.yml`](../.github/workflows/migrate-production.yml) — manual `workflow_dispatch`; uses repository secret `PRODUCTION_DATABASE_URL` (External Database URL from Render; **not** stored in repo). |
 | **Local / CI check** | `cd apps/api && python -m alembic current` and `python -m alembic upgrade head` against target DB before cert or deploy. |
 

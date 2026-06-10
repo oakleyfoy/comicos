@@ -90,7 +90,7 @@ cd apps/api
 .\.venv\Scripts\python -m alembic upgrade head
 ```
 
-**Render API (production):** `scripts/render_web_start.py` runs `alembic upgrade head` in a child process when `APP_ENV=production` (unless `DISABLE_STARTUP_MIGRATIONS` is set), then starts uvicorn. Migrations therefore run **before** the API accepts traffic on each deploy/restart.
+**Render API (production):** `scripts/render_web_start.py` runs `alembic upgrade head` in a child process when `APP_ENV=production`, then starts uvicorn. Migrations therefore run **before** the API accepts traffic on each deploy/restart.
 
 **Manual production migrate (no Render Shell):** GitHub Actions workflow `Migrate production database` (`.github/workflows/migrate-production.yml`) with secret `PRODUCTION_DATABASE_URL`. See [COMICOS_INTELLIGENCE_UI_AND_OPS_READINESS.md](COMICOS_INTELLIGENCE_UI_AND_OPS_READINESS.md).
 

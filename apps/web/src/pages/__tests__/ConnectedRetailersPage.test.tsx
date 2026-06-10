@@ -4,6 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
+import {
+  MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
+  MIDTOWN_EXTENSION_READY_EVENT,
+} from "../../lib/midtownExtensionBridge";
 import { ConnectedRetailersPage } from "../ConnectedRetailersPage";
 
 vi.mock("../../components/AppShell", () => ({
@@ -143,10 +147,10 @@ describe("ConnectedRetailersPage", () => {
         summary_json: {},
         error_message: null,
       },
-      helper_token: "helper-token",
+      helper_token: "capture-token",
       helper_token_expires_at: "2999-01-01T00:00:00Z",
       capture_url: "https://www.midtowncomics.com/account-settings",
-      helper_mode: "bookmarklet",
+      capture_mode: "extension",
     });
     vi.spyOn(apiClient, "completeRetailerLocalSync").mockResolvedValue({
       account: {
@@ -270,51 +274,75 @@ describe("ConnectedRetailersPage", () => {
     expect(screen.getByRole("button", { name: "Sync Paused" })).toBeDisabled();
   });
 
-  it("starts browser-assisted Midtown sync and opens Midtown", async () => {
+  it("starts Midtown capture when the extension is ready", async () => {
     render(
       <MemoryRouter>
         <ConnectedRetailersPage />
       </MemoryRouter>,
     );
 
-    const [startButton] = await screen.findAllByRole("button", { name: "Start Browser Sync" });
-    fireEvent.click(startButton);
+    window.dispatchEvent(new Event(MIDTOWN_EXTENSION_READY_EVENT));
+
+    await waitFor(async () => {
+      const buttons = await screen.findAllByRole("button", { name: "Capture Midtown Order" });
+      expect(buttons[0]).not.toBeDisabled();
+    });
+
+    const [captureButton] = await screen.findAllByRole("button", { name: "Capture Midtown Order" });
+    fireEvent.click(captureButton);
 
     await waitFor(() => {
-      expect(apiClient.startRetailerLocalSync).toHaveBeenCalledWith(1, { limit_orders: 25 });
-      expect(screen.getByText(/Midtown browser sync started/i)).toBeInTheDocument();
-      expect(screen.getByText(/Waiting for Midtown browser capture/i)).toBeInTheDocument();
+      expect(apiClient.startRetailerLocalSync).toHaveBeenCalledWith(1, { limit_orders: 1 });
+      expect(screen.getByText(/Midtown capture started/i)).toBeInTheDocument();
+      expect(screen.getByText(/Waiting for Midtown capture/i)).toBeInTheDocument();
     });
   });
 
-  it("completes browser-assisted Midtown sync from Midtown helper message", async () => {
+  it("completes Midtown capture from the extension result event", async () => {
     render(
       <MemoryRouter>
         <ConnectedRetailersPage />
       </MemoryRouter>,
     );
 
+    window.dispatchEvent(new Event(MIDTOWN_EXTENSION_READY_EVENT));
     const headings = await screen.findAllByRole("heading", { name: "Connected Retailers" });
     expect(headings.length).toBeGreaterThan(0);
+
+    const [captureButton] = await screen.findAllByRole("button", { name: "Capture Midtown Order" });
+    fireEvent.click(captureButton);
     window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://www.midtowncomics.com",
-        data: {
-          type: "comicos_midtown_local_sync_capture",
+      new CustomEvent(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, {
+        detail: {
+          type: MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
           accountId: 1,
           syncRunId: 3,
-          helperToken: "helper-token",
+          captureToken: "capture-token",
           historyHtml: "<html>history</html>",
-          detailPages: [],
+          detailPages: [
+            {
+              detail_url: "https://www.midtowncomics.com/ord-info",
+              retailer_order_number: "ABC123",
+              fallback_order_number: "ABC123",
+              html: "<html>detail</html>",
+            },
+          ],
         },
       }),
     );
 
     await waitFor(() => {
       expect(apiClient.completeRetailerLocalSync).toHaveBeenCalledWith(1, 3, {
-        helper_token: "helper-token",
+        helper_token: "capture-token",
         history_html: "<html>history</html>",
-        detail_pages: [],
+        detail_pages: [
+          {
+            detail_url: "https://www.midtowncomics.com/ord-info",
+            retailer_order_number: "ABC123",
+            fallback_order_number: "ABC123",
+            html: "<html>detail</html>",
+          },
+        ],
       });
     });
   });

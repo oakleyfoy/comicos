@@ -33,7 +33,7 @@ If the restart happens **before** any request lines for `/api/v1/market-intellig
 
 ```text
 render_web_start.py
-  → should_run_startup_migrations()  (APP_ENV=production, not DISABLE_STARTUP_MIGRATIONS)
+  → should_run_startup_migrations()  (APP_ENV=production)
   → subprocess: python -m alembic upgrade head   # separate process; exits
   → os.execvp(uvicorn app.main:app)              # replaces process; single worker default
 ```
@@ -108,7 +108,7 @@ Classify restart as **boot (D–E)** vs **request (F+)** using section 1.
 - **Move heavy service imports** inside route handlers (incremental; lowers import peak for unused domains).
 
 **Priority 3 — Migration ops (boot time / dual-process clarity)**  
-- Run migrations via **GitHub** `migrate-production.yml` on release; set **`DISABLE_STARTUP_MIGRATIONS=1`** on web service so boot only runs uvicorn (avoids Alembic child + model import on every restart).  
+- Run migrations via **GitHub** `migrate-production.yml` on release; keep Render boot on `render_web_start.py` so migrations complete before uvicorn starts.
 - Keep `render_web_start.py` for environments without CI migrate.
 
 **Priority 4 — Runtime (if logs show OOM on rebuild POSTs)**  
@@ -139,5 +139,5 @@ Production Top Recommendations failures were traced to **GET summary triggering 
 
 1. Render → `comic-os-api` → Logs: capture timestamp of memory alert vs lines A–E above.  
 2. Note instance **RAM** plan and whether **rolling deploy** ran two instances briefly.  
-3. If boot-bound: try **`DISABLE_STARTUP_MIGRATIONS`** + manual migrate, measure restart RSS.  
+3. If boot-bound: measure restart RSS with the current production boot path and keep migration timing separate from app import cost.  
 4. If request-bound: identify path from access log; compare with rebuild POSTs vs `/comicos-intelligence` GETs.

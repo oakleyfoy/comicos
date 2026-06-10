@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Comicos Midtown Capture",
+  "version": "0.1.0",
+  "description": "Capture a Midtown Comics order detail page and send it back to Comicos.",
+  "permissions": ["scripting", "tabs"],
+  "host_permissions": ["https://comicosapp.com/*", "https://www.midtowncomics.com/*", "https://midtowncomics.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://comicosapp.com/*"],
+      "js": ["content/comicos.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

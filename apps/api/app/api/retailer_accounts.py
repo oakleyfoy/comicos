@@ -227,7 +227,7 @@ def start_retailer_local_sync(
         helper_token=result.helper_token,
         helper_token_expires_at=result.helper_token_expires_at,
         capture_url=result.capture_url,
-        helper_mode="bookmarklet",
+        capture_mode="extension",
     )
 
 

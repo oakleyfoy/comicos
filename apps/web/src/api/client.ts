@@ -376,7 +376,7 @@ export interface RetailerLocalSyncStartResponse {
   helper_token: string;
   helper_token_expires_at: string;
   capture_url: string;
-  helper_mode: string;
+  capture_mode: string;
 }
 
 export interface RetailerAccountSyncResponse {

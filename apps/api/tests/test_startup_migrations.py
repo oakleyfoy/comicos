@@ -11,18 +11,14 @@ def test_startup_migrations_skipped_outside_production() -> None:
         assert startup_migrations.should_run_startup_migrations() is False
 
 
-def test_should_run_startup_migrations_in_production(monkeypatch) -> None:
+def test_should_run_startup_migrations_in_production() -> None:
     settings = MagicMock(app_env="production", database_url="postgresql://prod/test")
-    monkeypatch.delenv("DISABLE_STARTUP_MIGRATIONS", raising=False)
     with patch.object(startup_migrations, "get_settings", return_value=settings):
         assert startup_migrations.should_run_startup_migrations() is True
-        monkeypatch.setenv("DISABLE_STARTUP_MIGRATIONS", "true")
-        assert startup_migrations.should_run_startup_migrations() is False
 
 
-def test_startup_migrations_runs_in_production(monkeypatch) -> None:
+def test_startup_migrations_runs_in_production() -> None:
     settings = MagicMock(app_env="production", database_url="postgresql://prod/test")
-    monkeypatch.delenv("DISABLE_STARTUP_MIGRATIONS", raising=False)
     fake_api_root = MagicMock()
     fake_ini = MagicMock()
     fake_ini.is_file.return_value = True

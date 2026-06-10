@@ -134,7 +134,7 @@ class RetailerLocalSyncStartResponse(BaseModel):
     helper_token: str
     helper_token_expires_at: datetime
     capture_url: str
-    helper_mode: str = "bookmarklet"
+    capture_mode: str = "extension"
 
 
 class RetailerAccountSyncResponse(BaseModel):

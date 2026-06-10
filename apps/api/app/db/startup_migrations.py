@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,18 +13,9 @@ from app.core.config import API_ROOT, get_settings
 logger = logging.getLogger(__name__)
 
 
-def _env_truthy(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes"}
-
-
 def should_run_startup_migrations() -> bool:
     settings = get_settings()
-    if settings.app_env != "production":
-        return False
-    if _env_truthy("DISABLE_STARTUP_MIGRATIONS"):
-        logger.info("Startup migrations skipped (DISABLE_STARTUP_MIGRATIONS)")
-        return False
-    return True
+    return settings.app_env == "production"
 
 
 def run_alembic_upgrade_head(*, cwd: Path | None = None) -> None:
