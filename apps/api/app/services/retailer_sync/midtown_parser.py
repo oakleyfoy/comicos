@@ -161,6 +161,16 @@ def _match_after_label(fragment: str, label: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def _extract_order_status(html_text: str) -> str | None:
+    text = _clean_html_text(html_text)
+    match = re.search(
+        r"\bStatus\s*:?\s*([A-Za-z][A-Za-z -]{0,80}?)(?=\s+\d+\b|\s+(?:Date|Total|Publisher|Qty|Price|Line Total|Item Status|Shipped|Backordered|Unavailable|Returned|SKU|Variant|Cover Artist|Item #)\b|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1).strip() if match else None
+
+
 def _extract_order_number_from_text(*values: str | None) -> str | None:
     for value in values:
         if not value:
@@ -281,7 +291,7 @@ def parse_midtown_order_detail(
     detail = MidtownOrderDetail(
         retailer_order_number=retailer_order_number,
         order_date=_parse_date(_match_after_label(html_text, "Date")),
-        order_status=_match_after_label(html_text, "Status"),
+        order_status=_extract_order_status(html_text) or _match_after_label(html_text, "Status"),
         order_total=_parse_price(_match_after_label(html_text, "Total")),
         detail_url=detail_url,
         raw_html=html_text,

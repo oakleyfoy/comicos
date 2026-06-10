@@ -110,8 +110,9 @@ def test_parse_midtown_order_detail_uses_header_number_not_item_status_text() ->
         detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
     )
     assert detail.retailer_order_number == "4272232"
+    assert detail.order_status == "Pending"
     assert "Pending" not in detail.retailer_order_number
-    assert detail.items[0].title.startswith("Absolute Batman")
+    assert detail.items[0].title == "Absolute Batman #1 Cover A"
 
 
 def test_parse_midtown_order_detail_ignores_border_radius_noise() -> None:
