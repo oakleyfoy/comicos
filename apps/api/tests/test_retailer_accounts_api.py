@@ -676,6 +676,23 @@ def test_retailer_account_browser_sync_fixture_persists_all_midtown_items(
                     "retailer_order_number": "4272232",
                     "fallback_order_number": "4272232",
                     "html": html,
+                    "capture_diagnostics": {
+                        "current_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                        "ready_state": "complete",
+                        "html_length": len(html),
+                        "text_length": 2048,
+                        "body_inner_html_length": 2048,
+                        "body_inner_text_length": 2048,
+                        "image_count": 21,
+                        "product_link_count": 21,
+                        "visible_order_item_block_count": 21,
+                        "items_detected_client_side": 21,
+                        "each_match_count": 21,
+                        "qty_match_count": 21,
+                        "status_match_count": 21,
+                        "scroll_height": 12000,
+                        "scroll_position": 0,
+                    },
                 }
             ],
         },
@@ -686,4 +703,10 @@ def test_retailer_account_browser_sync_fixture_persists_all_midtown_items(
     assert len(completed.json()["orders"][0]["items"]) == 21
     assert completed.json()["orders"][0]["items"][0]["title"] == "Absolute Batman #1 Cover A"
     assert completed.json()["orders"][0]["items"][-1]["title"] == "Absolute Batman #21 Cover C"
+    assert completed.json()["run"]["summary_json"]["capture_quality_report"][0][
+        "items_detected_client_side"
+    ] == 21
+    assert completed.json()["run"]["summary_json"]["capture_quality_report"][0][
+        "parser_item_blocks_found"
+    ] == 21
     assert completed.json()["run"]["summary_json"]["parser_quality_report"][0]["items_parsed"] == 21

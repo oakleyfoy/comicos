@@ -17,6 +17,7 @@ import {
   getMidtownExtensionInstallUrl,
   isMidtownExtensionCaptureError,
   isMidtownExtensionCaptureResult,
+  type MidtownExtensionCaptureResult,
   MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT,
   MIDTOWN_EXTENSION_CAPTURE_REQUEST_EVENT,
   MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
@@ -122,6 +123,7 @@ export function ConnectedRetailersPage() {
   const [isWorking, setIsWorking] = useState(false);
   const [reviewDraftBusyOrderId, setReviewDraftBusyOrderId] = useState<number | null>(null);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<number, boolean>>({});
+  const [pendingMidtownCapture, setPendingMidtownCapture] = useState<MidtownExtensionCaptureResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAnotherMidtownPrompt, setShowAnotherMidtownPrompt] = useState(false);
@@ -191,41 +193,15 @@ export function ConnectedRetailersPage() {
       if (!isMidtownExtensionCaptureResult(customEvent.detail)) {
         return;
       }
-      const payload: RetailerLocalSyncCompleteRequest = {
-        helper_token: customEvent.detail.captureToken,
-        history_html: customEvent.detail.historyHtml,
-        detail_pages: customEvent.detail.detailPages,
-      };
-      if (!payload.helper_token || !payload.history_html) {
+      if (!customEvent.detail.captureToken || !customEvent.detail.historyHtml) {
         setError("Midtown extension returned incomplete data. Open the Midtown order detail page and try again.");
         setIsWorking(false);
         return;
       }
-      setIsWorking(true);
-      setError(null);
+      setPendingMidtownCapture(customEvent.detail);
       setSuccess(null);
-      setShowAnotherMidtownPrompt(false);
-      void apiClient
-        .completeRetailerLocalSync(customEvent.detail.accountId, customEvent.detail.syncRunId, payload)
-        .then(async (response: RetailerAccountSyncResponse) => {
-          setLocalSyncSession(null);
-          setShowAnotherMidtownPrompt(true);
-          await refreshWithMessage(
-            response.run.status === "succeeded"
-              ? "Midtown order imported. Import another Midtown order or finish when you're done."
-              : "Midtown browser capture finished but needs attention.",
-          );
-        })
-        .catch((completeError: unknown) => {
-          if (completeError instanceof ApiError || completeError instanceof Error) {
-            setError(completeError.message);
-          } else {
-            setError("Unable to finish Midtown capture.");
-          }
-        })
-        .finally(() => {
-          setIsWorking(false);
-        });
+      setError(null);
+      setIsWorking(false);
     }
 
     function handleCaptureError(event: Event): void {
@@ -253,6 +229,9 @@ export function ConnectedRetailersPage() {
     () => orders.filter((row) => !account || row.retailer_account_id === account.id).slice(0, 8),
     [account, orders],
   );
+  const pendingCaptureDiagnostics = pendingMidtownCapture?.detailPages[0]?.capture_diagnostics ?? null;
+  const pendingItemsDetected = pendingCaptureDiagnostics?.items_detected_client_side ?? 0;
+  const pendingCaptureWarning = pendingItemsDetected < 2;
 
   async function refreshWithMessage(message?: string): Promise<void> {
     await loadPage();
@@ -260,6 +239,49 @@ export function ConnectedRetailersPage() {
     if (message) {
       setSuccess(message);
     }
+  }
+
+  async function sendPendingMidtownCapture(): Promise<void> {
+    if (!pendingMidtownCapture) {
+      return;
+    }
+    const payload: RetailerLocalSyncCompleteRequest = {
+      helper_token: pendingMidtownCapture.captureToken,
+      history_html: pendingMidtownCapture.historyHtml,
+      detail_pages: pendingMidtownCapture.detailPages,
+    };
+    setIsWorking(true);
+    setError(null);
+    setSuccess(null);
+    setShowAnotherMidtownPrompt(false);
+    try {
+      const response = await apiClient.completeRetailerLocalSync(
+        pendingMidtownCapture.accountId,
+        pendingMidtownCapture.syncRunId,
+        payload,
+      );
+      setPendingMidtownCapture(null);
+      setLocalSyncSession(null);
+      setShowAnotherMidtownPrompt(true);
+      await refreshWithMessage(
+        response.run.status === "succeeded"
+          ? "Midtown order imported. Import another Midtown order or finish when you're done."
+          : "Midtown browser capture finished but needs attention.",
+      );
+    } catch (completeError) {
+      if (completeError instanceof ApiError || completeError instanceof Error) {
+        setError(completeError.message);
+      } else {
+        setError("Unable to finish Midtown capture.");
+      }
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  function discardPendingMidtownCapture(): void {
+    setPendingMidtownCapture(null);
+    setIsWorking(false);
   }
 
   async function openReviewDraftForOrder(order: RetailerOrderSnapshotRead): Promise<void> {
@@ -492,6 +514,99 @@ export function ConnectedRetailersPage() {
       {success ? (
         <div className="mt-6">
           <StatusBanner tone="success">{success}</StatusBanner>
+        </div>
+      ) : null}
+      {pendingMidtownCapture ? (
+        <div className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
+          <StatusBanner tone={pendingCaptureWarning ? "warning" : "info"} emphasis="prominent">
+            {pendingCaptureWarning
+              ? `This looks like a partial capture. ComicOS found ${pendingItemsDetected} possible items on this page. Scroll the Midtown order page fully, wait for all items to load, then try again.`
+              : `ComicOS found ${pendingItemsDetected} possible items on this page. Review the capture details below before sending it to ComicOS.`}
+          </StatusBanner>
+
+          <div className="mt-5 grid gap-3 text-sm text-slate-200 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Capture Debug</p>
+              <dl className="mt-3 space-y-2 text-slate-300">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">current_url</dt>
+                  <dd className="font-medium text-white break-all text-right">{pendingCaptureDiagnostics?.current_url ?? "unknown"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">items_detected_client_side</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.items_detected_client_side ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">html_length</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.html_length ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">text_length</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.text_length ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">scroll_height</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.scroll_height ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">product_link_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.product_link_count ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">image_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.image_count ?? 0}</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Page Signals</p>
+              <dl className="mt-3 space-y-2 text-slate-300">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">ready_state</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.ready_state ?? "unknown"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">each_match_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.each_match_count ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">qty_match_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.qty_match_count ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">status_match_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.status_match_count ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">visible_order_item_block_count</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.visible_order_item_block_count ?? 0}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-400">scroll_position</dt>
+                  <dd className="font-medium text-white">{pendingCaptureDiagnostics?.scroll_position ?? 0}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void sendPendingMidtownCapture()}
+              disabled={isWorking}
+              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Send Capture to ComicOS
+            </button>
+            <button
+              type="button"
+              onClick={discardPendingMidtownCapture}
+              disabled={isWorking}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Discard Capture
+            </button>
+          </div>
         </div>
       ) : null}
 

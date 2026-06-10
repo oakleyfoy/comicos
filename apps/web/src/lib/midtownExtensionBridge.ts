@@ -11,11 +11,30 @@ export interface MidtownExtensionCaptureRequest {
   appOrigin: string;
 }
 
+export interface MidtownExtensionCaptureDiagnostics {
+  current_url: string;
+  ready_state: string;
+  html_length: number;
+  text_length: number;
+  body_inner_html_length: number;
+  body_inner_text_length: number;
+  image_count: number;
+  product_link_count: number;
+  visible_order_item_block_count: number;
+  items_detected_client_side: number;
+  each_match_count: number;
+  qty_match_count: number;
+  status_match_count: number;
+  scroll_height: number;
+  scroll_position: number;
+}
+
 export interface MidtownExtensionDetailPageCapture {
   detail_url: string;
   html: string;
   retailer_order_number?: string | null;
   fallback_order_number?: string | null;
+  capture_diagnostics?: MidtownExtensionCaptureDiagnostics | null;
 }
 
 export interface MidtownExtensionCaptureResult extends MidtownExtensionCaptureRequest {

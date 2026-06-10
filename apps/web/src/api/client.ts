@@ -358,6 +358,7 @@ export interface RetailerLocalSyncDetailPageCapture {
   html: string;
   retailer_order_number?: string | null;
   fallback_order_number?: string | null;
+  capture_diagnostics?: Record<string, unknown> | null;
 }
 
 export interface RetailerLocalSyncCompleteRequest {

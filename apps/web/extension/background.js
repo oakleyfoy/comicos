@@ -8,6 +8,22 @@ function normalizeWhitespace(value) {
     .trim();
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isVisibleElement(element) {
+  if (!element || typeof element.getClientRects !== "function") {
+    return false;
+  }
+  const rects = element.getClientRects();
+  if (!rects || rects.length === 0) {
+    return false;
+  }
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
 function extractPlainTextFromHtml(html) {
   return normalizeWhitespace(
     String(html || "")
@@ -41,7 +57,128 @@ function extractOrderNumberFromUrl(url) {
   return match && match[1] ? match[1].trim() : null;
 }
 
-function buildMidtownPayload(pageHtml, pageUrl, pageTitle, pageText) {
+function countTextMatches(text, pattern) {
+  const matches = String(text || "").match(pattern);
+  return matches ? matches.length : 0;
+}
+
+function countVisibleOrderItemBlocks() {
+  const selectors = [
+    "tr",
+    "li",
+    "article",
+    "[data-midtown-item]",
+    "[data-order-item]",
+    "[data-testid*='item']",
+  ];
+  const seen = new Set();
+  const candidates = [];
+  for (const selector of selectors) {
+    for (const element of document.querySelectorAll(selector)) {
+      if (seen.has(element)) {
+        continue;
+      }
+      seen.add(element);
+      candidates.push(element);
+    }
+  }
+
+  const hasProductLink = (element) =>
+    Boolean(element.querySelector("a[href*='/product/'], a[href*='product/'], a[href*='product']"));
+
+  let count = 0;
+  for (const element of candidates) {
+    if (!isVisibleElement(element)) {
+      continue;
+    }
+    const text = normalizeWhitespace(element.innerText);
+    if (!text) {
+      continue;
+    }
+    if ((/Each:/i.test(text) || /QTY:/i.test(text) || /Status:/i.test(text)) && hasProductLink(element)) {
+      count += 1;
+    }
+  }
+
+  if (count > 0) {
+    return count;
+  }
+
+  for (const element of document.querySelectorAll("div")) {
+    if (!isVisibleElement(element)) {
+      continue;
+    }
+    const text = normalizeWhitespace(element.innerText);
+    if (!text) {
+      continue;
+    }
+    if ((/Each:/i.test(text) || /QTY:/i.test(text) || /Status:/i.test(text)) && hasProductLink(element)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function collectMidtownCaptureDiagnostics() {
+  const bodyText = document.body && document.body.innerText ? document.body.innerText : "";
+  const bodyHtml = document.body && document.body.innerHTML ? document.body.innerHTML : "";
+  const html = document.documentElement ? document.documentElement.outerHTML : "";
+  const imageCount = document.images ? document.images.length : document.querySelectorAll("img").length;
+  const productLinkCount = document.querySelectorAll(
+    "a[href*='/product/'], a[href*='product/'], a[href*='product']",
+  ).length;
+  const visibleOrderItemBlockCount = countVisibleOrderItemBlocks();
+  return {
+    current_url: location.href,
+    ready_state: document.readyState,
+    html_length: html.length,
+    text_length: bodyText.length,
+    body_inner_html_length: bodyHtml.length,
+    body_inner_text_length: bodyText.length,
+    image_count: imageCount,
+    product_link_count: productLinkCount,
+    visible_order_item_block_count: visibleOrderItemBlockCount,
+    items_detected_client_side: visibleOrderItemBlockCount || productLinkCount,
+    each_match_count: countTextMatches(bodyText, /\bEach:/gi),
+    qty_match_count: countTextMatches(bodyText, /\bQTY:/gi),
+    status_match_count: countTextMatches(bodyText, /\bStatus:/gi),
+    scroll_height: document.documentElement ? document.documentElement.scrollHeight : 0,
+    scroll_position: window.scrollY || 0,
+  };
+}
+
+async function waitForDocumentComplete() {
+  let attempts = 0;
+  while (document.readyState !== "complete" && attempts < 80) {
+    await sleep(100);
+    attempts += 1;
+  }
+}
+
+async function autoScrollMidtownPage() {
+  const viewport = Math.max(window.innerHeight || 0, 1);
+  const step = Math.max(Math.floor(viewport * 0.85), 240);
+  let previousScrollTop = -1;
+  window.scrollTo(0, 0);
+  await sleep(200);
+
+  for (let safety = 0; safety < 60; safety += 1) {
+    const maxScrollTop = Math.max((document.documentElement?.scrollHeight || 0) - viewport, 0);
+    const currentScrollTop = Math.max(window.scrollY || 0, 0);
+    if (currentScrollTop >= maxScrollTop || currentScrollTop === previousScrollTop) {
+      break;
+    }
+    previousScrollTop = currentScrollTop;
+    window.scrollBy(0, step);
+    await sleep(250);
+  }
+
+  window.scrollTo(0, 0);
+  await sleep(250);
+}
+
+function buildMidtownPayload(pageHtml, pageUrl, pageTitle, pageText, captureDiagnostics) {
   const bodyText = normalizeWhitespace(pageText).toLowerCase();
   const htmlText = extractPlainTextFromHtml(pageHtml).toLowerCase();
   const titleText = normalizeWhitespace(pageTitle).toLowerCase();
@@ -72,6 +209,7 @@ function buildMidtownPayload(pageHtml, pageUrl, pageTitle, pageText) {
       retailer_order_number: orderNumber,
       fallback_order_number: orderNumber,
       html: pageHtml,
+      capture_diagnostics: captureDiagnostics || null,
     }),
   );
 }
@@ -97,10 +235,18 @@ function describeError(error) {
   return "Midtown capture failed.";
 }
 
-function captureMidtownDetailPage() {
+async function captureMidtownDetailPage() {
+  await waitForDocumentComplete();
+  await autoScrollMidtownPage();
   const pageHtml = document.documentElement.outerHTML;
   const pageText = document.body && document.body.innerText ? document.body.innerText : "";
-  return buildMidtownPayload(pageHtml, location.href, document.title, pageText);
+  return buildMidtownPayload(
+    pageHtml,
+    location.href,
+    document.title,
+    pageText,
+    collectMidtownCaptureDiagnostics(),
+  );
 }
 
 async function captureMidtownDetailPageFromTab(tab) {
@@ -115,7 +261,27 @@ async function captureMidtownDetailPageFromTab(tab) {
     throw new Error(`Midtown detail page request failed (${response.status}).`);
   }
   const pageHtml = await response.text();
-  return buildMidtownPayload(pageHtml, tab.url, tab.title || "", extractPlainTextFromHtml(pageHtml));
+  const parser = new DOMParser();
+  const parsedDocument = parser.parseFromString(pageHtml, "text/html");
+  const parsedText = parsedDocument.body && parsedDocument.body.innerText ? parsedDocument.body.innerText : "";
+  const parsedDiagnostics = {
+    current_url: tab.url,
+    ready_state: "complete",
+    html_length: pageHtml.length,
+    text_length: parsedText.length,
+    body_inner_html_length: parsedDocument.body && parsedDocument.body.innerHTML ? parsedDocument.body.innerHTML.length : 0,
+    body_inner_text_length: parsedText.length,
+    image_count: parsedDocument.images ? parsedDocument.images.length : parsedDocument.querySelectorAll("img").length,
+    product_link_count: parsedDocument.querySelectorAll("a[href*='/product/'], a[href*='product/'], a[href*='product']").length,
+    visible_order_item_block_count: parsedDocument.querySelectorAll("tr, li, article").length,
+    items_detected_client_side: parsedDocument.querySelectorAll("tr, li, article").length,
+    each_match_count: countTextMatches(parsedText, /\bEach:/gi),
+    qty_match_count: countTextMatches(parsedText, /\bQTY:/gi),
+    status_match_count: countTextMatches(parsedText, /\bStatus:/gi),
+    scroll_height: 0,
+    scroll_position: 0,
+  };
+  return buildMidtownPayload(pageHtml, tab.url, tab.title || "", parsedText, parsedDiagnostics);
 }
 
 async function sendCaptureResult(targetTabId, message) {

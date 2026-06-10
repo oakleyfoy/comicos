@@ -270,6 +270,7 @@ def complete_retailer_account_local_sync(
                 html=page.html,
                 retailer_order_number=page.retailer_order_number,
                 fallback_order_number=page.fallback_order_number,
+                capture_diagnostics=page.capture_diagnostics,
             )
             for page in payload.detail_pages
         ],

@@ -385,11 +385,36 @@ describe("ConnectedRetailersPage", () => {
               retailer_order_number: "ABC123",
               fallback_order_number: "ABC123",
               html: "<html>detail</html>",
+              capture_diagnostics: {
+                current_url: "https://www.midtowncomics.com/ord-info",
+                ready_state: "complete",
+                html_length: 2048,
+                text_length: 512,
+                body_inner_html_length: 1024,
+                body_inner_text_length: 512,
+                image_count: 2,
+                product_link_count: 1,
+                visible_order_item_block_count: 1,
+                items_detected_client_side: 1,
+                each_match_count: 1,
+                qty_match_count: 1,
+                status_match_count: 1,
+                scroll_height: 900,
+                scroll_position: 0,
+              },
             },
           ],
         },
       }),
     );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/ComicOS found 1 possible items/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/partial capture/i).length).toBeGreaterThan(0);
+    });
+
+    const [sendCaptureButton] = screen.getAllByRole("button", { name: "Send Capture to ComicOS" });
+    fireEvent.click(sendCaptureButton);
 
     await waitFor(() => {
       expect(apiClient.completeRetailerLocalSync).toHaveBeenCalledWith(1, 3, {
@@ -401,6 +426,23 @@ describe("ConnectedRetailersPage", () => {
             retailer_order_number: "ABC123",
             fallback_order_number: "ABC123",
             html: "<html>detail</html>",
+            capture_diagnostics: {
+              current_url: "https://www.midtowncomics.com/ord-info",
+              ready_state: "complete",
+              html_length: 2048,
+              text_length: 512,
+              body_inner_html_length: 1024,
+              body_inner_text_length: 512,
+              image_count: 2,
+              product_link_count: 1,
+              visible_order_item_block_count: 1,
+              items_detected_client_side: 1,
+              each_match_count: 1,
+              qty_match_count: 1,
+              status_match_count: 1,
+              scroll_height: 900,
+              scroll_position: 0,
+            },
           },
         ],
       });

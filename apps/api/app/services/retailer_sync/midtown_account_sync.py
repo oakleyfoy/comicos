@@ -67,6 +67,7 @@ class MidtownLocalSyncCapture:
     html: str
     retailer_order_number: str | None = None
     fallback_order_number: str | None = None
+    capture_diagnostics: dict | None = None
 
 
 def _sanitize_error(message: str, *, username: str) -> str:
@@ -132,6 +133,7 @@ def _success_summary(
     items_imported: int,
     items_updated: int,
     touched_import_ids: list[int],
+    capture_quality_report: list[dict],
     parser_quality_report: list[dict],
     sync_path: str,
 ) -> dict:
@@ -143,6 +145,7 @@ def _success_summary(
         "items_imported": items_imported,
         "items_updated": items_updated,
         "touched_import_ids": touched_import_ids,
+        "capture_quality_report": capture_quality_report,
         "parser_quality_report": parser_quality_report,
     }
 
@@ -345,16 +348,69 @@ def _build_parser_quality_report(order: MidtownOrderDetail) -> dict:
     }
 
 
+def _build_capture_quality_report(
+    capture: MidtownLocalSyncCapture | None,
+    order: MidtownOrderDetail,
+) -> dict:
+    diagnostics = dict(capture.capture_diagnostics or {}) if capture is not None else {}
+    return {
+        "retailer_order_number": order.retailer_order_number,
+        "detail_url": order.detail_url or (capture.detail_url if capture is not None else None),
+        "current_url": diagnostics.get("current_url"),
+        "ready_state": diagnostics.get("ready_state"),
+        "items_detected_client_side": int(diagnostics.get("items_detected_client_side") or 0),
+        "html_length": int(diagnostics.get("html_length") or 0),
+        "text_length": int(diagnostics.get("text_length") or 0),
+        "body_inner_html_length": int(diagnostics.get("body_inner_html_length") or 0),
+        "body_inner_text_length": int(diagnostics.get("body_inner_text_length") or 0),
+        "image_count": int(diagnostics.get("image_count") or 0),
+        "product_link_count": int(diagnostics.get("product_link_count") or 0),
+        "visible_order_item_block_count": int(diagnostics.get("visible_order_item_block_count") or 0),
+        "each_match_count": int(diagnostics.get("each_match_count") or 0),
+        "qty_match_count": int(diagnostics.get("qty_match_count") or 0),
+        "status_match_count": int(diagnostics.get("status_match_count") or 0),
+        "scroll_height": int(diagnostics.get("scroll_height") or 0),
+        "scroll_position": int(diagnostics.get("scroll_position") or 0),
+        "parser_item_blocks_found": int((order.parse_diagnostics or {}).get("item_blocks_found") or 0),
+        "parser_items_parsed": int((order.parse_diagnostics or {}).get("items_parsed") or 0),
+        "parser_items_skipped": int((order.parse_diagnostics or {}).get("items_skipped") or 0),
+    }
+
+
 def _persist_success(
     session: Session,
     *,
     account: RetailerAccount,
     run: RetailerSyncRun,
     orders: list[MidtownOrderDetail],
+    captures: list[MidtownLocalSyncCapture] | None,
     test_only: bool,
     sync_path: str,
 ) -> tuple[list[RetailerOrderSnapshot], list[int]]:
     parser_quality_report = [_build_parser_quality_report(order) for order in orders]
+    capture_lookup_by_url = {
+        capture.detail_url: capture
+        for capture in (captures or [])
+        if capture.detail_url and capture.html
+    }
+    capture_lookup_by_order_number = {
+        capture.retailer_order_number: capture
+        for capture in (captures or [])
+        if capture.retailer_order_number and capture.html
+    }
+    capture_lookup_by_fallback_order_number = {
+        capture.fallback_order_number: capture
+        for capture in (captures or [])
+        if capture.fallback_order_number and capture.html
+    }
+    capture_quality_report = []
+    for order in orders:
+        capture = capture_lookup_by_url.get(order.detail_url or "")
+        if capture is None:
+            capture = capture_lookup_by_order_number.get(order.retailer_order_number)
+        if capture is None:
+            capture = capture_lookup_by_fallback_order_number.get(order.retailer_order_number)
+        capture_quality_report.append(_build_capture_quality_report(capture, order))
     if test_only:
         run.orders_seen = len(orders)
         run.items_seen = sum(len(order.items) for order in orders)
@@ -363,6 +419,7 @@ def _persist_success(
             "items_seen": run.items_seen,
             "mode": "test",
             "sync_path": sync_path,
+            "capture_quality_report": capture_quality_report,
             "parser_quality_report": parser_quality_report,
         }
         session.add(run)
@@ -393,6 +450,7 @@ def _persist_success(
         items_imported=run.items_imported,
         items_updated=run.items_updated,
         touched_import_ids=touched_import_ids,
+        capture_quality_report=capture_quality_report,
         parser_quality_report=parser_quality_report,
         sync_path=sync_path,
     )
@@ -537,6 +595,7 @@ def complete_midtown_browser_sync(
                 account=account,
                 run=run,
                 orders=orders,
+                captures=detail_pages,
                 test_only=False,
                 sync_path="browser_assisted",
             )
@@ -666,6 +725,7 @@ def sync_midtown_account(
                 account=account,
                 run=run,
                 orders=orders,
+                captures=None,
                 test_only=test_only,
                 sync_path="server_playwright",
             )

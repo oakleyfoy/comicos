@@ -116,6 +116,7 @@ class RetailerLocalSyncDetailPageCapture(BaseModel):
     html: str = Field(min_length=1)
     retailer_order_number: str | None = Field(default=None, max_length=128)
     fallback_order_number: str | None = Field(default=None, max_length=128)
+    capture_diagnostics: dict | None = None
 
 
 class RetailerLocalSyncCompleteRequest(BaseModel):
