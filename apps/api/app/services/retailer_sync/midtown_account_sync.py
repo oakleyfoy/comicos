@@ -424,11 +424,7 @@ def complete_midtown_browser_sync(
         run.status = "capturing"
         session.add(run)
         session.flush()
-        history = parse_midtown_order_history(history_html)[:limit_orders]
-        if not history:
-            raise MidtownNeedsAttentionError(
-                "Midtown browser sync could not find orders on the captured page."
-            )
+        history = parse_midtown_order_history(history_html)[:limit_orders] if history_html else []
         detail_by_url = {
             page.detail_url: page
             for page in detail_pages

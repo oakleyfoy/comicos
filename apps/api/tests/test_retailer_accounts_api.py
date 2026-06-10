@@ -439,3 +439,74 @@ def test_retailer_account_browser_sync_persistence_failure_returns_failed_run(
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "failed"
     assert completed.json()["run"]["summary_json"]["error_code"] == "browser_sync_failed"
+
+
+def test_retailer_account_browser_sync_detail_page_only_captures_successfully(
+    client, session, monkeypatch
+) -> None:
+    token = register_and_login(client, "retailer-browser-sync-detail-only@example.com")
+    created = client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+        },
+    )
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_history",
+        lambda html_text: [],
+    )
+    monkeypatch.setattr(
+        "app.services.retailer_sync.midtown_account_sync.parse_midtown_order_detail",
+        lambda html_text, fallback_order_number=None, detail_url=None: MidtownOrderDetail(
+            retailer_order_number=fallback_order_number or "4272232",
+            order_date=date(2026, 6, 9),
+            order_status="Pending",
+            order_total=Decimal("5.99"),
+            detail_url=detail_url,
+            items=[
+                MidtownOrderItem(
+                    retailer_item_id="SKU-1",
+                    title="Absolute Catwoman #1 Cover C",
+                    quantity=1,
+                    unit_price=Decimal("5.99"),
+                    total_price=Decimal("5.99"),
+                    item_status="Pending",
+                    raw_fragment=html_text,
+                )
+            ],
+            raw_html=html_text,
+        ),
+    )
+
+    started = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/start",
+        headers=auth_headers(token),
+        json={"limit_orders": 5},
+    )
+    assert started.status_code == 200, started.text
+
+    completed = client.post(
+        f"/api/v1/retailer-accounts/{account_id}/local-sync/{started.json()['run']['id']}/complete",
+        headers=auth_headers(token),
+        json={
+            "helper_token": started.json()["helper_token"],
+            "history_html": "<div><h1>Order #4272232</h1></div>",
+            "detail_pages": [
+                {
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                    "retailer_order_number": "4272232",
+                    "fallback_order_number": "4272232",
+                    "html": "<div><h1>Order #4272232</h1></div>",
+                }
+            ],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["run"]["status"] == "succeeded"
+    assert completed.json()["orders"][0]["retailer_order_number"] == "4272232"
