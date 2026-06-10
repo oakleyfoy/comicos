@@ -418,9 +418,9 @@ def complete_midtown_browser_sync(
     run = session.get(RetailerSyncRun, sync_run_id)
     if run is None or run.retailer_account_id != account.id:
         raise MidtownNeedsAttentionError("Midtown browser sync run was not found. Start it again.")
-    summary, _ = _get_local_sync_context(run, helper_token=helper_token)
-    limit_orders = int(summary.get("limit_orders") or 25)
     try:
+        summary, _ = _get_local_sync_context(run, helper_token=helper_token)
+        limit_orders = int(summary.get("limit_orders") or 25)
         run.status = "capturing"
         session.add(run)
         session.flush()
