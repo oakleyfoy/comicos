@@ -164,3 +164,39 @@ class RetailerSyncRunListResponse(BaseModel):
 
 class RetailerOrderListResponse(BaseModel):
     items: list[RetailerOrderSnapshotRead] = Field(default_factory=list)
+
+
+class MidtownBrowserOrderRead(BaseModel):
+    retailer_order_number: str
+    order_date: date | None = None
+    order_status: str | None = None
+    order_total: Decimal | None = None
+    item_count: int | None = None
+    detail_url: str | None = None
+
+
+class MidtownBrowserSessionStatusRead(BaseModel):
+    retailer: str = "midtown"
+    account_id: int
+    status: str
+    message: str | None = None
+    current_url: str | None = None
+    orders_url: str
+    authenticated: bool = False
+    order_count: int = 0
+    last_updated_at: datetime | None = None
+
+
+class MidtownBrowserSessionResponse(BaseModel):
+    session: MidtownBrowserSessionStatusRead
+
+
+class MidtownBrowserOrdersResponse(BaseModel):
+    session: MidtownBrowserSessionStatusRead
+    orders: list[MidtownBrowserOrderRead] = Field(default_factory=list)
+
+
+class MidtownBrowserCaptureResponse(BaseModel):
+    session: MidtownBrowserSessionStatusRead
+    order_id: int
+    retailer_order_number: str

@@ -361,6 +361,42 @@ export interface RetailerOrderQueryParams {
   syncRunId?: number;
 }
 
+export interface MidtownBrowserSessionStatusRead {
+  retailer: "midtown";
+  account_id: number;
+  status: string;
+  message?: string | null;
+  current_url?: string | null;
+  orders_url: string;
+  authenticated: boolean;
+  order_count: number;
+  last_updated_at?: string | null;
+}
+
+export interface MidtownBrowserSessionResponse {
+  session: MidtownBrowserSessionStatusRead;
+}
+
+export interface MidtownBrowserOrderRead {
+  retailer_order_number: string;
+  order_date?: string | null;
+  order_status?: string | null;
+  order_total?: string | null;
+  item_count?: number | null;
+  detail_url?: string | null;
+}
+
+export interface MidtownBrowserOrdersResponse {
+  session: MidtownBrowserSessionStatusRead;
+  orders: MidtownBrowserOrderRead[];
+}
+
+export interface MidtownBrowserCaptureResponse {
+  session: MidtownBrowserSessionStatusRead;
+  order_id: number;
+  retailer_order_number: string;
+}
+
 export interface RetailerAccountSyncRequest {
   limit_orders?: number;
 }
@@ -20755,6 +20791,35 @@ export const apiClient = {
     return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}/confirm`, {
       method: "POST",
     });
+  },
+
+  startMidtownBrowserSession(): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/start", {
+      method: "POST",
+    });
+  },
+
+  getMidtownBrowserSessionStatus(): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/status");
+  },
+
+  goToMidtownBrowserOrders(): Promise<MidtownBrowserOrdersResponse> {
+    return request<MidtownBrowserOrdersResponse>("/api/v1/retailer-browser/midtown/go-to-orders", {
+      method: "POST",
+    });
+  },
+
+  getMidtownBrowserOrders(): Promise<MidtownBrowserOrdersResponse> {
+    return request<MidtownBrowserOrdersResponse>("/api/v1/retailer-browser/midtown/orders");
+  },
+
+  captureMidtownBrowserOrder(retailerOrderNumber: string): Promise<MidtownBrowserCaptureResponse> {
+    return request<MidtownBrowserCaptureResponse>(
+      `/api/v1/retailer-browser/midtown/orders/${encodeURIComponent(retailerOrderNumber)}/capture`,
+      {
+        method: "POST",
+      },
+    );
   },
 
   createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {

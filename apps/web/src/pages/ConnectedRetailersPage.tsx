@@ -553,8 +553,37 @@ export function ConnectedRetailersPage() {
       <PageHeader
         eyebrow="Settings"
         title="Connected Retailers"
-        description="Connect a user-owned Midtown Comics account, install the Midtown extension once, and capture exact order details one Midtown order at a time."
+        description="Connect a user-owned Midtown Comics account and open Midtown inside ComicOS to choose an order."
       />
+
+      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
+            <h2 className="text-2xl font-semibold text-white">Open Midtown inside ComicOS</h2>
+            <p className="max-w-2xl text-sm text-slate-300">
+              ComicOS keeps your Midtown session, loads order history in-app, and lets you pick an
+              order without leaving this workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/connected-retailers/midtown")}
+              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            >
+              Open Midtown Browser
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/connected-retailers/midtown/orders")}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+            >
+              View Midtown Orders
+            </button>
+          </div>
+        </div>
+      </section>
 
       {error ? (
         <div className="mt-6">

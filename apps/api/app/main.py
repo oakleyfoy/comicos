@@ -1163,6 +1163,7 @@ from app.api.marketplace_publish import attach_marketplace_publish_layer
 from app.api.marketplace_sync import attach_marketplace_sync_layer
 from app.api.marketplace_accounts import attach_marketplace_accounts_layer
 from app.api.retailer_accounts import attach_retailer_accounts_layer
+from app.api.retailer_browser import attach_retailer_browser_layer
 from app.api.marketplace_events import attach_marketplace_events_layer
 from app.api.marketplace_inventory_sync import attach_marketplace_inventory_sync_layer
 from app.api.marketplace_listings import attach_marketplace_listings_layer
@@ -1356,6 +1357,7 @@ attach_ebay_compliance_layer(app)
 attach_marketplace_dashboard_layer(app)
 attach_marketplace_accounts_layer(app)
 attach_retailer_accounts_layer(app)
+attach_retailer_browser_layer(app)
 attach_marketplace_events_layer(app)
 attach_live_sales_layer(app)
 attach_marketplace_ops_dashboard_layer(app)

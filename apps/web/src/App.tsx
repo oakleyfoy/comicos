@@ -22,6 +22,8 @@ import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
+import { MidtownBrowserSessionPage } from "./pages/MidtownBrowserSessionPage";
+import { MidtownBrowserOrdersPage } from "./pages/MidtownBrowserOrdersPage";
 import { RetailerOrderDetailPage } from "./pages/RetailerOrderDetailPage";
 import { RetailerOrdersPage } from "./pages/RetailerOrdersPage";
 import { ScanIngestionPage } from "./pages/ScanIngestionPage";
@@ -467,6 +469,9 @@ export default function App() {
         <Route path="/orders/new" element={<OrderNewPage />} />
         <Route path="/retailer-orders" element={<RetailerOrdersPage />} />
         <Route path="/retailer-orders/:id" element={<RetailerOrderDetailPage />} />
+        <Route path="/connected-retailers" element={<ConnectedRetailersPage />} />
+        <Route path="/connected-retailers/midtown" element={<MidtownBrowserSessionPage />} />
+        <Route path="/connected-retailers/midtown/orders" element={<MidtownBrowserOrdersPage />} />
         <Route path="/settings/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
