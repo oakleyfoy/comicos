@@ -11,6 +11,8 @@ type ConsumerSessionCopy = {
   helperText: string;
   primaryActionLabel: string;
   primaryActionKind: "continue" | "verification";
+  secondaryActionLabel: string | null;
+  secondaryActionKind: "retry" | null;
 };
 
 function detectSecurityVerification(session: MidtownBrowserSessionResponse | null): boolean {
@@ -31,9 +33,11 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
   if (detectSecurityVerification(session)) {
     return {
       status: "Security Verification Required",
-      helperText: "Midtown requires a security verification before ComicOS can access your orders.",
-      primaryActionLabel: "Open Midtown Verification",
+      helperText: "Midtown requires security verification before ComicOS can load your orders.",
+      primaryActionLabel: "Continue to Midtown Verification",
       primaryActionKind: "verification",
+      secondaryActionLabel: "I Completed Verification - Retry",
+      secondaryActionKind: "retry",
     };
   }
 
@@ -43,6 +47,8 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
       helperText: "You?re signed in. ComicOS can continue to your Midtown orders.",
       primaryActionLabel: "Continue to Midtown",
       primaryActionKind: "continue",
+      secondaryActionLabel: null,
+      secondaryActionKind: null,
     };
   }
 
@@ -51,6 +57,8 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
     helperText: "Sign in to Midtown so ComicOS can load your orders.",
     primaryActionLabel: "Continue to Midtown",
     primaryActionKind: "continue",
+    secondaryActionLabel: null,
+    secondaryActionKind: null,
   };
 }
 
@@ -109,8 +117,28 @@ export function MidtownBrowserSessionPage() {
       const response = await apiClient.startMidtownBrowserSession();
       setSession(response);
       setBrowserUrl(resolveBrowserUrl(response));
+      if (response.session.status === "ready" || response.session.status === "connected") {
+        navigate("/connected-retailers/midtown/orders");
+      }
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Unable to continue to Midtown.");
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function handleRetryVerification(): Promise<void> {
+    setIsWorking(true);
+    setError(null);
+    try {
+      const response = await apiClient.startMidtownBrowserSession();
+      setSession(response);
+      setBrowserUrl(resolveBrowserUrl(response));
+      if (response.session.status === "ready" || response.session.status === "connected") {
+        navigate("/connected-retailers/midtown/orders");
+      }
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Unable to retry Midtown verification.");
     } finally {
       setIsWorking(false);
     }
@@ -160,6 +188,16 @@ export function MidtownBrowserSessionPage() {
             >
               View Orders
             </button>
+            {consumerCopy.secondaryActionLabel ? (
+              <button
+                type="button"
+                onClick={() => void handleRetryVerification()}
+                disabled={isLoading || isWorking}
+                className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-5 py-3 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {consumerCopy.secondaryActionLabel}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -176,14 +214,6 @@ export function MidtownBrowserSessionPage() {
                   : "Use this area to sign in to Midtown and continue to your orders."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void handlePrimaryAction()}
-            disabled={isLoading || isWorking}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {consumerCopy.primaryActionLabel}
-          </button>
         </div>
 
         <div className="mt-4 min-h-[720px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90">

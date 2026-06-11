@@ -102,13 +102,26 @@ describe("MidtownBrowserSessionPage", () => {
       session: {
         retailer: "midtown",
         account_id: 1,
-        status: "needs_attention",
-        message: "CAPTCHA required",
+        status: "security_verification_required",
+        message: "Midtown requires security verification.",
         current_url: "https://www.midtowncomics.com/verify",
         orders_url: "https://www.midtowncomics.com/account/orders",
         authenticated: false,
         order_count: 0,
         last_updated_at: "2026-06-10T20:00:00Z",
+      },
+    });
+    vi.spyOn(apiClient, "startMidtownBrowserSession").mockResolvedValue({
+      session: {
+        retailer: "midtown",
+        account_id: 1,
+        status: "ready",
+        message: "Ready",
+        current_url: "https://www.midtowncomics.com/account/orders",
+        orders_url: "https://www.midtowncomics.com/account/orders",
+        authenticated: true,
+        order_count: 8,
+        last_updated_at: "2026-06-10T20:05:00Z",
       },
     });
 
@@ -120,12 +133,16 @@ describe("MidtownBrowserSessionPage", () => {
     const scoped = within(container);
 
     expect(await findByRole("heading", { name: "Security Verification Required" })).toBeInTheDocument();
+    expect(scoped.getByText("Midtown requires security verification before ComicOS can load your orders.")).toBeInTheDocument();
     expect(scoped.getByTitle("Midtown browser workspace")).toHaveAttribute("src", "https://www.midtowncomics.com/verify");
+    expect(scoped.getAllByRole("button", { name: "Continue to Midtown Verification" }).length).toBeGreaterThan(0);
+    expect(scoped.getAllByRole("button", { name: "I Completed Verification - Retry" }).length).toBeGreaterThan(0);
 
-    fireEvent.click(scoped.getAllByRole("button", { name: "Open Midtown Verification" })[0]);
+    fireEvent.click(scoped.getAllByRole("button", { name: "I Completed Verification - Retry" })[0]);
 
     await waitFor(() => {
-      expect(scoped.getByTitle("Midtown browser workspace")).toHaveAttribute("src", "https://www.midtowncomics.com/verify");
+      expect(apiClient.startMidtownBrowserSession).toHaveBeenCalledTimes(1);
+      expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown/orders");
     });
   });
 });

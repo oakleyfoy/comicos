@@ -106,6 +106,27 @@ def test_midtown_browser_session_requires_connected_account(client) -> None:
     assert response.json()["error"]["message"] == "Retailer browser session is not configured."
 
 
+def test_midtown_browser_session_start_surfaces_security_verification(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-security@example.com")
+    status_model = MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=1,
+        status="security_verification_required",
+        message="Midtown requires security verification.",
+        current_url="https://www.midtowncomics.com/verify",
+        orders_url="https://www.midtowncomics.com/account/orders",
+        authenticated=False,
+        order_count=0,
+        last_updated_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr("app.api.retailer_browser.start_midtown_browser_session", lambda session, owner_user_id: status_model)
+
+    response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["status"] == "security_verification_required"
+    assert response.json()["session"]["message"] == "Midtown requires security verification."
+
+
 @pytest.mark.parametrize(
     ("raised_error", "expected_status", "expected_detail"),
     [

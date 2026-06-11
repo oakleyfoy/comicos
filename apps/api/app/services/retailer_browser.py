@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from app.services.retailer_sync.midtown_account_sync import (
     _has_midtown_challenge,
     _load_recent_order_details,
     _midtown_login,
+    MidtownNeedsAttentionError,
     _parse_midtown_detail_or_raise,
     _requires_midtown_login,
     _save_session_state,
@@ -51,6 +53,13 @@ def utc_now() -> datetime:
 def _log_event(event: str, **fields: Any) -> None:
     payload = {"event": event, **fields}
     LOGGER.info("midtown_browser_session %s", json.dumps(payload, default=str, sort_keys=True))
+
+
+def _playwright_version() -> str | None:
+    try:
+        return package_version("playwright")
+    except PackageNotFoundError:
+        return None
 
 
 def _browser_state_path(account_id: int) -> Path:
@@ -129,6 +138,26 @@ class MidtownBrowserOrders:
     orders: list[dict[str, Any]]
 
 
+def _security_verification_status(
+    *,
+    account: RetailerAccount,
+    current_url: str | None,
+    orders_url: str = MIDTOWN_ORDERS_URL,
+    order_count: int = 0,
+) -> MidtownBrowserStatus:
+    return MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=int(account.id or 0),
+        status="security_verification_required",
+        message="Midtown requires security verification.",
+        current_url=current_url or MIDTOWN_LOGIN_URL,
+        orders_url=orders_url,
+        authenticated=False,
+        order_count=order_count,
+        last_updated_at=utc_now(),
+    )
+
+
 def _session_context_kwargs(account_id: int) -> dict[str, Any]:
     _ensure_session_state_root()
     context_kwargs = {
@@ -156,12 +185,27 @@ def _session_context_kwargs(account_id: int) -> dict[str, Any]:
     return context_kwargs
 
 
-def _launch_midtown_browser(*, playwright, account_id: int):
-    _log_event("playwright_launch_attempt", account_id=account_id, headless=True)
+def _launch_midtown_browser(*, playwright, account_id: int, launch_args: dict[str, Any] | None = None):
+    browser_type = playwright.chromium
+    executable_path = getattr(browser_type, "executable_path", None)
+    _log_event(
+        "playwright_launch_attempt",
+        account_id=account_id,
+        headless=True,
+        playwright_version=_playwright_version(),
+        browser_type=getattr(browser_type, "name", "chromium"),
+        browser_executable_path=str(executable_path) if executable_path else None,
+        launch_args=launch_args or {"headless": True},
+    )
     try:
-        browser = playwright.chromium.launch(headless=True)
+        browser = browser_type.launch(headless=True, **(launch_args or {}))
     except Exception as exc:
-        LOGGER.exception("midtown_browser_session playwright_launch_failed account_id=%s", account_id)
+        LOGGER.exception(
+            "midtown_browser_session playwright_launch_failed account_id=%s executable_path=%s launch_args=%s",
+            account_id,
+            executable_path,
+            launch_args or {"headless": True},
+        )
         raise RetailerBrowserEnvironmentError("Playwright Chromium failed to launch.") from exc
     _log_event("playwright_launch_success", account_id=account_id)
     return browser
@@ -179,14 +223,25 @@ def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[Midtown
         raise RetailerBrowserConfigurationError("Retailer browser session is not configured.")
 
     _ensure_session_state_root()
-    _log_event("midtown_browser_init_start", account_id=int(account.id), owner_user_id=int(account.owner_user_id or 0))
+    _log_event(
+        "midtown_browser_init_start",
+        account_id=int(account.id),
+        owner_user_id=int(account.owner_user_id or 0),
+        session_directory=str(SESSION_STATE_ROOT),
+        storage_state_path=str(Path(SESSION_STATE_ROOT) / f"midtown-account-{int(account.id)}.json"),
+        playwright_version=_playwright_version(),
+    )
     password = decrypt_retailer_password(account.encrypted_password)
     state_path = Path(SESSION_STATE_ROOT) / f"midtown-account-{int(account.id)}.json"
     status = "ready"
     orders: list[MidtownOrderHistoryEntry] = []
 
     with sync_playwright() as playwright:
-        browser = _launch_midtown_browser(playwright=playwright, account_id=int(account.id))
+        browser = _launch_midtown_browser(
+            playwright=playwright,
+            account_id=int(account.id),
+            launch_args={"headless": True},
+        )
         context = browser.new_context(**_session_context_kwargs(int(account.id)))
         page = context.new_page()
         try:
@@ -200,15 +255,50 @@ def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[Midtown
             page.wait_for_load_state("networkidle")
             if _requires_midtown_login(page):
                 _log_event("midtown_browser_login_required", account_id=int(account.id), current_url=page.url)
-                _midtown_login(page, username=account.username, password=password)
-                _log_event("midtown_browser_storage_state_save_start", account_id=int(account.id), path=str(state_path))
-                _save_session_state(context, account_id=int(account.id))
-                _log_event("midtown_browser_storage_state_save_success", account_id=int(account.id), path=str(state_path))
-                page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
-                page.wait_for_load_state("networkidle")
+                try:
+                    _midtown_login(page, username=account.username, password=password)
+                    _log_event("midtown_browser_storage_state_save_start", account_id=int(account.id), path=str(state_path))
+                    _save_session_state(context, account_id=int(account.id))
+                    _log_event("midtown_browser_storage_state_save_success", account_id=int(account.id), path=str(state_path))
+                    page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
+                    page.wait_for_load_state("networkidle")
+                except MidtownNeedsAttentionError as exc:
+                    _log_event(
+                        "midtown_browser_security_verification_required",
+                        account_id=int(account.id),
+                        current_url=page.url,
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                    )
+                    status = "security_verification_required"
+                    _write_browser_state(
+                        int(account.id),
+                        {
+                            "status": status,
+                            "current_url": page.url or MIDTOWN_LOGIN_URL,
+                            "orders_url": MIDTOWN_ORDERS_URL,
+                            "order_count": 0,
+                            "authenticated": False,
+                            "message": str(exc),
+                            "last_updated_at": utc_now().isoformat(),
+                        },
+                    )
+                    return status, orders
             if _has_midtown_challenge(page):
                 _log_event("midtown_browser_security_challenge_detected", account_id=int(account.id), current_url=page.url)
-                status = "needs_attention"
+                status = "security_verification_required"
+                _write_browser_state(
+                    int(account.id),
+                    {
+                        "status": status,
+                        "current_url": page.url or MIDTOWN_LOGIN_URL,
+                        "orders_url": MIDTOWN_ORDERS_URL,
+                        "order_count": len(orders),
+                        "authenticated": False,
+                        "message": "Midtown requires security verification.",
+                        "last_updated_at": utc_now().isoformat(),
+                    },
+                )
             else:
                 orders = parse_midtown_order_history(page.content())
                 status = "ready" if orders else "empty"
@@ -252,6 +342,14 @@ def start_midtown_browser_session(
     try:
         status, orders = _ensure_midtown_session(account)
         state = _read_browser_state(int(account.id or 0))
+        if status in {"needs_attention", "security_verification_required"}:
+            current_url = state.get("current_url") or MIDTOWN_LOGIN_URL
+            return _security_verification_status(
+                account=account,
+                current_url=current_url,
+                orders_url=str(state.get("orders_url") or MIDTOWN_ORDERS_URL),
+                order_count=int(state.get("order_count") or 0),
+            )
         result = MidtownBrowserStatus(
             retailer="midtown",
             account_id=int(account.id or 0),
@@ -274,7 +372,13 @@ def start_midtown_browser_session(
     except (RetailerBrowserConfigurationError, RetailerBrowserStateError, RetailerBrowserEnvironmentError):
         raise
     except Exception as exc:
-        LOGGER.exception("midtown_browser_session_start_failed owner_user_id=%s", owner_user_id)
+        LOGGER.exception(
+            "midtown_browser_session_start_failed owner_user_id=%s account_id=%s error_type=%s error_message=%s",
+            owner_user_id,
+            getattr(account, "id", None),
+            type(exc).__name__,
+            str(exc),
+        )
         raise RetailerBrowserEnvironmentError("Midtown browser initialization failed.") from exc
 
 
@@ -294,10 +398,23 @@ def get_midtown_browser_session_status(
             last_updated_at = datetime.fromisoformat(str(state["last_updated_at"]))
         except ValueError:
             last_updated_at = None
+    status = str(state.get("status") or "idle")
+    if status in {"needs_attention", "security_verification_required"}:
+        return MidtownBrowserStatus(
+            retailer="midtown",
+            account_id=int(account.id or 0),
+            status="security_verification_required",
+            message="Midtown requires security verification.",
+            current_url=state.get("current_url") or MIDTOWN_LOGIN_URL,
+            orders_url=str(state.get("orders_url") or MIDTOWN_ORDERS_URL),
+            authenticated=False,
+            order_count=int(state.get("order_count") or 0),
+            last_updated_at=last_updated_at,
+        )
     return MidtownBrowserStatus(
         retailer="midtown",
         account_id=int(account.id or 0),
-        status=str(state.get("status") or "idle"),
+        status=status,
         message=state.get("message"),
         current_url=state.get("current_url"),
         orders_url=str(state.get("orders_url") or MIDTOWN_ORDERS_URL),
@@ -314,6 +431,17 @@ def list_midtown_browser_orders(
 ) -> MidtownBrowserOrders:
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
     status, orders = _ensure_midtown_session(account)
+    state = _read_browser_state(int(account.id or 0))
+    if status in {"needs_attention", "security_verification_required"}:
+        return MidtownBrowserOrders(
+            status=_security_verification_status(
+                account=account,
+                current_url=state.get("current_url") or MIDTOWN_LOGIN_URL,
+                orders_url=str(state.get("orders_url") or MIDTOWN_ORDERS_URL),
+                order_count=int(state.get("order_count") or 0),
+            ),
+            orders=[],
+        )
     normalized_orders = [
         {
             "retailer_order_number": order.retailer_order_number,
@@ -325,7 +453,6 @@ def list_midtown_browser_orders(
         }
         for order in orders
     ]
-    state = _read_browser_state(int(account.id or 0))
     state.update(
         {
             "status": status,
@@ -413,9 +540,7 @@ def capture_midtown_browser_order(
                     account_id=int(account.id or 0),
                     current_url=page.url,
                 )
-                raise RetailerBrowserEnvironmentError(
-                    "Midtown presented a CAPTCHA or security challenge."
-                )
+                raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
             detail = _parse_midtown_detail_or_raise(
                 page.content(),
                 fallback_order_number=history_entry.retailer_order_number,
