@@ -13,6 +13,7 @@ from app.services.retailer_browser import MidtownBrowserStatus
 from app.services.retailer_browser import _launch_midtown_browser
 from app.services.retailer_browser import (
     MidtownBrowserBusyError,
+    MidtownNeedsAttentionError,
     RetailerBrowserConfigurationError,
     RetailerBrowserEnvironmentError,
     RetailerBrowserStateError,
@@ -483,6 +484,162 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
     assert frame_payload["image_bytes_size"] > 0
     assert frame_payload["page_url"] == "https://www.midtowncomics.com/account/orders"
     assert frame_payload["session"]["live_session_active"] is True
+
+
+def _install_midtown_fake_browser(
+    monkeypatch,
+    *,
+    login_url="https://www.midtowncomics.com/login",
+    login_side_effect=None,
+    screenshot_side_effect=None,
+):
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = login_url
+            self.viewport_size = {"width": 1440, "height": 1100}
+
+        def goto(self, url, wait_until="domcontentloaded"):
+            self.url = url
+
+        def wait_for_load_state(self, state, timeout=None):
+            return None
+
+        def content(self):
+            return "<html><body>login</body></html>"
+
+        def screenshot(self, type="jpeg", quality=75):
+            if screenshot_side_effect is not None:
+                screenshot_side_effect()
+            return b"fake-image-bytes"
+
+        def is_closed(self):
+            return False
+
+        def title(self):
+            return "Midtown"
+
+        def evaluate(self, *args, **kwargs):
+            return {"tag": None, "name": None, "type": None, "placeholder": None}
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self):
+            return self.page
+
+        def storage_state(self, path):
+            return None
+
+        def close(self):
+            pass
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+
+        def new_context(self, **kwargs):
+            return self.context
+
+        def close(self):
+            pass
+
+    class FakeChromium:
+        executable_path = "C:/fake/chrome.exe"
+        name = "chromium"
+
+        def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeSyncPlaywright:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeSyncPlaywright())
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
+    monkeypatch.setattr("app.services.retailer_browser.parse_midtown_order_history", lambda html: [])
+    monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+    monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
+
+    def fake_login(page, *, username, password):
+        if login_side_effect is not None:
+            login_side_effect()
+        page.url = "https://www.midtowncomics.com/account/orders"
+
+    monkeypatch.setattr("app.services.retailer_browser._midtown_login", fake_login)
+
+
+def _connect_midtown_account(client, token) -> None:
+    client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+            "display_name": "Midtown Comics",
+            "sync_enabled": True,
+        },
+    )
+
+
+def test_midtown_browser_session_start_returns_security_state_on_captcha(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-start-captcha@example.com")
+    _connect_midtown_account(client, token)
+
+    def raise_challenge():
+        raise MidtownNeedsAttentionError("Midtown requires security verification.")
+
+    _install_midtown_fake_browser(monkeypatch, login_side_effect=raise_challenge)
+
+    response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["status"] == "security_verification_required"
+
+
+def test_midtown_browser_session_frame_serves_screenshot_during_security_verification(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-frame-captcha@example.com")
+    _connect_midtown_account(client, token)
+
+    def raise_challenge():
+        raise MidtownNeedsAttentionError("Midtown requires security verification.")
+
+    _install_midtown_fake_browser(monkeypatch, login_side_effect=raise_challenge)
+
+    response = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["session"]["status"] == "security_verification_required"
+    assert payload["image_data_url"].startswith("data:image/jpeg;base64,")
+    assert payload["image_bytes_size"] > 0
+    assert payload["frame_available"] is True
+
+
+def test_midtown_browser_session_frame_never_500_when_capture_fails(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-frame-fail@example.com")
+    _connect_midtown_account(client, token)
+
+    def raise_capture():
+        raise RuntimeError("screenshot exploded")
+
+    # No cached screenshot exists for this fresh account, so a capture failure
+    # must degrade to a controlled no_frame_available response rather than 500.
+    monkeypatch.setattr("app.services.retailer_browser._read_last_screenshot", lambda account_id: None)
+    _install_midtown_fake_browser(monkeypatch, screenshot_side_effect=raise_capture)
+
+    response = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["session"]["status"] == "no_frame_available"
+    assert payload["frame_available"] is False
+    assert payload["image_data_url"] == ""
 
 
 def test_midtown_browser_click_replay_supports_typing(client, monkeypatch) -> None:

@@ -23,6 +23,8 @@ type ConsumerSessionCopy = {
 const FRAME_POLL_INTERVAL_MS = 3000;
 const FRAME_REQUEST_TIMEOUT_MS = 12000;
 const FRAME_BUSY_BACKOFF_MS = 9000;
+const FRAME_MAX_CONSECUTIVE_FAILURES = 3;
+const FRAME_UNAVAILABLE_MESSAGE = "Midtown browser temporarily unavailable. Retry.";
 
 function detectSecurityVerification(session: MidtownBrowserSessionResponse | null): boolean {
   const browserSession = session?.session ?? null;
@@ -116,11 +118,13 @@ export function MidtownBrowserSessionPage() {
   const [isPollingFrame, setIsPollingFrame] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [frameError, setFrameError] = useState<string | null>(null);
+  const [frameUnavailable, setFrameUnavailable] = useState(false);
   const shouldNavigateOnReadyRef = useRef(false);
   const isMountedRef = useRef(true);
   const browserPanelRef = useRef<HTMLDivElement | null>(null);
   const frameRequestInFlightRef = useRef(false);
   const frameBackoffUntilRef = useRef(0);
+  const frameFailureCountRef = useRef(0);
 
   const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
   const browserSession = session?.session ?? null;
@@ -161,6 +165,10 @@ export function MidtownBrowserSessionPage() {
       }
       setFrame(response);
       setSession({ session: response.session });
+      // A controlled 200 response (including security_verification_required and
+      // frame_capture_failed) is a healthy round-trip, so reset failure tracking.
+      frameFailureCountRef.current = 0;
+      setFrameUnavailable(false);
       setFrameError(null);
       return response;
     } catch (loadError) {
@@ -168,11 +176,20 @@ export function MidtownBrowserSessionPage() {
         return null;
       }
       if (isMidtownBrowserBusy(loadError)) {
+        // Busy is a transient backoff signal, not a hard failure.
         frameBackoffUntilRef.current = Date.now() + FRAME_BUSY_BACKOFF_MS;
         setFrameError("Midtown browser is busy. Retrying shortly.");
-      } else if (loadError instanceof Error && loadError.message === "Timed out while loading the Midtown browser view.") {
+        return null;
+      }
+      if (loadError instanceof Error && loadError.message === "Timed out while loading the Midtown browser view.") {
         frameBackoffUntilRef.current = Date.now() + FRAME_BUSY_BACKOFF_MS;
         setFrameError("Midtown browser is taking longer than expected. Retrying shortly.");
+        return null;
+      }
+      frameFailureCountRef.current += 1;
+      if (frameFailureCountRef.current >= FRAME_MAX_CONSECUTIVE_FAILURES) {
+        setFrameUnavailable(true);
+        setFrameError(FRAME_UNAVAILABLE_MESSAGE);
       } else {
         setFrameError(loadError instanceof Error ? loadError.message : "Unable to load the Midtown browser view.");
       }
@@ -208,7 +225,7 @@ export function MidtownBrowserSessionPage() {
   }, [refreshSessionStatus]);
 
   useEffect(() => {
-    if (!shouldPollFrame) {
+    if (!shouldPollFrame || frameUnavailable) {
       setIsPollingFrame(false);
       return;
     }
@@ -238,7 +255,16 @@ export function MidtownBrowserSessionPage() {
       window.clearInterval(intervalId);
       setIsPollingFrame(false);
     };
-  }, [navigate, refreshFrame, shouldPollFrame]);
+  }, [navigate, refreshFrame, shouldPollFrame, frameUnavailable]);
+
+  const handleRetryFrame = useCallback(async (): Promise<void> => {
+    frameFailureCountRef.current = 0;
+    frameBackoffUntilRef.current = 0;
+    setFrameUnavailable(false);
+    setFrameError(null);
+    setIsPollingFrame(true);
+    await refreshFrame();
+  }, [refreshFrame]);
 
   async function startLiveSession(shouldNavigateWhenReady: boolean): Promise<void> {
     setIsWorking(true);
@@ -468,7 +494,18 @@ export function MidtownBrowserSessionPage() {
         </div>
       ) : null}
 
-      {frameError ? (
+      {frameUnavailable ? (
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-amber-100">{FRAME_UNAVAILABLE_MESSAGE}</p>
+          <button
+            type="button"
+            onClick={() => void handleRetryFrame()}
+            className="self-start rounded-xl bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 sm:self-auto"
+          >
+            Retry
+          </button>
+        </div>
+      ) : frameError ? (
         <div className="mt-6">
           <StatusBanner tone="warning">{frameError}</StatusBanner>
         </div>

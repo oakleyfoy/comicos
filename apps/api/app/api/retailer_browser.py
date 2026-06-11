@@ -222,6 +222,7 @@ def get_midtown_session_frame(
         image_width=frame_payload["image_width"],
         image_height=frame_payload["image_height"],
         captured_at=frame_payload["captured_at"],
+        frame_available=frame_payload.get("frame_available"),
         endpoint_status=frame_payload.get("endpoint_status"),
         image_bytes_size=frame_payload.get("image_bytes_size"),
         page_title=frame_payload.get("page_title"),

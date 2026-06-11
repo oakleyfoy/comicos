@@ -218,6 +218,7 @@ class MidtownBrowserFrameResponse(BaseModel):
     image_width: int
     image_height: int
     captured_at: datetime
+    frame_available: bool | None = None
     endpoint_status: int | None = None
     image_bytes_size: int | None = None
     page_title: str | None = None

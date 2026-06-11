@@ -413,6 +413,7 @@ export interface MidtownBrowserFrameResponse {
   image_width: number;
   image_height: number;
   captured_at: string;
+  frame_available?: boolean | null;
   viewport_width?: number | null;
   viewport_height?: number | null;
   endpoint_status?: number | null;

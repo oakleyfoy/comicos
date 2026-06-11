@@ -118,6 +118,122 @@ def _write_browser_state(account_id: int, payload: dict[str, Any]) -> None:
         raise RetailerBrowserStateError("Could not create retailer session directory.") from exc
 
 
+def _screenshot_cache_path(account_id: int) -> Path:
+    return SESSION_STATE_ROOT / f"midtown-account-{account_id}.frame.json"
+
+
+def _write_last_screenshot(account_id: int, image_data_url: str, width: int, height: int) -> None:
+    """Best-effort persistence of the most recent successful screenshot. Never raises."""
+    if not image_data_url:
+        return
+    path = _screenshot_cache_path(account_id)
+    try:
+        _ensure_session_state_root()
+        path.write_text(
+            json.dumps(
+                {
+                    "image_data_url": image_data_url,
+                    "image_width": int(width),
+                    "image_height": int(height),
+                    "captured_at": utc_now().isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+    except Exception as exc:  # noqa: BLE001 - caching must never break the request
+        _log_event("midtown_screenshot_cache_write_failed", account_id=account_id, error=str(exc))
+
+
+def _read_last_screenshot(account_id: int) -> dict[str, Any] | None:
+    """Best-effort read of the last successful screenshot. Never raises."""
+    path = _screenshot_cache_path(account_id)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - missing/corrupt cache is non-fatal
+        _log_event("midtown_screenshot_cache_read_failed", account_id=account_id, error=str(exc))
+        return None
+    if not isinstance(data, dict) or not data.get("image_data_url"):
+        return None
+    return data
+
+
+def _capture_or_cached_frame(account_id: int, page) -> tuple[str, int, int, str]:
+    """Capture a live screenshot, falling back to the last cached one.
+
+    Returns ``(image_data_url, width, height, source)`` where ``source`` is one of
+    ``"live"``, ``"cache"``, or ``"none"``. Never raises.
+    """
+    if page is not None:
+        try:
+            image_data_url, width, height = _live_session_frame_data_url(page)
+            _write_last_screenshot(account_id, image_data_url, width, height)
+            return image_data_url, width, height, "live"
+        except Exception as exc:  # noqa: BLE001 - screenshot failure must never crash the endpoint
+            LOGGER.exception(
+                "midtown_live_session_frame_capture_failed account_id=%s error_type=%s error_message=%s",
+                account_id,
+                type(exc).__name__,
+                exc,
+            )
+    cached = _read_last_screenshot(account_id)
+    if cached:
+        return (
+            str(cached.get("image_data_url") or ""),
+            int(cached.get("image_width") or 1440),
+            int(cached.get("image_height") or 1100),
+            "cache",
+        )
+    return "", 1440, 1100, "none"
+
+
+def _assemble_frame_payload(
+    account_id: int,
+    status: "MidtownBrowserStatus",
+    *,
+    image_data_url: str,
+    image_width: int,
+    image_height: int,
+    frame_available: bool,
+    page=None,
+) -> dict[str, Any]:
+    page_title: str | None = None
+    page_url: str | None = status.current_url
+    if page is not None:
+        try:
+            page_title = page.title() if hasattr(page, "title") else None
+        except Exception:  # noqa: BLE001 - diagnostics only
+            page_title = None
+        page_url = getattr(page, "url", None) or status.current_url
+    image_bytes_size = len(image_data_url.split(",", 1)[1]) if "," in image_data_url else 0
+    return {
+        "session": status,
+        "image_data_url": image_data_url,
+        "image_width": int(image_width or status.viewport_width or 1440),
+        "image_height": int(image_height or status.viewport_height or 1100),
+        "viewport_width": status.viewport_width,
+        "viewport_height": status.viewport_height,
+        "live_session_active": True,
+        "captured_at": utc_now().isoformat(),
+        "endpoint_status": 200,
+        "image_bytes_size": image_bytes_size,
+        "frame_available": frame_available,
+        "page_title": page_title,
+        "page_url": page_url,
+        "browser_exists": page is not None,
+        "context_exists": page is not None,
+        "page_exists": page is not None,
+        "process_id": os.getpid(),
+        "registry_contains_account": _midtown_live_metadata_contains(account_id),
+        "registry_session_count": len(_MIDTOWN_LIVE_SESSION_METADATA),
+        "active_element_tag": status.active_element_tag,
+        "active_element_name": status.active_element_name,
+        "active_element_type": status.active_element_type,
+        "active_element_placeholder": status.active_element_placeholder,
+    }
+
+
 def _history_item_count(fragment: str) -> int | None:
     import re
 
@@ -1021,20 +1137,6 @@ def _midtown_attempt_assisted_login(
         _best_effort_wait_for_load(page)
     return True
 
-    if not state_path.exists():
-        _write_browser_state(
-            int(account.id),
-            {
-                "status": status,
-                "current_url": MIDTOWN_LOGIN_URL,
-                "orders_url": MIDTOWN_ORDERS_URL,
-                "order_count": len(orders),
-                "authenticated": False,
-                "last_updated_at": utc_now().isoformat(),
-            },
-        )
-    return status, orders
-
 
 def start_midtown_browser_session(
     session: Session,
@@ -1053,14 +1155,40 @@ def start_midtown_browser_session(
                 or state.get("last_known_url")
                 or MIDTOWN_ORDERS_URL
             )
+            post_login_url = str(state.get("orders_url") or MIDTOWN_ORDERS_URL)
             with _midtown_request_browser(account, target_url=target_url) as (_browser, context, page):
-                _midtown_attempt_assisted_login(
-                    account,
-                    context=context,
-                    page=page,
-                    post_login_url=target_url,
-                    save_session_state=True,
-                )
+                try:
+                    _midtown_attempt_assisted_login(
+                        account,
+                        context=context,
+                        page=page,
+                        post_login_url=post_login_url,
+                        save_session_state=True,
+                    )
+                except MidtownNeedsAttentionError as exc:
+                    # CAPTCHA / security challenge is a valid application state, not a failure.
+                    LOGGER.warning(
+                        "midtown_browser_session_start_security_verification account_id=%s error_type=%s error_message=%s",
+                        account_id,
+                        type(exc).__name__,
+                        exc,
+                        exc_info=True,
+                    )
+                    _log_event(
+                        "midtown_browser_security_verification_required",
+                        account_id=account_id,
+                        current_url=getattr(page, "url", None),
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                    )
+                    result = _security_verification_status(
+                        account=account,
+                        current_url=getattr(page, "url", None) or MIDTOWN_LOGIN_URL,
+                        order_count=0,
+                    )
+                    _apply_midtown_viewport_metadata(result, page)
+                    _write_browser_state(account_id, _browser_state_payload(result))
+                    return result
                 result = _build_midtown_status_from_page(account, page)
             _log_event(
                 "midtown_browser_session_start_success",
@@ -1074,6 +1202,25 @@ def start_midtown_browser_session(
         raise
     except MidtownBrowserBusyError:
         raise
+    except MidtownNeedsAttentionError as exc:
+        # Defensive: a security challenge must NEVER be reported as an environment failure.
+        LOGGER.warning(
+            "midtown_browser_session_start_security_verification_late account_id=%s error_type=%s error_message=%s",
+            account_id,
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        result = _security_verification_status(
+            account=account,
+            current_url=MIDTOWN_LOGIN_URL,
+            order_count=0,
+        )
+        try:
+            _write_browser_state(account_id, _browser_state_payload(result))
+        except Exception:  # noqa: BLE001 - persistence is best-effort here
+            pass
+        return result
     except Exception as exc:
         LOGGER.exception(
             "midtown_browser_session_start_failed owner_user_id=%s account_id=%s error_type=%s error_message=%s",
@@ -1319,81 +1466,136 @@ def get_midtown_browser_live_frame(
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
     account_id = int(account.id or 0)
     with _midtown_single_operation(account_id):
-        state = _read_browser_state(account_id)
-        target_url = str(
-            state.get("current_url")
-            or state.get("orders_url")
-            or state.get("last_known_url")
-            or MIDTOWN_ORDERS_URL
-        )
-        post_login_url = str(state.get("orders_url") or MIDTOWN_ORDERS_URL)
-        with _midtown_request_browser(account, target_url=target_url) as (_browser, context, page):
-            try:
-                _midtown_attempt_assisted_login(
-                    account,
-                    context=context,
-                    page=page,
-                    post_login_url=post_login_url,
-                    save_session_state=True,
-                )
-            except MidtownNeedsAttentionError as exc:
-                _log_event(
-                    "midtown_browser_security_verification_required",
-                    account_id=account_id,
-                    current_url=page.url,
-                    error_type=type(exc).__name__,
-                    error_message=str(exc),
-                )
-                return _security_verification_status(
-                    account=account,
-                    current_url=page.url or MIDTOWN_LOGIN_URL,
-                    order_count=0,
-                )
-            status = _build_midtown_status_from_page(account, page)
-            image_data_url, width, height = _live_session_frame_data_url(page)
-            image_bytes_size = len(image_data_url.split(",", 1)[1]) if "," in image_data_url else 0
-            page_title = page.title() if hasattr(page, "title") else None
-            page_url = getattr(page, "url", None)
-            payload = {
-                "session": status,
-                "image_data_url": image_data_url,
-                "image_width": width,
-                "image_height": height,
-                "viewport_width": status.viewport_width,
-                "viewport_height": status.viewport_height,
-                "live_session_active": True,
-                "captured_at": utc_now().isoformat(),
-                "endpoint_status": 200,
-                "image_bytes_size": image_bytes_size,
-                "page_title": page_title,
-                "page_url": page_url,
-                "browser_exists": True,
-                "context_exists": True,
-                "page_exists": True,
-                "process_id": os.getpid(),
-                "registry_contains_account": _midtown_live_metadata_contains(account_id),
-                "registry_session_count": len(_MIDTOWN_LIVE_SESSION_METADATA),
-                "active_element_tag": status.active_element_tag,
-                "active_element_name": status.active_element_name,
-                "active_element_type": status.active_element_type,
-                "active_element_placeholder": status.active_element_placeholder,
-            }
-            _log_event(
-                "midtown_live_session_frame",
-                account_id=account_id,
-                endpoint_status=200,
-                image_bytes_size=image_bytes_size,
-                captured_at=payload["captured_at"],
-                page_url=page_url,
-                page_title=page_title,
-                viewport_width=status.viewport_width,
-                viewport_height=status.viewport_height,
-                browser_exists=True,
-                context_exists=True,
-                page_exists=True,
-                registry_contains_account=_midtown_live_metadata_contains(account_id),
+        try:
+            state = _read_browser_state(account_id)
+            target_url = str(
+                state.get("current_url")
+                or state.get("orders_url")
+                or state.get("last_known_url")
+                or MIDTOWN_ORDERS_URL
             )
-            return payload
+            post_login_url = str(state.get("orders_url") or MIDTOWN_ORDERS_URL)
+            with _midtown_request_browser(account, target_url=target_url) as (_browser, context, page):
+                security_required = False
+                try:
+                    _midtown_attempt_assisted_login(
+                        account,
+                        context=context,
+                        page=page,
+                        post_login_url=post_login_url,
+                        save_session_state=True,
+                    )
+                except MidtownNeedsAttentionError as exc:
+                    # CAPTCHA / security challenge is a normal workflow state. Keep serving
+                    # the live screenshot so the user can complete verification in-panel.
+                    LOGGER.warning(
+                        "midtown_live_session_frame_security_verification account_id=%s error_type=%s error_message=%s",
+                        account_id,
+                        type(exc).__name__,
+                        exc,
+                        exc_info=True,
+                    )
+                    _log_event(
+                        "midtown_browser_security_verification_required",
+                        account_id=account_id,
+                        current_url=getattr(page, "url", None),
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                    )
+                    status = _security_verification_status(
+                        account=account,
+                        current_url=getattr(page, "url", None) or MIDTOWN_LOGIN_URL,
+                        order_count=0,
+                    )
+                    _apply_midtown_viewport_metadata(status, page)
+                    security_required = True
+
+                if not security_required:
+                    status = _build_midtown_status_from_page(account, page)
+
+                image_data_url, width, height, source = _capture_or_cached_frame(account_id, page)
+
+                if not security_required:
+                    if source == "none":
+                        status.status = "no_frame_available"
+                        status.message = "Midtown browser screenshot is temporarily unavailable."
+                    elif source == "cache":
+                        status.status = "frame_capture_failed"
+                        status.message = "Showing the last Midtown screenshot while the live view recovers."
+
+                payload = _assemble_frame_payload(
+                    account_id,
+                    status,
+                    image_data_url=image_data_url,
+                    image_width=width,
+                    image_height=height,
+                    frame_available=source != "none",
+                    page=page,
+                )
+                _log_event(
+                    "midtown_live_session_frame",
+                    account_id=account_id,
+                    endpoint_status=200,
+                    image_bytes_size=payload["image_bytes_size"],
+                    captured_at=payload["captured_at"],
+                    page_url=payload["page_url"],
+                    page_title=payload["page_title"],
+                    status=status.status,
+                    frame_source=source,
+                    registry_contains_account=_midtown_live_metadata_contains(account_id),
+                )
+                return payload
+        except (RetailerBrowserConfigurationError, MidtownBrowserBusyError):
+            raise
+        except Exception as exc:  # noqa: BLE001 - the frame endpoint must never crash
+            LOGGER.exception(
+                "midtown_live_session_frame_unhandled account_id=%s error_type=%s error_message=%s",
+                account_id,
+                type(exc).__name__,
+                exc,
+            )
+            return _offline_frame_payload(account, account_id)
+
+
+def _offline_frame_payload(account: RetailerAccount, account_id: int) -> dict[str, Any]:
+    """Build a controlled frame payload when the live browser cannot be reached.
+
+    Serves the last successful screenshot when available; otherwise returns a
+    ``no_frame_available`` payload so the endpoint stays at HTTP 200.
+    """
+    try:
+        state = _read_browser_state(account_id)
+    except Exception:  # noqa: BLE001 - corrupt state must not block a controlled response
+        state = {}
+    if state:
+        status = _status_from_browser_state(account, state)
+    else:
+        status = _login_required_status(account=account, current_url=MIDTOWN_LOGIN_URL)
+    status.live_session_active = True
+    status.process_id = os.getpid()
+
+    cached = _read_last_screenshot(account_id)
+    if cached and cached.get("image_data_url"):
+        status.status = "frame_capture_failed"
+        status.message = "Showing the last Midtown screenshot while the live view recovers."
+        image_data_url = str(cached.get("image_data_url") or "")
+        width = int(cached.get("image_width") or 1440)
+        height = int(cached.get("image_height") or 1100)
+        frame_available = True
+    else:
+        status.status = "no_frame_available"
+        status.message = "Midtown browser is temporarily unavailable. Retry shortly."
+        image_data_url, width, height, frame_available = "", 1440, 1100, False
+
+    return _assemble_frame_payload(
+        account_id,
+        status,
+        image_data_url=image_data_url,
+        image_width=width,
+        image_height=height,
+        frame_available=frame_available,
+        page=None,
+    )
 
 
 def click_midtown_browser_live_session(
