@@ -188,23 +188,25 @@ def _session_context_kwargs(account_id: int) -> dict[str, Any]:
 def _launch_midtown_browser(*, playwright, account_id: int, launch_args: dict[str, Any] | None = None):
     browser_type = playwright.chromium
     executable_path = getattr(browser_type, "executable_path", None)
+    args = dict(launch_args or {})
+    args.setdefault("headless", True)
     _log_event(
         "playwright_launch_attempt",
         account_id=account_id,
-        headless=True,
+        headless=bool(args.get("headless", True)),
         playwright_version=_playwright_version(),
         browser_type=getattr(browser_type, "name", "chromium"),
         browser_executable_path=str(executable_path) if executable_path else None,
-        launch_args=launch_args or {"headless": True},
+        launch_args=args,
     )
     try:
-        browser = browser_type.launch(headless=True, **(launch_args or {}))
+        browser = browser_type.launch(**args)
     except Exception as exc:
         LOGGER.exception(
             "midtown_browser_session playwright_launch_failed account_id=%s executable_path=%s launch_args=%s",
             account_id,
             executable_path,
-            launch_args or {"headless": True},
+            args,
         )
         raise RetailerBrowserEnvironmentError("Playwright Chromium failed to launch.") from exc
     _log_event("playwright_launch_success", account_id=account_id)

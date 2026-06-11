@@ -9,6 +9,7 @@ from test_inventory import auth_headers, register_and_login
 
 from app.services.retailer_browser import MidtownBrowserOrders as MidtownBrowserOrdersModel
 from app.services.retailer_browser import MidtownBrowserStatus
+from app.services.retailer_browser import _launch_midtown_browser
 from app.services.retailer_browser import (
     RetailerBrowserConfigurationError,
     RetailerBrowserEnvironmentError,
@@ -164,3 +165,31 @@ def test_midtown_browser_session_start_maps_browser_errors(
     response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
     assert response.status_code == expected_status, response.text
     assert response.json()["error"]["message"] == expected_detail
+
+
+def test_launch_midtown_browser_applies_headless_default_once(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeBrowserType:
+        name = "chromium"
+        executable_path = "C:/fake/chrome.exe"
+
+        def launch(self, **kwargs):
+            captured.update(kwargs)
+            return object()
+
+    class FakePlaywright:
+        chromium = FakeBrowserType()
+
+    monkeypatch.setattr("app.services.retailer_browser._playwright_version", lambda: "1.50.0")
+
+    browser = _launch_midtown_browser(
+        playwright=FakePlaywright(),
+        account_id=7,
+        launch_args={"headless": True, "slow_mo": 25},
+    )
+
+    assert browser is not None
+    assert captured["headless"] is True
+    assert captured["slow_mo"] == 25
+    assert list(captured.keys()).count("headless") == 1
