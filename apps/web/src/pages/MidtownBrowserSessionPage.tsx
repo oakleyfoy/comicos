@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { apiClient, type MidtownBrowserSessionResponse } from "../api/client";
@@ -6,17 +6,49 @@ import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) {
-    return "Unknown";
+type ConsumerSessionCopy = {
+  status: string;
+  helperText: string;
+  primaryActionLabel: string;
+  primaryActionKind: "continue" | "verification";
+};
+
+function detectSecurityVerification(session: MidtownBrowserSessionResponse | null): boolean {
+  const message = `${session?.session.message ?? ""} ${session?.session.status ?? ""} ${session?.session.current_url ?? ""}`.toLowerCase();
+  return (
+    message.includes("captcha") ||
+    message.includes("verification") ||
+    message.includes("challenge") ||
+    message.includes("verify")
+  );
+}
+
+function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null): ConsumerSessionCopy {
+  const browserSession = session?.session ?? null;
+  if (detectSecurityVerification(session)) {
+    return {
+      status: "Security Verification Required",
+      helperText: "Midtown requires a security verification before ComicOS can access your orders.",
+      primaryActionLabel: "Open Midtown Verification",
+      primaryActionKind: "verification",
+    };
   }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+
+  if (browserSession?.authenticated) {
+    return {
+      status: "Connected",
+      helperText: "You?re signed in. ComicOS can continue to your Midtown orders.",
+      primaryActionLabel: "Continue to Midtown",
+      primaryActionKind: "continue",
+    };
+  }
+
+  return {
+    status: "Login Required",
+    helperText: "Sign in to Midtown so ComicOS can load your orders.",
+    primaryActionLabel: "Continue to Midtown",
+    primaryActionKind: "continue",
+  };
 }
 
 export function MidtownBrowserSessionPage() {
@@ -36,7 +68,7 @@ export function MidtownBrowserSessionPage() {
     void refreshSession()
       .catch((loadError) => {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load Midtown session.");
+          setError(loadError instanceof Error ? loadError.message : "Unable to load Midtown.");
         }
       })
       .finally(() => {
@@ -49,28 +81,38 @@ export function MidtownBrowserSessionPage() {
     };
   }, []);
 
-  async function handleStartSession(): Promise<void> {
+  const browserSession = session?.session ?? null;
+  const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
+
+  async function handlePrimaryAction(): Promise<void> {
     setIsWorking(true);
     setError(null);
     try {
-      const response = await apiClient.startMidtownBrowserSession();
-      setSession(response);
+      if (consumerCopy.primaryActionKind === "verification") {
+        const verificationUrl = browserSession?.current_url ?? browserSession?.orders_url;
+        if (verificationUrl) {
+          window.open(verificationUrl, "_blank", "noreferrer");
+        }
+        await refreshSession();
+        return;
+      }
+
+      await apiClient.startMidtownBrowserSession();
+      await refreshSession();
       navigate("/connected-retailers/midtown/orders");
     } catch (startError) {
-      setError(startError instanceof Error ? startError.message : "Unable to start Midtown session.");
+      setError(startError instanceof Error ? startError.message : "Unable to continue to Midtown.");
     } finally {
       setIsWorking(false);
     }
   }
 
-  const browserSession = session?.session ?? null;
-
   return (
     <AppShell>
       <PageHeader
         eyebrow="Connected Retailers"
-        title="Midtown Browser Session"
-        description="ComicOS keeps a Midtown session for this connected account and loads your orders inside the app."
+        title="Midtown Comics"
+        description="Continue your Midtown session and choose an order to add to your inventory."
       />
 
       {error ? (
@@ -83,83 +125,33 @@ export function MidtownBrowserSessionPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
-            <h2 className="text-2xl font-semibold text-white">Login and load your orders in ComicOS</h2>
-            <p className="max-w-2xl text-sm text-slate-300">
-              ComicOS maintains your Midtown session for this account. Start the session, then open
-              the order history page to choose an order to add to your inventory.
-            </p>
+            <h2 className="text-2xl font-semibold text-white">{consumerCopy.status}</h2>
+            <p className="max-w-2xl text-sm text-slate-300">{consumerCopy.helperText}</p>
+            {consumerCopy.primaryActionKind === "verification" ? (
+              <p className="max-w-2xl rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                Midtown requires a security verification before ComicOS can access your orders.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => void handleStartSession()}
+              onClick={() => void handlePrimaryAction()}
               disabled={isLoading || isWorking}
               className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isWorking ? "Starting..." : "Start Midtown Session"}
+              {isWorking ? "Working..." : consumerCopy.primaryActionLabel}
             </button>
             <button
               type="button"
-              onClick={() => void refreshSession()}
+              onClick={() => navigate("/connected-retailers/midtown/orders")}
               disabled={isLoading || isWorking}
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Refresh Status
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/connected-retailers")}
-              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
-            >
-              Back to Connected Retailers
+              View Orders
             </button>
           </div>
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Session Status</p>
-            <p className="mt-2 text-lg font-semibold text-white">{browserSession?.status ?? "idle"}</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Authenticated</p>
-            <p className="mt-2 text-lg font-semibold text-white">
-              {browserSession?.authenticated ? "Yes" : "No"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Orders Loaded</p>
-            <p className="mt-2 text-lg font-semibold text-white">
-              {browserSession?.order_count ?? 0}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Last Updated</p>
-            <p className="mt-2 text-sm font-semibold text-white">
-              {formatDateTime(browserSession?.last_updated_at)}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
-          <span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-100">
-            Retailer website is the source of truth
-          </span>
-          <span className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-cyan-100">
-            Session persists across refreshes
-          </span>
-        </div>
-
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => navigate("/connected-retailers/midtown/orders")}
-            disabled={isLoading || isWorking}
-            className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Open Order History
-          </button>
         </div>
       </section>
     </AppShell>
