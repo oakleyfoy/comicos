@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,22 +76,24 @@ describe("MidtownBrowserSessionPage", () => {
       },
     });
 
-    render(
+    const { container, findByRole } = render(
       <MemoryRouter>
         <MidtownBrowserSessionPage />
       </MemoryRouter>,
     );
+    const scoped = within(container);
 
-    expect(await screen.findByRole("heading", { name: "Midtown Comics" })).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue to Midtown" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View Orders" })).toBeInTheDocument();
+    expect(await findByRole("heading", { name: "Midtown Comics" })).toBeInTheDocument();
+    expect(scoped.getByText("Connected")).toBeInTheDocument();
+    expect(scoped.getAllByRole("button", { name: "Continue to Midtown" }).length).toBeGreaterThan(0);
+    expect(scoped.getByRole("button", { name: "View Orders" })).toBeInTheDocument();
+    expect(scoped.getByTitle("Midtown browser workspace")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue to Midtown" }));
+    fireEvent.click(scoped.getAllByRole("button", { name: "Continue to Midtown" })[0]);
 
     await waitFor(() => {
       expect(apiClient.startMidtownBrowserSession).toHaveBeenCalledTimes(1);
-      expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown/orders");
+      expect(scoped.getByTitle("Midtown browser workspace")).toBeInTheDocument();
     });
   });
 
@@ -110,19 +112,20 @@ describe("MidtownBrowserSessionPage", () => {
       },
     });
 
-    render(
+    const { container, findByRole } = render(
       <MemoryRouter>
         <MidtownBrowserSessionPage />
       </MemoryRouter>,
     );
+    const scoped = within(container);
 
-    expect(await screen.findByRole("button", { name: "Open Midtown Verification" })).toBeInTheDocument();
-    expect(screen.getAllByText(/Midtown requires a security verification/i).length).toBeGreaterThan(0);
+    expect(await findByRole("heading", { name: "Security Verification Required" })).toBeInTheDocument();
+    expect(scoped.getByTitle("Midtown browser workspace")).toHaveAttribute("src", "https://www.midtowncomics.com/verify");
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Midtown Verification" }));
+    fireEvent.click(scoped.getAllByRole("button", { name: "Open Midtown Verification" })[0]);
 
     await waitFor(() => {
-      expect(window.open).toHaveBeenCalledWith("https://www.midtowncomics.com/verify", "_blank", "noreferrer");
+      expect(scoped.getByTitle("Midtown browser workspace")).toHaveAttribute("src", "https://www.midtowncomics.com/verify");
     });
   });
 });

@@ -14,8 +14,11 @@ type ConsumerSessionCopy = {
 };
 
 function detectSecurityVerification(session: MidtownBrowserSessionResponse | null): boolean {
-  const message = `${session?.session.message ?? ""} ${session?.session.status ?? ""} ${session?.session.current_url ?? ""}`.toLowerCase();
+  const browserSession = session?.session ?? null;
+  const message = `${browserSession?.message ?? ""} ${browserSession?.status ?? ""} ${browserSession?.current_url ?? ""}`.toLowerCase();
   return (
+    browserSession?.status === "needs_attention" ||
+    message.includes("needs_attention") ||
     message.includes("captcha") ||
     message.includes("verification") ||
     message.includes("challenge") ||
@@ -54,13 +57,23 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
 export function MidtownBrowserSessionPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<MidtownBrowserSessionResponse | null>(null);
+  const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function resolveBrowserUrl(response: MidtownBrowserSessionResponse | null): string | null {
+    const browserSession = response?.session ?? null;
+    if (!browserSession) {
+      return null;
+    }
+    return browserSession.current_url ?? browserSession.orders_url ?? null;
+  }
+
   async function refreshSession(): Promise<void> {
     const response = await apiClient.getMidtownBrowserSessionStatus();
     setSession(response);
+    setBrowserUrl(resolveBrowserUrl(response));
   }
 
   useEffect(() => {
@@ -89,17 +102,13 @@ export function MidtownBrowserSessionPage() {
     setError(null);
     try {
       if (consumerCopy.primaryActionKind === "verification") {
-        const verificationUrl = browserSession?.current_url ?? browserSession?.orders_url;
-        if (verificationUrl) {
-          window.open(verificationUrl, "_blank", "noreferrer");
-        }
-        await refreshSession();
+        setBrowserUrl(browserSession?.current_url ?? browserSession?.orders_url ?? null);
         return;
       }
 
-      await apiClient.startMidtownBrowserSession();
-      await refreshSession();
-      navigate("/connected-retailers/midtown/orders");
+      const response = await apiClient.startMidtownBrowserSession();
+      setSession(response);
+      setBrowserUrl(resolveBrowserUrl(response));
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Unable to continue to Midtown.");
     } finally {
@@ -146,12 +155,56 @@ export function MidtownBrowserSessionPage() {
             <button
               type="button"
               onClick={() => navigate("/connected-retailers/midtown/orders")}
-              disabled={isLoading || isWorking}
+              disabled={isLoading || isWorking || !browserSession?.authenticated}
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               View Orders
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl shadow-black/20">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-2">
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Browser</p>
+            <p className="text-sm text-slate-300">
+              {consumerCopy.primaryActionKind === "verification"
+                ? "Complete Midtown security verification here."
+                : browserSession?.authenticated
+                  ? "Your Midtown account is ready. Choose an order below."
+                  : "Use this area to sign in to Midtown and continue to your orders."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handlePrimaryAction()}
+            disabled={isLoading || isWorking}
+            className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {consumerCopy.primaryActionLabel}
+          </button>
+        </div>
+
+        <div className="mt-4 min-h-[720px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90">
+          {browserUrl ? (
+            <iframe
+              key={browserUrl}
+              title="Midtown browser workspace"
+              src={browserUrl}
+              className="h-[720px] w-full border-0 bg-slate-950"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="flex min-h-[720px] items-center justify-center p-8 text-center">
+              <div className="max-w-lg space-y-3">
+                <p className="text-lg font-semibold text-white">Midtown browser workspace</p>
+                <p className="text-sm text-slate-300">
+                  Click Continue to Midtown to open the login and order history view here.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </AppShell>
