@@ -70,8 +70,8 @@ describe("ConnectedRetailersPage", () => {
     expect(screen.getAllByText("Midtown Comics").length).toBeGreaterThan(0);
     expect(screen.getByText(/Status: Connected/i)).toBeInTheDocument();
     expect(screen.getByText(/Last successful session:/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Midtown Browser" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View Midtown Orders" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load My Midtown Orders" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Live Browser (Fallback)" })).toBeInTheDocument();
   });
 
   it("keeps the legacy tools collapsed by default", async () => {

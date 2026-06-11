@@ -59,7 +59,7 @@ describe("ConnectedRetailersPage Midtown browser entry", () => {
     vi.spyOn(apiClient, "getRetailerAccountSyncRuns").mockResolvedValue({ items: [] });
   });
 
-  it("routes into the Midtown browser session flow", async () => {
+  it("routes into the Midtown order flow with the live browser as fallback", async () => {
     render(
       <MemoryRouter>
         <ConnectedRetailersPage />
@@ -67,9 +67,9 @@ describe("ConnectedRetailersPage Midtown browser entry", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Connected Retailers" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open Midtown Browser" }));
-    expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown");
-    fireEvent.click(screen.getByRole("button", { name: "View Midtown Orders" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load My Midtown Orders" }));
     expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown/orders");
+    fireEvent.click(screen.getByRole("button", { name: "Open Live Browser (Fallback)" }));
+    expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown");
   });
 });

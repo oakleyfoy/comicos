@@ -125,6 +125,8 @@ export function MidtownBrowserSessionPage() {
   const frameRequestInFlightRef = useRef(false);
   const frameBackoffUntilRef = useRef(0);
   const frameFailureCountRef = useRef(0);
+  const verificationCompleteRef = useRef(false);
+  const sawUnauthenticatedRef = useRef(false);
 
   const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
   const browserSession = session?.session ?? null;
@@ -265,6 +267,23 @@ export function MidtownBrowserSessionPage() {
     setIsPollingFrame(true);
     await refreshFrame();
   }, [refreshFrame]);
+
+  // The live browser is verification-only now. Once the user clears the Midtown
+  // security check (unauthenticated -> authenticated), hand control back to the
+  // in-app order list so the backend reloads orders. We require having seen an
+  // unauthenticated state first so an already-signed-in visit isn't bounced away.
+  useEffect(() => {
+    const status = frameSession?.status ?? "";
+    const verified = frameSession?.authenticated === true || ["ready", "connected"].includes(status);
+    if (!verified) {
+      sawUnauthenticatedRef.current = true;
+      return;
+    }
+    if (sawUnauthenticatedRef.current && !verificationCompleteRef.current) {
+      verificationCompleteRef.current = true;
+      navigate("/connected-retailers/midtown/orders");
+    }
+  }, [frameSession, navigate]);
 
   async function startLiveSession(shouldNavigateWhenReady: boolean): Promise<void> {
     setIsWorking(true);
@@ -484,9 +503,22 @@ export function MidtownBrowserSessionPage() {
     <AppShell>
       <PageHeader
         eyebrow="Connected Retailers"
-        title="Midtown Comics"
-        description="Continue your Midtown session and choose an order to add to your inventory."
+        title="Midtown security verification"
+        description="Use this live browser only to clear a Midtown security check. Once you're verified, ComicOS loads your orders automatically."
       />
+
+      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-300">
+          This is the fallback browser. Your normal flow is the in-app order list.
+        </p>
+        <button
+          type="button"
+          onClick={() => void handleViewOrders()}
+          className="self-start rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5 sm:self-auto"
+        >
+          Back to My Orders
+        </button>
+      </div>
 
       {error ? (
         <div className="mt-6">

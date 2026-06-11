@@ -585,10 +585,11 @@ export function ConnectedRetailersPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
-            <h2 className="text-2xl font-semibold text-white">Open Midtown inside ComicOS</h2>
+            <h2 className="text-2xl font-semibold text-white">Load your Midtown orders</h2>
             <p className="max-w-2xl text-sm text-slate-300">
-              ComicOS keeps your Midtown session, loads order history in-app, and lets you pick an
-              order without leaving this workspace.
+              ComicOS signs in to Midtown with your saved credentials, pulls your order history, and lists
+              it here so you can pick an order to capture. The live browser is only needed if Midtown asks
+              for a one-time security check.
             </p>
             <div className="flex flex-wrap gap-3 pt-1 text-sm text-slate-200">
               <span className={`inline-flex rounded-full border px-3 py-1 ${statusBadgeClass(account?.status ?? "pending")}`}>
@@ -602,17 +603,17 @@ export function ConnectedRetailersPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => navigate("/connected-retailers/midtown")}
+              onClick={() => navigate("/connected-retailers/midtown/orders")}
               className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Open Midtown Browser
+              Load My Midtown Orders
             </button>
             <button
               type="button"
-              onClick={() => navigate("/connected-retailers/midtown/orders")}
-              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+              onClick={() => navigate("/connected-retailers/midtown")}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
             >
-              View Midtown Orders
+              Open Live Browser (Fallback)
             </button>
           </div>
         </div>

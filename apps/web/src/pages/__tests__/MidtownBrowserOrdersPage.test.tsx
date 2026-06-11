@@ -97,4 +97,37 @@ describe("MidtownBrowserOrdersPage", () => {
       expect(navigateMock).toHaveBeenCalledWith("/retailer-orders/17");
     });
   });
+
+  it("shows the security verification handoff and can retry loading orders", async () => {
+    const ordersSpy = vi.spyOn(apiClient, "goToMidtownBrowserOrders").mockResolvedValue({
+      session: {
+        retailer: "midtown",
+        account_id: 1,
+        status: "security_verification_required",
+        message: "Midtown requires security verification.",
+        current_url: "https://www.midtowncomics.com/verify",
+        orders_url: "https://www.midtowncomics.com/account-settings",
+        authenticated: false,
+        order_count: 0,
+        last_updated_at: "2026-06-10T20:00:00Z",
+      },
+      orders: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MidtownBrowserOrdersPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Security verification required" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete Security Verification" }));
+    expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry Loading Orders" }));
+    await waitFor(() => {
+      expect(ordersSpy).toHaveBeenCalledTimes(2);
+    });
+  });
 });

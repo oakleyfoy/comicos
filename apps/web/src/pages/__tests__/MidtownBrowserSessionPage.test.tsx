@@ -109,7 +109,7 @@ describe("MidtownBrowserSessionPage", () => {
     );
     const scoped = within(container);
 
-    expect(await findByRole("heading", { name: "Midtown Comics" })).toBeInTheDocument();
+    expect(await findByRole("heading", { name: "Midtown security verification" })).toBeInTheDocument();
     expect(await scoped.findByAltText("Midtown browser workspace")).toHaveAttribute(
       "src",
       "data:image/jpeg;base64,abc123",
