@@ -24,6 +24,7 @@ from app.services.retailer_browser import (
     click_midtown_browser_live_session,
     RetailerBrowserConfigurationError,
     RetailerBrowserEnvironmentError,
+    MidtownBrowserBusyError,
     RetailerBrowserStateError,
     get_midtown_browser_session_status,
     get_midtown_browser_live_frame,
@@ -54,6 +55,10 @@ def _status_schema(
     process_id: int | None = None,
     registry_contains_account: bool | None = None,
     registry_session_count: int | None = None,
+    active_element_tag: str | None = None,
+    active_element_name: str | None = None,
+    active_element_type: str | None = None,
+    active_element_placeholder: str | None = None,
 ) -> MidtownBrowserSessionStatusRead:
     return MidtownBrowserSessionStatusRead(
         retailer=status.retailer,
@@ -78,6 +83,16 @@ def _status_schema(
             registry_session_count
             if registry_session_count is not None
             else getattr(status, "registry_session_count", None),
+        active_element_tag=
+            active_element_tag if active_element_tag is not None else getattr(status, "active_element_tag", None),
+        active_element_name=
+            active_element_name if active_element_name is not None else getattr(status, "active_element_name", None),
+        active_element_type=
+            active_element_type if active_element_type is not None else getattr(status, "active_element_type", None),
+        active_element_placeholder=
+            active_element_placeholder
+            if active_element_placeholder is not None
+            else getattr(status, "active_element_placeholder", None),
     )
 
 
@@ -100,6 +115,9 @@ def start_midtown_session(
             exc,
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        LOGGER.info("midtown_browser_session_start_busy user_id=%s detail=%s", current_user.id, exc)
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         LOGGER.exception("midtown_browser_session_start_state_error user_id=%s", current_user.id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
@@ -119,6 +137,8 @@ def get_midtown_session_status(
         status_model = get_midtown_browser_session_status(session, owner_user_id=int(current_user.id))
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserSessionResponse(session=_status_schema(status_model))
@@ -134,6 +154,8 @@ def go_to_midtown_orders(
         orders_model = list_midtown_browser_orders(session, owner_user_id=int(current_user.id))
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except RetailerBrowserEnvironmentError as exc:
@@ -154,6 +176,8 @@ def get_midtown_orders(
         orders_model = list_midtown_browser_orders(session, owner_user_id=int(current_user.id))
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except RetailerBrowserEnvironmentError as exc:
@@ -174,6 +198,8 @@ def get_midtown_session_frame(
         frame_payload = get_midtown_browser_live_frame(session, owner_user_id=int(current_user.id))
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except RetailerBrowserEnvironmentError as exc:
@@ -187,6 +213,10 @@ def get_midtown_session_frame(
             process_id=frame_payload.get("process_id"),
             registry_contains_account=frame_payload.get("registry_contains_account"),
             registry_session_count=frame_payload.get("registry_session_count"),
+            active_element_tag=frame_payload.get("active_element_tag"),
+            active_element_name=frame_payload.get("active_element_name"),
+            active_element_type=frame_payload.get("active_element_type"),
+            active_element_placeholder=frame_payload.get("active_element_placeholder"),
         ),
         image_data_url=frame_payload["image_data_url"],
         image_width=frame_payload["image_width"],
@@ -202,6 +232,10 @@ def get_midtown_session_frame(
         process_id=frame_payload.get("process_id"),
         registry_contains_account=frame_payload.get("registry_contains_account"),
         registry_session_count=frame_payload.get("registry_session_count"),
+        active_element_tag=frame_payload.get("active_element_tag"),
+        active_element_name=frame_payload.get("active_element_name"),
+        active_element_type=frame_payload.get("active_element_type"),
+        active_element_placeholder=frame_payload.get("active_element_placeholder"),
     )
 
 
@@ -220,6 +254,10 @@ def click_midtown_session(
             y=payload.y,
             button=payload.button,
             click_count=payload.click_count,
+            displayed_image_width=payload.displayed_image_width,
+            displayed_image_height=payload.displayed_image_height,
+            viewport_width=payload.viewport_width,
+            viewport_height=payload.viewport_height,
         )
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -311,6 +349,8 @@ def capture_midtown_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RetailerBrowserConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MidtownBrowserBusyError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
     except RetailerBrowserStateError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except RetailerBrowserEnvironmentError as exc:

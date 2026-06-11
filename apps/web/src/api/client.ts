@@ -426,6 +426,10 @@ export interface MidtownBrowserClickRequest {
   y: number;
   button?: "left" | "right" | "middle";
   click_count?: number;
+  displayed_image_width?: number | null;
+  displayed_image_height?: number | null;
+  viewport_width?: number | null;
+  viewport_height?: number | null;
 }
 
 export interface MidtownBrowserTypeRequest {

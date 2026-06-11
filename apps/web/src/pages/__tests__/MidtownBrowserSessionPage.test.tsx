@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../api/apiError";
 import { apiClient } from "../../api/client";
 import { MidtownBrowserSessionPage } from "../MidtownBrowserSessionPage";
 
@@ -114,11 +115,32 @@ describe("MidtownBrowserSessionPage", () => {
       "data:image/jpeg;base64,abc123",
     );
 
-    fireEvent.click(scoped.getByAltText("Midtown browser workspace"));
+    const image = scoped.getByAltText("Midtown browser workspace");
+    Object.defineProperty(image, "getBoundingClientRect", {
+      value: () =>
+        ({
+          left: 0,
+          top: 0,
+          width: 720,
+          height: 550,
+          right: 720,
+          bottom: 550,
+        }) as DOMRect,
+    });
+
+    fireEvent.click(image, { clientX: 180, clientY: 275 });
     fireEvent.keyDown(scoped.getByRole("application"), { key: "A" });
 
     await waitFor(() => {
       expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledWith({
+        x: 360,
+        y: 550,
+        displayed_image_width: 1440,
+        displayed_image_height: 1100,
+        viewport_width: 1440,
+        viewport_height: 1100,
+      });
       expect(typeSpy).toHaveBeenCalledWith({ text: "A" });
     });
   });
@@ -190,6 +212,37 @@ describe("MidtownBrowserSessionPage", () => {
     await waitFor(() => {
       expect(apiClient.retryMidtownBrowserSession).toHaveBeenCalledTimes(1);
       expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown/orders");
+    });
+  });
+
+  it("backs off when the Midtown browser frame is busy", async () => {
+    vi.spyOn(apiClient, "getMidtownBrowserSessionStatus").mockResolvedValue({
+      session: {
+        retailer: "midtown",
+        account_id: 1,
+        status: "ready",
+        message: "Ready",
+        current_url: "https://www.midtowncomics.com/account/orders",
+        orders_url: "https://www.midtowncomics.com/account/orders",
+        authenticated: true,
+        order_count: 5,
+        last_updated_at: "2026-06-10T20:00:00Z",
+        live_session_active: true,
+      },
+    });
+    const frameSpy = vi.spyOn(apiClient, "getMidtownBrowserLiveFrame").mockRejectedValue(
+      new ApiError("Midtown browser is busy. Try again shortly.", 429),
+    );
+
+    render(
+      <MemoryRouter>
+        <MidtownBrowserSessionPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(frameSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Midtown browser is busy. Retrying shortly.")).toBeInTheDocument();
     });
   });
 });

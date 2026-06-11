@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -6,6 +6,7 @@ import {
   type MidtownBrowserFrameResponse,
   type MidtownBrowserSessionResponse,
 } from "../api/client";
+import { ApiError } from "../api/apiError";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -18,6 +19,10 @@ type ConsumerSessionCopy = {
   secondaryActionLabel: string | null;
   secondaryActionKind: "retry" | null;
 };
+
+const FRAME_POLL_INTERVAL_MS = 3000;
+const FRAME_REQUEST_TIMEOUT_MS = 12000;
+const FRAME_BUSY_BACKOFF_MS = 9000;
 
 function detectSecurityVerification(session: MidtownBrowserSessionResponse | null): boolean {
   const browserSession = session?.session ?? null;
@@ -77,6 +82,31 @@ function getInputTextFromKey(key: string): string | null {
   return key;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error("Timed out while loading the Midtown browser view."));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
+function isMidtownBrowserBusy(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 429;
+  }
+  return error instanceof Error && error.message.toLowerCase().includes("busy");
+}
+
 export function MidtownBrowserSessionPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<MidtownBrowserSessionResponse | null>(null);
@@ -89,6 +119,8 @@ export function MidtownBrowserSessionPage() {
   const shouldNavigateOnReadyRef = useRef(false);
   const isMountedRef = useRef(true);
   const browserPanelRef = useRef<HTMLDivElement | null>(null);
+  const frameRequestInFlightRef = useRef(false);
+  const frameBackoffUntilRef = useRef(0);
 
   const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
   const browserSession = session?.session ?? null;
@@ -115,8 +147,15 @@ export function MidtownBrowserSessionPage() {
   }, []);
 
   const refreshFrame = useCallback(async (): Promise<MidtownBrowserFrameResponse | null> => {
+    if (frameRequestInFlightRef.current) {
+      return null;
+    }
+    if (Date.now() < frameBackoffUntilRef.current) {
+      return null;
+    }
+    frameRequestInFlightRef.current = true;
     try {
-      const response = await apiClient.getMidtownBrowserLiveFrame();
+      const response = await withTimeout(apiClient.getMidtownBrowserLiveFrame(), FRAME_REQUEST_TIMEOUT_MS);
       if (!isMountedRef.current) {
         return response;
       }
@@ -128,8 +167,18 @@ export function MidtownBrowserSessionPage() {
       if (!isMountedRef.current) {
         return null;
       }
-      setFrameError(loadError instanceof Error ? loadError.message : "Unable to load the Midtown browser view.");
+      if (isMidtownBrowserBusy(loadError)) {
+        frameBackoffUntilRef.current = Date.now() + FRAME_BUSY_BACKOFF_MS;
+        setFrameError("Midtown browser is busy. Retrying shortly.");
+      } else if (loadError instanceof Error && loadError.message === "Timed out while loading the Midtown browser view.") {
+        frameBackoffUntilRef.current = Date.now() + FRAME_BUSY_BACKOFF_MS;
+        setFrameError("Midtown browser is taking longer than expected. Retrying shortly.");
+      } else {
+        setFrameError(loadError instanceof Error ? loadError.message : "Unable to load the Midtown browser view.");
+      }
       return null;
+    } finally {
+      frameRequestInFlightRef.current = false;
     }
   }, []);
 
@@ -167,6 +216,9 @@ export function MidtownBrowserSessionPage() {
     setIsPollingFrame(true);
 
     const poll = async () => {
+      if (frameRequestInFlightRef.current || Date.now() < frameBackoffUntilRef.current) {
+        return;
+      }
       const response = await refreshFrame();
       if (cancelled || !response) {
         return;
@@ -180,7 +232,7 @@ export function MidtownBrowserSessionPage() {
     void poll();
     const intervalId = window.setInterval(() => {
       void poll();
-    }, 1500);
+    }, FRAME_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
@@ -286,7 +338,14 @@ export function MidtownBrowserSessionPage() {
     setIsWorking(true);
     setError(null);
     try {
-      const response = await apiClient.clickMidtownBrowserSession({ x, y });
+      const response = await apiClient.clickMidtownBrowserSession({
+        x,
+        y,
+        displayed_image_width: frame.image_width,
+        displayed_image_height: frame.image_height,
+        viewport_width: frame.viewport_width ?? frame.image_width,
+        viewport_height: frame.viewport_height ?? frame.image_height,
+      });
       if (!isMountedRef.current) {
         return;
       }
@@ -533,6 +592,10 @@ export function MidtownBrowserSessionPage() {
             <p>Browser exists: {liveDiagnostics?.browser_exists === true ? "true" : String(liveDiagnostics?.browser_exists ?? "null")}</p>
             <p>Context exists: {liveDiagnostics?.context_exists === true ? "true" : String(liveDiagnostics?.context_exists ?? "null")}</p>
             <p>Page exists: {liveDiagnostics?.page_exists === true ? "true" : String(liveDiagnostics?.page_exists ?? "null")}</p>
+            <p>Active element tag: {liveDiagnostics?.active_element_tag ?? "unknown"}</p>
+            <p>Active element name: {liveDiagnostics?.active_element_name ?? "unknown"}</p>
+            <p>Active element type: {liveDiagnostics?.active_element_type ?? "unknown"}</p>
+            <p>Active element placeholder: {liveDiagnostics?.active_element_placeholder ?? "unknown"}</p>
           </div>
         </details>
       </section>

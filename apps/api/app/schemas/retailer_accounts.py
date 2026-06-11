@@ -191,6 +191,10 @@ class MidtownBrowserSessionStatusRead(BaseModel):
     process_id: int | None = None
     registry_contains_account: bool | None = None
     registry_session_count: int | None = None
+    active_element_tag: str | None = None
+    active_element_name: str | None = None
+    active_element_type: str | None = None
+    active_element_placeholder: str | None = None
 
 
 class MidtownBrowserSessionResponse(BaseModel):
@@ -224,6 +228,10 @@ class MidtownBrowserFrameResponse(BaseModel):
     process_id: int | None = None
     registry_contains_account: bool | None = None
     registry_session_count: int | None = None
+    active_element_tag: str | None = None
+    active_element_name: str | None = None
+    active_element_type: str | None = None
+    active_element_placeholder: str | None = None
 
 
 class MidtownBrowserClickRequest(BaseModel):
@@ -231,6 +239,10 @@ class MidtownBrowserClickRequest(BaseModel):
     y: float = Field(ge=0)
     button: Literal["left", "right", "middle"] = "left"
     click_count: int = Field(default=1, ge=1, le=2)
+    displayed_image_width: int | None = Field(default=None, ge=0)
+    displayed_image_height: int | None = Field(default=None, ge=0)
+    viewport_width: int | None = Field(default=None, ge=0)
+    viewport_height: int | None = Field(default=None, ge=0)
 
 
 class MidtownBrowserTypeRequest(BaseModel):

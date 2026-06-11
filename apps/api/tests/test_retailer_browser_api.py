@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -11,6 +12,7 @@ from app.services.retailer_browser import MidtownBrowserOrders as MidtownBrowser
 from app.services.retailer_browser import MidtownBrowserStatus
 from app.services.retailer_browser import _launch_midtown_browser
 from app.services.retailer_browser import (
+    MidtownBrowserBusyError,
     RetailerBrowserConfigurationError,
     RetailerBrowserEnvironmentError,
     RetailerBrowserStateError,
@@ -233,6 +235,9 @@ def test_midtown_session_start_does_not_fail_when_networkidle_times_out(client, 
         def new_page(self):
             return self.page
 
+        def storage_state(self, path):
+            return None
+
         def close(self):
             pass
 
@@ -332,6 +337,19 @@ def test_midtown_browser_session_frame_returns_image_and_metadata(client, monkey
     assert payload["session"]["live_session_active"] is True
 
 
+def test_midtown_browser_session_frame_returns_429_when_busy(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-frame-busy@example.com")
+
+    def raise_busy(session, owner_user_id):
+        raise MidtownBrowserBusyError("Midtown browser is busy. Try again shortly.")
+
+    monkeypatch.setattr("app.api.retailer_browser.get_midtown_browser_live_frame", raise_busy)
+
+    response = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
+    assert response.status_code == 429, response.text
+    assert "Midtown browser is busy. Try again shortly." in response.text
+
+
 def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch) -> None:
     token = register_and_login(client, "midtown-browser-rehydrate@example.com")
     client.post(
@@ -358,6 +376,8 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
             return None
 
         def content(self):
+            if self.url.endswith("/account/orders"):
+                return "<html><body>orders</body></html>"
             return "<html><body>login</body></html>"
 
         def screenshot(self, type="jpeg", quality=75):
@@ -375,6 +395,9 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
 
         def new_page(self):
             return self.page
+
+        def storage_state(self, path):
+            return None
 
         def close(self):
             pass
@@ -415,6 +438,17 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
     monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
     monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_LIVE_SESSIONS", {})
     monkeypatch.setattr(
+        "app.services.retailer_browser.parse_midtown_order_history",
+        lambda html: [],
+    )
+    login_calls: list[tuple[str, str]] = []
+
+    def fake_midtown_login(page, *, username, password):
+        login_calls.append((username, password))
+        page.url = "https://www.midtowncomics.com/account/orders"
+
+    monkeypatch.setattr("app.services.retailer_browser._midtown_login", fake_midtown_login)
+    monkeypatch.setattr(
         "app.services.retailer_browser._read_browser_state",
         lambda account_id: {
             "status": "login_required",
@@ -430,7 +464,7 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
         },
     )
     monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda *args, **kwargs: None)
-    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: page.url.endswith("/login"))
     monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
 
     response = client.get("/api/v1/retailer-browser/midtown/session/status", headers=auth_headers(token))
@@ -440,14 +474,192 @@ def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch
     assert payload["viewport_width"] == 1440
     assert payload["viewport_height"] == 1100
     assert payload["registry_contains_account"] is True
+    assert login_calls == [("collector@example.com", "supersafe")]
 
     frame = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
     assert frame.status_code == 200, frame.text
     frame_payload = frame.json()
     assert frame_payload["endpoint_status"] == 200
     assert frame_payload["image_bytes_size"] > 0
-    assert frame_payload["page_url"] == "https://www.midtowncomics.com/login"
+    assert frame_payload["page_url"] == "https://www.midtowncomics.com/account/orders"
     assert frame_payload["session"]["live_session_active"] is True
+
+
+def test_midtown_browser_click_replay_supports_typing(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-interaction@example.com")
+    client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+            "display_name": "Midtown Comics",
+            "sync_enabled": True,
+        },
+    )
+
+    state = {
+        "status": "login_required",
+        "current_url": "https://www.midtowncomics.com/login",
+        "orders_url": "https://www.midtowncomics.com/account/orders",
+        "order_count": 0,
+        "authenticated": False,
+        "message": "Midtown login is required.",
+        "last_updated_at": "2026-06-11T17:00:00Z",
+        "viewport_width": 1440,
+        "viewport_height": 1100,
+        "live_session_active": True,
+    }
+    pages: list[object] = []
+
+    class FakeMouse:
+        def __init__(self) -> None:
+            self.clicks: list[tuple[float, float, str, int]] = []
+
+        def click(self, x, y, button="left", click_count=1):
+            self.clicks.append((x, y, button, click_count))
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.typed: list[str] = []
+            self.inserted: list[str] = []
+
+        def type(self, text, delay=0):
+            self.typed.append(text)
+
+        def insert_text(self, text):
+            self.inserted.append(text)
+
+        def press(self, key):
+            self.typed.append(f"[{key}]")
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = state["current_url"]
+            self.viewport_size = {"width": 1440, "height": 1100}
+            self.mouse = FakeMouse()
+            self.keyboard = FakeKeyboard()
+            self.active_element = {
+                "tag": "input",
+                "name": "email",
+                "type": "email",
+                "placeholder": "Email address",
+            }
+
+        def goto(self, url, wait_until="domcontentloaded"):
+            self.url = url
+
+        def wait_for_load_state(self, state_name, timeout=None):
+            return None
+
+        def content(self):
+            return "<html><body><input type='email' name='email' placeholder='Email address'></body></html>"
+
+        def screenshot(self, type="jpeg", quality=75):
+            return b"fake-image-bytes"
+
+        def is_closed(self):
+            return False
+
+        def title(self):
+            return "Midtown Login"
+
+        def evaluate(self, script):
+            return self.active_element
+
+    class FakeContext:
+        def __init__(self, page) -> None:
+            self.page = page
+
+        def new_page(self):
+            return self.page
+
+        def close(self):
+            pass
+
+    class FakeBrowser:
+        def __init__(self, page) -> None:
+            self.context = FakeContext(page)
+
+        def new_context(self, **kwargs):
+            self.context_kwargs = kwargs
+            return self.context
+
+        def close(self):
+            pass
+
+        def is_connected(self):
+            return True
+
+    class FakeChromium:
+        executable_path = "C:/fake/chrome.exe"
+        name = "chromium"
+
+        def launch(self, **kwargs):
+            self.launch_kwargs = kwargs
+            page = FakePage()
+            pages.append(page)
+            return FakeBrowser(page)
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeSyncPlaywright:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    @contextmanager
+    def fake_request_browser(account, *, target_url=None):
+        browser = FakeBrowser(FakePage())
+        page = browser.context.page
+        if target_url is not None:
+            page.goto(target_url)
+        pages.append(page)
+        try:
+            yield browser, browser.context, page
+        finally:
+            pass
+
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeSyncPlaywright())
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_LIVE_SESSIONS", {})
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_LIVE_SESSION_METADATA", {})
+    monkeypatch.setattr("app.services.retailer_browser._read_browser_state", lambda account_id: state)
+    monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda account_id, payload: state.update(payload))
+    monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+    monkeypatch.setattr("app.services.retailer_browser._midtown_request_browser", fake_request_browser)
+
+    click_response = client.post(
+        "/api/v1/retailer-browser/midtown/session/click",
+        headers=auth_headers(token),
+        json={
+            "x": 360,
+            "y": 220,
+            "displayed_image_width": 720,
+            "displayed_image_height": 440,
+            "viewport_width": 1440,
+            "viewport_height": 1100,
+        },
+    )
+    assert click_response.status_code == 200, click_response.text
+    assert state["last_click"]["x"] == 360
+    assert state["last_click"]["y"] == 220
+    assert state["last_click"]["displayed_image_width"] == 720
+    assert pages[0].mouse.clicks[0][:2] == (720.0, 550.0)
+
+    type_response = client.post(
+        "/api/v1/retailer-browser/midtown/session/type",
+        headers=auth_headers(token),
+        json={"text": "collector@example.com"},
+    )
+    assert type_response.status_code == 200, type_response.text
+    assert pages[-1].mouse.clicks[-1][:2] == (720.0, 550.0)
+    assert pages[-1].keyboard.typed[-1] == "collector@example.com"
 
 
 @pytest.mark.parametrize(
