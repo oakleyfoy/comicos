@@ -281,12 +281,32 @@ def list_retailer_orders(
     session: Session,
     *,
     owner_user_id: int,
+    retailer: str | None = None,
+    status: str | None = None,
 ) -> list[RetailerOrderSnapshot]:
-    return session.exec(
+    orders = session.exec(
         select(RetailerOrderSnapshot)
         .where(RetailerOrderSnapshot.owner_user_id == owner_user_id)
         .order_by(RetailerOrderSnapshot.order_date.desc(), RetailerOrderSnapshot.id.desc())
     ).all()
+    if retailer:
+        retailer_key = retailer.strip().casefold()
+        orders = [order for order in orders if order.retailer.casefold() == retailer_key]
+    if status:
+        status_key = status.strip().casefold()
+        orders = [order for order in orders if retailer_order_review_status(order).casefold() == status_key]
+    return orders
+
+
+def retailer_order_review_status(order: RetailerOrderSnapshot) -> str:
+    raw = order.raw_snapshot_json or {}
+    if isinstance(raw, dict):
+        review_status = raw.get("comicos_review_status") or raw.get("review_status")
+        if isinstance(review_status, str) and review_status.strip():
+            return review_status.strip()
+    if order.order_status and order.order_status.strip():
+        return "captured"
+    return "captured"
 
 
 def get_retailer_order_review_draft_id(
@@ -316,6 +336,42 @@ def get_retailer_order_review_draft_id(
     return None
 
 
+def set_retailer_order_review_status(
+    session: Session,
+    *,
+    owner_user_id: int,
+    order_id: int,
+    review_status: str,
+) -> RetailerOrderSnapshot:
+    order = get_retailer_order_for_user_or_404(
+        session, owner_user_id=owner_user_id, order_id=order_id
+    )
+    raw = dict(order.raw_snapshot_json or {})
+    if raw.get("comicos_review_status") != review_status:
+        raw["comicos_review_status"] = review_status
+        raw["comicos_reviewed_at"] = utc_now().isoformat()
+        order.raw_snapshot_json = raw
+        order.updated_at = utc_now()
+        session.add(order)
+        session.commit()
+        session.refresh(order)
+    return order
+
+
+def confirm_retailer_order(
+    session: Session,
+    *,
+    owner_user_id: int,
+    order_id: int,
+) -> RetailerOrderSnapshot:
+    return set_retailer_order_review_status(
+        session,
+        owner_user_id=owner_user_id,
+        order_id=order_id,
+        review_status="confirmed",
+    )
+
+
 def get_retailer_order_for_user_or_404(
     session: Session,
     *,
@@ -338,6 +394,69 @@ def list_retailer_order_items(
         .where(RetailerOrderItemSnapshot.retailer_order_snapshot_id == order_snapshot_id)
         .order_by(RetailerOrderItemSnapshot.id.asc())
     ).all()
+
+
+def build_retailer_order_quality_summary(
+    session: Session,
+    *,
+    order: RetailerOrderSnapshot,
+    items: list[RetailerOrderItemSnapshot] | None = None,
+) -> dict:
+    order_items = items
+    if order_items is None:
+        order_items = list_retailer_order_items(session, order_snapshot_id=int(order.id))
+    item_count = len(order_items)
+    capture_quality_summary_json: dict = {}
+    parser_quality_summary_json: dict = {}
+    sync_runs = session.exec(
+        select(RetailerSyncRun)
+        .where(RetailerSyncRun.retailer_account_id == order.retailer_account_id)
+        .order_by(RetailerSyncRun.started_at.desc(), RetailerSyncRun.id.desc())
+    ).all()
+    for sync_run in sync_runs:
+        summary = sync_run.summary_json or {}
+        if not isinstance(summary, dict):
+            continue
+        capture_reports = summary.get("capture_quality_report")
+        parser_reports = summary.get("parser_quality_report")
+        if isinstance(capture_reports, list):
+            for report in capture_reports:
+                if isinstance(report, dict) and report.get("retailer_order_number") == order.retailer_order_number:
+                    capture_quality_summary_json = report
+                    break
+        if isinstance(parser_reports, list):
+            for report in parser_reports:
+                if isinstance(report, dict) and report.get("retailer_order_number") == order.retailer_order_number:
+                    parser_quality_summary_json = report
+                    break
+        if capture_quality_summary_json or parser_quality_summary_json:
+            break
+    if not parser_quality_summary_json:
+        raw = order.raw_snapshot_json or {}
+        if isinstance(raw, dict):
+            parser_diagnostics = raw.get("parse_diagnostics")
+            if isinstance(parser_diagnostics, dict):
+                parser_quality_summary_json = parser_diagnostics
+    raw_fields_summary_json = {
+        "retailer_order_number": order.retailer_order_number,
+        "retailer": order.retailer,
+        "order_date": order.order_date.isoformat() if order.order_date else None,
+        "order_status": order.order_status,
+        "order_total": str(order.order_total) if order.order_total is not None else None,
+        "source_url": order.source_url,
+        "raw_snapshot_keys": sorted((order.raw_snapshot_json or {}).keys()) if isinstance(order.raw_snapshot_json, dict) else [],
+    }
+    return {
+        "review_status": retailer_order_review_status(order),
+        "item_count": item_count,
+        "cover_image_count": sum(1 for item in order_items if item.image_url),
+        "product_url_count": sum(1 for item in order_items if item.product_url),
+        "price_count": sum(1 for item in order_items if item.unit_price is not None),
+        "release_date_count": sum(1 for item in order_items if item.release_date is not None),
+        "capture_quality_summary_json": capture_quality_summary_json,
+        "parser_quality_summary_json": parser_quality_summary_json,
+        "raw_fields_summary_json": raw_fields_summary_json,
+    }
 
 
 def masked_username_for_account(account: RetailerAccount) -> str:

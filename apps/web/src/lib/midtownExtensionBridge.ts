@@ -3,6 +3,7 @@ export const MIDTOWN_EXTENSION_PING_EVENT = "comicos_midtown_extension_ping";
 export const MIDTOWN_EXTENSION_CAPTURE_REQUEST_EVENT = "comicos_midtown_capture_request";
 export const MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT = "comicos_midtown_capture_result";
 export const MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT = "comicos_midtown_capture_error";
+export const MIDTOWN_EXTENSION_STATUS_EVENT = "comicos_midtown_extension_status";
 
 export interface MidtownExtensionCaptureRequest {
   accountId: number;
@@ -52,6 +53,14 @@ export interface MidtownExtensionCaptureError {
   syncRunId?: number;
 }
 
+export interface MidtownExtensionStatusMessage {
+  stage: "extension_connected" | "midtown_page_detected" | "dom_read_success";
+  message: string;
+  accountId?: number;
+  syncRunId?: number;
+  captureToken?: string;
+}
+
 export function getMidtownExtensionInstallUrl(): string | null {
   const configured = import.meta.env.VITE_MIDTOWN_EXTENSION_INSTALL_URL;
   return typeof configured === "string" && configured.trim().length > 0
@@ -92,4 +101,25 @@ export function isMidtownExtensionCaptureError(data: unknown): data is {
   }
   const record = data as Record<string, unknown>;
   return record.type === MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT && typeof record.message === "string";
+}
+
+export function isMidtownExtensionStatusMessage(data: unknown): data is {
+  type: typeof MIDTOWN_EXTENSION_STATUS_EVENT;
+  stage: MidtownExtensionStatusMessage["stage"];
+  message: string;
+  accountId?: number;
+  syncRunId?: number;
+  captureToken?: string;
+} {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const record = data as Record<string, unknown>;
+  return (
+    record.type === MIDTOWN_EXTENSION_STATUS_EVENT &&
+    (record.stage === "extension_connected" ||
+      record.stage === "midtown_page_detected" ||
+      record.stage === "dom_read_success") &&
+    typeof record.message === "string"
+  );
 }

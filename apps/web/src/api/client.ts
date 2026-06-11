@@ -330,6 +330,15 @@ export interface RetailerOrderSnapshotRead {
   order_total?: string | null;
   source_url?: string | null;
   draft_import_id?: number | null;
+  review_status: string;
+  item_count: number;
+  cover_image_count: number;
+  product_url_count: number;
+  price_count: number;
+  release_date_count: number;
+  capture_quality_summary_json: Record<string, unknown>;
+  parser_quality_summary_json: Record<string, unknown>;
+  raw_fields_summary_json: Record<string, unknown>;
   updated_at: string;
   items: RetailerOrderItemSnapshotRead[];
 }
@@ -344,6 +353,12 @@ export interface RetailerSyncRunListResponse {
 
 export interface RetailerOrderListResponse {
   items: RetailerOrderSnapshotRead[];
+}
+
+export interface RetailerOrderQueryParams {
+  retailer?: string;
+  status?: string;
+  syncRunId?: number;
 }
 
 export interface RetailerAccountSyncRequest {
@@ -20723,12 +20738,23 @@ export const apiClient = {
     );
   },
 
-  getRetailerOrders(): Promise<RetailerOrderListResponse> {
-    return request<RetailerOrderListResponse>("/api/v1/retailer-orders");
+  getRetailerOrders(params?: RetailerOrderQueryParams): Promise<RetailerOrderListResponse> {
+    const query = buildQueryString({
+      retailer: params?.retailer,
+      status: params?.status,
+      syncRunId: params?.syncRunId,
+    });
+    return request<RetailerOrderListResponse>(`/api/v1/retailer-orders${query}`);
   },
 
   getRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
     return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}`);
+  },
+
+  confirmRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
+    return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}/confirm`, {
+      method: "POST",
+    });
   },
 
   createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {

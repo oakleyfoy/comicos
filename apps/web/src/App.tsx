@@ -22,6 +22,8 @@ import { OrdersPage } from "./pages/OrdersPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
+import { RetailerOrderDetailPage } from "./pages/RetailerOrderDetailPage";
+import { RetailerOrdersPage } from "./pages/RetailerOrdersPage";
 import { ScanIngestionPage } from "./pages/ScanIngestionPage";
 import { ScanNormalizationPage } from "./pages/ScanNormalizationPage";
 import { ScanBoundaryPage } from "./pages/ScanBoundaryPage";
@@ -463,6 +465,8 @@ export default function App() {
         <Route path="/orders/:orderId" element={<OrderDetailPage />} />
         <Route path="/orders/import" element={<OrderImportPage />} />
         <Route path="/orders/new" element={<OrderNewPage />} />
+        <Route path="/retailer-orders" element={<RetailerOrdersPage />} />
+        <Route path="/retailer-orders/:id" element={<RetailerOrderDetailPage />} />
         <Route path="/settings/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />

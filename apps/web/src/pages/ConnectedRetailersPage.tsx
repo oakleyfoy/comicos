@@ -17,12 +17,14 @@ import {
   getMidtownExtensionInstallUrl,
   isMidtownExtensionCaptureError,
   isMidtownExtensionCaptureResult,
+  isMidtownExtensionStatusMessage,
   type MidtownExtensionCaptureResult,
   MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT,
   MIDTOWN_EXTENSION_CAPTURE_REQUEST_EVENT,
   MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT,
   MIDTOWN_EXTENSION_PING_EVENT,
   MIDTOWN_EXTENSION_READY_EVENT,
+  MIDTOWN_EXTENSION_STATUS_EVENT,
 } from "../lib/midtownExtensionBridge";
 
 
@@ -82,9 +84,21 @@ type LocalSyncSession = {
   captureTokenExpiresAt: string;
 };
 
+type ExtensionCaptureStatus = {
+  connected: boolean;
+  midtownPageDetected: boolean;
+  domReadSuccess: boolean;
+  lastMessage: string | null;
+};
+
 function readSummaryString(summary: Record<string, unknown>, key: string): string | null {
   const value = summary[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readSummaryNumber(summary: Record<string, unknown>, key: string): number {
+  const value = summary[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function deriveNeedsAttentionState(run: RetailerSyncRunRead | null): NeedsAttentionState {
@@ -106,14 +120,6 @@ function isRetryBlocked(retryAllowedAt: string | null): boolean {
   return Number.isFinite(retryAt.getTime()) && retryAt.getTime() > Date.now();
 }
 
-function readTouchedImportIds(summary: Record<string, unknown>): number[] {
-  const raw = summary["touched_import_ids"];
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw.filter((value): value is number => typeof value === "number");
-}
-
 export function ConnectedRetailersPage() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<RetailerAccountRead[]>([]);
@@ -121,9 +127,18 @@ export function ConnectedRetailersPage() {
   const [runs, setRuns] = useState<RetailerSyncRunRead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
-  const [reviewDraftBusyOrderId, setReviewDraftBusyOrderId] = useState<number | null>(null);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Record<number, boolean>>({});
   const [pendingMidtownCapture, setPendingMidtownCapture] = useState<MidtownExtensionCaptureResult | null>(null);
+  const [latestCompletedRetailerOrders, setLatestCompletedRetailerOrders] = useState<
+    RetailerOrderSnapshotRead[]
+  >([]);
+  const [latestCompletedRun, setLatestCompletedRun] = useState<RetailerSyncRunRead | null>(null);
+  const [extensionCaptureStatus, setExtensionCaptureStatus] = useState<ExtensionCaptureStatus>({
+    connected: false,
+    midtownPageDetected: false,
+    domReadSuccess: false,
+    lastMessage: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAnotherMidtownPrompt, setShowAnotherMidtownPrompt] = useState(false);
@@ -141,11 +156,8 @@ export function ConnectedRetailersPage() {
     () => isRetryBlocked(needsAttention.retryAllowedAt),
     [needsAttention.retryAllowedAt],
   );
-  const latestTouchedImportIds = useMemo(
-    () => readTouchedImportIds((latestRun?.summary_json ?? {}) as Record<string, unknown>),
-    [latestRun],
-  );
-  const latestTouchedImportId = latestTouchedImportIds[0] ?? null;
+  const latestCompletedRetailerOrder = latestCompletedRetailerOrders[0] ?? orders[0] ?? null;
+  const latestCompletedRetailerOrderCount = latestCompletedRetailerOrders.length || (latestCompletedRetailerOrder ? 1 : 0);
   const midtownExtensionInstallUrl = useMemo(() => getMidtownExtensionInstallUrl(), []);
 
   async function loadPage(): Promise<void> {
@@ -186,6 +198,39 @@ export function ConnectedRetailersPage() {
   useEffect(() => {
     function handleExtensionReady(): void {
       setMidtownExtensionReady(true);
+      setExtensionCaptureStatus((current) => ({
+        ...current,
+        connected: true,
+        lastMessage: "Extension Connected",
+      }));
+    }
+
+    function handleExtensionStatus(event: Event): void {
+      const customEvent = event as CustomEvent<unknown>;
+      if (!isMidtownExtensionStatusMessage(customEvent.detail)) {
+        return;
+      }
+      const status = customEvent.detail;
+      setExtensionCaptureStatus((current) => {
+        if (status.stage === "midtown_page_detected") {
+          return {
+            ...current,
+            midtownPageDetected: true,
+            lastMessage: status.message,
+          };
+        }
+        if (status.stage === "dom_read_success") {
+          return {
+            ...current,
+            domReadSuccess: true,
+            lastMessage: status.message,
+          };
+        }
+        return {
+          ...current,
+          lastMessage: status.message,
+        };
+      });
     }
 
     function handleCaptureResult(event: Event): void {
@@ -193,8 +238,17 @@ export function ConnectedRetailersPage() {
       if (!isMidtownExtensionCaptureResult(customEvent.detail)) {
         return;
       }
+      const captureDiagnostics = customEvent.detail.detailPages[0]?.capture_diagnostics ?? null;
+      const htmlLength = captureDiagnostics?.html_length ?? 0;
+      const currentUrl = captureDiagnostics?.current_url ?? "unknown";
       if (!customEvent.detail.captureToken || !customEvent.detail.historyHtml) {
         setError("Midtown extension returned incomplete data. Open the Midtown order detail page and try again.");
+        setIsWorking(false);
+        return;
+      }
+      if (!currentUrl || currentUrl === "unknown" || htmlLength === 0) {
+        setPendingMidtownCapture(null);
+        setError("ComicOS could not read the Midtown page. Make sure the Midtown order tab is open and try again.");
         setIsWorking(false);
         return;
       }
@@ -217,11 +271,13 @@ export function ConnectedRetailersPage() {
     window.addEventListener(MIDTOWN_EXTENSION_READY_EVENT, handleExtensionReady);
     window.addEventListener(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, handleCaptureResult);
     window.addEventListener(MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT, handleCaptureError);
+    window.addEventListener(MIDTOWN_EXTENSION_STATUS_EVENT, handleExtensionStatus);
     window.dispatchEvent(new CustomEvent(MIDTOWN_EXTENSION_PING_EVENT));
     return () => {
       window.removeEventListener(MIDTOWN_EXTENSION_READY_EVENT, handleExtensionReady);
       window.removeEventListener(MIDTOWN_EXTENSION_CAPTURE_RESULT_EVENT, handleCaptureResult);
       window.removeEventListener(MIDTOWN_EXTENSION_CAPTURE_ERROR_EVENT, handleCaptureError);
+      window.removeEventListener(MIDTOWN_EXTENSION_STATUS_EVENT, handleExtensionStatus);
     };
   }, []);
 
@@ -260,12 +316,14 @@ export function ConnectedRetailersPage() {
         pendingMidtownCapture.syncRunId,
         payload,
       );
+      setLatestCompletedRetailerOrders(response.orders);
+      setLatestCompletedRun(response.run);
       setPendingMidtownCapture(null);
       setLocalSyncSession(null);
       setShowAnotherMidtownPrompt(true);
       await refreshWithMessage(
         response.run.status === "succeeded"
-          ? "Midtown order imported. Import another Midtown order or finish when you're done."
+          ? "Midtown order captured. Review the retailer order below or continue with another capture."
           : "Midtown browser capture finished but needs attention.",
       );
     } catch (completeError) {
@@ -284,24 +342,8 @@ export function ConnectedRetailersPage() {
     setIsWorking(false);
   }
 
-  async function openReviewDraftForOrder(order: RetailerOrderSnapshotRead): Promise<void> {
-    const draftImportId = order.draft_import_id;
-    if (draftImportId) {
-      navigate(`/orders/import?importId=${draftImportId}`);
-      return;
-    }
-
-    setReviewDraftBusyOrderId(order.id);
-    setError(null);
-    setSuccess(null);
-    try {
-      const draft = await apiClient.createRetailerOrderReviewDraft(order.id);
-      navigate(`/orders/import?importId=${draft.id}`);
-    } catch (createError) {
-      setError(createError instanceof ApiError ? createError.message : "Unable to create review draft.");
-    } finally {
-      setReviewDraftBusyOrderId(null);
-    }
+  function openRetailerOrderReview(order: RetailerOrderSnapshotRead): void {
+    navigate(`/retailer-orders/${order.id}`);
   }
 
   function toggleOrderDetails(orderId: number): void {
@@ -416,6 +458,14 @@ export function ConnectedRetailersPage() {
     setError(null);
     setSuccess(null);
     setShowAnotherMidtownPrompt(false);
+    setLatestCompletedRetailerOrders([]);
+    setLatestCompletedRun(null);
+    setExtensionCaptureStatus((current) => ({
+      ...current,
+      midtownPageDetected: false,
+      domReadSuccess: false,
+      lastMessage: "Waiting for Midtown tab",
+    }));
     try {
       const response = await apiClient.startRetailerLocalSync(account.id, { limit_orders: 1 });
       const session: LocalSyncSession = {
@@ -629,6 +679,38 @@ export function ConnectedRetailersPage() {
                     {runs[0]?.status ?? "No sync run yet"}
                   </span>
                 </div>
+                <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.16em]">
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${
+                      extensionCaptureStatus.connected
+                        ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                        : "border-slate-600 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    Extension Connected
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${
+                      extensionCaptureStatus.midtownPageDetected
+                        ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200"
+                        : "border-slate-600 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    Midtown Page Detected
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${
+                      extensionCaptureStatus.domReadSuccess
+                        ? "border-violet-400/20 bg-violet-400/10 text-violet-200"
+                        : "border-slate-600 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    DOM Read Success
+                  </span>
+                </div>
+                {extensionCaptureStatus.lastMessage ? (
+                  <p className="text-xs text-slate-400">{extensionCaptureStatus.lastMessage}</p>
+                ) : null}
                 <p>
                   Stored username: <span className="font-medium text-white">{account?.masked_username ?? "None"}</span>
                 </p>
@@ -820,9 +902,9 @@ export function ConnectedRetailersPage() {
                     Open the Midtown order detail page and capture it
                   </p>
                   <p className="mt-2 text-slate-300">
-                    Open the order you want imported, then click{" "}
+                    Open the order you want to review, then click{" "}
                     <span className="font-medium text-white">Capture Midtown Order</span>. After
-                    import, choose whether to import another Midtown order or finish.
+                    capture, review the retailer order directly in ComicOS.
                   </p>
                 </div>
               </div>
@@ -832,30 +914,9 @@ export function ConnectedRetailersPage() {
                   {formatDateTime(localSyncSession.captureTokenExpiresAt)}.
                 </p>
               ) : null}
-              {latestTouchedImportIds.length > 0 ? (
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <p className="text-slate-300">
-                    Last Midtown capture touched {latestTouchedImportIds.length} draft import
-                    {latestTouchedImportIds.length === 1 ? "" : "s"}.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(
-                        latestTouchedImportId
-                          ? `/orders/import?importId=${latestTouchedImportId}`
-                          : "/orders/import",
-                      )
-                    }
-                    className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white hover:bg-white/5"
-                  >
-                    Open Import Review
-                  </button>
-                </div>
-              ) : null}
               {showAnotherMidtownPrompt ? (
                 <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-                  <p className="text-sm text-slate-200">Import another Midtown order?</p>
+                  <p className="text-sm text-slate-200">Capture another Midtown order?</p>
                   <div className="mt-3 flex flex-wrap gap-3">
                     <button
                       type="button"
@@ -863,7 +924,7 @@ export function ConnectedRetailersPage() {
                       onClick={() => void handleImportAnotherMidtownOrder()}
                       className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Yes, import another
+                      Yes, capture another
                     </button>
                     <button
                       type="button"
@@ -880,6 +941,66 @@ export function ConnectedRetailersPage() {
         </div>
       </section>
 
+      {latestCompletedRetailerOrder ? (
+        <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-6 text-slate-100 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-emerald-100/80">
+                Retailer Order Captured
+              </p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                Order #{latestCompletedRetailerOrder.retailer_order_number}
+              </p>
+              <p className="mt-2 text-sm text-emerald-50/90">
+                {latestCompletedRetailerOrder.item_count} item
+                {latestCompletedRetailerOrder.item_count === 1 ? "" : "s"} ·{" "}
+                {formatMoney(latestCompletedRetailerOrder.order_total)} ·{" "}
+                {latestCompletedRetailerOrder.review_status}
+              </p>
+              {latestCompletedRun ? (
+                <p className="mt-2 text-xs text-emerald-50/80">
+                  Sync run #{latestCompletedRun.id} · Capture quality:{" "}
+                  {readSummaryNumber(latestCompletedRetailerOrder.capture_quality_summary_json, "items_detected_client_side")} detected ·{" "}
+                  {readSummaryNumber(latestCompletedRetailerOrder.capture_quality_summary_json, "parser_items_parsed")} parsed
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    latestCompletedRetailerOrderCount === 1
+                      ? `/retailer-orders/${latestCompletedRetailerOrder.id}`
+                      : `/retailer-orders${latestCompletedRun ? `?syncRunId=${latestCompletedRun.id}` : ""}`,
+                  )
+                }
+                className="rounded-xl bg-white px-4 py-2 font-semibold text-slate-950 transition hover:bg-slate-100"
+              >
+                {latestCompletedRetailerOrderCount === 1
+                  ? "Review Retailer Order"
+                  : "Review Retailer Orders"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleImportAnotherMidtownOrder()}
+                disabled={isLoading || isWorking || !account}
+                className="rounded-xl border border-emerald-200/30 px-4 py-2 font-semibold text-emerald-50 transition hover:bg-emerald-200/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Capture Another Midtown Order
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/retailer-orders")}
+                className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white transition hover:bg-white/5"
+              >
+                View All Retailer Orders
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
         <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Recent Orders</p>
@@ -893,11 +1014,11 @@ export function ConnectedRetailersPage() {
                   key={order.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => void openReviewDraftForOrder(order)}
+                  onClick={() => openRetailerOrderReview(order)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      void openReviewDraftForOrder(order);
+                      openRetailerOrderReview(order);
                     }
                   }}
                   className="cursor-pointer rounded-2xl border border-white/10 bg-slate-950/50 p-4 transition hover:border-cyan-300/40 hover:bg-slate-950/70 focus:outline-none focus:ring-2 focus:ring-cyan-300/50"
@@ -913,7 +1034,15 @@ export function ConnectedRetailersPage() {
                       {order.order_status ?? "Unknown"}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm text-slate-300">Total: <span className="font-medium text-white">{formatMoney(order.order_total)}</span></p>
+                  <p className="mt-3 text-sm text-slate-300">
+                    Total: <span className="font-medium text-white">{formatMoney(order.order_total)}</span>
+                  </p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    Review status: <span className="text-slate-200">{order.review_status}</span>
+                  </p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {order.item_count} items · {order.cover_image_count} covers · {order.product_url_count} product links
+                  </p>
                   <div className="mt-3 space-y-2 text-sm text-slate-300">
                     {(expandedOrderIds[order.id] ? order.items : order.items.slice(0, 3)).map((item) => (
                       <div key={item.id} className="flex items-center justify-between gap-4">
@@ -927,18 +1056,13 @@ export function ConnectedRetailersPage() {
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
-                      disabled={reviewDraftBusyOrderId === order.id}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void openReviewDraftForOrder(order);
+                        openRetailerOrderReview(order);
                       }}
-                      className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
                     >
-                      {reviewDraftBusyOrderId === order.id
-                        ? "Opening…"
-                        : order.draft_import_id
-                          ? "Review Import"
-                          : "Create Review Draft"}
+                      Review Order
                     </button>
                     <button
                       type="button"
@@ -950,11 +1074,6 @@ export function ConnectedRetailersPage() {
                     >
                       {expandedOrderIds[order.id] ? "Hide Details" : "View Details"}
                     </button>
-                    {order.draft_import_id ? (
-                      <span className="text-xs uppercase tracking-[0.16em] text-cyan-200/80">
-                        Draft #{order.draft_import_id}
-                      </span>
-                    ) : null}
                   </div>
                 </article>
               ))

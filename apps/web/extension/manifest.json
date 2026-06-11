@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://comicosapp.com/*"],
+      "matches": ["https://comicosapp.com/*", "https://www.midtowncomics.com/*", "https://midtowncomics.com/*"],
       "js": ["content/comicos.js"],
       "run_at": "document_idle"
     }

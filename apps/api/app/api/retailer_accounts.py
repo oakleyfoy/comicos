@@ -25,7 +25,9 @@ from app.schemas.retailer_accounts import (
 )
 from app.schemas.imports import DraftImportRead
 from app.services.retailer_accounts import (
+    build_retailer_order_quality_summary,
     complete_retailer_account_local_sync,
+    confirm_retailer_order,
     delete_retailer_account,
     get_retailer_order_review_draft_id,
     get_retailer_account_for_user_or_404,
@@ -85,6 +87,7 @@ def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
         owner_user_id=int(order.owner_user_id),
         retailer_order_number=order.retailer_order_number,
     )
+    quality_summary = build_retailer_order_quality_summary(session, order=order, items=items)
     return RetailerOrderSnapshotRead(
         id=int(order.id),
         retailer_account_id=order.retailer_account_id,
@@ -95,6 +98,15 @@ def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
         order_total=order.order_total,
         source_url=order.source_url,
         draft_import_id=draft_import_id,
+        review_status=quality_summary["review_status"],
+        item_count=quality_summary["item_count"],
+        cover_image_count=quality_summary["cover_image_count"],
+        product_url_count=quality_summary["product_url_count"],
+        price_count=quality_summary["price_count"],
+        release_date_count=quality_summary["release_date_count"],
+        capture_quality_summary_json=quality_summary["capture_quality_summary_json"],
+        parser_quality_summary_json=quality_summary["parser_quality_summary_json"],
+        raw_fields_summary_json=quality_summary["raw_fields_summary_json"],
         updated_at=order.updated_at,
         items=[_serialize_order_item(item) for item in items],
     )
@@ -289,11 +301,18 @@ def get_retailer_sync_runs(
 
 @retailer_accounts_v1_router.get("/retailer-orders", response_model=RetailerOrderListResponse)
 def get_retailer_orders(
+    retailer: str | None = None,
+    status: str | None = None,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> RetailerOrderListResponse:
     assert current_user.id is not None
-    orders = list_retailer_orders(session, owner_user_id=int(current_user.id))
+    orders = list_retailer_orders(
+        session,
+        owner_user_id=int(current_user.id),
+        retailer=retailer,
+        status=status,
+    )
     return RetailerOrderListResponse(
         items=[_serialize_order(order, session=session) for order in orders]
     )
@@ -310,6 +329,24 @@ def get_retailer_order(
     assert current_user.id is not None
     order = get_retailer_order_for_user_or_404(
         session, owner_user_id=int(current_user.id), order_id=order_id
+    )
+    return _serialize_order(order, session=session)
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/{order_id}/confirm",
+    response_model=RetailerOrderSnapshotRead,
+)
+def confirm_retailer_order_route(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RetailerOrderSnapshotRead:
+    assert current_user.id is not None
+    order = confirm_retailer_order(
+        session,
+        owner_user_id=int(current_user.id),
+        order_id=order_id,
     )
     return _serialize_order(order, session=session)
 

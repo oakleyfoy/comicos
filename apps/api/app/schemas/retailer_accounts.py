@@ -99,6 +99,15 @@ class RetailerOrderSnapshotRead(BaseModel):
     order_total: Decimal | None = None
     source_url: str | None = None
     draft_import_id: int | None = None
+    review_status: str = "captured"
+    item_count: int = 0
+    cover_image_count: int = 0
+    product_url_count: int = 0
+    price_count: int = 0
+    release_date_count: int = 0
+    capture_quality_summary_json: dict = Field(default_factory=dict)
+    parser_quality_summary_json: dict = Field(default_factory=dict)
+    raw_fields_summary_json: dict = Field(default_factory=dict)
     updated_at: datetime
     items: list[RetailerOrderItemSnapshotRead] = Field(default_factory=list)
 

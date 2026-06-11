@@ -1,6 +1,7 @@
 const REQUEST_EVENT = "comicos_midtown_capture_request";
 const RESULT_EVENT = "comicos_midtown_capture_result";
 const ERROR_EVENT = "comicos_midtown_capture_error";
+const STATUS_EVENT = "comicos_midtown_extension_status";
 
 function normalizeWhitespace(value) {
   return String(value || "")
@@ -22,6 +23,10 @@ function isVisibleElement(element) {
   }
   const style = window.getComputedStyle(element);
   return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+function logCapture(step, detail) {
+  console.info("[Comicos Midtown Extension]", step, detail || {});
 }
 
 function extractPlainTextFromHtml(html) {
@@ -291,12 +296,25 @@ async function sendCaptureResult(targetTabId, message) {
   await chrome.tabs.sendMessage(targetTabId, message);
 }
 
+async function sendStatus(targetTabId, stage, message, extra = {}) {
+  await sendCaptureResult(targetTabId, {
+    type: STATUS_EVENT,
+    stage,
+    message,
+    ...extra,
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== REQUEST_EVENT) {
     return;
   }
 
   (async () => {
+    logCapture("capture request received", {
+      senderTabUrl: sender.tab?.url || null,
+      senderTabId: sender.tab?.id ?? null,
+    });
     const tabs = await chrome.tabs.query({
       url: ["https://www.midtowncomics.com/*", "https://midtowncomics.com/*"],
     });
@@ -309,27 +327,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       throw new Error("Midtown order tab was not found.");
     }
 
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: selectedTab.id },
-      func: captureMidtownDetailPage,
+    logCapture("midtown tab selected", {
+      selectedTabId: selectedTab.id,
+      selectedTabUrl: selectedTab.url || null,
+      contentScriptInjected: true,
     });
-    const payload = results[0]?.result;
+
+    await sendStatus(
+      sender.tab?.id ?? null,
+      "midtown_page_detected",
+      `Midtown Page Detected: ${selectedTab.url || "unknown"}`,
+      {
+        accountId: message.payload.accountId,
+        syncRunId: message.payload.syncRunId,
+      },
+    );
+
+    let payload = null;
+    try {
+      const contentScriptResponse = await chrome.tabs.sendMessage(selectedTab.id, {
+        type: REQUEST_EVENT,
+        payload: {
+          accountId: message.payload.accountId,
+          syncRunId: message.payload.syncRunId,
+          captureToken: message.payload.captureToken,
+          appOrigin: message.payload.appOrigin,
+        },
+      });
+      logCapture("message sent to Midtown tab", {
+        selectedTabId: selectedTab.id,
+        messageReceived: Boolean(contentScriptResponse),
+      });
+      if (contentScriptResponse && contentScriptResponse.ok && contentScriptResponse.payload) {
+        payload = contentScriptResponse.payload;
+      }
+    } catch (contentScriptError) {
+      logCapture("Midtown content script unavailable, falling back to executeScript", {
+        error: contentScriptError instanceof Error ? contentScriptError.message : String(contentScriptError),
+      });
+    }
+
+    if (!payload) {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: selectedTab.id },
+        func: captureMidtownDetailPage,
+      });
+      payload = results[0]?.result;
+    }
     if (!payload) {
       const fallbackPayload = await captureMidtownDetailPageFromTab(selectedTab);
       if (!fallbackPayload) {
         throw new Error("Midtown detail capture returned no data.");
       }
-      await sendCaptureResult(sender.tab?.id ?? null, {
-        type: RESULT_EVENT,
+      payload = fallbackPayload;
+    }
+
+    logCapture("diagnostics returned", {
+      current_url: payload.capture_diagnostics?.current_url || "unknown",
+      html_length: payload.capture_diagnostics?.html_length || 0,
+      items_detected_client_side: payload.capture_diagnostics?.items_detected_client_side || 0,
+    });
+
+    await sendStatus(
+      sender.tab?.id ?? null,
+      "dom_read_success",
+      `DOM Read Success: ${payload.capture_diagnostics?.html_length || 0} chars`,
+      {
         accountId: message.payload.accountId,
         syncRunId: message.payload.syncRunId,
         captureToken: message.payload.captureToken,
-        historyHtml: fallbackPayload.html,
-        detailPages: [fallbackPayload],
-      });
-      sendResponse({ ok: true, usedFallback: true });
-      return;
-    }
+      },
+    );
 
     await sendCaptureResult(sender.tab?.id ?? null, {
       type: RESULT_EVENT,
@@ -340,6 +408,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       detailPages: [payload],
     });
 
+    logCapture("capture result returned to ComicOS tab", {
+      targetTabId: sender.tab?.id ?? null,
+      historyHtmlLength: payload.html ? payload.html.length : 0,
+    });
     sendResponse({ ok: true });
   })().catch(async (error) => {
     await sendCaptureResult(sender.tab?.id ?? null, {

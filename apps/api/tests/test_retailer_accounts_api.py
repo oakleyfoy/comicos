@@ -307,6 +307,7 @@ def test_retailer_account_browser_sync_lifecycle(client, session, monkeypatch) -
     assert completed.status_code == 200, completed.text
     assert completed.json()["run"]["status"] == "succeeded"
     assert completed.json()["run"]["summary_json"]["sync_path"] == "browser_assisted"
+    assert completed.json()["orders"][0]["id"] is not None
     assert completed.json()["orders"][0]["retailer_order_number"] == "4272232"
 
 
