@@ -188,6 +188,9 @@ class MidtownBrowserSessionStatusRead(BaseModel):
     viewport_width: int | None = None
     viewport_height: int | None = None
     live_session_active: bool | None = None
+    process_id: int | None = None
+    registry_contains_account: bool | None = None
+    registry_session_count: int | None = None
 
 
 class MidtownBrowserSessionResponse(BaseModel):
@@ -211,6 +214,16 @@ class MidtownBrowserFrameResponse(BaseModel):
     image_width: int
     image_height: int
     captured_at: datetime
+    endpoint_status: int | None = None
+    image_bytes_size: int | None = None
+    page_title: str | None = None
+    page_url: str | None = None
+    browser_exists: bool | None = None
+    context_exists: bool | None = None
+    page_exists: bool | None = None
+    process_id: int | None = None
+    registry_contains_account: bool | None = None
+    registry_session_count: int | None = None
 
 
 class MidtownBrowserClickRequest(BaseModel):

@@ -332,6 +332,124 @@ def test_midtown_browser_session_frame_returns_image_and_metadata(client, monkey
     assert payload["session"]["live_session_active"] is True
 
 
+def test_midtown_browser_session_rehydrates_from_saved_state(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-rehydrate@example.com")
+    client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+            "display_name": "Midtown Comics",
+            "sync_enabled": True,
+        },
+    )
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://www.midtowncomics.com/login"
+            self.viewport_size = {"width": 1440, "height": 1100}
+
+        def goto(self, url, wait_until="domcontentloaded"):
+            self.url = url
+
+        def wait_for_load_state(self, state, timeout=None):
+            return None
+
+        def content(self):
+            return "<html><body>login</body></html>"
+
+        def screenshot(self, type="jpeg", quality=75):
+            return b"fake-image-bytes"
+
+        def is_closed(self):
+            return False
+
+        def title(self):
+            return "Midtown Login"
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self):
+            return self.page
+
+        def close(self):
+            pass
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+
+        def new_context(self, **kwargs):
+            self.context_kwargs = kwargs
+            return self.context
+
+        def close(self):
+            pass
+
+        def is_connected(self):
+            return True
+
+    class FakeChromium:
+        executable_path = "C:/fake/chrome.exe"
+        name = "chromium"
+
+        def launch(self, **kwargs):
+            self.launch_kwargs = kwargs
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeSyncPlaywright:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeSyncPlaywright())
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_LIVE_SESSIONS", {})
+    monkeypatch.setattr(
+        "app.services.retailer_browser._read_browser_state",
+        lambda account_id: {
+            "status": "login_required",
+            "current_url": "https://www.midtowncomics.com/login",
+            "orders_url": "https://www.midtowncomics.com/account/orders",
+            "order_count": 0,
+            "authenticated": False,
+            "message": "Midtown login is required.",
+            "last_updated_at": "2026-06-11T17:00:00Z",
+            "viewport_width": 1440,
+            "viewport_height": 1100,
+            "live_session_active": True,
+        },
+    )
+    monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+    monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
+
+    response = client.get("/api/v1/retailer-browser/midtown/session/status", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    payload = response.json()["session"]
+    assert payload["live_session_active"] is True
+    assert payload["viewport_width"] == 1440
+    assert payload["viewport_height"] == 1100
+    assert payload["registry_contains_account"] is True
+
+    frame = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
+    assert frame.status_code == 200, frame.text
+    frame_payload = frame.json()
+    assert frame_payload["endpoint_status"] == 200
+    assert frame_payload["image_bytes_size"] > 0
+    assert frame_payload["page_url"] == "https://www.midtowncomics.com/login"
+    assert frame_payload["session"]["live_session_active"] is True
+
+
 @pytest.mark.parametrize(
     ("route", "service_name", "payload", "expected_key"),
     [

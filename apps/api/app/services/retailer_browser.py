@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -135,6 +136,9 @@ class MidtownBrowserStatus:
     viewport_width: int | None = None
     viewport_height: int | None = None
     live_session_active: bool = False
+    process_id: int | None = None
+    registry_contains_account: bool | None = None
+    registry_session_count: int | None = None
 
 
 @dataclass(slots=True)
@@ -185,6 +189,10 @@ def _security_verification_status(
         authenticated=False,
         order_count=order_count,
         last_updated_at=utc_now(),
+        live_session_active=True,
+        process_id=os.getpid(),
+        registry_contains_account=int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
     )
 
 
@@ -205,6 +213,10 @@ def _login_required_status(
         authenticated=False,
         order_count=order_count,
         last_updated_at=utc_now(),
+        live_session_active=True,
+        process_id=os.getpid(),
+        registry_contains_account=int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
     )
 
 
@@ -226,6 +238,10 @@ def _ready_status(
         authenticated=True,
         order_count=order_count,
         last_updated_at=utc_now(),
+        live_session_active=True,
+        process_id=os.getpid(),
+        registry_contains_account=int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
     )
 
 
@@ -238,6 +254,12 @@ def _browser_state_payload(status: MidtownBrowserStatus) -> dict[str, Any]:
         "authenticated": status.authenticated,
         "message": status.message,
         "last_updated_at": status.last_updated_at.isoformat() if status.last_updated_at else None,
+        "viewport_width": status.viewport_width,
+        "viewport_height": status.viewport_height,
+        "live_session_active": status.live_session_active,
+        "process_id": status.process_id,
+        "registry_contains_account": status.registry_contains_account,
+        "registry_session_count": status.registry_session_count,
     }
 
 
@@ -399,6 +421,25 @@ def _refresh_midtown_live_session_state(session: MidtownLiveBrowserSession, acco
         status.viewport_width = session.viewport_width
         status.viewport_height = session.viewport_height
         status.live_session_active = True
+        status.process_id = os.getpid()
+        status.registry_contains_account = int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS
+        status.registry_session_count = len(_MIDTOWN_LIVE_SESSIONS)
+        _log_event(
+            "midtown_live_session_refresh",
+            account_id=int(account.id or 0),
+            process_id=os.getpid(),
+            browser_exists=session.browser is not None,
+            context_exists=session.context is not None,
+            page_exists=session.page is not None,
+            page_url=getattr(session.page, "url", None),
+            page_title=(session.page.title() if hasattr(session.page, "title") else None),
+            viewport_width=session.viewport_width,
+            viewport_height=session.viewport_height,
+            live_session_active=status.live_session_active,
+            status=status.status,
+            registry_contains_account=status.registry_contains_account,
+            registry_session_count=status.registry_session_count,
+        )
         session.status = status.status
         session.message = status.message
         session.current_url = status.current_url
@@ -478,6 +519,61 @@ def _create_midtown_live_session(account: RetailerAccount) -> MidtownLiveBrowser
     return session
 
 
+def _rehydrate_midtown_live_session(account: RetailerAccount, state: dict[str, Any]) -> MidtownLiveBrowserSession:
+    if account.id is None:
+        raise RetailerBrowserConfigurationError("Retailer browser session is not configured.")
+
+    account_id = int(account.id)
+    target_url = str(
+        state.get("current_url")
+        or state.get("orders_url")
+        or state.get("last_known_url")
+        or MIDTOWN_ORDERS_URL
+    )
+    _log_event(
+        "midtown_live_session_rehydrate_start",
+        account_id=account_id,
+        target_url=target_url,
+        state_status=state.get("status"),
+        state_live_session_active=state.get("live_session_active"),
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
+    )
+    playwright = _midtown_playwright()
+    browser = _launch_midtown_browser(playwright=playwright, account_id=account_id, launch_args={"headless": True})
+    context = browser.new_context(**_session_context_kwargs(account_id))
+    page = context.new_page()
+    page.goto(target_url, wait_until="domcontentloaded")
+    _best_effort_wait_for_load(page)
+    session = MidtownLiveBrowserSession(
+        account_id=account_id,
+        owner_user_id=int(account.owner_user_id or 0),
+        browser=browser,
+        context=context,
+        page=page,
+        status=str(state.get("status") or "rehydrated"),
+        message=state.get("message"),
+        current_url=getattr(page, "url", target_url),
+        orders_url=str(state.get("orders_url") or MIDTOWN_ORDERS_URL),
+        authenticated=bool(state.get("authenticated", False)),
+        order_count=int(state.get("order_count") or 0),
+        last_updated_at=utc_now(),
+        viewport_width=int(state.get("viewport_width") or 1440),
+        viewport_height=int(state.get("viewport_height") or 1100),
+    )
+    status = _refresh_midtown_live_session_state(session, account)
+    _log_event(
+        "midtown_live_session_rehydrate_success",
+        account_id=account_id,
+        process_id=os.getpid(),
+        current_url=status.current_url,
+        page_title=(page.title() if hasattr(page, "title") else None),
+        live_session_active=status.live_session_active,
+        registry_contains_account=status.registry_contains_account,
+        registry_session_count=status.registry_session_count,
+    )
+    return session
+
+
 def _get_midtown_live_session(account_id: int) -> MidtownLiveBrowserSession | None:
     with _MIDTOWN_LIVE_SESSIONS_LOCK:
         session = _MIDTOWN_LIVE_SESSIONS.get(account_id)
@@ -502,6 +598,17 @@ def _ensure_midtown_live_session(account: RetailerAccount) -> MidtownLiveBrowser
     session = _get_midtown_live_session(account_id)
     if session is not None:
         return session
+    state = _read_browser_state(account_id)
+    if state:
+        try:
+            return _set_midtown_live_session(account_id, _rehydrate_midtown_live_session(account, state))
+        except Exception as exc:
+            _log_event(
+                "midtown_live_session_rehydrate_failed",
+                account_id=account_id,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
     return _set_midtown_live_session(account_id, _create_midtown_live_session(account))
 
 
@@ -587,6 +694,9 @@ def _status_from_browser_state(account: RetailerAccount, state: dict[str, Any]) 
         authenticated=authenticated,
         order_count=order_count,
         last_updated_at=last_updated_at,
+        process_id=os.getpid(),
+        registry_contains_account=False,
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
     )
 
 
@@ -749,13 +859,10 @@ def get_midtown_browser_session_status(
 ) -> MidtownBrowserStatus:
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
     try:
-        live_session = _get_midtown_live_session(int(account.id or 0))
-        if live_session is not None:
-            return _refresh_midtown_live_session_state(live_session, account)
-        state = _read_browser_state(int(account.id or 0))
+        live_session = _ensure_midtown_live_session(account)
+        return _refresh_midtown_live_session_state(live_session, account)
     except RetailerBrowserStateError:
         raise
-    return _status_from_browser_state(account, state)
 
 
 def list_midtown_browser_orders(
@@ -988,6 +1095,9 @@ def get_midtown_browser_live_frame(
             raise RetailerBrowserEnvironmentError("Midtown browser session is no longer available.")
         status = _refresh_midtown_live_session_state(live_session, account)
         image_data_url, width, height = _live_session_frame_data_url(live_session.page)
+        image_bytes_size = len(image_data_url.split(",", 1)[1]) if "," in image_data_url else 0
+        page_title = live_session.page.title() if hasattr(live_session.page, "title") else None
+        page_url = getattr(live_session.page, "url", None)
         payload = {
             "session": status,
             "image_data_url": image_data_url,
@@ -997,7 +1107,28 @@ def get_midtown_browser_live_frame(
             "viewport_height": live_session.viewport_height,
             "live_session_active": True,
             "captured_at": utc_now().isoformat(),
+            "endpoint_status": 200,
+            "image_bytes_size": image_bytes_size,
+            "page_title": page_title,
+            "page_url": page_url,
+            "registry_contains_account": int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+            "registry_session_count": len(_MIDTOWN_LIVE_SESSIONS),
         }
+        _log_event(
+            "midtown_live_session_frame",
+            account_id=int(account.id or 0),
+            endpoint_status=200,
+            image_bytes_size=image_bytes_size,
+            captured_at=payload["captured_at"],
+            page_url=page_url,
+            page_title=page_title,
+            viewport_width=live_session.viewport_width,
+            viewport_height=live_session.viewport_height,
+            browser_exists=live_session.browser is not None,
+            context_exists=live_session.context is not None,
+            page_exists=live_session.page is not None,
+            registry_contains_account=int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+        )
         return payload
 
 

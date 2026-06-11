@@ -51,6 +51,9 @@ def _status_schema(
     viewport_width: int | None = None,
     viewport_height: int | None = None,
     live_session_active: bool | None = None,
+    process_id: int | None = None,
+    registry_contains_account: bool | None = None,
+    registry_session_count: int | None = None,
 ) -> MidtownBrowserSessionStatusRead:
     return MidtownBrowserSessionStatusRead(
         retailer=status.retailer,
@@ -62,9 +65,19 @@ def _status_schema(
         authenticated=status.authenticated,
         order_count=status.order_count,
         last_updated_at=status.last_updated_at,
-        viewport_width=viewport_width,
-        viewport_height=viewport_height,
-        live_session_active=live_session_active,
+        viewport_width=viewport_width if viewport_width is not None else getattr(status, "viewport_width", None),
+        viewport_height=viewport_height if viewport_height is not None else getattr(status, "viewport_height", None),
+        live_session_active=
+            live_session_active if live_session_active is not None else getattr(status, "live_session_active", None),
+        process_id=process_id if process_id is not None else getattr(status, "process_id", None),
+        registry_contains_account=
+            registry_contains_account
+            if registry_contains_account is not None
+            else getattr(status, "registry_contains_account", None),
+        registry_session_count=
+            registry_session_count
+            if registry_session_count is not None
+            else getattr(status, "registry_session_count", None),
     )
 
 
@@ -171,11 +184,24 @@ def get_midtown_session_frame(
             viewport_width=frame_payload.get("viewport_width"),
             viewport_height=frame_payload.get("viewport_height"),
             live_session_active=frame_payload.get("live_session_active"),
+            process_id=frame_payload.get("process_id"),
+            registry_contains_account=frame_payload.get("registry_contains_account"),
+            registry_session_count=frame_payload.get("registry_session_count"),
         ),
         image_data_url=frame_payload["image_data_url"],
         image_width=frame_payload["image_width"],
         image_height=frame_payload["image_height"],
         captured_at=frame_payload["captured_at"],
+        endpoint_status=frame_payload.get("endpoint_status"),
+        image_bytes_size=frame_payload.get("image_bytes_size"),
+        page_title=frame_payload.get("page_title"),
+        page_url=frame_payload.get("page_url"),
+        browser_exists=frame_payload.get("browser_exists"),
+        context_exists=frame_payload.get("context_exists"),
+        page_exists=frame_payload.get("page_exists"),
+        process_id=frame_payload.get("process_id"),
+        registry_contains_account=frame_payload.get("registry_contains_account"),
+        registry_session_count=frame_payload.get("registry_session_count"),
     )
 
 

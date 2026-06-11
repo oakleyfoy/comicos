@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -93,6 +93,17 @@ export function MidtownBrowserSessionPage() {
   const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
   const browserSession = session?.session ?? null;
   const frameSession = frame?.session ?? browserSession;
+  const shouldPollFrame = useMemo(() => {
+    if (!browserSession) {
+      return false;
+    }
+    if (browserSession.live_session_active) {
+      return true;
+    }
+    return ["login_required", "security_verification_required", "ready", "connected", "initializing"].includes(
+      browserSession.status,
+    );
+  }, [browserSession]);
 
   const refreshSessionStatus = useCallback(async (): Promise<MidtownBrowserSessionResponse> => {
     const response = await apiClient.getMidtownBrowserSessionStatus();
@@ -148,7 +159,7 @@ export function MidtownBrowserSessionPage() {
   }, [refreshSessionStatus]);
 
   useEffect(() => {
-    if (!session?.session.live_session_active) {
+    if (!shouldPollFrame) {
       setIsPollingFrame(false);
       return;
     }
@@ -175,7 +186,7 @@ export function MidtownBrowserSessionPage() {
       window.clearInterval(intervalId);
       setIsPollingFrame(false);
     };
-  }, [navigate, refreshFrame, session?.session.live_session_active]);
+  }, [navigate, refreshFrame, shouldPollFrame]);
 
   async function startLiveSession(shouldNavigateWhenReady: boolean): Promise<void> {
     setIsWorking(true);
@@ -188,7 +199,12 @@ export function MidtownBrowserSessionPage() {
       }
       setSession(response);
       setFrame(null);
-      if (response.session.live_session_active) {
+      if (
+        response.session.live_session_active ||
+        ["login_required", "security_verification_required", "ready", "connected", "initializing"].includes(
+          response.session.status,
+        )
+      ) {
         await refreshFrame();
       }
       if (shouldNavigateWhenReady && response.session.status === "ready") {
@@ -225,7 +241,12 @@ export function MidtownBrowserSessionPage() {
       }
       setSession(response);
       setFrame(null);
-      if (response.session.live_session_active) {
+      if (
+        response.session.live_session_active ||
+        ["login_required", "security_verification_required", "ready", "connected", "initializing"].includes(
+          response.session.status,
+        )
+      ) {
         await refreshFrame();
       }
       if (response.session.status === "ready") {
@@ -372,6 +393,7 @@ export function MidtownBrowserSessionPage() {
     : frameSession?.authenticated
       ? "Click the live browser image to interact with Midtown."
       : "Open Midtown, then click and type directly in the live panel.";
+  const liveDiagnostics = frame ?? null;
 
   return (
     <AppShell>
@@ -494,6 +516,25 @@ export function MidtownBrowserSessionPage() {
             </div>
           )}
         </div>
+
+        <details className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+          <summary className="cursor-pointer select-none text-slate-100">Temporary live-view diagnostics</summary>
+          <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-2">
+            <p>Screenshot endpoint status: {liveDiagnostics?.endpoint_status ?? "unknown"}</p>
+            <p>Image bytes size: {liveDiagnostics?.image_bytes_size ?? "unknown"}</p>
+            <p>Last screenshot timestamp: {liveDiagnostics?.captured_at ?? "unknown"}</p>
+            <p>Current page title: {liveDiagnostics?.page_title ?? "unknown"}</p>
+            <p>Current page URL: {liveDiagnostics?.page_url ?? frameSession?.current_url ?? "unknown"}</p>
+            <p>Process ID: {liveDiagnostics?.process_id ?? frameSession?.process_id ?? "unknown"}</p>
+            <p>Live session active: {frameSession?.live_session_active === true ? "true" : String(frameSession?.live_session_active ?? "null")}</p>
+            <p>Viewport: {frameSession?.viewport_width ?? "unknown"} x {frameSession?.viewport_height ?? "unknown"}</p>
+            <p>Registry has account: {frameSession?.registry_contains_account === true ? "true" : String(frameSession?.registry_contains_account ?? "null")}</p>
+            <p>Registry session count: {frameSession?.registry_session_count ?? "unknown"}</p>
+            <p>Browser exists: {liveDiagnostics?.browser_exists === true ? "true" : String(liveDiagnostics?.browser_exists ?? "null")}</p>
+            <p>Context exists: {liveDiagnostics?.context_exists === true ? "true" : String(liveDiagnostics?.context_exists ?? "null")}</p>
+            <p>Page exists: {liveDiagnostics?.page_exists === true ? "true" : String(liveDiagnostics?.page_exists ?? "null")}</p>
+          </div>
+        </details>
       </section>
     </AppShell>
   );
