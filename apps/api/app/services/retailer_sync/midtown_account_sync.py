@@ -219,8 +219,16 @@ def _save_session_state(context, *, account_id: int) -> None:
     context.storage_state(path=str(_session_state_path(account_id)))
 
 
+def _best_effort_wait_for_load(page, *, timeout_ms: int = 15000) -> None:
+    try:
+        page.wait_for_load_state("load", timeout=timeout_ms)
+    except Exception:
+        return
+
+
 def _midtown_login(page, *, username: str, password: str) -> None:
     page.goto(MIDTOWN_LOGIN_URL, wait_until="domcontentloaded")
+    _best_effort_wait_for_load(page)
     username_input = _first_visible(
         page,
         [
@@ -254,7 +262,7 @@ def _midtown_login(page, *, username: str, password: str) -> None:
     if submit is None:
         raise MidtownNeedsAttentionError("Midtown login submit action could not be located.")
     submit.click()
-    page.wait_for_load_state("networkidle")
+    _best_effort_wait_for_load(page)
     if _has_midtown_challenge(page):
         raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
     lower_url = (page.url or "").lower()
@@ -270,7 +278,7 @@ def _load_recent_order_details(
     page, *, limit_orders: int, allow_login_redirect: bool = False
 ) -> list[MidtownOrderDetail]:
     page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
-    page.wait_for_load_state("networkidle")
+    _best_effort_wait_for_load(page)
     if _has_midtown_challenge(page):
         raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
     if _requires_midtown_login(page):
@@ -286,7 +294,7 @@ def _load_recent_order_details(
         if not entry.detail_url:
             continue
         page.goto(entry.detail_url, wait_until="domcontentloaded")
-        page.wait_for_load_state("networkidle")
+        _best_effort_wait_for_load(page)
         if _has_midtown_challenge(page):
             raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
         details.append(

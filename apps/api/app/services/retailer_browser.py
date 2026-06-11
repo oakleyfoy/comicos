@@ -213,6 +213,13 @@ def _launch_midtown_browser(*, playwright, account_id: int, launch_args: dict[st
     return browser
 
 
+def _best_effort_wait_for_load(page, *, timeout_ms: int = 15000) -> None:
+    try:
+        page.wait_for_load_state("load", timeout=timeout_ms)
+    except Exception:
+        return
+
+
 def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[MidtownOrderHistoryEntry]]:
     try:
         from playwright.sync_api import sync_playwright
@@ -254,7 +261,7 @@ def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[Midtown
                 storage_state_path=str(state_path),
             )
             page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
-            page.wait_for_load_state("networkidle")
+            _best_effort_wait_for_load(page)
             if _requires_midtown_login(page):
                 _log_event("midtown_browser_login_required", account_id=int(account.id), current_url=page.url)
                 try:
@@ -263,7 +270,7 @@ def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[Midtown
                     _save_session_state(context, account_id=int(account.id))
                     _log_event("midtown_browser_storage_state_save_success", account_id=int(account.id), path=str(state_path))
                     page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
-                    page.wait_for_load_state("networkidle")
+                    _best_effort_wait_for_load(page)
                 except MidtownNeedsAttentionError as exc:
                     _log_event(
                         "midtown_browser_security_verification_required",
@@ -515,7 +522,7 @@ def capture_midtown_browser_order(
         page = context.new_page()
         try:
             page.goto(history_entry.detail_url or MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
-            page.wait_for_load_state("networkidle")
+            _best_effort_wait_for_load(page)
             if _requires_midtown_login(page):
                 _log_event(
                     "midtown_browser_detail_login_required",

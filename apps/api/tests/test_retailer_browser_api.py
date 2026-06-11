@@ -193,3 +193,100 @@ def test_launch_midtown_browser_applies_headless_default_once(monkeypatch) -> No
     assert captured["headless"] is True
     assert captured["slow_mo"] == 25
     assert list(captured.keys()).count("headless") == 1
+
+
+def test_midtown_session_start_does_not_fail_when_networkidle_times_out(client, session, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-networkidle@example.com")
+    client.post(
+        "/api/v1/retailer-accounts",
+        headers=auth_headers(token),
+        json={
+            "retailer": "midtown",
+            "username": "collector@example.com",
+            "password": "supersafe",
+            "display_name": "Midtown Comics",
+            "sync_enabled": True,
+        },
+    )
+
+    class FakePage:
+        url = "https://www.midtowncomics.com/account/orders"
+
+        def __init__(self) -> None:
+            self.load_states: list[str] = []
+
+        def goto(self, url, wait_until="domcontentloaded"):
+            self.url = url
+
+        def wait_for_load_state(self, state, timeout=None):
+            self.load_states.append(state)
+            if state == "networkidle":
+                raise AssertionError("networkidle should not be required")
+
+        def content(self):
+            return "<html><body>orders</body></html>"
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self):
+            return self.page
+
+        def close(self):
+            pass
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+
+        def new_context(self, **kwargs):
+            self.context_kwargs = kwargs
+            return self.context
+
+        def close(self):
+            pass
+
+    class FakeChromium:
+        executable_path = "C:/fake/chrome.exe"
+        name = "chromium"
+
+        def launch(self, **kwargs):
+            self.launch_kwargs = kwargs
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeSyncPlaywright:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeSyncPlaywright())
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: False)
+    monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
+    monkeypatch.setattr(
+        "app.services.retailer_browser.parse_midtown_order_history",
+        lambda html: [
+            type(
+                "FakeOrder",
+                (),
+                {
+                    "retailer_order_number": "4272232",
+                    "order_date": None,
+                    "order_status": "Ready",
+                    "order_total": None,
+                    "raw_fragment": html,
+                    "detail_url": "https://www.midtowncomics.com/account/orders/view/4272232",
+                },
+            )()
+        ],
+    )
+    monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda *args, **kwargs: None)
+
+    response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["status"] == "ready"
