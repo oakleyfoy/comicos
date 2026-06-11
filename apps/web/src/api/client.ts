@@ -377,6 +377,10 @@ export interface MidtownBrowserSessionStatusRead {
   process_id?: number | null;
   registry_contains_account?: boolean | null;
   registry_session_count?: number | null;
+  active_element_tag?: string | null;
+  active_element_name?: string | null;
+  active_element_type?: string | null;
+  active_element_placeholder?: string | null;
 }
 
 export interface MidtownBrowserSessionResponse {
@@ -409,6 +413,8 @@ export interface MidtownBrowserFrameResponse {
   image_width: number;
   image_height: number;
   captured_at: string;
+  viewport_width?: number | null;
+  viewport_height?: number | null;
   endpoint_status?: number | null;
   image_bytes_size?: number | null;
   page_title?: string | null;
@@ -419,6 +425,10 @@ export interface MidtownBrowserFrameResponse {
   process_id?: number | null;
   registry_contains_account?: boolean | null;
   registry_session_count?: number | null;
+  active_element_tag?: string | null;
+  active_element_name?: string | null;
+  active_element_type?: string | null;
+  active_element_placeholder?: string | null;
 }
 
 export interface MidtownBrowserClickRequest {
