@@ -371,6 +371,9 @@ export interface MidtownBrowserSessionStatusRead {
   authenticated: boolean;
   order_count: number;
   last_updated_at?: string | null;
+  viewport_width?: number | null;
+  viewport_height?: number | null;
+  live_session_active?: boolean | null;
 }
 
 export interface MidtownBrowserSessionResponse {
@@ -395,6 +398,29 @@ export interface MidtownBrowserCaptureResponse {
   session: MidtownBrowserSessionStatusRead;
   order_id: number;
   retailer_order_number: string;
+}
+
+export interface MidtownBrowserFrameResponse {
+  session: MidtownBrowserSessionStatusRead;
+  image_data_url: string;
+  image_width: number;
+  image_height: number;
+  captured_at: string;
+}
+
+export interface MidtownBrowserClickRequest {
+  x: number;
+  y: number;
+  button?: "left" | "right" | "middle";
+  click_count?: number;
+}
+
+export interface MidtownBrowserTypeRequest {
+  text: string;
+}
+
+export interface MidtownBrowserKeyRequest {
+  key: string;
 }
 
 export interface RetailerAccountSyncRequest {
@@ -20801,6 +20827,37 @@ export const apiClient = {
 
   getMidtownBrowserSessionStatus(): Promise<MidtownBrowserSessionResponse> {
     return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/status");
+  },
+
+  getMidtownBrowserLiveFrame(): Promise<MidtownBrowserFrameResponse> {
+    return request<MidtownBrowserFrameResponse>("/api/v1/retailer-browser/midtown/session/frame");
+  },
+
+  clickMidtownBrowserSession(payload: MidtownBrowserClickRequest): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/click", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  typeMidtownBrowserSession(payload: MidtownBrowserTypeRequest): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/type", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  keyMidtownBrowserSession(payload: MidtownBrowserKeyRequest): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/key", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  retryMidtownBrowserSession(): Promise<MidtownBrowserSessionResponse> {
+    return request<MidtownBrowserSessionResponse>("/api/v1/retailer-browser/midtown/session/retry", {
+      method: "POST",
+    });
   },
 
   goToMidtownBrowserOrders(): Promise<MidtownBrowserOrdersResponse> {

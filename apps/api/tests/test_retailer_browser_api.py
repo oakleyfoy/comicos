@@ -266,6 +266,8 @@ def test_midtown_session_start_does_not_fail_when_networkidle_times_out(client, 
             return False
 
     monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakeSyncPlaywright())
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
+    monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_LIVE_SESSIONS", {})
     monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: False)
     monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
     monkeypatch.setattr(
@@ -290,3 +292,108 @@ def test_midtown_session_start_does_not_fail_when_networkidle_times_out(client, 
     response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
     assert response.status_code == 200, response.text
     assert response.json()["session"]["status"] == "ready"
+
+
+def test_midtown_browser_session_frame_returns_image_and_metadata(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-frame@example.com")
+    status_model = MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=1,
+        status="login_required",
+        message="Midtown login is required.",
+        current_url="https://www.midtowncomics.com/account/orders",
+        orders_url="https://www.midtowncomics.com/account/orders",
+        authenticated=False,
+        order_count=0,
+        last_updated_at=datetime.now(timezone.utc),
+        viewport_width=1440,
+        viewport_height=1100,
+        live_session_active=True,
+    )
+    monkeypatch.setattr(
+        "app.api.retailer_browser.get_midtown_browser_live_frame",
+        lambda session, owner_user_id: {
+            "session": status_model,
+            "image_data_url": "data:image/jpeg;base64,abc123",
+            "image_width": 1440,
+            "image_height": 1100,
+            "viewport_width": 1440,
+            "viewport_height": 1100,
+            "live_session_active": True,
+            "captured_at": "2026-06-10T20:00:00Z",
+        },
+    )
+
+    response = client.get("/api/v1/retailer-browser/midtown/session/frame", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["image_data_url"] == "data:image/jpeg;base64,abc123"
+    assert payload["image_width"] == 1440
+    assert payload["session"]["live_session_active"] is True
+
+
+@pytest.mark.parametrize(
+    ("route", "service_name", "payload", "expected_key"),
+    [
+        ("/api/v1/retailer-browser/midtown/session/click", "click_midtown_browser_live_session", {"x": 12, "y": 34}, "x"),
+        ("/api/v1/retailer-browser/midtown/session/type", "type_midtown_browser_live_session", {"text": "hello"}, "text"),
+        ("/api/v1/retailer-browser/midtown/session/key", "key_midtown_browser_live_session", {"key": "Enter"}, "key"),
+    ],
+)
+def test_midtown_browser_session_input_routes_forward_payload(
+    client,
+    monkeypatch,
+    route,
+    service_name,
+    payload,
+    expected_key,
+) -> None:
+    token = register_and_login(client, "midtown-browser-input@example.com")
+    status_model = MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=1,
+        status="ready",
+        message="Ready",
+        current_url="https://www.midtowncomics.com/account/orders",
+        orders_url="https://www.midtowncomics.com/account/orders",
+        authenticated=True,
+        order_count=3,
+        last_updated_at=datetime.now(timezone.utc),
+        live_session_active=True,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_forward(*args, **kwargs):
+        captured.update(kwargs)
+        return status_model
+
+    monkeypatch.setattr(f"app.api.retailer_browser.{service_name}", fake_forward)
+
+    response = client.post(route, headers=auth_headers(token), json=payload)
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["status"] == "ready"
+    assert expected_key in captured
+
+
+def test_midtown_browser_session_retry_returns_refreshed_status(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-retry@example.com")
+    status_model = MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=1,
+        status="ready",
+        message="Ready",
+        current_url="https://www.midtowncomics.com/account/orders",
+        orders_url="https://www.midtowncomics.com/account/orders",
+        authenticated=True,
+        order_count=9,
+        last_updated_at=datetime.now(timezone.utc),
+        live_session_active=True,
+    )
+    monkeypatch.setattr(
+        "app.api.retailer_browser.retry_midtown_browser_live_session",
+        lambda session, owner_user_id: status_model,
+    )
+
+    response = client.post("/api/v1/retailer-browser/midtown/session/retry", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["order_count"] == 9

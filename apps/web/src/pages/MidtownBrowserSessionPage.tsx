@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { apiClient, type MidtownBrowserSessionResponse } from "../api/client";
+import {
+  apiClient,
+  type MidtownBrowserFrameResponse,
+  type MidtownBrowserSessionResponse,
+} from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -20,6 +24,7 @@ function detectSecurityVerification(session: MidtownBrowserSessionResponse | nul
   const message = `${browserSession?.message ?? ""} ${browserSession?.status ?? ""} ${browserSession?.current_url ?? ""}`.toLowerCase();
   return (
     browserSession?.status === "needs_attention" ||
+    browserSession?.status === "security_verification_required" ||
     message.includes("needs_attention") ||
     message.includes("captcha") ||
     message.includes("verification") ||
@@ -44,7 +49,7 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
   if (browserSession?.authenticated) {
     return {
       status: "Connected",
-      helperText: "You?re signed in. ComicOS can continue to your Midtown orders.",
+      helperText: "You are signed in. ComicOS can continue to your Midtown orders.",
       primaryActionLabel: "Continue to Midtown",
       primaryActionKind: "continue",
       secondaryActionLabel: null,
@@ -62,31 +67,70 @@ function deriveConsumerSessionCopy(session: MidtownBrowserSessionResponse | null
   };
 }
 
+function getInputTextFromKey(key: string): string | null {
+  if (key.length !== 1) {
+    return null;
+  }
+  if (key === "\n" || key === "\r") {
+    return null;
+  }
+  return key;
+}
+
 export function MidtownBrowserSessionPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<MidtownBrowserSessionResponse | null>(null);
-  const [browserUrl, setBrowserUrl] = useState<string | null>(null);
+  const [frame, setFrame] = useState<MidtownBrowserFrameResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
+  const [isPollingFrame, setIsPollingFrame] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const shouldNavigateOnReadyRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const browserPanelRef = useRef<HTMLDivElement | null>(null);
 
-  function resolveBrowserUrl(response: MidtownBrowserSessionResponse | null): string | null {
-    const browserSession = response?.session ?? null;
-    if (!browserSession) {
+  const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
+  const browserSession = session?.session ?? null;
+  const frameSession = frame?.session ?? browserSession;
+
+  const refreshSessionStatus = useCallback(async (): Promise<MidtownBrowserSessionResponse> => {
+    const response = await apiClient.getMidtownBrowserSessionStatus();
+    if (!isMountedRef.current) {
+      return response;
+    }
+    setSession(response);
+    return response;
+  }, []);
+
+  const refreshFrame = useCallback(async (): Promise<MidtownBrowserFrameResponse | null> => {
+    try {
+      const response = await apiClient.getMidtownBrowserLiveFrame();
+      if (!isMountedRef.current) {
+        return response;
+      }
+      setFrame(response);
+      setSession({ session: response.session });
+      setFrameError(null);
+      return response;
+    } catch (loadError) {
+      if (!isMountedRef.current) {
+        return null;
+      }
+      setFrameError(loadError instanceof Error ? loadError.message : "Unable to load the Midtown browser view.");
       return null;
     }
-    return browserSession.current_url ?? browserSession.orders_url ?? null;
-  }
-
-  async function refreshSession(): Promise<void> {
-    const response = await apiClient.getMidtownBrowserSessionStatus();
-    setSession(response);
-    setBrowserUrl(resolveBrowserUrl(response));
-  }
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     let cancelled = false;
-    void refreshSession()
+    void refreshSessionStatus()
+      .then((response) => {
+        if (!cancelled && response.session.live_session_active) {
+          setIsPollingFrame(true);
+        }
+      })
       .catch((loadError) => {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : "Unable to load Midtown.");
@@ -99,50 +143,235 @@ export function MidtownBrowserSessionPage() {
       });
     return () => {
       cancelled = true;
+      isMountedRef.current = false;
     };
-  }, []);
+  }, [refreshSessionStatus]);
 
-  const browserSession = session?.session ?? null;
-  const consumerCopy = useMemo(() => deriveConsumerSessionCopy(session), [session]);
+  useEffect(() => {
+    if (!session?.session.live_session_active) {
+      setIsPollingFrame(false);
+      return;
+    }
+    let cancelled = false;
+    setIsPollingFrame(true);
 
-  async function handlePrimaryAction(): Promise<void> {
-    setIsWorking(true);
-    setError(null);
-    try {
-      if (consumerCopy.primaryActionKind === "verification") {
-        setBrowserUrl(browserSession?.current_url ?? browserSession?.orders_url ?? null);
+    const poll = async () => {
+      const response = await refreshFrame();
+      if (cancelled || !response) {
         return;
       }
+      if (shouldNavigateOnReadyRef.current && response.session.status === "ready") {
+        shouldNavigateOnReadyRef.current = false;
+        navigate("/connected-retailers/midtown/orders");
+      }
+    };
 
+    void poll();
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      setIsPollingFrame(false);
+    };
+  }, [navigate, refreshFrame, session?.session.live_session_active]);
+
+  async function startLiveSession(shouldNavigateWhenReady: boolean): Promise<void> {
+    setIsWorking(true);
+    setError(null);
+    shouldNavigateOnReadyRef.current = shouldNavigateWhenReady;
+    try {
       const response = await apiClient.startMidtownBrowserSession();
+      if (!isMountedRef.current) {
+        return;
+      }
       setSession(response);
-      setBrowserUrl(resolveBrowserUrl(response));
-      if (response.session.status === "ready" || response.session.status === "connected") {
+      setFrame(null);
+      if (response.session.live_session_active) {
+        await refreshFrame();
+      }
+      if (shouldNavigateWhenReady && response.session.status === "ready") {
+        shouldNavigateOnReadyRef.current = false;
         navigate("/connected-retailers/midtown/orders");
       }
     } catch (startError) {
-      setError(startError instanceof Error ? startError.message : "Unable to continue to Midtown.");
+      if (isMountedRef.current) {
+        setError(startError instanceof Error ? startError.message : "Unable to continue to Midtown.");
+      }
     } finally {
-      setIsWorking(false);
+      if (isMountedRef.current) {
+        setIsWorking(false);
+      }
     }
+  }
+
+  async function handlePrimaryAction(): Promise<void> {
+    if (consumerCopy.primaryActionKind === "verification") {
+      await startLiveSession(false);
+      return;
+    }
+    await startLiveSession(false);
   }
 
   async function handleRetryVerification(): Promise<void> {
     setIsWorking(true);
     setError(null);
+    shouldNavigateOnReadyRef.current = true;
     try {
-      const response = await apiClient.startMidtownBrowserSession();
+      const response = await apiClient.retryMidtownBrowserSession();
+      if (!isMountedRef.current) {
+        return;
+      }
       setSession(response);
-      setBrowserUrl(resolveBrowserUrl(response));
-      if (response.session.status === "ready" || response.session.status === "connected") {
+      setFrame(null);
+      if (response.session.live_session_active) {
+        await refreshFrame();
+      }
+      if (response.session.status === "ready") {
+        shouldNavigateOnReadyRef.current = false;
         navigate("/connected-retailers/midtown/orders");
       }
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "Unable to retry Midtown verification.");
+      if (isMountedRef.current) {
+        setError(retryError instanceof Error ? retryError.message : "Unable to retry Midtown verification.");
+      }
     } finally {
-      setIsWorking(false);
+      if (isMountedRef.current) {
+        setIsWorking(false);
+      }
     }
   }
+
+  async function handleViewOrders(): Promise<void> {
+    navigate("/connected-retailers/midtown/orders");
+  }
+
+  async function handleBrowserClick(event: MouseEvent<HTMLImageElement>): Promise<void> {
+    if (!frame || !frameSession?.live_session_active) {
+      return;
+    }
+    const image = event.currentTarget;
+    const rect = image.getBoundingClientRect();
+    const x =
+      rect.width > 0
+        ? Math.max(0, Math.min(frame.image_width, ((event.clientX - rect.left) / rect.width) * frame.image_width))
+        : frame.image_width / 2;
+    const y =
+      rect.height > 0
+        ? Math.max(0, Math.min(frame.image_height, ((event.clientY - rect.top) / rect.height) * frame.image_height))
+        : frame.image_height / 2;
+
+    setIsWorking(true);
+    setError(null);
+    try {
+      const response = await apiClient.clickMidtownBrowserSession({ x, y });
+      if (!isMountedRef.current) {
+        return;
+      }
+      setSession(response);
+      await refreshFrame();
+    } catch (clickError) {
+      if (isMountedRef.current) {
+        setError(clickError instanceof Error ? clickError.message : "Unable to click the Midtown browser.");
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsWorking(false);
+      }
+    }
+  }
+
+  async function forwardText(text: string): Promise<void> {
+    if (!text) {
+      return;
+    }
+    setIsWorking(true);
+    setError(null);
+    try {
+      const response = await apiClient.typeMidtownBrowserSession({ text });
+      if (!isMountedRef.current) {
+        return;
+      }
+      setSession(response);
+      await refreshFrame();
+    } catch (typeError) {
+      if (isMountedRef.current) {
+        setError(typeError instanceof Error ? typeError.message : "Unable to type into the Midtown browser.");
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsWorking(false);
+      }
+    }
+  }
+
+  async function handleBrowserKeyDown(event: KeyboardEvent<HTMLDivElement>): Promise<void> {
+    if (!frameSession?.live_session_active) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      if (event.key === "Tab" || event.key === "Enter" || event.key === "Backspace" || event.key.startsWith("Arrow")) {
+        event.preventDefault();
+        setIsWorking(true);
+        setError(null);
+        try {
+          const response = await apiClient.keyMidtownBrowserSession({ key: event.key });
+          if (!isMountedRef.current) {
+            return;
+          }
+          setSession(response);
+          await refreshFrame();
+        } catch (keyError) {
+          if (isMountedRef.current) {
+            setError(keyError instanceof Error ? keyError.message : "Unable to send a key to the Midtown browser.");
+          }
+        } finally {
+          if (isMountedRef.current) {
+            setIsWorking(false);
+          }
+        }
+      }
+      return;
+    }
+
+    const text = getInputTextFromKey(event.key);
+    if (text === null) {
+      if (event.key === "Enter" || event.key === "Tab" || event.key === "Backspace" || event.key.startsWith("Arrow")) {
+        event.preventDefault();
+        setIsWorking(true);
+        setError(null);
+        try {
+          const response = await apiClient.keyMidtownBrowserSession({ key: event.key });
+          if (!isMountedRef.current) {
+            return;
+          }
+          setSession(response);
+          await refreshFrame();
+        } catch (keyError) {
+          if (isMountedRef.current) {
+            setError(keyError instanceof Error ? keyError.message : "Unable to send a key to the Midtown browser.");
+          }
+        } finally {
+          if (isMountedRef.current) {
+            setIsWorking(false);
+          }
+        }
+      }
+      return;
+    }
+
+    event.preventDefault();
+    await forwardText(text);
+  }
+
+  const displaySource = frame?.image_data_url ?? null;
+  const browserStatusText = consumerCopy.status;
+  const browserInstructions = detectSecurityVerification(session)
+    ? "Complete Midtown security verification inside the live panel."
+    : frameSession?.authenticated
+      ? "Click the live browser image to interact with Midtown."
+      : "Open Midtown, then click and type directly in the live panel.";
 
   return (
     <AppShell>
@@ -155,6 +384,12 @@ export function MidtownBrowserSessionPage() {
       {error ? (
         <div className="mt-6">
           <StatusBanner tone="error">{error}</StatusBanner>
+        </div>
+      ) : null}
+
+      {frameError ? (
+        <div className="mt-6">
+          <StatusBanner tone="warning">{frameError}</StatusBanner>
         </div>
       ) : null}
 
@@ -182,7 +417,7 @@ export function MidtownBrowserSessionPage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/connected-retailers/midtown/orders")}
+              onClick={() => void handleViewOrders()}
               disabled={isLoading || isWorking || !browserSession?.authenticated}
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -204,34 +439,57 @@ export function MidtownBrowserSessionPage() {
 
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl shadow-black/20">
         <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-2">
-          <div>
+          <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Browser</p>
-            <p className="text-sm text-slate-300">
-              {consumerCopy.primaryActionKind === "verification"
-                ? "Complete Midtown security verification here."
-                : browserSession?.authenticated
-                  ? "Your Midtown account is ready. Choose an order below."
-                  : "Use this area to sign in to Midtown and continue to your orders."}
-            </p>
+            <p className="text-sm text-slate-300">{browserInstructions}</p>
+            <p className="text-xs text-slate-500">Status: {browserStatusText}</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+            {frameSession?.current_url ? <span className="rounded-full border border-white/10 px-3 py-1">{frameSession.current_url}</span> : null}
+            {frameSession?.order_count != null ? (
+              <span className="rounded-full border border-white/10 px-3 py-1">{frameSession.order_count} orders</span>
+            ) : null}
+            {isPollingFrame ? <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-cyan-100">Live</span> : null}
           </div>
         </div>
 
-        <div className="mt-4 min-h-[720px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90">
-          {browserUrl ? (
-            <iframe
-              key={browserUrl}
-              title="Midtown browser workspace"
-              src={browserUrl}
-              className="h-[720px] w-full border-0 bg-slate-950"
-              referrerPolicy="no-referrer"
-            />
+        <div className="mt-4 min-h-[720px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/90 p-3">
+          {displaySource ? (
+            <div className="space-y-3">
+              <div
+                ref={browserPanelRef}
+                role="application"
+                tabIndex={0}
+                onPaste={(event) => {
+                  event.preventDefault();
+                  const text = event.clipboardData.getData("text");
+                  if (text) {
+                    void forwardText(text);
+                  }
+                }}
+                onClick={() => browserPanelRef.current?.focus()}
+                onKeyDown={(event) => void handleBrowserKeyDown(event)}
+                className="outline-none focus:ring-2 focus:ring-cyan-400/60 focus:ring-offset-0"
+              >
+                <img
+                  title="Midtown browser workspace"
+                  src={displaySource}
+                  alt="Midtown browser workspace"
+                  onClick={(event) => void handleBrowserClick(event)}
+                  className="w-full select-none rounded-xl border border-white/10 bg-slate-950"
+                  draggable={false}
+                />
+              </div>
+              <p className="px-1 text-xs text-slate-500">Click the image to interact. Type while the browser panel is focused.</p>
+            </div>
           ) : (
-            <div className="flex min-h-[720px] items-center justify-center p-8 text-center">
+            <div className="flex min-h-[680px] items-center justify-center p-8 text-center">
               <div className="max-w-lg space-y-3">
                 <p className="text-lg font-semibold text-white">Midtown browser workspace</p>
                 <p className="text-sm text-slate-300">
                   Click Continue to Midtown to open the login and order history view here.
                 </p>
+                <p className="text-xs text-slate-500">ComicOS keeps the live page inside the app and updates the image automatically.</p>
               </div>
             </div>
           )}

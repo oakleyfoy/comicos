@@ -185,6 +185,9 @@ class MidtownBrowserSessionStatusRead(BaseModel):
     authenticated: bool = False
     order_count: int = 0
     last_updated_at: datetime | None = None
+    viewport_width: int | None = None
+    viewport_height: int | None = None
+    live_session_active: bool | None = None
 
 
 class MidtownBrowserSessionResponse(BaseModel):
@@ -200,3 +203,26 @@ class MidtownBrowserCaptureResponse(BaseModel):
     session: MidtownBrowserSessionStatusRead
     order_id: int
     retailer_order_number: str
+
+
+class MidtownBrowserFrameResponse(BaseModel):
+    session: MidtownBrowserSessionStatusRead
+    image_data_url: str
+    image_width: int
+    image_height: int
+    captured_at: datetime
+
+
+class MidtownBrowserClickRequest(BaseModel):
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    button: Literal["left", "right", "middle"] = "left"
+    click_count: int = Field(default=1, ge=1, le=2)
+
+
+class MidtownBrowserTypeRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+
+
+class MidtownBrowserKeyRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
