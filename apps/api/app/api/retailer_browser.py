@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from sqlmodel import Session
 
@@ -15,10 +17,15 @@ from app.schemas.retailer_accounts import (
 )
 from app.services.retailer_browser import (
     capture_midtown_browser_order,
+    RetailerBrowserConfigurationError,
+    RetailerBrowserEnvironmentError,
+    RetailerBrowserStateError,
     get_midtown_browser_session_status,
     list_midtown_browser_orders,
     start_midtown_browser_session,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 retailer_browser_v1_router = APIRouter(
     prefix="/api/v1/retailer-browser", tags=["Retailer Browser API v1 (P91-02)"]
@@ -49,12 +56,25 @@ def start_midtown_session(
     current_user: User = Depends(get_current_user),
 ) -> MidtownBrowserSessionResponse:
     assert current_user.id is not None
+    LOGGER.info(
+        "midtown_browser_session_start_endpoint user_id=%s",
+        current_user.id,
+    )
     try:
         status_model = start_midtown_browser_session(session, owner_user_id=int(current_user.id))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RetailerBrowserConfigurationError as exc:
+        LOGGER.warning(
+            "midtown_browser_session_start_config_error user_id=%s detail=%s",
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RetailerBrowserStateError as exc:
+        LOGGER.exception("midtown_browser_session_start_state_error user_id=%s", current_user.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except RetailerBrowserEnvironmentError as exc:
+        LOGGER.exception("midtown_browser_session_start_environment_error user_id=%s", current_user.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserSessionResponse(session=_status_schema(status_model))
 
 
@@ -66,8 +86,10 @@ def get_midtown_session_status(
     assert current_user.id is not None
     try:
         status_model = get_midtown_browser_session_status(session, owner_user_id=int(current_user.id))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RetailerBrowserConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RetailerBrowserStateError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserSessionResponse(session=_status_schema(status_model))
 
 
@@ -79,10 +101,12 @@ def go_to_midtown_orders(
     assert current_user.id is not None
     try:
         orders_model = list_midtown_browser_orders(session, owner_user_id=int(current_user.id))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RetailerBrowserConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RetailerBrowserStateError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except RetailerBrowserEnvironmentError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserOrdersResponse(
         session=_status_schema(orders_model.status),
         orders=[MidtownBrowserOrderRead.model_validate(order) for order in orders_model.orders],
@@ -97,10 +121,12 @@ def get_midtown_orders(
     assert current_user.id is not None
     try:
         orders_model = list_midtown_browser_orders(session, owner_user_id=int(current_user.id))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RetailerBrowserConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RetailerBrowserStateError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except RetailerBrowserEnvironmentError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserOrdersResponse(
         session=_status_schema(orders_model.status),
         orders=[MidtownBrowserOrderRead.model_validate(order) for order in orders_model.orders],
@@ -125,8 +151,12 @@ def capture_midtown_order(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RetailerBrowserConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RetailerBrowserStateError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except RetailerBrowserEnvironmentError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return MidtownBrowserCaptureResponse(
         session=_status_schema(status_model),
         order_id=snapshot_id,

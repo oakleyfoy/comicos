@@ -3,10 +3,17 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from test_inventory import auth_headers, register_and_login
 
 from app.services.retailer_browser import MidtownBrowserOrders as MidtownBrowserOrdersModel
 from app.services.retailer_browser import MidtownBrowserStatus
+from app.services.retailer_browser import (
+    RetailerBrowserConfigurationError,
+    RetailerBrowserEnvironmentError,
+    RetailerBrowserStateError,
+)
 
 
 def test_midtown_browser_session_routes_surface_orders_and_capture(client, session, monkeypatch) -> None:
@@ -95,4 +102,44 @@ def test_midtown_browser_session_requires_connected_account(client) -> None:
         "/api/v1/retailer-browser/midtown/session/status",
         headers=auth_headers(token),
     )
-    assert response.status_code == 404
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Retailer browser session is not configured."
+
+
+@pytest.mark.parametrize(
+    ("raised_error", "expected_status", "expected_detail"),
+    [
+        (
+            RetailerBrowserConfigurationError("Retailer browser session is not configured."),
+            400,
+            "Retailer browser session is not configured.",
+        ),
+        (
+            RetailerBrowserEnvironmentError("Playwright Chromium failed to launch."),
+            500,
+            "Playwright Chromium failed to launch.",
+        ),
+        (
+            RetailerBrowserStateError("Failed loading saved browser state."),
+            500,
+            "Failed loading saved browser state.",
+        ),
+    ],
+)
+def test_midtown_browser_session_start_maps_browser_errors(
+    client,
+    monkeypatch,
+    raised_error,
+    expected_status,
+    expected_detail,
+) -> None:
+    token = register_and_login(client, "midtown-browser-error-map@example.com")
+
+    def raise_error(*args, **kwargs):
+        raise raised_error
+
+    monkeypatch.setattr("app.api.retailer_browser.start_midtown_browser_session", raise_error)
+
+    response = client.post("/api/v1/retailer-browser/midtown/session/start", headers=auth_headers(token))
+    assert response.status_code == expected_status, response.text
+    assert response.json()["error"]["message"] == expected_detail

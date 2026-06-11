@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -28,9 +29,28 @@ from app.services.retailer_sync.midtown_parser import (
 )
 from app.services.retailer_sync.retailer_order_persistence import upsert_retailer_order_snapshots
 
+LOGGER = logging.getLogger(__name__)
+
+
+class RetailerBrowserConfigurationError(RuntimeError):
+    pass
+
+
+class RetailerBrowserEnvironmentError(RuntimeError):
+    pass
+
+
+class RetailerBrowserStateError(RuntimeError):
+    pass
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _log_event(event: str, **fields: Any) -> None:
+    payload = {"event": event, **fields}
+    LOGGER.info("midtown_browser_session %s", json.dumps(payload, default=str, sort_keys=True))
 
 
 def _browser_state_path(account_id: int) -> Path:
@@ -45,8 +65,16 @@ def _midtown_account_for_user_or_404(session: Session, *, owner_user_id: int) ->
         )
     ).first()
     if account is None:
-        raise ValueError("Midtown retailer account not found.")
+        raise RetailerBrowserConfigurationError("Retailer browser session is not configured.")
     return account
+
+
+def _ensure_session_state_root() -> None:
+    try:
+        SESSION_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _log_event("session_state_root_create_failed", root=str(SESSION_STATE_ROOT), error=str(exc))
+        raise RetailerBrowserStateError("Could not create retailer session directory.") from exc
 
 
 def _read_browser_state(account_id: int) -> dict[str, Any]:
@@ -55,14 +83,22 @@ def _read_browser_state(account_id: int) -> dict[str, Any]:
         return {}
     try:
         return json.loads(state_path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    except OSError as exc:
+        _log_event("browser_state_load_failed", account_id=account_id, path=str(state_path), error=str(exc))
+        raise RetailerBrowserStateError("Failed loading saved browser state.") from exc
+    except json.JSONDecodeError as exc:
+        _log_event("browser_state_decode_failed", account_id=account_id, path=str(state_path), error=str(exc))
+        raise RetailerBrowserStateError("Failed loading saved browser state.") from exc
 
 
 def _write_browser_state(account_id: int, payload: dict[str, Any]) -> None:
     state_path = _browser_state_path(account_id)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    _ensure_session_state_root()
+    try:
+        state_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    except OSError as exc:
+        _log_event("browser_state_write_failed", account_id=account_id, path=str(state_path), error=str(exc))
+        raise RetailerBrowserStateError("Could not create retailer session directory.") from exc
 
 
 def _history_item_count(fragment: str) -> int | None:
@@ -94,6 +130,7 @@ class MidtownBrowserOrders:
 
 
 def _session_context_kwargs(account_id: int) -> dict[str, Any]:
+    _ensure_session_state_root()
     context_kwargs = {
         "user_agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -105,39 +142,72 @@ def _session_context_kwargs(account_id: int) -> dict[str, Any]:
     }
     state_path = Path(SESSION_STATE_ROOT) / f"midtown-account-{account_id}.json"
     if state_path.exists():
+        _log_event("storage_state_load_attempt", account_id=account_id, path=str(state_path))
+        try:
+            json.loads(state_path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            _log_event("storage_state_load_failed", account_id=account_id, path=str(state_path), error=str(exc))
+            raise RetailerBrowserStateError("Failed loading saved browser state.") from exc
+        except json.JSONDecodeError as exc:
+            _log_event("storage_state_load_failed", account_id=account_id, path=str(state_path), error=str(exc))
+            raise RetailerBrowserStateError("Failed loading saved browser state.") from exc
         context_kwargs["storage_state"] = str(state_path)
+        _log_event("storage_state_load_success", account_id=account_id, path=str(state_path))
     return context_kwargs
+
+
+def _launch_midtown_browser(*, playwright, account_id: int):
+    _log_event("playwright_launch_attempt", account_id=account_id, headless=True)
+    try:
+        browser = playwright.chromium.launch(headless=True)
+    except Exception as exc:
+        LOGGER.exception("midtown_browser_session playwright_launch_failed account_id=%s", account_id)
+        raise RetailerBrowserEnvironmentError("Playwright Chromium failed to launch.") from exc
+    _log_event("playwright_launch_success", account_id=account_id)
+    return browser
 
 
 def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[MidtownOrderHistoryEntry]]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:  # pragma: no cover - environment guard
-        raise RuntimeError(
+        raise RetailerBrowserEnvironmentError(
             "playwright is required for Midtown browser sessions; install it and run `playwright install chromium`."
         ) from exc
 
     if account.id is None:
-        raise RuntimeError("Retailer account must be saved before starting a Midtown session.")
+        raise RetailerBrowserConfigurationError("Retailer browser session is not configured.")
 
+    _ensure_session_state_root()
+    _log_event("midtown_browser_init_start", account_id=int(account.id), owner_user_id=int(account.owner_user_id or 0))
     password = decrypt_retailer_password(account.encrypted_password)
     state_path = Path(SESSION_STATE_ROOT) / f"midtown-account-{int(account.id)}.json"
     status = "ready"
     orders: list[MidtownOrderHistoryEntry] = []
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = _launch_midtown_browser(playwright=playwright, account_id=int(account.id))
         context = browser.new_context(**_session_context_kwargs(int(account.id)))
         page = context.new_page()
         try:
+            _log_event(
+                "midtown_browser_init_ready",
+                account_id=int(account.id),
+                current_url=MIDTOWN_ORDERS_URL,
+                storage_state_path=str(state_path),
+            )
             page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
             page.wait_for_load_state("networkidle")
             if _requires_midtown_login(page):
+                _log_event("midtown_browser_login_required", account_id=int(account.id), current_url=page.url)
                 _midtown_login(page, username=account.username, password=password)
+                _log_event("midtown_browser_storage_state_save_start", account_id=int(account.id), path=str(state_path))
                 _save_session_state(context, account_id=int(account.id))
+                _log_event("midtown_browser_storage_state_save_success", account_id=int(account.id), path=str(state_path))
                 page.goto(MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
                 page.wait_for_load_state("networkidle")
             if _has_midtown_challenge(page):
+                _log_event("midtown_browser_security_challenge_detected", account_id=int(account.id), current_url=page.url)
                 status = "needs_attention"
             else:
                 orders = parse_midtown_order_history(page.content())
@@ -177,20 +247,35 @@ def start_midtown_browser_session(
     *,
     owner_user_id: int,
 ) -> MidtownBrowserStatus:
+    _log_event("midtown_browser_session_start_request", owner_user_id=owner_user_id)
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
-    status, orders = _ensure_midtown_session(account)
-    state = _read_browser_state(int(account.id or 0))
-    return MidtownBrowserStatus(
-        retailer="midtown",
-        account_id=int(account.id or 0),
-        status=status,
-        message=state.get("message"),
-        current_url=state.get("current_url") or MIDTOWN_ORDERS_URL,
-        orders_url=state.get("orders_url") or MIDTOWN_ORDERS_URL,
-        authenticated=bool(state.get("authenticated", True)),
-        order_count=len(orders) if orders else int(state.get("order_count") or 0),
-        last_updated_at=datetime.fromisoformat(state["last_updated_at"]) if state.get("last_updated_at") else None,
-    )
+    try:
+        status, orders = _ensure_midtown_session(account)
+        state = _read_browser_state(int(account.id or 0))
+        result = MidtownBrowserStatus(
+            retailer="midtown",
+            account_id=int(account.id or 0),
+            status=status,
+            message=state.get("message"),
+            current_url=state.get("current_url") or MIDTOWN_ORDERS_URL,
+            orders_url=state.get("orders_url") or MIDTOWN_ORDERS_URL,
+            authenticated=bool(state.get("authenticated", True)),
+            order_count=len(orders) if orders else int(state.get("order_count") or 0),
+            last_updated_at=datetime.fromisoformat(state["last_updated_at"]) if state.get("last_updated_at") else None,
+        )
+        _log_event(
+            "midtown_browser_session_start_success",
+            account_id=result.account_id,
+            status=result.status,
+            current_url=result.current_url,
+            order_count=result.order_count,
+        )
+        return result
+    except (RetailerBrowserConfigurationError, RetailerBrowserStateError, RetailerBrowserEnvironmentError):
+        raise
+    except Exception as exc:
+        LOGGER.exception("midtown_browser_session_start_failed owner_user_id=%s", owner_user_id)
+        raise RetailerBrowserEnvironmentError("Midtown browser initialization failed.") from exc
 
 
 def get_midtown_browser_session_status(
@@ -199,7 +284,10 @@ def get_midtown_browser_session_status(
     owner_user_id: int,
 ) -> MidtownBrowserStatus:
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
-    state = _read_browser_state(int(account.id or 0))
+    try:
+        state = _read_browser_state(int(account.id or 0))
+    except RetailerBrowserStateError:
+        raise
     last_updated_at = None
     if state.get("last_updated_at"):
         try:
@@ -281,24 +369,53 @@ def capture_midtown_browser_order(
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:  # pragma: no cover - environment guard
-        raise RuntimeError(
+        raise RetailerBrowserEnvironmentError(
             "playwright is required for Midtown browser sessions; install it and run `playwright install chromium`."
         ) from exc
 
+    _log_event(
+        "midtown_browser_detail_capture_start",
+        account_id=int(account.id or 0),
+        retailer_order_number=retailer_order_number,
+        detail_url=history_entry.detail_url,
+    )
+
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = _launch_midtown_browser(playwright=playwright, account_id=int(account.id or 0))
         context = browser.new_context(**_session_context_kwargs(int(account.id or 0)))
         page = context.new_page()
         try:
             page.goto(history_entry.detail_url or MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
             page.wait_for_load_state("networkidle")
             if _requires_midtown_login(page):
+                _log_event(
+                    "midtown_browser_detail_login_required",
+                    account_id=int(account.id or 0),
+                    current_url=page.url,
+                )
                 _midtown_login(page, username=account.username, password=decrypt_retailer_password(account.encrypted_password))
+                _log_event(
+                    "midtown_browser_storage_state_save_start",
+                    account_id=int(account.id or 0),
+                    path=str(Path(SESSION_STATE_ROOT) / f"midtown-account-{int(account.id)}.json"),
+                )
                 _save_session_state(context, account_id=int(account.id or 0))
+                _log_event(
+                    "midtown_browser_storage_state_save_success",
+                    account_id=int(account.id or 0),
+                    path=str(Path(SESSION_STATE_ROOT) / f"midtown-account-{int(account.id)}.json"),
+                )
                 page.goto(history_entry.detail_url or MIDTOWN_ORDERS_URL, wait_until="domcontentloaded")
                 page.wait_for_load_state("networkidle")
             if _has_midtown_challenge(page):
-                raise RuntimeError("Midtown presented a CAPTCHA or security challenge.")
+                _log_event(
+                    "midtown_browser_detail_security_challenge_detected",
+                    account_id=int(account.id or 0),
+                    current_url=page.url,
+                )
+                raise RetailerBrowserEnvironmentError(
+                    "Midtown presented a CAPTCHA or security challenge."
+                )
             detail = _parse_midtown_detail_or_raise(
                 page.content(),
                 fallback_order_number=history_entry.retailer_order_number,
@@ -338,7 +455,7 @@ def capture_midtown_browser_order(
         )
     ).first()
     if snapshot is None or snapshot.id is None:
-        raise RuntimeError("Retailer order snapshot was not created.")
+        raise RetailerBrowserStateError("Retailer order snapshot was not created.")
     state = _read_browser_state(int(account.id or 0))
     state.update(
         {
