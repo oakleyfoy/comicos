@@ -7,6 +7,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models import DraftImport, User
 from app.schemas.retailer_accounts import (
+    MidtownHtmlImportDebugResponse,
     MidtownHtmlImportResponse,
     RetailerAccountCreate,
     RetailerAccountRead,
@@ -27,6 +28,7 @@ from app.schemas.retailer_accounts import (
 from app.services.retailer_sync.midtown_html_import import (
     MAX_HTML_BYTES,
     MidtownHtmlImportError,
+    debug_midtown_saved_html,
     import_midtown_order_from_html,
 )
 from app.schemas.imports import DraftImportRead
@@ -324,6 +326,39 @@ def get_retailer_orders(
     )
 
 
+async def _read_midtown_html_upload(file: UploadFile) -> str:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file was empty.")
+    if len(raw) > MAX_HTML_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large. Save just the Midtown order page as HTML and try again.",
+        )
+    return raw.decode("utf-8", errors="replace")
+
+
+def _midtown_html_import_http_error(exc: MidtownHtmlImportError) -> HTTPException:
+    payload: dict = {"message": str(exc)}
+    if exc.diagnostics:
+        payload["diagnostics"] = exc.diagnostics
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=payload)
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/import/midtown-html/debug",
+    response_model=MidtownHtmlImportDebugResponse,
+)
+async def debug_midtown_order_html_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> MidtownHtmlImportDebugResponse:
+    assert current_user.id is not None
+    html_text = await _read_midtown_html_upload(file)
+    fields = debug_midtown_saved_html(html_text)
+    return MidtownHtmlImportDebugResponse(**fields)
+
+
 @retailer_accounts_v1_router.post(
     "/retailer-orders/import/midtown-html",
     response_model=MidtownHtmlImportResponse,
@@ -335,15 +370,7 @@ async def import_midtown_order_html(
     current_user: User = Depends(get_current_user),
 ) -> MidtownHtmlImportResponse:
     assert current_user.id is not None
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file was empty.")
-    if len(raw) > MAX_HTML_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File is too large. Save just the Midtown order page as HTML and try again.",
-        )
-    html_text = raw.decode("utf-8", errors="replace")
+    html_text = await _read_midtown_html_upload(file)
     try:
         order_id, order_number, stats = import_midtown_order_from_html(
             session,
@@ -352,7 +379,7 @@ async def import_midtown_order_html(
             source_filename=file.filename,
         )
     except MidtownHtmlImportError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise _midtown_html_import_http_error(exc) from exc
     return MidtownHtmlImportResponse(
         order_id=order_id,
         retailer_order_number=order_number,

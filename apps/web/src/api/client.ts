@@ -413,6 +413,43 @@ export interface MidtownHtmlImportResponse {
   item_count: number;
 }
 
+export interface MidtownHtmlImportDebugResponse {
+  title: string | null;
+  page_length: number;
+  order_item_count: number;
+  has_right_contents: boolean;
+  has_info_container: boolean;
+  visible_text_excerpt: string;
+}
+
+export interface MidtownHtmlImportParsedPreview {
+  retailer_order_number?: string;
+  order_status?: string | null;
+  order_date?: string | null;
+  order_total?: string | null;
+  items_parsed?: number;
+  item_titles?: string[];
+  parse_diagnostics?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface MidtownHtmlImportDiagnostics {
+  title: string | null;
+  page_length: number;
+  order_item_count: number;
+  order_number_link_count: number;
+  visible_text_excerpt: string;
+  has_right_contents: boolean;
+  has_info_container: boolean;
+  saved_html_path?: string | null;
+  parsed?: MidtownHtmlImportParsedPreview | null;
+}
+
+export interface MidtownHtmlImportErrorPayload {
+  message: string;
+  diagnostics?: MidtownHtmlImportDiagnostics;
+}
+
 export interface MidtownBrowserFrameResponse {
   session: MidtownBrowserSessionStatusRead;
   image_data_url: string;
@@ -6958,8 +6995,41 @@ function parseStructuredApiError(data: unknown): string | null {
     const m = (nested as { message?: unknown }).message;
     if (typeof m === "string") return m;
   }
-  if (typeof rec.detail === "string") return rec.detail;
+  const detail = rec.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && detail !== null) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
   return null;
+}
+
+function extractApiErrorPayload(data: unknown): { message: string; payload?: unknown } {
+  const fallback = parseStructuredApiError(data) ?? "Request failed";
+  if (!data || typeof data !== "object") {
+    return { message: fallback };
+  }
+  const rec = data as Record<string, unknown>;
+  const apiError = rec.error;
+  if (apiError && typeof apiError === "object" && apiError !== null) {
+    const message = (apiError as { message?: unknown }).message;
+    const details = (apiError as { details?: unknown }).details;
+    if (typeof message === "string") {
+      return {
+        message,
+        payload: details,
+      };
+    }
+  }
+  const detail = rec.detail;
+  if (detail && typeof detail === "object" && detail !== null) {
+    const message = (detail as { message?: unknown }).message;
+    return {
+      message: typeof message === "string" ? message : fallback,
+      payload: detail,
+    };
+  }
+  return { message: fallback };
 }
 
 function getStoredToken(): string | null {
@@ -7033,15 +7103,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = "Request failed";
+    let payload: unknown;
 
     try {
       const data = (await response.json()) as unknown;
-      message = parseStructuredApiError(data) ?? message;
+      const parsed = extractApiErrorPayload(data);
+      message = parsed.message;
+      payload = parsed.payload;
     } catch {
       // Ignore invalid error payloads.
     }
 
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, payload);
   }
 
   assertJsonApiResponse(path, response);
@@ -20920,6 +20993,18 @@ export const apiClient = {
       method: "POST",
       body: form,
     });
+  },
+
+  debugMidtownOrderHtmlImport(file: File): Promise<MidtownHtmlImportDebugResponse> {
+    const form = new FormData();
+    form.append("file", file);
+    return request<MidtownHtmlImportDebugResponse>(
+      "/api/v1/retailer-orders/import/midtown-html/debug",
+      {
+        method: "POST",
+        body: form,
+      },
+    );
   },
 
   createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {

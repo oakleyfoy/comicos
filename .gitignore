@@ -25,6 +25,8 @@ apps/api/test_creator_migration.db
 
 # LoCG browser capture artifacts (local certification runs)
 data/locg_browser_capture/
+data/midtown_html_upload_failures/
+data/retailer_sessions/
 
 # Cursor local settings
 .cursor/

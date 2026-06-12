@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sqlmodel import select
 from test_inventory import auth_headers, register_and_login
@@ -298,4 +299,72 @@ def test_import_midtown_order_html_rejects_empty_file(client, session) -> None:
         files={"file": ("order.html", b"", "text/html")},
     )
     assert response.status_code == 400, response.text
+
+
+_NO_ITEMS_MIDTOWN_HTML = """
+<html>
+  <head><title>Order #4257558 - Midtown Comics</title></head>
+  <body>
+    <div id="right-contents">
+      <div class="info-container">
+        <h1>Order #4257558</h1>
+        <p>Status: Shipped</p>
+        <p>Order Total: $72.86</p>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+
+def test_import_midtown_order_html_no_items_returns_diagnostics(client, session, tmp_path, monkeypatch) -> None:
+    from app.services.retailer_sync import midtown_html_import as import_module
+
+    monkeypatch.setattr(import_module, "MIDTOWN_HTML_FAILURE_ROOT", tmp_path)
+
+    token = register_and_login(client, "midtown-html-no-items@example.com")
+    response = client.post(
+        "/api/v1/retailer-orders/import/midtown-html",
+        headers=auth_headers(token),
+        files={
+            "file": ("order.html", _NO_ITEMS_MIDTOWN_HTML.encode("utf-8"), "text/html"),
+        },
+    )
+    assert response.status_code == 422, response.text
+    payload = response.json()
+    assert "error" in payload
+    detail = payload["error"]["details"]
+    assert detail is not None
+    assert "No order items" in payload["error"]["message"]
+    diagnostics = detail["diagnostics"]
+    assert diagnostics["title"] == "Order #4257558 - Midtown Comics"
+    assert diagnostics["order_item_count"] == 0
+    assert diagnostics["has_right_contents"] is True
+    assert diagnostics["has_info_container"] is True
+    assert diagnostics["parsed"]["retailer_order_number"] == "4257558"
+    assert diagnostics["parsed"]["items_parsed"] == 0
+    assert diagnostics["saved_html_path"]
+    assert Path(diagnostics["saved_html_path"]).is_file()
+
+
+def test_debug_midtown_order_html_import(client, session) -> None:
+    token = register_and_login(client, "midtown-html-debug@example.com")
+    html = """
+    <html><head><title>Order #9999</title></head>
+    <body><div id="right-contents"><div class="info-container">
+    <div class="order-item"><a href="/product/x">Comic</a></div>
+    </div></div></body></html>
+    """
+    response = client.post(
+        "/api/v1/retailer-orders/import/midtown-html/debug",
+        headers=auth_headers(token),
+        files={"file": ("order.html", html.encode("utf-8"), "text/html")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["title"] == "Order #9999"
+    assert body["order_item_count"] == 1
+    assert body["has_right_contents"] is True
+    assert body["has_info_container"] is True
+    assert "Comic" in body["visible_text_excerpt"]
 

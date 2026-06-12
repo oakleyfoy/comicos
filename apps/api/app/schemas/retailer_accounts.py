@@ -172,6 +172,27 @@ class MidtownHtmlImportResponse(BaseModel):
     item_count: int
 
 
+class MidtownHtmlImportDebugResponse(BaseModel):
+    title: str | None = None
+    page_length: int
+    order_item_count: int
+    has_right_contents: bool
+    has_info_container: bool
+    visible_text_excerpt: str
+
+
+class MidtownHtmlImportDiagnostics(BaseModel):
+    title: str | None = None
+    page_length: int
+    order_item_count: int
+    order_number_link_count: int
+    visible_text_excerpt: str
+    has_right_contents: bool
+    has_info_container: bool
+    saved_html_path: str | None = None
+    parsed: dict | None = None
+
+
 class MidtownBrowserOrderRead(BaseModel):
     retailer_order_number: str
     order_date: date | None = None
