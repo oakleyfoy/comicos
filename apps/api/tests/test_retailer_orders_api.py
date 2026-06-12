@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlmodel import select
 from test_inventory import auth_headers, register_and_login
 
-from app.models import RetailerAccount, RetailerOrderItemSnapshot, RetailerOrderSnapshot, RetailerSyncRun
+from app.models import InventoryCopy, PortfolioItem, RetailerAccount, RetailerOrderItemSnapshot, RetailerOrderSnapshot, RetailerSyncRun
 
 
 def _create_account(client, session, token: str, email: str) -> RetailerAccount:
@@ -216,6 +216,40 @@ def test_retailer_orders_list_detail_and_confirm_flow(client, session) -> None:
     assert confirmed_again.json()["review_status"] == "confirmed"
 
 
+def test_retailer_order_confirm_materializes_inventory_and_portfolio(client, session) -> None:
+    owner_token = register_and_login(client, "retailer-confirm-inventory@example.com")
+    owner_account = _create_account(client, session, owner_token, "confirm-inventory@example.com")
+    _seed_order(session, account=owner_account, order_id=501, order_number="8880001", item_count=2)
+
+    before = client.get("/inventory", headers=auth_headers(owner_token))
+    assert before.status_code == 200, before.text
+    assert before.json()["total"] == 0
+
+    confirmed = client.post("/api/v1/retailer-orders/501/confirm", headers=auth_headers(owner_token))
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["review_status"] == "confirmed"
+
+    after = client.get("/inventory", headers=auth_headers(owner_token))
+    assert after.status_code == 200, after.text
+    assert after.json()["total"] == 2
+
+    inventory_ids = [
+        row["inventory_copy_id"] for row in after.json()["items"] if row.get("inventory_copy_id") is not None
+    ]
+    portfolio_items = session.exec(
+        select(PortfolioItem).where(
+            PortfolioItem.inventory_item_id.in_(inventory_ids),
+            PortfolioItem.removed_at.is_(None),
+        )
+    ).all()
+    assert len(portfolio_items) == 2
+
+    copies = session.exec(
+        select(InventoryCopy).where(InventoryCopy.user_id == owner_account.owner_user_id)
+    ).all()
+    assert len(copies) == 2
+
+
 def test_retailer_orders_detail_returns_all_items(client, session) -> None:
     token = register_and_login(client, "retailer-orders-detail@example.com")
     account = _create_account(client, session, token, "detail@example.com")
@@ -275,7 +309,8 @@ def test_import_midtown_order_html_creates_order(client, session) -> None:
     assert body["order_total"] == "14.98"
     assert len(body["items"]) == 1
     assert body["items"][0]["title"] == "Immortal Thor #1 Cover A"
-    assert body["items"][0]["image_url"] == "https://www.midtowncomics.com/images/immortal.jpg"
+    # Saved HTML keeps relative img src; CDN URL is only derived for Midtown *_ful.jpg filenames.
+    assert body["items"][0]["image_url"] == "/images/immortal.jpg"
 
 
 def test_import_midtown_order_html_rejects_unparseable_file(client, session) -> None:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collectionHistoricalTimelineUi";
 import { DashboardProfileTabs } from "../components/DashboardProfileTabs";
@@ -827,6 +827,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
     loadProfile !== "collection" &&
     (loadProfile === "market" || loadProfile === "grading" || loadProfile === "dealer");
 
+  const [searchParams] = useSearchParams();
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [performance, setPerformance] = useState<PortfolioPerformance | null>(null);
   const [portfolioValueSummary, setPortfolioValueSummary] = useState<PortfolioValueSummaryResponse | null>(null);
@@ -836,6 +837,15 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const [pageSize] = useState(25);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+
+  useEffect(() => {
+    const q = searchParams.get("q")?.trim();
+    if (q) {
+      setSearchInput(q);
+      setSearch(q);
+    }
+  }, [searchParams]);
+
   const [publisher, setPublisher] = useState("");
   const [holdStatus, setHoldStatus] = useState("");
   const [gradeStatus, setGradeStatus] = useState("");

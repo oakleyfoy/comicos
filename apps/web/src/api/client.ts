@@ -336,6 +336,11 @@ export interface RetailerOrderSnapshotRead {
   product_url_count: number;
   price_count: number;
   release_date_count: number;
+  linked_order_id?: number | null;
+  linked_import_id?: number | null;
+  inventory_copies_created?: number | null;
+  total_ordered_quantity?: number | null;
+  portfolio_items_added?: number | null;
   capture_quality_summary_json: Record<string, unknown>;
   parser_quality_summary_json: Record<string, unknown>;
   raw_fields_summary_json: Record<string, unknown>;

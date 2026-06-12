@@ -105,6 +105,11 @@ class RetailerOrderSnapshotRead(BaseModel):
     product_url_count: int = 0
     price_count: int = 0
     release_date_count: int = 0
+    linked_order_id: int | None = None
+    linked_import_id: int | None = None
+    inventory_copies_created: int | None = None
+    total_ordered_quantity: int | None = None
+    portfolio_items_added: int | None = None
     capture_quality_summary_json: dict = Field(default_factory=dict)
     parser_quality_summary_json: dict = Field(default_factory=dict)
     raw_fields_summary_json: dict = Field(default_factory=dict)

@@ -51,6 +51,7 @@ from app.services.retailer_accounts import (
     start_retailer_account_local_sync,
     update_retailer_account,
 )
+from app.services.retailer_order_materialization import RetailerOrderMaterializationResult
 from app.services.retailer_sync.retailer_import_enrichment import enrich_drafts_from_retailer_orders
 from app.services.imports import serialize_import
 
@@ -88,7 +89,12 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     return RetailerOrderItemSnapshotRead.model_validate(item)
 
 
-def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
+def _serialize_order(
+    order,
+    *,
+    session: Session,
+    materialization: RetailerOrderMaterializationResult | None = None,
+) -> RetailerOrderSnapshotRead:
     items = list_retailer_order_items(session, order_snapshot_id=int(order.id))
     draft_import_id = get_retailer_order_review_draft_id(
         session,
@@ -96,6 +102,18 @@ def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
         retailer_order_number=order.retailer_order_number,
     )
     quality_summary = build_retailer_order_quality_summary(session, order=order, items=items)
+    raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
+    linked_order_id = materialization.order_id if materialization else raw.get("comicos_linked_order_id")
+    linked_import_id = materialization.import_id if materialization else raw.get("comicos_linked_import_id")
+    inventory_copies_created = (
+        materialization.inventory_copies_created if materialization else raw.get("comicos_inventory_copies_created")
+    )
+    total_ordered_quantity = (
+        materialization.total_ordered_quantity if materialization else raw.get("comicos_total_ordered_quantity")
+    )
+    portfolio_items_added = (
+        materialization.portfolio_items_added if materialization else raw.get("comicos_portfolio_items_added")
+    )
     return RetailerOrderSnapshotRead(
         id=int(order.id),
         retailer_account_id=order.retailer_account_id,
@@ -112,6 +130,11 @@ def _serialize_order(order, *, session: Session) -> RetailerOrderSnapshotRead:
         product_url_count=quality_summary["product_url_count"],
         price_count=quality_summary["price_count"],
         release_date_count=quality_summary["release_date_count"],
+        linked_order_id=int(linked_order_id) if linked_order_id is not None else None,
+        linked_import_id=int(linked_import_id) if linked_import_id is not None else None,
+        inventory_copies_created=int(inventory_copies_created) if inventory_copies_created is not None else None,
+        total_ordered_quantity=int(total_ordered_quantity) if total_ordered_quantity is not None else None,
+        portfolio_items_added=int(portfolio_items_added) if portfolio_items_added is not None else None,
         capture_quality_summary_json=quality_summary["capture_quality_summary_json"],
         parser_quality_summary_json=quality_summary["parser_quality_summary_json"],
         raw_fields_summary_json=quality_summary["raw_fields_summary_json"],
@@ -412,12 +435,12 @@ def confirm_retailer_order_route(
     current_user: User = Depends(get_current_user),
 ) -> RetailerOrderSnapshotRead:
     assert current_user.id is not None
-    order = confirm_retailer_order(
+    order, materialization = confirm_retailer_order(
         session,
         owner_user_id=int(current_user.id),
         order_id=order_id,
     )
-    return _serialize_order(order, session=session)
+    return _serialize_order(order, session=session, materialization=materialization)
 
 
 @retailer_accounts_v1_router.post(

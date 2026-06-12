@@ -23,6 +23,10 @@ from app.services.retailer_credentials import (
     mask_retailer_username,
     validate_retailer_credential_key,
 )
+from app.services.retailer_order_materialization import (
+    RetailerOrderMaterializationResult,
+    materialize_retailer_order_inventory,
+)
 from app.services.retailer_sync.midtown_account_sync import (
     MidtownLocalSyncCapture,
     MidtownLocalSyncStart,
@@ -316,10 +320,7 @@ def get_retailer_order_review_draft_id(
     retailer_order_number: str,
 ) -> int | None:
     candidate_imports = session.exec(
-        select(DraftImport).where(
-            DraftImport.user_id == owner_user_id,
-            DraftImport.status == "draft",
-        )
+        select(DraftImport).where(DraftImport.user_id == owner_user_id).order_by(DraftImport.updated_at.desc())
     ).all()
     for draft in candidate_imports:
         payload = draft.parsed_payload_json or {}
@@ -363,13 +364,29 @@ def confirm_retailer_order(
     *,
     owner_user_id: int,
     order_id: int,
-) -> RetailerOrderSnapshot:
-    return set_retailer_order_review_status(
+) -> tuple[RetailerOrderSnapshot, RetailerOrderMaterializationResult]:
+    order = get_retailer_order_for_user_or_404(
+        session, owner_user_id=owner_user_id, order_id=order_id
+    )
+    account = get_retailer_account_for_user_or_404(
+        session,
+        owner_user_id=owner_user_id,
+        account_id=int(order.retailer_account_id),
+    )
+    materialization = materialize_retailer_order_inventory(
+        session,
+        owner_user_id=owner_user_id,
+        order=order,
+        account=account,
+    )
+    session.refresh(order)
+    order = set_retailer_order_review_status(
         session,
         owner_user_id=owner_user_id,
         order_id=order_id,
         review_status="confirmed",
     )
+    return order, materialization
 
 
 def get_retailer_order_for_user_or_404(

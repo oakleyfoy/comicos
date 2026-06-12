@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, apiClient, type RetailerOrderSnapshotRead } from "../api/client";
 import { AppShell } from "../components/AppShell";
@@ -65,6 +65,11 @@ export function RetailerOrderDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmStats, setConfirmStats] = useState<{
+    inventoryCopies: number;
+    linkedOrderId: number;
+    retailer: string;
+  } | null>(null);
 
   const debugSummary = useMemo(() => {
     if (!order) {
@@ -116,10 +121,23 @@ export function RetailerOrderDetailPage() {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
+    setConfirmStats(null);
     try {
       const response = await apiClient.confirmRetailerOrder(order.id);
       setOrder(response);
-      setSuccess("Retailer order confirmed. Ready for receiving when books arrive.");
+      const copies = response.inventory_copies_created ?? response.total_ordered_quantity ?? 0;
+      if (response.linked_order_id && copies > 0) {
+        setConfirmStats({
+          inventoryCopies: copies,
+          linkedOrderId: response.linked_order_id,
+          retailer: response.retailer,
+        });
+      }
+      setSuccess(
+        copies > 0
+          ? `Confirmed. Created ${copies} inventory cop${copies === 1 ? "y" : "ies"} in your portfolio.`
+          : "Retailer order confirmed.",
+      );
     } catch (confirmError) {
       setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
     } finally {
@@ -141,8 +159,30 @@ export function RetailerOrderDetailPage() {
         </div>
       ) : null}
       {success ? (
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
           <StatusBanner tone="success">{success}</StatusBanner>
+          {confirmStats ? (
+            <div className="flex flex-wrap gap-3 text-sm">
+              <Link
+                to={`/retailer-orders/${orderId}`}
+                className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 font-medium text-emerald-100 hover:bg-emerald-400/20"
+              >
+                Retail order detail
+              </Link>
+              <Link
+                to={`/dashboard?q=${encodeURIComponent(confirmStats.retailer)}`}
+                className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 font-medium text-cyan-100 hover:bg-cyan-400/20"
+              >
+                Portfolio ({confirmStats.inventoryCopies} new)
+              </Link>
+              <Link
+                to={`/dashboard?q=${encodeURIComponent(confirmStats.retailer)}`}
+                className="rounded-lg border border-white/10 px-3 py-2 font-medium text-slate-200 hover:bg-white/5"
+              >
+                Filter inventory by retailer
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
