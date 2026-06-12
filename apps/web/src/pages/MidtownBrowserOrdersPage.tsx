@@ -14,6 +14,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
 
 const SECURITY_VERIFICATION_PATH = "/connected-retailers/midtown";
+const MIDTOWN_HTML_UPLOAD_PATH = "/connected-retailers/midtown/upload";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
@@ -286,6 +287,13 @@ export function MidtownBrowserOrdersPage() {
             </button>
             <button
               type="button"
+              onClick={() => navigate(MIDTOWN_HTML_UPLOAD_PATH)}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-white/5"
+            >
+              Upload Saved Midtown Order
+            </button>
+            <button
+              type="button"
               onClick={() => navigate(SECURITY_VERIFICATION_PATH)}
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
             >
@@ -315,6 +323,13 @@ export function MidtownBrowserOrdersPage() {
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
             >
               Update Midtown Login
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(MIDTOWN_HTML_UPLOAD_PATH)}
+              className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+            >
+              Upload Saved Midtown Order
             </button>
             <button
               type="button"

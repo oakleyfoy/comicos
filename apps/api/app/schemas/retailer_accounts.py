@@ -166,6 +166,12 @@ class RetailerOrderListResponse(BaseModel):
     items: list[RetailerOrderSnapshotRead] = Field(default_factory=list)
 
 
+class MidtownHtmlImportResponse(BaseModel):
+    order_id: int
+    retailer_order_number: str
+    item_count: int
+
+
 class MidtownBrowserOrderRead(BaseModel):
     retailer_order_number: str
     order_date: date | None = None

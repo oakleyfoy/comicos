@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, FastAPI, Response, status
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Response, UploadFile, status
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models import DraftImport, User
 from app.schemas.retailer_accounts import (
+    MidtownHtmlImportResponse,
     RetailerAccountCreate,
     RetailerAccountRead,
     RetailerAccountsListResponse,
@@ -22,6 +23,11 @@ from app.schemas.retailer_accounts import (
     RetailerOrderSnapshotRead,
     RetailerSyncRunListResponse,
     RetailerSyncRunRead,
+)
+from app.services.retailer_sync.midtown_html_import import (
+    MAX_HTML_BYTES,
+    MidtownHtmlImportError,
+    import_midtown_order_from_html,
 )
 from app.schemas.imports import DraftImportRead
 from app.services.retailer_accounts import (
@@ -315,6 +321,42 @@ def get_retailer_orders(
     )
     return RetailerOrderListResponse(
         items=[_serialize_order(order, session=session) for order in orders]
+    )
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/import/midtown-html",
+    response_model=MidtownHtmlImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_midtown_order_html(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MidtownHtmlImportResponse:
+    assert current_user.id is not None
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file was empty.")
+    if len(raw) > MAX_HTML_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large. Save just the Midtown order page as HTML and try again.",
+        )
+    html_text = raw.decode("utf-8", errors="replace")
+    try:
+        order_id, order_number, stats = import_midtown_order_from_html(
+            session,
+            owner_user_id=int(current_user.id),
+            html_text=html_text,
+            source_filename=file.filename,
+        )
+    except MidtownHtmlImportError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return MidtownHtmlImportResponse(
+        order_id=order_id,
+        retailer_order_number=order_number,
+        item_count=int(stats.get("items_imported", 0)),
     )
 
 

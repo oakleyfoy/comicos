@@ -407,6 +407,12 @@ export interface MidtownBrowserCaptureResponse {
   retailer_order_number: string;
 }
 
+export interface MidtownHtmlImportResponse {
+  order_id: number;
+  retailer_order_number: string;
+  item_count: number;
+}
+
 export interface MidtownBrowserFrameResponse {
   session: MidtownBrowserSessionStatusRead;
   image_data_url: string;
@@ -20905,6 +20911,15 @@ export const apiClient = {
         method: "POST",
       },
     );
+  },
+
+  importMidtownOrderHtml(file: File): Promise<MidtownHtmlImportResponse> {
+    const form = new FormData();
+    form.append("file", file);
+    return request<MidtownHtmlImportResponse>("/api/v1/retailer-orders/import/midtown-html", {
+      method: "POST",
+      body: form,
+    });
   },
 
   createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {

@@ -227,3 +227,75 @@ def test_retailer_orders_detail_returns_all_items(client, session) -> None:
     assert detail.json()["items"][0]["title"] == "Immortal Thor #1 Cover A"
     assert detail.json()["items"][-1]["title"] == "Immortal Thor #21 Cover A"
 
+
+_SAVED_MIDTOWN_ORDER_HTML = """
+<html>
+  <head><title>Order #4272232 - Midtown Comics</title></head>
+  <body>
+    <h1>Order #4272232</h1>
+    <p>Date: 06/08/2026</p>
+    <p>Status: Shipped</p>
+    <p>Total: $14.98</p>
+    <table>
+      <tr>
+        <td><img src="/images/immortal.jpg" /></td>
+        <td><a href="/product/1234/immortal-thor-1-cover-a">Immortal Thor #1 Cover A</a></td>
+        <td>Publisher: Marvel</td>
+        <td>Qty: 2</td>
+        <td>Price: $4.99</td>
+        <td>Line Total: $9.98</td>
+        <td>Status: Shipped</td>
+        <td>SKU: MT-1234</td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def test_import_midtown_order_html_creates_order(client, session) -> None:
+    token = register_and_login(client, "midtown-html-upload@example.com")
+
+    response = client.post(
+        "/api/v1/retailer-orders/import/midtown-html",
+        headers=auth_headers(token),
+        files={"file": ("order.html", _SAVED_MIDTOWN_ORDER_HTML.encode("utf-8"), "text/html")},
+    )
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["retailer_order_number"] == "4272232"
+    assert payload["item_count"] == 1
+    order_id = payload["order_id"]
+
+    detail = client.get(f"/api/v1/retailer-orders/{order_id}", headers=auth_headers(token))
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["retailer_order_number"] == "4272232"
+    assert body["order_total"] == "14.98"
+    assert len(body["items"]) == 1
+    assert body["items"][0]["title"] == "Immortal Thor #1 Cover A"
+    assert body["items"][0]["image_url"] == "https://www.midtowncomics.com/images/immortal.jpg"
+
+
+def test_import_midtown_order_html_rejects_unparseable_file(client, session) -> None:
+    token = register_and_login(client, "midtown-html-bad@example.com")
+
+    response = client.post(
+        "/api/v1/retailer-orders/import/midtown-html",
+        headers=auth_headers(token),
+        files={"file": ("notes.txt", b"<html><body>no order here</body></html>", "text/plain")},
+    )
+    assert response.status_code == 422, response.text
+    assert "order number" in response.text.lower()
+
+
+def test_import_midtown_order_html_rejects_empty_file(client, session) -> None:
+    token = register_and_login(client, "midtown-html-empty@example.com")
+
+    response = client.post(
+        "/api/v1/retailer-orders/import/midtown-html",
+        headers=auth_headers(token),
+        files={"file": ("order.html", b"", "text/html")},
+    )
+    assert response.status_code == 400, response.text
+
