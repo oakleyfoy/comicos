@@ -203,6 +203,14 @@ class OrderItem(SQLModel, table=True):
         sa_column=Column(Numeric(12, 2), nullable=False, default=Decimal("0")),
     )
     all_in_unit_cost: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    catalog_match_id: int | None = Field(default=None, nullable=True, index=True)
+    enrichment_status: str | None = Field(default=None, max_length=32, nullable=True, index=True)
+    enrichment_confidence: Decimal | None = Field(
+        default=None,
+        sa_column=Column(Numeric(5, 2), nullable=True),
+    )
+    enrichment_notes: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    foc_date: date | None = Field(default=None, nullable=True)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -252,6 +260,7 @@ class InventoryCopy(SQLModel, table=True):
     )
     receiving_session_id: int | None = Field(default=None, foreign_key="receiving_session.id", nullable=True, index=True)
     received_via: str = Field(default="RECEIVING_STATION", max_length=40, nullable=False, index=True)
+    source_image_url: str | None = Field(default=None, max_length=2048, nullable=True)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

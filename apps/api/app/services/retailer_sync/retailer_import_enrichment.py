@@ -188,6 +188,28 @@ def _find_existing_draft(
     return None
 
 
+def build_parsed_payload_for_retailer_snapshots(
+    *,
+    retailer: str,
+    order_snapshot: RetailerOrderSnapshot,
+    item_snapshots: list[RetailerOrderItemSnapshot],
+) -> ParseOrderResponse:
+    """One draft line per retailer snapshot row (no merge with prior draft items)."""
+    return _build_parsed_payload(
+        retailer=retailer,
+        order_snapshot=order_snapshot,
+        item_snapshots=item_snapshots,
+        existing=None,
+    )
+
+
+def retailer_order_import_raw_text(
+    order_snapshot: RetailerOrderSnapshot,
+    item_snapshots: Iterable[RetailerOrderItemSnapshot],
+) -> str:
+    return _retailer_raw_text(order_snapshot, item_snapshots)
+
+
 def enrich_drafts_from_retailer_orders(
     session: Session,
     *,

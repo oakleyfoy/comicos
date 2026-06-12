@@ -86,7 +86,18 @@ def _serialize_run(run) -> RetailerSyncRunRead:
 
 
 def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
-    return RetailerOrderItemSnapshotRead.model_validate(item)
+    raw = item.raw_item_json if isinstance(item.raw_item_json, dict) else {}
+    base = RetailerOrderItemSnapshotRead.model_validate(item)
+    return base.model_copy(
+        update={
+            "enrichment_status": raw.get("enrichment_status") or base.enrichment_status,
+            "enrichment_confidence": raw.get("enrichment_confidence") or base.enrichment_confidence,
+            "catalog_match_id": raw.get("catalog_match_id") or base.catalog_match_id,
+            "enrichment_notes": raw.get("enrichment_notes") or base.enrichment_notes,
+            "cover_image_url": raw.get("cover_image_url") or base.cover_image_url,
+            "source_image_url": raw.get("source_image_url") or base.source_image_url,
+        }
+    )
 
 
 def _serialize_order(
@@ -114,6 +125,11 @@ def _serialize_order(
     portfolio_items_added = (
         materialization.portfolio_items_added if materialization else raw.get("comicos_portfolio_items_added")
     )
+    materialization_line_debug: list[dict] = []
+    if materialization and materialization.line_debug:
+        materialization_line_debug = list(materialization.line_debug)
+    elif isinstance(raw.get("comicos_materialization_line_debug"), list):
+        materialization_line_debug = raw["comicos_materialization_line_debug"]
     return RetailerOrderSnapshotRead(
         id=int(order.id),
         retailer_account_id=order.retailer_account_id,
@@ -135,6 +151,7 @@ def _serialize_order(
         inventory_copies_created=int(inventory_copies_created) if inventory_copies_created is not None else None,
         total_ordered_quantity=int(total_ordered_quantity) if total_ordered_quantity is not None else None,
         portfolio_items_added=int(portfolio_items_added) if portfolio_items_added is not None else None,
+        materialization_line_debug=materialization_line_debug,
         capture_quality_summary_json=quality_summary["capture_quality_summary_json"],
         parser_quality_summary_json=quality_summary["parser_quality_summary_json"],
         raw_fields_summary_json=quality_summary["raw_fields_summary_json"],

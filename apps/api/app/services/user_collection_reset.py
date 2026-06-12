@@ -74,7 +74,7 @@ def build_user_collection_scope(session: Session, *, user_id: int) -> UserCollec
     receiving_session_ids = _scalar_ids(
         session, select(ReceivingSession.id).where(ReceivingSession.owner_user_id == user_id)
     )
-    gmail_account = session.exec(select(GmailAccount.id).where(GmailAccount.user_id == user_id)).first()
+    gmail_account_id = session.scalar(select(GmailAccount.id).where(GmailAccount.user_id == user_id))
     cover_clauses = []
     if draft_import_ids:
         cover_clauses.append(CoverImage.draft_import_id.in_(draft_import_ids))
@@ -91,7 +91,7 @@ def build_user_collection_scope(session: Session, *, user_id: int) -> UserCollec
         draft_import_ids=draft_import_ids,
         portfolio_ids=portfolio_ids,
         receiving_session_ids=receiving_session_ids,
-        gmail_account_id=int(gmail_account) if gmail_account is not None else None,
+        gmail_account_id=int(gmail_account_id) if gmail_account_id is not None else None,
         cover_image_ids=cover_image_ids,
     )
 
@@ -399,6 +399,75 @@ def _count_rows(connection: Connection, step: DeleteStep, scope: UserCollectionS
 def _delete_rows(connection: Connection, step: DeleteStep, scope: UserCollectionScope) -> int:
     result = connection.execute(delete(step.model).where(step.predicate(scope)))
     return int(result.rowcount or 0)
+
+
+COLLECTION_RESET_CONFIRMATION_PHRASE = "DELETE MY COLLECTION"
+
+
+def remaining_collection_row_counts(session: Session, *, user_id: int) -> dict[str, int]:
+    """Counts of user-owned collection rows after a reset (or preview baseline)."""
+    gmail_account_id = session.scalar(select(GmailAccount.id).where(GmailAccount.user_id == user_id))
+    gmail_imports = 0
+    if gmail_account_id is not None:
+        gmail_imports = int(
+            session.scalar(
+                select(func.count())
+                .select_from(GmailImportRecord)
+                .where(GmailImportRecord.gmail_account_id == gmail_account_id)
+            )
+            or 0
+        )
+    portfolio_ids = _scalar_ids(session, select(Portfolio.id).where(Portfolio.owner_user_id == user_id))
+    portfolio_items = 0
+    if portfolio_ids:
+        portfolio_items = int(
+            session.scalar(
+                select(func.count())
+                .select_from(PortfolioItem)
+                .where(PortfolioItem.portfolio_id.in_(portfolio_ids))
+            )
+            or 0
+        )
+    return {
+        "inventory_copies": int(
+            session.scalar(select(func.count()).select_from(InventoryCopy).where(InventoryCopy.user_id == user_id)) or 0
+        ),
+        "orders": int(session.scalar(select(func.count()).select_from(Order).where(Order.user_id == user_id)) or 0),
+        "draft_imports": int(
+            session.scalar(select(func.count()).select_from(DraftImport).where(DraftImport.user_id == user_id)) or 0
+        ),
+        "retailer_order_snapshots": int(
+            session.scalar(
+                select(func.count()).select_from(RetailerOrderSnapshot).where(RetailerOrderSnapshot.owner_user_id == user_id)
+            )
+            or 0
+        ),
+        "gmail_import_records": gmail_imports,
+        "portfolio_items": portfolio_items,
+        "portfolios": len(portfolio_ids),
+    }
+
+
+def friendly_delete_summary(table_summaries: list[TableDeleteSummary]) -> dict[str, int]:
+    """Map internal table labels to user-facing aggregate counts."""
+    by_label = {row.label: row.row_count for row in table_summaries}
+    order_items = by_label.get("order_items", 0)
+    return {
+        "inventory_copies": by_label.get("inventory_copies", 0),
+        "orders": by_label.get("customer_orders", 0),
+        "order_items": order_items,
+        "draft_imports": by_label.get("draft_imports", 0),
+        "retailer_order_snapshots": by_label.get("retailer_order_snapshots", 0),
+        "retailer_order_item_snapshots": by_label.get("retailer_order_item_snapshots", 0),
+        "gmail_import_records": by_label.get("gmail_import_records", 0),
+        "portfolio_items": by_label.get("portfolio_items", 0),
+        "portfolios": by_label.get("portfolio", 0),
+        "cover_images": by_label.get("cover_images", 0),
+        "receiving_sessions": by_label.get("receiving_sessions", 0),
+        "collection_valuation_snapshots": by_label.get("p83_collection_valuation_snapshot", 0),
+        "inventory_fmv_snapshots": by_label.get("inventory_fmv_snapshots", 0),
+        "total_rows": sum(row.row_count for row in table_summaries),
+    }
 
 
 def reset_user_collection_data(

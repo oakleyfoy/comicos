@@ -84,6 +84,12 @@ class RetailerOrderItemSnapshotRead(BaseModel):
     unavailable_qty: int | None = None
     returned_qty: int | None = None
     release_date: date | None = None
+    enrichment_status: str | None = None
+    enrichment_confidence: float | None = None
+    catalog_match_id: int | None = None
+    enrichment_notes: str | None = None
+    cover_image_url: str | None = None
+    source_image_url: str | None = None
     updated_at: datetime
 
 
@@ -110,6 +116,7 @@ class RetailerOrderSnapshotRead(BaseModel):
     inventory_copies_created: int | None = None
     total_ordered_quantity: int | None = None
     portfolio_items_added: int | None = None
+    materialization_line_debug: list[dict] = Field(default_factory=list)
     capture_quality_summary_json: dict = Field(default_factory=dict)
     parser_quality_summary_json: dict = Field(default_factory=dict)
     raw_fields_summary_json: dict = Field(default_factory=dict)

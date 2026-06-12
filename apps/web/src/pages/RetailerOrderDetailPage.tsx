@@ -56,6 +56,24 @@ function formatSummaryValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function enrichmentBadgeLabel(status: string | null | undefined): string | null {
+  if (!status) return null;
+  if (status === "matched") return "Matched";
+  if (status === "partial_match") return "Partial Match";
+  if (status === "needs_review") return "Needs Review";
+  return status;
+}
+
+function enrichmentBadgeClass(status: string | null | undefined): string {
+  if (status === "matched") {
+    return "border-emerald-400/30 bg-emerald-400/10 text-emerald-100";
+  }
+  if (status === "partial_match") {
+    return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+  }
+  return "border-rose-400/30 bg-rose-400/10 text-rose-100";
+}
+
 export function RetailerOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -287,9 +305,9 @@ export function RetailerOrderDetailPage() {
                   className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 md:grid-cols-[120px,1fr]"
                 >
                   <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/80">
-                    {item.image_url ? (
+                    {item.cover_image_url || item.image_url ? (
                       <img
-                        src={item.image_url}
+                        src={item.cover_image_url || item.image_url || ""}
                         alt={item.title}
                         className="h-full w-full object-cover"
                         loading="lazy"
@@ -312,6 +330,13 @@ export function RetailerOrderDetailPage() {
                       <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-slate-300">
                         {item.item_status ?? "Status missing"}
                       </span>
+                      {enrichmentBadgeLabel(item.enrichment_status) ? (
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${enrichmentBadgeClass(item.enrichment_status)}`}
+                        >
+                          {enrichmentBadgeLabel(item.enrichment_status)}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-300">

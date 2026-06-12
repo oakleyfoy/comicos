@@ -264,6 +264,54 @@ export interface RetailerAccountUpdatePayload {
   status?: string | null;
 }
 
+export interface CollectionResetSummary {
+  inventory_copies: number;
+  orders: number;
+  order_items: number;
+  draft_imports: number;
+  retailer_order_snapshots: number;
+  retailer_order_item_snapshots: number;
+  gmail_import_records: number;
+  portfolio_items: number;
+  portfolios: number;
+  cover_images: number;
+  receiving_sessions: number;
+  collection_valuation_snapshots: number;
+  inventory_fmv_snapshots: number;
+  total_rows: number;
+}
+
+export interface CollectionResetRemaining {
+  inventory_copies: number;
+  orders: number;
+  draft_imports: number;
+  retailer_order_snapshots: number;
+  gmail_import_records: number;
+  portfolio_items: number;
+  portfolios: number;
+}
+
+export interface CollectionResetPreviewResponse {
+  status: string;
+  dry_run: boolean;
+  summary: CollectionResetSummary;
+  table_counts: { label: string; row_count: number }[];
+  remaining: CollectionResetRemaining;
+}
+
+export interface CollectionResetExecutePayload {
+  confirmation_phrase: string;
+  acknowledge_permanent_delete: boolean;
+}
+
+export interface CollectionResetExecuteResponse {
+  status: string;
+  dry_run: boolean;
+  deleted: CollectionResetSummary;
+  deleted_by_table: { label: string; row_count: number }[];
+  remaining: CollectionResetRemaining;
+}
+
 export interface RetailerAccountRead {
   id: number;
   retailer: string;
@@ -317,6 +365,12 @@ export interface RetailerOrderItemSnapshotRead {
   unavailable_qty?: number | null;
   returned_qty?: number | null;
   release_date?: string | null;
+  enrichment_status?: "matched" | "partial_match" | "needs_review" | string | null;
+  enrichment_confidence?: number | null;
+  catalog_match_id?: number | null;
+  enrichment_notes?: string | null;
+  cover_image_url?: string | null;
+  source_image_url?: string | null;
   updated_at: string;
 }
 
@@ -20845,6 +20899,19 @@ export const apiClient = {
 
   getRetailerAccounts(): Promise<RetailerAccountsListResponse> {
     return request<RetailerAccountsListResponse>("/api/v1/retailer-accounts");
+  },
+
+  previewResetCollectionData(): Promise<CollectionResetPreviewResponse> {
+    return request<CollectionResetPreviewResponse>("/api/v1/account/reset-collection-data/preview", {
+      method: "POST",
+    });
+  },
+
+  executeResetCollectionData(payload: CollectionResetExecutePayload): Promise<CollectionResetExecuteResponse> {
+    return request<CollectionResetExecuteResponse>("/api/v1/account/reset-collection-data", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   saveRetailerAccount(payload: RetailerAccountCreatePayload): Promise<RetailerAccountRead> {

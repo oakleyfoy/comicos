@@ -9,6 +9,7 @@ import { DealerStorefrontPage } from "./pages/DealerStorefrontPage";
 import { EmailImportsPage } from "./pages/EmailImportsPage";
 import { InventoryDetailPage } from "./pages/InventoryDetailPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { AccountSettingsPage } from "./pages/AccountSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
@@ -476,6 +477,7 @@ export default function App() {
         <Route path="/connected-retailers/midtown/upload" element={<MidtownOrderHtmlUploadPage />} />
         <Route path="/settings/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
+        <Route path="/settings/account" element={<AccountSettingsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
         </Route>
       </Route>

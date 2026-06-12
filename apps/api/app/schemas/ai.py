@@ -142,6 +142,12 @@ class AiDraftOrderItem(BaseModel):
         | None
     ) = None
     publisher_autofill_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    catalog_match_id: int | None = None
+    enrichment_status: Literal["matched", "partial_match", "needs_review"] | None = None
+    enrichment_confidence: float | None = Field(default=None, ge=0.0, le=100.0)
+    enrichment_notes: str | None = None
+    source_image_url: str | None = None
+    foc_date: date | None = None
     quantity: int | None = Field(default=None, ge=1)
     raw_item_price: Decimal | None = Field(default=None, ge=0)
 

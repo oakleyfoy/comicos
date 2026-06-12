@@ -1165,6 +1165,7 @@ from app.api.marketplace import attach_marketplace_layer
 from app.api.marketplace_publish import attach_marketplace_publish_layer
 from app.api.marketplace_sync import attach_marketplace_sync_layer
 from app.api.marketplace_accounts import attach_marketplace_accounts_layer
+from app.api.account import attach_account_layer
 from app.api.retailer_accounts import attach_retailer_accounts_layer
 from app.api.retailer_browser import attach_retailer_browser_layer
 from app.api.marketplace_events import attach_marketplace_events_layer
@@ -1387,6 +1388,7 @@ attach_shopify_layer(app)
 attach_ebay_compliance_layer(app)
 attach_marketplace_dashboard_layer(app)
 attach_marketplace_accounts_layer(app)
+attach_account_layer(app)
 attach_retailer_accounts_layer(app)
 attach_retailer_browser_layer(app)
 attach_marketplace_events_layer(app)

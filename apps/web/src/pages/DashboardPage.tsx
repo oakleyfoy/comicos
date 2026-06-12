@@ -3253,6 +3253,12 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 >
                   Scan
                 </Link>
+                <Link
+                  to="/settings/account"
+                  className="rounded-2xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-800 transition hover:border-rose-300 hover:bg-rose-50"
+                >
+                  Reset collection
+                </Link>
               </>
             ) : null}
             <Link

@@ -144,6 +144,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Gmail & integrations", to: "/settings/integrations" },
+      { label: "Account & data", to: "/settings/account" },
       { label: "Connected Retailers", to: "/connected-retailers" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Operations", to: "/ops", requiresOpsAdmin: true },
