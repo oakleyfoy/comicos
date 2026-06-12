@@ -18,6 +18,7 @@ from app.models.recommendation_v2 import (
     RecommendationScoreComponentV2,
     RecommendationScoreV2,
 )
+from app.models.release_intelligence import ReleaseVariant
 from app.services.user_collection_reset import reset_user_collection_data
 from test_inventory import create_order, register_and_login
 
@@ -88,6 +89,42 @@ def _seed_recommendation_score_with_component(session: Session, *, owner_user_id
         )
     )
     session.commit()
+
+
+def _seed_release_issue_with_variant(session: Session, *, owner_user_id: int, tag: str) -> tuple[ReleaseIssue, ReleaseVariant]:
+    series = ReleaseSeries(
+        owner_user_id=owner_user_id,
+        publisher="Marvel",
+        series_name=f"Catalog Series {tag}",
+        series_type="ONGOING",
+        status="ACTIVE",
+    )
+    session.add(series)
+    session.commit()
+    session.refresh(series)
+    issue = ReleaseIssue(
+        owner_user_id=owner_user_id,
+        release_uuid=f"reset-catalog-{tag}",
+        series_id=int(series.id or 0),
+        issue_number="1",
+        title=f"Catalog Issue {tag}",
+        release_status="SCHEDULED",
+        release_date=date.today() + timedelta(days=21),
+    )
+    session.add(issue)
+    session.commit()
+    session.refresh(issue)
+    variant = ReleaseVariant(
+        issue_id=int(issue.id or 0),
+        variant_uuid=f"reset-var-{tag}",
+        variant_name="Cover A",
+        variant_type="STANDARD",
+        source_item_code=f"CAT-{tag}",
+    )
+    session.add(variant)
+    session.commit()
+    session.refresh(variant)
+    return issue, variant
 
 
 def test_reset_user_collection_data_dry_run_and_scoped_delete(client, session) -> None:
@@ -188,3 +225,25 @@ def test_reset_deletes_recommendation_score_v2_components_before_parent(client, 
     assert victim_component_count == 0
     assert other_score_count == 1
     assert other_component_count == 1
+
+
+def test_reset_preserves_release_catalog_issue_and_variant(client, session) -> None:
+    victim_email = "reset-catalog-victim@example.com"
+    victim_token = register_and_login(client, victim_email)
+    create_order(client, victim_token)
+
+    victim = session.exec(select(User).where(User.email == victim_email)).one()
+    issue, variant = _seed_release_issue_with_variant(session, owner_user_id=int(victim.id), tag="victim")
+    issue_id = int(issue.id or 0)
+    variant_id = int(variant.id or 0)
+
+    reset_user_collection_data(session, user=victim, execute=True)
+
+    assert len(session.exec(select(InventoryCopy.id).where(InventoryCopy.user_id == victim.id)).all()) == 0
+    assert len(session.exec(select(Order.id).where(Order.user_id == victim.id)).all()) == 0
+    assert session.get(ReleaseIssue, issue_id) is not None
+    assert session.get(ReleaseVariant, variant_id) is not None
+    assert (
+        session.exec(select(ReleaseIssue).where(ReleaseIssue.id == issue_id, ReleaseIssue.owner_user_id == victim.id)).one()
+        is not None
+    )

@@ -192,6 +192,28 @@ def _gmail_import_predicate(scope: UserCollectionScope) -> ColumnElement[bool]:
 
 
 # Models we never touch during a per-user collection reset.
+# Release/catalog intelligence is user-scoped in the DB but is not collection data.
+_PRESERVE_RELEASE_CATALOG_MODELS: frozenset[type[SQLModel]] = frozenset(
+    {
+        models.ReleaseSeries,
+        models.ReleaseIssue,
+        models.ReleaseVariant,
+        models.ReleaseKeySignal,
+        models.ReleaseAgentExecution,
+        models.ReleaseImportRun,
+        models.ReleaseImportFile,
+        models.ReleaseImportError,
+        models.ReleaseIntelligenceMatch,
+        models.IndustryPublisher,
+        models.IndustryReleaseScanRun,
+        models.IndustryReleaseCandidate,
+        models.IndustryReleaseSignal,
+        models.FutureReleaseMatch,
+        models.FutureReleaseAction,
+        models.FutureReleaseCertificationRun,
+    }
+)
+
 _NEVER_DELETE_MODELS: frozenset[type[SQLModel]] = frozenset(
     {
         User,
@@ -206,7 +228,7 @@ _NEVER_DELETE_MODELS: frozenset[type[SQLModel]] = frozenset(
         models.MarketSource,
         models.MarketSourceSnapshot,
     }
-)
+) | _PRESERVE_RELEASE_CATALOG_MODELS
 
 
 def _portfolio_related_steps() -> list[DeleteStep]:
