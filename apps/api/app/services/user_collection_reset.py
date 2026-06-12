@@ -38,6 +38,12 @@ from app.models import (
     User,
 )
 from app.models.p92_import_line_cover import P92ImportLineCoverResolution
+from app.models.recommendation_v2 import (
+    RecommendationDecisionV2,
+    RecommendationRunV2,
+    RecommendationScoreComponentV2,
+    RecommendationScoreV2,
+)
 from app.models.storage_location import P79InventoryLocationAssignment
 
 logger = logging.getLogger(__name__)
@@ -106,6 +112,11 @@ def build_user_collection_scope(session: Session, *, user_id: int) -> UserCollec
 
 def _owner(scope: UserCollectionScope, column):
     return column == scope.user_id
+
+
+def _recommendation_score_v2_id_in(scope: UserCollectionScope, column) -> ColumnElement[bool]:
+    owned_score_ids = select(RecommendationScoreV2.id).where(RecommendationScoreV2.owner_user_id == scope.user_id)
+    return column.in_(owned_score_ids)
 
 
 def _inventory_in(scope: UserCollectionScope, column):
@@ -282,6 +293,26 @@ def _explicit_delete_steps() -> list[DeleteStep]:
         DeleteStep("p90_fmv_snapshot", P90FmvSnapshot, lambda s: _owner(s, P90FmvSnapshot.owner_user_id)),
         DeleteStep("inventory_fmv_snapshots", InventoryFmvSnapshot, lambda s: _inventory_in(s, InventoryFmvSnapshot.inventory_copy_id)),
         DeleteStep("ops_events", OpsEvent, lambda s: OpsEvent.user_id == s.user_id),
+        DeleteStep(
+            "recommendation_score_component_v2",
+            RecommendationScoreComponentV2,
+            lambda s: _recommendation_score_v2_id_in(s, RecommendationScoreComponentV2.recommendation_score_id),
+        ),
+        DeleteStep(
+            "recommendation_decision_v2",
+            RecommendationDecisionV2,
+            lambda s: _recommendation_score_v2_id_in(s, RecommendationDecisionV2.recommendation_score_id),
+        ),
+        DeleteStep(
+            "recommendation_score_v2",
+            RecommendationScoreV2,
+            lambda s: _owner(s, RecommendationScoreV2.owner_user_id),
+        ),
+        DeleteStep(
+            "recommendation_run_v2",
+            RecommendationRunV2,
+            lambda s: _owner(s, RecommendationRunV2.owner_user_id),
+        ),
     ]
     steps.extend(_portfolio_related_steps())
     steps.extend(
