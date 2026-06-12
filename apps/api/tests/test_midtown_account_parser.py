@@ -155,3 +155,67 @@ def test_parse_midtown_order_detail_ignores_border_radius_noise() -> None:
         detail_url="https://www.midtowncomics.com/account/orders/view/4272232",
     )
     assert detail.retailer_order_number == "4272232"
+
+
+def test_parse_midtown_saved_order_4257558_ignores_header_pull_list() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parent / "fixtures" / "midtown" / "order_4257558_saved.html"
+    )
+    html = fixture_path.read_text(encoding="utf-8")
+    detail = parse_midtown_order_detail(
+        html,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4257558",
+    )
+    assert detail.retailer_order_number == "4257558"
+    assert detail.order_status == "Shipped"
+    assert detail.order_total == Decimal("72.86")
+    assert len(detail.items) == 13
+    assert detail.parse_diagnostics["parse_scope"] == "info_container"
+    assert detail.parse_diagnostics["parse_source"] == "info_container_order_item"
+    assert detail.parse_diagnostics["items_parsed"] == 13
+    assert detail.items[0].title == (
+        "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover"
+    )
+    assert detail.items[0].unit_price == Decimal("4.99")
+    titles = [item.title for item in detail.items]
+    assert "Redcoat Cover B (regular)" not in titles
+    assert "Sidebar Promo Comic" not in titles
+
+
+def test_parse_midtown_order_detail_visible_text_fallback_in_info_container() -> None:
+    html = """
+    <div id="right-contents">
+      <div class="info-container">
+        <h1>Order #4257558</h1>
+        <p>Status: Shipped</p>
+        <p>Order Total: $9.98</p>
+        <div class="order-summary-text">
+          Immortal Thor #1 Cover A
+          Publisher: Marvel
+          Each: $4.99
+          Total: $4.99
+          QTY: 1
+          Condition: New
+          Status: Shipped
+
+          Immortal Thor #2 Cover B
+          Publisher: Marvel
+          Each: $4.99
+          Total: $4.99
+          QTY: 1
+          Condition: New
+          Status: Shipped
+        </div>
+      </div>
+    </div>
+    """
+    detail = parse_midtown_order_detail(
+        html,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4257558",
+    )
+    assert detail.retailer_order_number == "4257558"
+    assert detail.order_total == Decimal("9.98")
+    assert len(detail.items) == 2
+    assert detail.parse_diagnostics["parse_source"] == "visible_text_fallback"
+    assert detail.items[0].title == "Immortal Thor #1 Cover A"
+    assert detail.items[1].title == "Immortal Thor #2 Cover B"

@@ -7,14 +7,16 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urljoin, urlparse
 
+from bs4 import BeautifulSoup
+
 _MIDTOWN_BASE_URL = "https://www.midtowncomics.com"
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPACE_RE = re.compile(r"\s+")
 _PRICE_RE = re.compile(r"\$?\s*([0-9]+(?:\.[0-9]{2})?)")
 _DATE_PATTERNS = ("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y")
 _KNOWN_LABELS = (
-    "Date|Status|Total|Publisher|Qty|Price|Line Total|Item Status|Shipped|Backordered|"
-    "Unavailable|Returned|SKU|Variant|Cover Artist|Item #"
+    "Date|Status|Total|Subtotal|Order Total|Publisher|Qty|QTY|Price|Each|Line Total|"
+    "Item Status|Shipped|Backordered|Unavailable|Returned|SKU|Variant|Cover Artist|Item #|Condition"
 )
 _ORDER_NUMBER_RE = re.compile(r"\border\s*#\s*([0-9]{4,})\b", flags=re.IGNORECASE)
 
@@ -275,6 +277,11 @@ def parse_midtown_order_history(html_text: str) -> list[MidtownOrderHistoryEntry
 
 
 def _extract_item_fragments(html_text: str) -> list[str]:
+    """Legacy scan: product links anywhere in the document (pre-scoped pages)."""
+    return _extract_item_fragments_legacy(html_text)
+
+
+def _extract_item_fragments_legacy(html_text: str) -> list[str]:
     fragments: list[str] = []
     for anchor in re.finditer(
         r'href=["\']([^"\']*/product/[^"\']+)["\']', html_text, flags=re.IGNORECASE
@@ -289,6 +296,204 @@ def _extract_item_fragments(html_text: str) -> list[str]:
         if div_start != -1 and div_end != -1:
             fragments.append(html_text[div_start : div_end + len("</div>")])
     return fragments
+
+
+def _scope_saved_order_container(html_text: str) -> tuple[str | None, list[str]]:
+    """Isolate ``#right-contents .info-container`` and its ``.order-item`` rows."""
+    soup = BeautifulSoup(html_text, "html.parser")
+    right = soup.select_one("#right-contents")
+    if right is None:
+        return None, []
+    info = right.select_one(".info-container")
+    if info is None:
+        return None, []
+    fragments = [str(element) for element in info.select(".order-item")]
+    return str(info), fragments
+
+
+def _visible_text_from_html(html_fragment: str) -> str:
+    soup = BeautifulSoup(html_fragment, "html.parser")
+    return soup.get_text("\n", strip=True)
+
+
+def _extract_order_total_from_scope(scoped_html: str) -> Decimal | None:
+    for label in ("Order Total", "Grand Total", "Subtotal", "Total"):
+        parsed = _parse_price(_match_after_label(scoped_html, label))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _line_value(lines: list[str], prefix: str) -> str | None:
+    prefix_lower = prefix.lower()
+    for line in lines:
+        if line.lower().startswith(prefix_lower):
+            return line.split(":", 1)[-1].strip() if ":" in line else line[len(prefix) :].strip()
+    return None
+
+
+def _parse_order_items_from_visible_text(text: str) -> list[MidtownOrderItem]:
+    """Parse Midtown order line items from plain visible text blocks."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    label_prefixes = (
+        "publisher:",
+        "each:",
+        "total:",
+        "qty:",
+        "condition:",
+        "status:",
+        "date:",
+        "subtotal:",
+        "order total:",
+        "line total:",
+        "price:",
+        "item #:",
+        "sku:",
+    )
+    items: list[MidtownOrderItem] = []
+    index = 0
+    while index < len(lines):
+        title = lines[index]
+        lower = title.lower()
+        if lower.startswith(label_prefixes) or _ORDER_NUMBER_RE.search(title):
+            index += 1
+            continue
+        lookahead = lines[index + 1 : index + 12]
+        if not any(
+            segment.lower().startswith(("publisher:", "each:", "price:")) for segment in lookahead
+        ):
+            index += 1
+            continue
+        block_lines = [title]
+        cursor = index + 1
+        while cursor < len(lines):
+            segment = lines[cursor]
+            segment_lower = segment.lower()
+            if segment_lower.startswith(label_prefixes):
+                block_lines.append(segment)
+                cursor += 1
+                continue
+            if _ORDER_NUMBER_RE.search(segment):
+                break
+            next_lookahead = lines[cursor + 1 : cursor + 12]
+            if any(
+                part.lower().startswith(("publisher:", "each:", "price:"))
+                for part in next_lookahead
+            ):
+                break
+            block_lines.append(segment)
+            cursor += 1
+        block = "\n".join(block_lines)
+        publisher = _line_value(block_lines, "Publisher")
+        unit_price = _parse_price(_line_value(block_lines, "Each")) or _parse_price(
+            _line_value(block_lines, "Price")
+        )
+        total_price = _parse_price(_line_value(block_lines, "Total")) or _parse_price(
+            _line_value(block_lines, "Line Total")
+        )
+        quantity = (
+            _parse_int(_line_value(block_lines, "QTY"))
+            or _parse_int(_line_value(block_lines, "Qty"))
+            or 1
+        )
+        item_status = _line_value(block_lines, "Status")
+        if unit_price is None and total_price is None:
+            index = cursor
+            continue
+        issue_number, cover_name = _parse_issue_and_cover(title)
+        item = MidtownOrderItem(
+            title=title,
+            publisher=publisher,
+            issue_number=issue_number,
+            cover_name=cover_name,
+            quantity=quantity,
+            unit_price=unit_price,
+            total_price=total_price or unit_price,
+            item_status=item_status,
+            raw_fragment=block,
+        )
+        item.parse_diagnostics = _extract_item_quality_snapshot(item)
+        item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
+        item.parse_diagnostics["parse_source"] = "visible_text_fallback"
+        items.append(item)
+        index = cursor
+    return items
+
+
+def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, str | None]:
+    """Return ``(item, skip_reason)`` from a single order line HTML fragment."""
+    product_match = re.search(
+        r'href=["\']([^"\']*/product/[^"\']+)["\']', fragment, flags=re.IGNORECASE
+    )
+    image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
+    title = _extract_title(fragment, _absolute_url(product_match.group(1)) if product_match else None)
+    if not title:
+        return None, "missing_title"
+    issue_number, cover_name = _parse_issue_and_cover(title)
+    variant_type = _match_after_label(fragment, "Variant")
+    cover_artist = _match_after_label(fragment, "Cover Artist")
+    release_date = _extract_release_date(fragment)
+    quantity = (
+        _parse_int(_match_after_label(fragment, "QTY"))
+        or _parse_int(_match_after_label(fragment, "Qty"))
+        or 1
+    )
+    unit_price = _parse_price(_match_after_label(fragment, "Each")) or _parse_price(
+        _match_after_label(fragment, "Price")
+    )
+    total_price = (
+        _parse_price(_match_after_label(fragment, "Line Total"))
+        or _parse_price(_match_after_label(fragment, "Total"))
+    )
+    item = MidtownOrderItem(
+        retailer_item_id=_match_after_label(fragment, "Item #") or _match_after_label(fragment, "SKU"),
+        product_url=_absolute_url(product_match.group(1)) if product_match else None,
+        image_url=_absolute_url(image_match.group(1)) if image_match else None,
+        thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
+        title=title,
+        publisher=_match_after_label(fragment, "Publisher"),
+        issue_number=issue_number,
+        cover_name=cover_name,
+        variant_type=variant_type,
+        cover_artist=cover_artist,
+        quantity=quantity,
+        unit_price=unit_price,
+        total_price=total_price,
+        item_status=_match_after_label(fragment, "Item Status") or _match_after_label(fragment, "Status"),
+        release_date=release_date,
+        shipped_qty=_parse_int(_match_after_label(fragment, "Shipped")),
+        backordered_qty=_parse_int(_match_after_label(fragment, "Backordered")),
+        unavailable_qty=_parse_int(_match_after_label(fragment, "Unavailable")),
+        returned_qty=_parse_int(_match_after_label(fragment, "Returned")),
+        raw_fragment=fragment,
+    )
+    item.parse_diagnostics = _extract_item_quality_snapshot(item)
+    item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
+    return item, None
+
+
+def _append_parsed_items(
+    detail: MidtownOrderDetail,
+    item_fragments: list[str],
+    *,
+    parse_source: str,
+) -> dict[str, int]:
+    skipped_reasons: dict[str, int] = {}
+    seen_item_keys: set[str] = set()
+    for fragment in item_fragments:
+        item, skip_reason = _parse_item_from_fragment(fragment)
+        if item is None:
+            if skip_reason:
+                skipped_reasons[skip_reason] = skipped_reasons.get(skip_reason, 0) + 1
+            continue
+        item_key = item.product_url or item.title
+        if item_key in seen_item_keys:
+            skipped_reasons["duplicate_item_block"] = skipped_reasons.get("duplicate_item_block", 0) + 1
+            continue
+        seen_item_keys.add(item_key)
+        item.parse_diagnostics["parse_source"] = parse_source
+        detail.items.append(item)
+    return skipped_reasons
 
 
 def _extract_title(fragment: str, product_url: str | None) -> str:
@@ -312,77 +517,62 @@ def _extract_title(fragment: str, product_url: str | None) -> str:
 def parse_midtown_order_detail(
     html_text: str, *, fallback_order_number: str | None = None, detail_url: str | None = None
 ) -> MidtownOrderDetail:
-    retailer_order_number = _extract_order_number_from_header(html_text) or _extract_order_number_from_url(
-        detail_url
+    retailer_order_number = (
+        _extract_order_number_from_header(html_text)
+        or _extract_order_number_from_url(detail_url)
+        or fallback_order_number
     )
     if not retailer_order_number:
         raise MidtownOrderNumberError(
             "parser_no_order_number: Midtown order number was not found in the page header or URL."
         )
+
+    scoped_html, scoped_fragments = _scope_saved_order_container(html_text)
+    parse_context = scoped_html if scoped_html is not None else html_text
+    parse_scope = "info_container" if scoped_html is not None else "legacy"
+    item_fragments: list[str] = []
+    parse_source = "legacy_product_scan"
+    visible_text_items: list[MidtownOrderItem] = []
+
+    if scoped_html is not None:
+        item_fragments = scoped_fragments
+        parse_source = "info_container_order_item"
+        if not item_fragments:
+            visible_text_items = _parse_order_items_from_visible_text(
+                _visible_text_from_html(scoped_html)
+            )
+            if visible_text_items:
+                parse_source = "visible_text_fallback"
+    else:
+        item_fragments = _extract_item_fragments_legacy(html_text)
+
+    order_total = _extract_order_total_from_scope(parse_context) or _parse_price(
+        _match_after_label(parse_context, "Total")
+    )
     detail = MidtownOrderDetail(
         retailer_order_number=retailer_order_number,
-        order_date=_parse_date(_match_after_label(html_text, "Date")),
-        order_status=_extract_order_status(html_text) or _match_after_label(html_text, "Status"),
-        order_total=_parse_price(_match_after_label(html_text, "Total")),
+        order_date=_parse_date(_match_after_label(parse_context, "Date")),
+        order_status=_extract_order_status(parse_context) or _match_after_label(parse_context, "Status"),
+        order_total=order_total,
         detail_url=detail_url,
         raw_html=html_text,
     )
-    item_fragments = _extract_item_fragments(html_text)
-    seen_item_keys: set[str] = set()
+
     skipped_reasons: dict[str, int] = {}
-    for fragment in item_fragments:
-        product_match = re.search(
-            r'href=["\']([^"\']*/product/[^"\']+)["\']', fragment, flags=re.IGNORECASE
+    if visible_text_items:
+        detail.items = visible_text_items
+    else:
+        skipped_reasons = _append_parsed_items(
+            detail, item_fragments, parse_source=parse_source
         )
-        item_key = _absolute_url(product_match.group(1)) if product_match else None
-        if item_key and item_key in seen_item_keys:
-            skipped_reasons["duplicate_item_block"] = skipped_reasons.get("duplicate_item_block", 0) + 1
-            continue
-        if item_key:
-            seen_item_keys.add(item_key)
-        image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
-        title = _extract_title(
-            fragment, _absolute_url(product_match.group(1)) if product_match else None
-        )
-        if not title:
-            skipped_reasons["missing_title"] = skipped_reasons.get("missing_title", 0) + 1
-            continue
-        issue_number, cover_name = _parse_issue_and_cover(title)
-        variant_type = _match_after_label(fragment, "Variant")
-        cover_artist = _match_after_label(fragment, "Cover Artist")
-        release_date = _extract_release_date(fragment)
-        item = MidtownOrderItem(
-            retailer_item_id=_match_after_label(fragment, "Item #") or _match_after_label(fragment, "SKU"),
-            product_url=_absolute_url(product_match.group(1)) if product_match else None,
-            image_url=_absolute_url(image_match.group(1)) if image_match else None,
-            thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
-            title=title,
-            publisher=_match_after_label(fragment, "Publisher"),
-            issue_number=issue_number,
-            cover_name=cover_name,
-            variant_type=variant_type,
-            cover_artist=cover_artist,
-            quantity=_parse_int(_match_after_label(fragment, "Qty")) or 1,
-            unit_price=_parse_price(_match_after_label(fragment, "Price")),
-            total_price=_parse_price(_match_after_label(fragment, "Line Total"))
-            or _parse_price(_match_after_label(fragment, "Total")),
-            item_status=_match_after_label(fragment, "Item Status") or _match_after_label(fragment, "Status"),
-            release_date=release_date,
-            shipped_qty=_parse_int(_match_after_label(fragment, "Shipped")),
-            backordered_qty=_parse_int(_match_after_label(fragment, "Backordered")),
-            unavailable_qty=_parse_int(_match_after_label(fragment, "Unavailable")),
-            returned_qty=_parse_int(_match_after_label(fragment, "Returned")),
-            raw_fragment=fragment,
-        )
-        item.parse_diagnostics = _extract_item_quality_snapshot(item)
-        item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
-        detail.items.append(
-            item
-        )
+
+    blocks_found = len(item_fragments) if not visible_text_items else len(visible_text_items)
     detail.parse_diagnostics = {
-        "item_blocks_found": len(item_fragments),
+        "parse_scope": parse_scope,
+        "parse_source": parse_source,
+        "item_blocks_found": blocks_found,
         "items_parsed": len(detail.items),
-        "items_skipped": len(item_fragments) - len(detail.items),
+        "items_skipped": max(blocks_found - len(detail.items), 0),
         "skipped_reasons": skipped_reasons,
     }
     return detail
