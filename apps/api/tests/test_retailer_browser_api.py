@@ -13,7 +13,9 @@ from app.services.retailer_browser import MidtownBrowserStatus
 from app.services.retailer_browser import _launch_midtown_browser
 from app.services.retailer_browser import (
     MidtownBrowserBusyError,
+    MidtownLoginRejectedError,
     MidtownNeedsAttentionError,
+    MidtownSecurityChallengeError,
     RetailerBrowserConfigurationError,
     RetailerBrowserEnvironmentError,
     RetailerBrowserStateError,
@@ -565,13 +567,21 @@ def _install_midtown_fake_browser(
     monkeypatch.setattr("app.services.retailer_browser._MIDTOWN_PLAYWRIGHT", None)
     monkeypatch.setattr("app.services.retailer_browser.parse_midtown_order_history", lambda html: [])
     monkeypatch.setattr("app.services.retailer_browser._write_browser_state", lambda *args, **kwargs: None)
-    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+    # Track login state so the assisted-login path runs until fake_login
+    # succeeds; the post-login re-verification then sees an authenticated page.
+    login_state = {"logged_in": False}
+    monkeypatch.setattr(
+        "app.services.retailer_browser._requires_midtown_login",
+        lambda page: not login_state["logged_in"],
+    )
     monkeypatch.setattr("app.services.retailer_browser._has_midtown_challenge", lambda page: False)
 
     def fake_login(page, *, username, password):
         if login_side_effect is not None:
             login_side_effect()
+        login_state["logged_in"] = True
         page.url = "https://www.midtowncomics.com/account/orders"
+        return {"post_login_url": page.url, "post_login_title": "Midtown"}
 
     monkeypatch.setattr("app.services.retailer_browser._midtown_login", fake_login)
 
@@ -640,6 +650,40 @@ def test_midtown_browser_session_frame_never_500_when_capture_fails(client, monk
     assert payload["session"]["status"] == "no_frame_available"
     assert payload["frame_available"] is False
     assert payload["image_data_url"] == ""
+
+
+def test_midtown_go_to_orders_returns_login_failed_when_credentials_rejected(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-login-rejected@example.com")
+    _connect_midtown_account(client, token)
+
+    def reject_login():
+        raise MidtownLoginRejectedError(
+            "Midtown rejected the sign-in. Check the saved username and password."
+        )
+
+    _install_midtown_fake_browser(monkeypatch, login_side_effect=reject_login)
+
+    response = client.post("/api/v1/retailer-browser/midtown/go-to-orders", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    payload = response.json()["session"]
+    assert payload["status"] == "login_failed"
+    assert "username" in (payload["message"] or "").lower()
+
+
+def test_midtown_go_to_orders_login_failed_when_form_still_present_after_login(client, monkeypatch) -> None:
+    token = register_and_login(client, "midtown-browser-login-silent@example.com")
+    _connect_midtown_account(client, token)
+
+    # The fake login "succeeds" (no raise) but leaves the browser on the login
+    # page, simulating a silent rejection. The post-login re-verification should
+    # detect this and surface login_failed rather than a generic login_required.
+    _install_midtown_fake_browser(monkeypatch)
+    monkeypatch.setattr("app.services.retailer_browser._midtown_login", lambda page, *, username, password: None)
+    monkeypatch.setattr("app.services.retailer_browser._requires_midtown_login", lambda page: True)
+
+    response = client.post("/api/v1/retailer-browser/midtown/go-to-orders", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["session"]["status"] == "login_failed"
 
 
 def test_midtown_browser_click_replay_supports_typing(client, monkeypatch) -> None:

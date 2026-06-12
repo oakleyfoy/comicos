@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 import secrets
 
 from sqlmodel import Session, select
@@ -38,6 +39,24 @@ MIDTOWN_ORDERS_URL = "https://www.midtowncomics.com/account-settings"
 
 class MidtownNeedsAttentionError(RuntimeError):
     """Raised when Midtown requires manual intervention or rejects login."""
+
+
+class MidtownSecurityChallengeError(MidtownNeedsAttentionError):
+    """Raised when Midtown presents a CAPTCHA / security challenge.
+
+    Subclass of :class:`MidtownNeedsAttentionError` so existing handlers keep
+    treating it as an attention-required state, while newer call sites can
+    distinguish a genuine security challenge from a rejected login.
+    """
+
+
+class MidtownLoginRejectedError(MidtownNeedsAttentionError):
+    """Raised when Midtown rejects the submitted credentials.
+
+    Subclass of :class:`MidtownNeedsAttentionError` so legacy ``except`` blocks
+    still catch it, but the orders/session flows can surface a precise
+    "check your username/password" message instead of a security prompt.
+    """
 
 
 class MidtownAuthenticationRequiredError(RuntimeError):
@@ -306,7 +325,14 @@ def _best_effort_wait_for_load(page, *, timeout_ms: int = 15000) -> None:
         return
 
 
-def _midtown_login(page, *, username: str, password: str) -> None:
+def _midtown_login(page, *, username: str, password: str) -> dict[str, Any]:
+    """Submit the Midtown login form using stored credentials.
+
+    Returns a small diagnostics dict on success (no secrets). Raises
+    :class:`MidtownSecurityChallengeError` when a CAPTCHA/security challenge
+    blocks the login, and :class:`MidtownLoginRejectedError` when the
+    credentials are rejected or the login form cannot be driven.
+    """
     page.goto(MIDTOWN_LOGIN_URL, wait_until="domcontentloaded")
     _best_effort_wait_for_load(page)
     username_input = _first_visible(
@@ -327,7 +353,9 @@ def _midtown_login(page, *, username: str, password: str) -> None:
         ],
     )
     if username_input is None or password_input is None:
-        raise MidtownNeedsAttentionError("Midtown login form could not be located.")
+        raise MidtownLoginRejectedError(
+            "Midtown login form could not be located. Try the live browser fallback."
+        )
     username_input.fill(username)
     password_input.fill(password)
     submit = _first_visible(
@@ -340,18 +368,36 @@ def _midtown_login(page, *, username: str, password: str) -> None:
         ],
     )
     if submit is None:
-        raise MidtownNeedsAttentionError("Midtown login submit action could not be located.")
+        raise MidtownLoginRejectedError(
+            "Midtown login submit action could not be located. Try the live browser fallback."
+        )
     submit.click()
     _best_effort_wait_for_load(page)
+    # Give the SPA time to navigate / render any error banner before we judge
+    # the outcome. Reading the URL/markers too early was the root cause of
+    # silent login failures being reported as a generic "login required" state.
+    try:
+        page.wait_for_timeout(1500)
+    except Exception:  # noqa: BLE001 - timing helper only
+        pass
+
+    # A challenge taking over after submit is a security state, not a rejection.
     if _has_midtown_challenge(page):
-        raise MidtownNeedsAttentionError("Midtown presented a CAPTCHA or security challenge.")
-    lower_url = (page.url or "").lower()
-    page_text = page.content().lower()
-    page.wait_for_timeout(1200)
-    if "/login" in lower_url and ("invalid" in page_text or "sign in" in page_text):
-        raise MidtownNeedsAttentionError(
-            "Midtown login failed. Verify the saved username and password."
+        raise MidtownSecurityChallengeError(
+            "Midtown presented a CAPTCHA or security challenge."
         )
+
+    # If the login form is still present (URL still on /login or a password
+    # field is still visible), the credentials were rejected.
+    if _requires_midtown_login(page):
+        raise MidtownLoginRejectedError(
+            "Midtown rejected the sign-in. Check the saved username and password."
+        )
+
+    return {
+        "post_login_url": getattr(page, "url", None),
+        "post_login_title": _midtown_page_title(page),
+    }
 
 
 def _load_recent_order_details(

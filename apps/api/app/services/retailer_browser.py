@@ -27,11 +27,14 @@ from app.services.retailer_sync.midtown_account_sync import (
     _midtown_login,
     _midtown_page_title,
     _midtown_visible_text,
+    MidtownLoginRejectedError,
     MidtownNeedsAttentionError,
+    MidtownSecurityChallengeError,
     _parse_midtown_detail_or_raise,
     _requires_midtown_login,
     _save_session_state,
 )
+from app.services.retailer_credentials import mask_retailer_username
 from app.services.retailer_sync.midtown_parser import (
     MidtownOrderDetail,
     MidtownOrderHistoryEntry,
@@ -345,6 +348,30 @@ def _login_required_status(
         orders_url=orders_url,
         authenticated=False,
         order_count=order_count,
+        last_updated_at=utc_now(),
+        live_session_active=True,
+        process_id=os.getpid(),
+        registry_contains_account=int(account.id or 0) in _MIDTOWN_LIVE_SESSIONS,
+        registry_session_count=len(_MIDTOWN_LIVE_SESSIONS),
+    )
+
+
+def _login_failed_status(
+    *,
+    account: RetailerAccount,
+    current_url: str | None,
+    orders_url: str = MIDTOWN_ORDERS_URL,
+    message: str | None = None,
+) -> MidtownBrowserStatus:
+    return MidtownBrowserStatus(
+        retailer="midtown",
+        account_id=int(account.id or 0),
+        status="login_failed",
+        message=message or "Login failed. Check your Midtown username and password.",
+        current_url=current_url or MIDTOWN_LOGIN_URL,
+        orders_url=orders_url,
+        authenticated=False,
+        order_count=0,
         last_updated_at=utc_now(),
         live_session_active=True,
         process_id=os.getpid(),
@@ -1164,8 +1191,96 @@ def _midtown_attempt_assisted_login(
         return False
     account_id = int(account.id or 0)
     _log_event("midtown_browser_login_required", account_id=account_id, current_url=page.url)
-    password = decrypt_retailer_password(account.encrypted_password)
-    _midtown_login(page, username=account.username, password=password)
+
+    # Decrypt without ever logging the value. We log only presence + length so
+    # we can tell stored-but-blank from stored-and-populated credentials.
+    try:
+        password = decrypt_retailer_password(account.encrypted_password)
+    except Exception as exc:  # noqa: BLE001 - surface as a clear login failure
+        _log_event(
+            "midtown_browser_login_credential_error",
+            account_id=account_id,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+        )
+        raise MidtownLoginRejectedError(
+            "Saved Midtown credentials could not be read. Update your Midtown login."
+        ) from exc
+
+    username = (account.username or "").strip()
+    _log_event(
+        "midtown_browser_login_attempt",
+        account_id=account_id,
+        username_masked=mask_retailer_username(username) if username else None,
+        username_present=bool(username),
+        password_present=bool(password),
+        password_length=len(password or ""),
+        credential_version=account.credential_version,
+        current_url=page.url,
+    )
+    if not username or not password:
+        raise MidtownLoginRejectedError(
+            "Saved Midtown username or password is empty. Update your Midtown login."
+        )
+
+    try:
+        login_diagnostics = _midtown_login(page, username=username, password=password)
+    except MidtownSecurityChallengeError as exc:
+        _log_event(
+            "midtown_browser_login_result",
+            account_id=account_id,
+            outcome="security_challenge",
+            current_url=getattr(page, "url", None),
+            error_message=str(exc),
+        )
+        raise
+    except MidtownLoginRejectedError as exc:
+        _log_event(
+            "midtown_browser_login_result",
+            account_id=account_id,
+            outcome="rejected",
+            current_url=getattr(page, "url", None),
+            error_message=str(exc),
+        )
+        raise
+
+    if post_login_url:
+        page.goto(post_login_url, wait_until="domcontentloaded")
+        _best_effort_wait_for_load(page)
+
+    # Re-verify after returning to the post-login page: a challenge may appear
+    # only now, or a "successful" submit may silently land us back on /login.
+    if _has_midtown_challenge(page):
+        _log_event(
+            "midtown_browser_login_result",
+            account_id=account_id,
+            outcome="security_challenge_post_login",
+            current_url=getattr(page, "url", None),
+        )
+        raise MidtownSecurityChallengeError(
+            "Midtown presented a CAPTCHA or security challenge."
+        )
+    if _requires_midtown_login(page):
+        _log_event(
+            "midtown_browser_login_result",
+            account_id=account_id,
+            outcome="rejected_post_login",
+            current_url=getattr(page, "url", None),
+        )
+        raise MidtownLoginRejectedError(
+            "Midtown rejected the sign-in. Check the saved username and password."
+        )
+
+    _log_event(
+        "midtown_browser_login_result",
+        account_id=account_id,
+        outcome="authenticated",
+        current_url=getattr(page, "url", None),
+        post_login_title=(login_diagnostics or {}).get("post_login_title"),
+    )
+
+    # Only persist the storage state once we have confirmed an authenticated
+    # session, so we never cache a logged-out state over a good one.
     if save_session_state:
         _log_event(
             "midtown_browser_storage_state_save_start",
@@ -1178,9 +1293,6 @@ def _midtown_attempt_assisted_login(
             account_id=account_id,
             path=str(Path(SESSION_STATE_ROOT) / f"midtown-account-{account_id}.json"),
         )
-    if post_login_url:
-        page.goto(post_login_url, wait_until="domcontentloaded")
-        _best_effort_wait_for_load(page)
     return True
 
 
@@ -1211,6 +1323,28 @@ def start_midtown_browser_session(
                         post_login_url=post_login_url,
                         save_session_state=True,
                     )
+                except MidtownLoginRejectedError as exc:
+                    LOGGER.warning(
+                        "midtown_browser_session_start_login_failed account_id=%s error_type=%s error_message=%s",
+                        account_id,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    _log_event(
+                        "midtown_browser_login_failed",
+                        account_id=account_id,
+                        current_url=getattr(page, "url", None),
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                    )
+                    result = _login_failed_status(
+                        account=account,
+                        current_url=getattr(page, "url", None) or MIDTOWN_LOGIN_URL,
+                        message=str(exc),
+                    )
+                    _apply_midtown_viewport_metadata(result, page)
+                    _write_browser_state(account_id, _browser_state_payload(result))
+                    return result
                 except MidtownNeedsAttentionError as exc:
                     # CAPTCHA / security challenge is a valid application state, not a failure.
                     LOGGER.warning(
@@ -1248,6 +1382,24 @@ def start_midtown_browser_session(
         raise
     except MidtownBrowserBusyError:
         raise
+    except MidtownLoginRejectedError as exc:
+        # Defensive: rejected credentials must surface as a login failure, never an env error.
+        LOGGER.warning(
+            "midtown_browser_session_start_login_failed_late account_id=%s error_type=%s error_message=%s",
+            account_id,
+            type(exc).__name__,
+            exc,
+        )
+        result = _login_failed_status(
+            account=account,
+            current_url=MIDTOWN_LOGIN_URL,
+            message=str(exc),
+        )
+        try:
+            _write_browser_state(account_id, _browser_state_payload(result))
+        except Exception:  # noqa: BLE001 - persistence is best-effort here
+            pass
+        return result
     except MidtownNeedsAttentionError as exc:
         # Defensive: a security challenge must NEVER be reported as an environment failure.
         LOGGER.warning(
@@ -1403,6 +1555,21 @@ def list_midtown_browser_orders(
                     post_login_url=post_login_url,
                     save_session_state=True,
                 )
+            except MidtownLoginRejectedError as exc:
+                _log_event(
+                    "midtown_browser_login_failed",
+                    account_id=account_id,
+                    current_url=page.url,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                )
+                login_failed = _login_failed_status(
+                    account=account,
+                    current_url=page.url or MIDTOWN_LOGIN_URL,
+                    message=str(exc),
+                )
+                _write_browser_state(account_id, _browser_state_payload(login_failed))
+                return MidtownBrowserOrders(status=login_failed, orders=[])
             except MidtownNeedsAttentionError as exc:
                 _log_event(
                     "midtown_browser_security_verification_required",

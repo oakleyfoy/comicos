@@ -41,12 +41,15 @@ function formatMoney(value: string | null | undefined): string {
   }).format(parsed);
 }
 
-type LoadPhase = "security" | "signin" | "ready";
+type LoadPhase = "security" | "login_failed" | "signin" | "ready";
 
 function classifyStatus(session: MidtownBrowserSessionStatusRead | null): LoadPhase {
   const status = (session?.status ?? "").toLowerCase();
   if (status === "security_verification_required") {
     return "security";
+  }
+  if (status === "login_failed") {
+    return "login_failed";
   }
   if (["login_required", "needs_attention", "failed", "error"].includes(status)) {
     return "signin";
@@ -96,6 +99,7 @@ export function MidtownBrowserOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [loginAccount, setLoginAccount] = useState<RetailerAccountRead | null>(null);
@@ -188,7 +192,9 @@ export function MidtownBrowserOrdersPage() {
       }
       setIsLoginModalOpen(false);
       setLoginPassword("");
+      setNotice("Saved your Midtown login. Retrying sign-in...");
       await loadOrders();
+      setNotice(null);
     } catch (saveError) {
       if (saveError instanceof ApiError || saveError instanceof Error) {
         setLoginError(saveError.message);
@@ -215,6 +221,12 @@ export function MidtownBrowserOrdersPage() {
       {error ? (
         <div className="mt-6">
           <StatusBanner tone="error">{error}</StatusBanner>
+        </div>
+      ) : null}
+
+      {notice ? (
+        <div className="mt-6">
+          <StatusBanner tone="info">{notice}</StatusBanner>
         </div>
       ) : null}
 
@@ -245,6 +257,39 @@ export function MidtownBrowserOrdersPage() {
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Retry Loading Orders
+            </button>
+          </div>
+        </section>
+      ) : phase === "login_failed" ? (
+        <section className="mt-6 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 shadow-xl shadow-black/20">
+          <p className="text-xs uppercase tracking-[0.16em] text-rose-200/80">Sign-in rejected</p>
+          <h2 className="mt-1 text-2xl font-semibold text-white">Login failed. Check your username/password.</h2>
+          <p className="mt-3 max-w-2xl text-sm text-rose-50/90">
+            {browserSession?.message ??
+              "Midtown rejected the saved credentials. Update your Midtown username and password, then retry."}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void openLoginModal()}
+              className="rounded-2xl bg-rose-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-rose-200"
+            >
+              Update Midtown Login
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadOrders()}
+              disabled={isWorking}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Try Again
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(SECURITY_VERIFICATION_PATH)}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
+            >
+              Open Live Browser (Fallback)
             </button>
           </div>
         </section>

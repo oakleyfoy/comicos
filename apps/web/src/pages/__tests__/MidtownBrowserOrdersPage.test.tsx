@@ -131,6 +131,38 @@ describe("MidtownBrowserOrdersPage", () => {
     });
   });
 
+  it("shows a distinct login-failed message and opens the update modal", async () => {
+    vi.spyOn(apiClient, "goToMidtownBrowserOrders").mockResolvedValue({
+      session: {
+        retailer: "midtown",
+        account_id: 1,
+        status: "login_failed",
+        message: "Midtown rejected the sign-in. Check the saved username and password.",
+        current_url: "https://www.midtowncomics.com/login",
+        orders_url: "https://www.midtowncomics.com/account-settings",
+        authenticated: false,
+        order_count: 0,
+        last_updated_at: "2026-06-10T20:00:00Z",
+      },
+      orders: [],
+    });
+    vi.spyOn(apiClient, "getRetailerAccounts").mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <MidtownBrowserOrdersPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Login failed. Check your username/password." }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update Midtown Login" }));
+    expect(await screen.findByRole("dialog", { name: "Update Midtown login" })).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalledWith("/connected-retailers");
+  });
+
   it("updates Midtown login in a modal and retries loading orders", async () => {
     const ordersSpy = vi.spyOn(apiClient, "goToMidtownBrowserOrders").mockResolvedValue({
       session: {
