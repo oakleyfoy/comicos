@@ -160,7 +160,7 @@ describe("RetailerOrderDetailPage", () => {
     await waitFor(() => {
       expect(apiClient.confirmRetailerOrder).toHaveBeenCalledWith(11);
       expect(screen.getByText("confirmed")).toBeInTheDocument();
-      expect(screen.getByText("Retailer order confirmed. Ready for receiving when books arrive.")).toBeInTheDocument();
+      expect(screen.getByText("Retailer order confirmed.")).toBeInTheDocument();
     });
   });
 });

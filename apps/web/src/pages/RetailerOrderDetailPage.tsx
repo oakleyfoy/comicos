@@ -82,6 +82,7 @@ export function RetailerOrderDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmStats, setConfirmStats] = useState<{
     inventoryCopies: number;
@@ -138,6 +139,7 @@ export function RetailerOrderDetailPage() {
     }
     setIsSaving(true);
     setError(null);
+    setNotice(null);
     setSuccess(null);
     setConfirmStats(null);
     try {
@@ -157,7 +159,20 @@ export function RetailerOrderDetailPage() {
           : "Retailer order confirmed.",
       );
     } catch (confirmError) {
-      setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
+      if (confirmError instanceof ApiError && confirmError.status === 408) {
+        // The confirm request timed out client-side, but the backend may still be
+        // finishing. Surface a non-blocking notice and refresh the order so the UI
+        // self-heals once materialization completes (idempotent on the server).
+        setNotice(confirmError.message);
+        try {
+          const refreshed = await apiClient.getRetailerOrder(order.id);
+          setOrder(refreshed);
+        } catch {
+          // Leave the notice in place; user can refresh manually.
+        }
+      } else {
+        setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -174,6 +189,11 @@ export function RetailerOrderDetailPage() {
       {error ? (
         <div className="mt-6">
           <StatusBanner tone="error">{error}</StatusBanner>
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="mt-6">
+          <StatusBanner tone="warning">{notice}</StatusBanner>
         </div>
       ) : null}
       {success ? (

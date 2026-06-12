@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -24,6 +26,7 @@ from app.models import (
 from app.services.imports import confirm_import_for_user
 from app.services.retailer_draft_import_prep import prepare_draft_import_for_retailer_confirm
 from app.services.retailer_order_catalog_enrichment import (
+    RetailerEnrichmentSummary,
     apply_retailer_enrichment_to_confirmed_order,
     enrich_retailer_draft_import_for_confirm,
 )
@@ -39,6 +42,23 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+@contextmanager
+def _stage_timer(stage: str, *, order_number: str):
+    """Log wall-clock duration of a confirm stage so production hangs are diagnosable."""
+    start = time.monotonic()
+    logger.info("retailer_confirm_stage start stage=%s order=%s", stage, order_number)
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - start
+        logger.info(
+            "retailer_confirm_stage done stage=%s order=%s elapsed=%.3fs",
+            stage,
+            order_number,
+            elapsed,
+        )
+
+
 @dataclass(frozen=True)
 class RetailerOrderMaterializationResult:
     order_id: int
@@ -47,6 +67,7 @@ class RetailerOrderMaterializationResult:
     portfolio_items_added: int
     import_id: int | None
     line_debug: tuple[dict, ...] = ()
+    enrichment_summary: dict | None = None
 
 
 def _draft_contains_retailer_order(draft: DraftImport, retailer_order_number: str) -> bool:
@@ -255,6 +276,7 @@ def _persist_materialization_on_snapshot(
     import_id: int | None,
     portfolio_items_added: int,
     line_debug: tuple[dict, ...] = (),
+    enrichment_summary: dict | None = None,
 ) -> None:
     raw = dict(order.raw_snapshot_json or {})
     raw["comicos_linked_order_id"] = int(order_id)
@@ -265,6 +287,8 @@ def _persist_materialization_on_snapshot(
     raw["comicos_import_status"] = "imported"
     if line_debug:
         raw["comicos_materialization_line_debug"] = list(line_debug)
+    if enrichment_summary is not None:
+        raw["comicos_enrichment_summary"] = enrichment_summary
     order.raw_snapshot_json = raw
     order.updated_at = utc_now()
     session.add(order)
@@ -281,6 +305,11 @@ def _finalize_existing_order(
 ) -> RetailerOrderMaterializationResult:
     if item_snapshots is None:
         item_snapshots = list_retailer_order_item_snapshots(session, order_snapshot_id=int(order.id or 0))
+    logger.info(
+        "retailer_confirm idempotent_recovery order=%s linked_order_id=%s",
+        order.retailer_order_number,
+        order_id,
+    )
     portfolio_added = _attach_inventory_to_default_portfolio(
         session,
         owner_user_id=owner_user_id,
@@ -290,6 +319,10 @@ def _finalize_existing_order(
     line_debug = _build_materialization_line_debug(
         session, order_id=order_id, item_snapshots=item_snapshots
     )
+    existing_raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
+    enrichment_summary = existing_raw.get("comicos_enrichment_summary")
+    if not isinstance(enrichment_summary, dict):
+        enrichment_summary = None
     _persist_materialization_on_snapshot(
         session,
         order=order,
@@ -297,6 +330,7 @@ def _finalize_existing_order(
         import_id=import_id,
         portfolio_items_added=portfolio_added,
         line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
     )
     raw = dict(order.raw_snapshot_json or {})
     raw["comicos_inventory_copies_created"] = copies
@@ -311,6 +345,7 @@ def _finalize_existing_order(
         portfolio_items_added=portfolio_added,
         import_id=import_id,
         line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
     )
 
 
@@ -359,12 +394,14 @@ def materialize_retailer_order_inventory(
             item_snapshots=item_snapshots,
         )
 
-    draft = sync_isolated_draft_import_for_retailer_order(
-        session,
-        account=account,
-        order=order,
-        item_snapshots=item_snapshots,
-    )
+    order_number = order.retailer_order_number
+    with _stage_timer("draft_sync", order_number=order_number):
+        draft = sync_isolated_draft_import_for_retailer_order(
+            session,
+            account=account,
+            order=order,
+            item_snapshots=item_snapshots,
+        )
     if draft.id is None:
         raise HTTPException(status_code=422, detail="Retailer import draft could not be created.")
 
@@ -379,43 +416,52 @@ def materialize_retailer_order_inventory(
         )
 
     prepare_draft_import_for_retailer_confirm(session, draft)
-    try:
-        enrich_retailer_draft_import_for_confirm(
-            session,
-            owner_user_id=owner_user_id,
-            draft_import=draft,
-        )
-    except Exception:
-        logger.warning(
-            "retailer_catalog_enrich draft failed order=%s",
-            order.retailer_order_number,
-            exc_info=True,
-        )
+
+    # Enrichment is best-effort and time-boxed: it must never block inventory creation.
+    enrichment_summary: RetailerEnrichmentSummary | None = None
+    with _stage_timer("enrichment", order_number=order_number):
+        try:
+            enrichment_summary = enrich_retailer_draft_import_for_confirm(
+                session,
+                owner_user_id=owner_user_id,
+                draft_import=draft,
+            )
+        except Exception:
+            logger.warning(
+                "retailer_catalog_enrich draft failed order=%s",
+                order_number,
+                exc_info=True,
+            )
 
     user = session.get(User, owner_user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    confirm_result = confirm_import_for_user(session, user, int(draft.id))
-    try:
-        apply_retailer_enrichment_to_confirmed_order(
+    with _stage_timer("import_confirm", order_number=order_number):
+        confirm_result = confirm_import_for_user(session, user, int(draft.id))
+
+    with _stage_timer("enrichment_apply", order_number=order_number):
+        try:
+            apply_retailer_enrichment_to_confirmed_order(
+                session,
+                owner_user_id=owner_user_id,
+                order_id=int(confirm_result.order_id),
+                draft_import=draft,
+                item_snapshots=item_snapshots,
+            )
+        except Exception:
+            logger.warning(
+                "retailer_enrichment_apply failed order=%s",
+                confirm_result.order_id,
+                exc_info=True,
+            )
+
+    with _stage_timer("portfolio_creation", order_number=order_number):
+        portfolio_added = _attach_inventory_to_default_portfolio(
             session,
             owner_user_id=owner_user_id,
             order_id=int(confirm_result.order_id),
-            draft_import=draft,
-            item_snapshots=item_snapshots,
         )
-    except Exception:
-        logger.warning(
-            "retailer_enrichment_apply failed order=%s",
-            confirm_result.order_id,
-            exc_info=True,
-        )
-    portfolio_added = _attach_inventory_to_default_portfolio(
-        session,
-        owner_user_id=owner_user_id,
-        order_id=int(confirm_result.order_id),
-    )
     copies, total_qty = _inventory_stats_for_order(
         session,
         owner_user_id=owner_user_id,
@@ -435,8 +481,9 @@ def materialize_retailer_order_inventory(
     if copies != expected_qty:
         raise HTTPException(
             status_code=422,
-            detail=f"Expected {expected_qty} inventory copies for order {order.retailer_order_number}, got {copies}.",
+            detail=f"Expected {expected_qty} inventory copies for order {order_number}, got {copies}.",
         )
+    summary_dict = enrichment_summary.as_dict() if enrichment_summary is not None else None
     _persist_materialization_on_snapshot(
         session,
         order=order,
@@ -444,13 +491,15 @@ def materialize_retailer_order_inventory(
         import_id=int(confirm_result.import_id),
         portfolio_items_added=portfolio_added,
         line_debug=line_debug,
+        enrichment_summary=summary_dict,
     )
     raw = dict(order.raw_snapshot_json or {})
     raw["comicos_inventory_copies_created"] = copies
     raw["comicos_total_ordered_quantity"] = total_qty
     order.raw_snapshot_json = raw
     session.add(order)
-    session.commit()
+    with _stage_timer("commit", order_number=order_number):
+        session.commit()
 
     return RetailerOrderMaterializationResult(
         order_id=int(confirm_result.order_id),
@@ -459,4 +508,5 @@ def materialize_retailer_order_inventory(
         portfolio_items_added=portfolio_added,
         import_id=int(confirm_result.import_id),
         line_debug=line_debug,
+        enrichment_summary=summary_dict,
     )

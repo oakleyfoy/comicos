@@ -116,6 +116,7 @@ class RetailerOrderSnapshotRead(BaseModel):
     inventory_copies_created: int | None = None
     total_ordered_quantity: int | None = None
     portfolio_items_added: int | None = None
+    enrichment_summary: dict | None = None
     materialization_line_debug: list[dict] = Field(default_factory=list)
     capture_quality_summary_json: dict = Field(default_factory=dict)
     parser_quality_summary_json: dict = Field(default_factory=dict)
@@ -185,6 +186,38 @@ class MidtownHtmlImportResponse(BaseModel):
 
 
 class MidtownHtmlImportDebugResponse(BaseModel):
+    title: str | None = None
+    page_length: int
+    order_item_count: int
+    has_right_contents: bool
+    has_info_container: bool
+    visible_text_excerpt: str
+
+
+class SupportedRetailerRead(BaseModel):
+    key: str
+    display_name: str
+    status: str
+    supported: bool
+    accepts_upload: bool
+    is_fallback: bool = False
+
+
+class SupportedRetailersResponse(BaseModel):
+    items: list[SupportedRetailerRead] = Field(default_factory=list)
+
+
+class RetailerHtmlImportResponse(BaseModel):
+    order_id: int
+    retailer: str
+    retailer_order_number: str
+    item_count: int
+    parser_status: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RetailerHtmlImportDebugResponse(BaseModel):
+    retailer: str
     title: str | None = None
     page_length: int
     order_item_count: int

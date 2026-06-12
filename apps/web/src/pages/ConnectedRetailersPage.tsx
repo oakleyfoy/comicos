@@ -603,8 +603,15 @@ export function ConnectedRetailersPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => navigate("/connected-retailers/midtown/upload")}
+              onClick={() => navigate("/connected-retailers/import")}
               className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+            >
+              Import Saved Retailer Order
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/connected-retailers/midtown/upload")}
+              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
             >
               Upload Saved Midtown Order
             </button>

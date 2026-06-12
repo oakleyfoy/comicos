@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile, status
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
@@ -9,6 +9,10 @@ from app.models import DraftImport, User
 from app.schemas.retailer_accounts import (
     MidtownHtmlImportDebugResponse,
     MidtownHtmlImportResponse,
+    RetailerHtmlImportDebugResponse,
+    RetailerHtmlImportResponse,
+    SupportedRetailerRead,
+    SupportedRetailersResponse,
     RetailerAccountCreate,
     RetailerAccountRead,
     RetailerAccountsListResponse,
@@ -31,6 +35,12 @@ from app.services.retailer_sync.midtown_html_import import (
     debug_midtown_saved_html,
     import_midtown_order_from_html,
 )
+from app.services.retailer_sync.retailer_html_common import RetailerHtmlImportError
+from app.services.retailer_sync.retailer_html_import import (
+    debug_retailer_order_html,
+    import_retailer_order_from_html,
+)
+from app.services.retailer_sync.retailer_html_parsers import list_supported_retailers
 from app.schemas.imports import DraftImportRead
 from app.services.retailer_accounts import (
     build_retailer_order_quality_summary,
@@ -130,6 +140,11 @@ def _serialize_order(
         materialization_line_debug = list(materialization.line_debug)
     elif isinstance(raw.get("comicos_materialization_line_debug"), list):
         materialization_line_debug = raw["comicos_materialization_line_debug"]
+    enrichment_summary = None
+    if materialization and materialization.enrichment_summary is not None:
+        enrichment_summary = materialization.enrichment_summary
+    elif isinstance(raw.get("comicos_enrichment_summary"), dict):
+        enrichment_summary = raw["comicos_enrichment_summary"]
     return RetailerOrderSnapshotRead(
         id=int(order.id),
         retailer_account_id=order.retailer_account_id,
@@ -151,6 +166,7 @@ def _serialize_order(
         inventory_copies_created=int(inventory_copies_created) if inventory_copies_created is not None else None,
         total_ordered_quantity=int(total_ordered_quantity) if total_ordered_quantity is not None else None,
         portfolio_items_added=int(portfolio_items_added) if portfolio_items_added is not None else None,
+        enrichment_summary=enrichment_summary,
         materialization_line_debug=materialization_line_debug,
         capture_quality_summary_json=quality_summary["capture_quality_summary_json"],
         parser_quality_summary_json=quality_summary["parser_quality_summary_json"],
@@ -366,16 +382,20 @@ def get_retailer_orders(
     )
 
 
-async def _read_midtown_html_upload(file: UploadFile) -> str:
+async def _read_retailer_html_upload(file: UploadFile) -> str:
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The uploaded file was empty.")
     if len(raw) > MAX_HTML_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File is too large. Save just the Midtown order page as HTML and try again.",
+            detail="File is too large. Save just the retailer order page as HTML and try again.",
         )
     return raw.decode("utf-8", errors="replace")
+
+
+# Backwards-compatible alias for the Midtown-specific endpoints below.
+_read_midtown_html_upload = _read_retailer_html_upload
 
 
 def _midtown_html_import_http_error(exc: MidtownHtmlImportError) -> HTTPException:
@@ -383,6 +403,79 @@ def _midtown_html_import_http_error(exc: MidtownHtmlImportError) -> HTTPExceptio
     if exc.diagnostics:
         payload["diagnostics"] = exc.diagnostics
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=payload)
+
+
+def _retailer_html_import_http_error(exc: RetailerHtmlImportError) -> HTTPException:
+    payload: dict = {"message": str(exc)}
+    if exc.diagnostics:
+        payload["diagnostics"] = exc.diagnostics
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=payload)
+
+
+@retailer_accounts_v1_router.get(
+    "/retailer-orders/import/retailers",
+    response_model=SupportedRetailersResponse,
+)
+def list_retailer_html_import_retailers(
+    current_user: User = Depends(get_current_user),
+) -> SupportedRetailersResponse:
+    assert current_user.id is not None
+    return SupportedRetailersResponse(
+        items=[SupportedRetailerRead(**card) for card in list_supported_retailers()]
+    )
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/import/html/debug",
+    response_model=RetailerHtmlImportDebugResponse,
+)
+async def debug_retailer_order_html_import(
+    retailer: str = Form("unknown"),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> RetailerHtmlImportDebugResponse:
+    assert current_user.id is not None
+    html_text = await _read_retailer_html_upload(file)
+    try:
+        fields = debug_retailer_order_html(retailer, html_text)
+    except RetailerHtmlImportError as exc:
+        raise _retailer_html_import_http_error(exc) from exc
+    return RetailerHtmlImportDebugResponse(retailer=retailer, **fields)
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/import/html",
+    response_model=RetailerHtmlImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_retailer_order_html(
+    retailer: str = Form("unknown"),
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RetailerHtmlImportResponse:
+    assert current_user.id is not None
+    html_text = await _read_retailer_html_upload(file)
+    try:
+        result = import_retailer_order_from_html(
+            session,
+            owner_user_id=int(current_user.id),
+            retailer=retailer,
+            html_text=html_text,
+            source_filename=file.filename,
+        )
+    except MidtownHtmlImportError as exc:
+        raise _midtown_html_import_http_error(exc) from exc
+    except RetailerHtmlImportError as exc:
+        raise _retailer_html_import_http_error(exc) from exc
+    return RetailerHtmlImportResponse(
+        order_id=result.order_id,
+        retailer=result.retailer,
+        retailer_order_number=result.retailer_order_number,
+        item_count=result.item_count,
+        parser_status=result.parser_status,
+        warnings=list(result.warnings),
+    )
 
 
 @retailer_accounts_v1_router.post(

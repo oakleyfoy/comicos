@@ -397,6 +397,7 @@ export interface RetailerOrderSnapshotRead {
   inventory_copies_created?: number | null;
   total_ordered_quantity?: number | null;
   portfolio_items_added?: number | null;
+  enrichment_summary?: Record<string, unknown> | null;
   capture_quality_summary_json: Record<string, unknown>;
   parser_quality_summary_json: Record<string, unknown>;
   raw_fields_summary_json: Record<string, unknown>;
@@ -472,6 +473,28 @@ export interface MidtownHtmlImportResponse {
   order_id: number;
   retailer_order_number: string;
   item_count: number;
+}
+
+export interface SupportedRetailer {
+  key: string;
+  display_name: string;
+  status: string;
+  supported: boolean;
+  accepts_upload: boolean;
+  is_fallback: boolean;
+}
+
+export interface SupportedRetailersResponse {
+  items: SupportedRetailer[];
+}
+
+export interface RetailerHtmlImportResponse {
+  order_id: number;
+  retailer: string;
+  retailer_order_number: string;
+  item_count: number;
+  parser_status: string;
+  warnings: string[];
 }
 
 export interface MidtownHtmlImportDebugResponse {
@@ -20995,9 +21018,12 @@ export const apiClient = {
   },
 
   confirmRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
-    return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}/confirm`, {
-      method: "POST",
-    });
+    return requestWithTimeout<RetailerOrderSnapshotRead>(
+      `/api/v1/retailer-orders/${orderId}/confirm`,
+      { method: "POST" },
+      30_000,
+      "Confirmation may still be processing. Refresh or check your Portfolio.",
+    );
   },
 
   startMidtownBrowserSession(): Promise<MidtownBrowserSessionResponse> {
@@ -21079,6 +21105,20 @@ export const apiClient = {
         body: form,
       },
     );
+  },
+
+  listImportRetailers(): Promise<SupportedRetailersResponse> {
+    return request<SupportedRetailersResponse>("/api/v1/retailer-orders/import/retailers");
+  },
+
+  importRetailerOrderHtml(retailer: string, file: File): Promise<RetailerHtmlImportResponse> {
+    const form = new FormData();
+    form.append("retailer", retailer);
+    form.append("file", file);
+    return request<RetailerHtmlImportResponse>("/api/v1/retailer-orders/import/html", {
+      method: "POST",
+      body: form,
+    });
   },
 
   createRetailerOrderReviewDraft(orderId: number): Promise<DraftImport> {

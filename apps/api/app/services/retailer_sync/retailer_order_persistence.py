@@ -50,7 +50,7 @@ def _match_existing_item(
     return None
 
 
-def _validate_midtown_order_number(value: str | None) -> str:
+def _validate_retailer_order_number(value: str | None, *, numeric_only: bool = False) -> str:
     cleaned = (value or "").strip()
     if not cleaned:
         raise MidtownOrderNumberError(
@@ -60,11 +60,22 @@ def _validate_midtown_order_number(value: str | None) -> str:
         raise MidtownOrderNumberError(
             "parser_no_order_number: retailer_order_number must be 128 characters or fewer."
         )
-    if not re.fullmatch(r"[0-9]+", cleaned):
+    if numeric_only:
+        if not re.fullmatch(r"[0-9]+", cleaned):
+            raise MidtownOrderNumberError(
+                "parser_no_order_number: retailer_order_number must contain only the numeric order id."
+            )
+    elif not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_\-]*", cleaned):
         raise MidtownOrderNumberError(
-            "parser_no_order_number: retailer_order_number must contain only the numeric order id."
+            "parser_no_order_number: retailer_order_number may only contain letters, numbers, dashes, "
+            "and underscores."
         )
     return cleaned
+
+
+# Backwards-compatible alias: Midtown order numbers are numeric-only.
+def _validate_midtown_order_number(value: str | None) -> str:
+    return _validate_retailer_order_number(value, numeric_only=True)
 
 
 def _apply_item_snapshot(
@@ -106,7 +117,9 @@ def upsert_retailer_order_snapshots(
     for order in orders:
         summary.orders_seen += 1
         summary.items_seen += len(order.items)
-        order_number = _validate_midtown_order_number(order.retailer_order_number)
+        order_number = _validate_retailer_order_number(
+            order.retailer_order_number, numeric_only=(account.retailer == "midtown")
+        )
         snapshot = session.exec(
             select(RetailerOrderSnapshot).where(
                 RetailerOrderSnapshot.owner_user_id == account.owner_user_id,

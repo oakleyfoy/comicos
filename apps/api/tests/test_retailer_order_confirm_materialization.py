@@ -241,3 +241,56 @@ def test_confirm_midtown_order_allows_missing_product_url_and_release_date(clien
     confirmed = client.post(f"/api/v1/retailer-orders/{order.id}/confirm", headers=auth_headers(token))
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["inventory_copies_created"] == 1
+
+
+def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, session, monkeypatch) -> None:
+    """Slow catalog enrichment must never block inventory creation or hang the request."""
+    import time as _time
+
+    from app.services import retailer_order_catalog_enrichment as enrichment_module
+
+    token = register_and_login(client, "midtown-confirm-slow@example.com")
+    account = _create_account(client, session, token, "midtown-slow@example.com")
+    _seed_midtown_order_4272232(session, account=account, order_id=9004272240)
+
+    # Cap the per-order enrichment budget and make each line enrichment slow so the
+    # budget is exceeded almost immediately. Remaining lines should be skipped.
+    monkeypatch.setattr(enrichment_module, "DEFAULT_ENRICH_TIME_BUDGET_SECONDS", 0.5)
+
+    original_enrich = enrichment_module.enrich_retailer_draft_item_dict
+
+    def _slow_enrich(session, *, owner_user_id, item):
+        _time.sleep(0.6)
+        return original_enrich(session, owner_user_id=owner_user_id, item=item)
+
+    monkeypatch.setattr(enrichment_module, "enrich_retailer_draft_item_dict", _slow_enrich)
+
+    started = _time.perf_counter()
+    confirmed = client.post("/api/v1/retailer-orders/9004272240/confirm", headers=auth_headers(token))
+    elapsed = _time.perf_counter() - started
+
+    assert confirmed.status_code == 200, confirmed.text
+    assert elapsed < 15.0, f"confirm took {elapsed:.2f}s (enrichment must be time-boxed)"
+
+    body = confirmed.json()
+    assert body["review_status"] == "confirmed"
+    assert body["linked_order_id"] is not None
+    assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
+    assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
+    summary = body.get("enrichment_summary")
+    assert summary is not None
+    assert summary["budget_exceeded"] is True
+    assert summary["skipped_items"] >= 1
+    assert summary["enriched_items"] + summary["skipped_items"] == EXPECTED_LINE_COUNT
+
+    # Second confirm is idempotent: no new copies, no duplicate portfolio items.
+    confirmed_again = client.post("/api/v1/retailer-orders/9004272240/confirm", headers=auth_headers(token))
+    assert confirmed_again.status_code == 200, confirmed_again.text
+    assert confirmed_again.json()["portfolio_items_added"] == 0
+
+    copies_after = session.exec(
+        select(InventoryCopy)
+        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
+        .where(OrderItem.order_id == body["linked_order_id"])
+    ).all()
+    assert len(copies_after) == EXPECTED_TOTAL_QUANTITY

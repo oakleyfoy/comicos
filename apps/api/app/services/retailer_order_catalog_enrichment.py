@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
@@ -19,6 +21,33 @@ from app.services.import_release_lifecycle_service import enrich_import_item_lif
 logger = logging.getLogger(__name__)
 
 EnrichmentStatus = Literal["matched", "partial_match", "needs_review"]
+
+# Confirm must never block inventory creation on slow catalog enrichment. Once this
+# wall-clock budget is exceeded, remaining lines are left as needs_review and the
+# confirm flow proceeds to materialize inventory immediately.
+DEFAULT_ENRICH_TIME_BUDGET_SECONDS = 5.0
+
+
+@dataclass(frozen=True)
+class RetailerEnrichmentSummary:
+    total_items: int
+    enriched_items: int
+    skipped_items: int
+    matched_items: int
+    needs_review_items: int
+    budget_exceeded: bool
+    elapsed_seconds: float
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "total_items": self.total_items,
+            "enriched_items": self.enriched_items,
+            "skipped_items": self.skipped_items,
+            "matched_items": self.matched_items,
+            "needs_review_items": self.needs_review_items,
+            "budget_exceeded": self.budget_exceeded,
+            "elapsed_seconds": round(self.elapsed_seconds, 3),
+        }
 
 
 def _is_broken_local_retailer_image(url: str | None) -> bool:
@@ -178,17 +207,49 @@ def enrich_retailer_draft_import_for_confirm(
     *,
     owner_user_id: int,
     draft_import: DraftImport,
-) -> None:
-    """Enrich draft lines with catalog metadata before confirm (errors are logged, not raised)."""
+    time_budget_seconds: float | None = None,
+) -> RetailerEnrichmentSummary:
+    """Enrich draft lines with catalog metadata before confirm (errors are logged, not raised).
+
+    Enrichment is best-effort and time-boxed: once ``time_budget_seconds`` of wall-clock
+    time is consumed, the remaining lines are left as ``needs_review`` so that confirm can
+    proceed to create inventory immediately rather than hanging on slow catalog lookups.
+    """
+    if time_budget_seconds is None:
+        time_budget_seconds = DEFAULT_ENRICH_TIME_BUDGET_SECONDS
     payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json or {})
     enriched_items: list[AiDraftOrderItem] = []
     draft_id = int(draft_import.id or 0)
 
+    started = time.monotonic()
+    budget_exceeded = False
+    enriched_count = 0
+    skipped_count = 0
+    matched_count = 0
+    needs_review_count = 0
+
     for line_index, item in enumerate(payload.items, start=1):
         item_dict = item.model_dump(mode="json")
+
+        if not budget_exceeded and (time.monotonic() - started) > time_budget_seconds:
+            budget_exceeded = True
+
+        if budget_exceeded:
+            item_dict["enrichment_status"] = "needs_review"
+            enriched_item = AiDraftOrderItem.model_validate(item_dict)
+            enriched_items.append(enriched_item)
+            skipped_count += 1
+            needs_review_count += 1
+            continue
+
         enriched = enrich_retailer_draft_item_dict(session, owner_user_id=owner_user_id, item=item_dict)
         enriched_item = AiDraftOrderItem.model_validate(enriched)
         enriched_items.append(enriched_item)
+        enriched_count += 1
+        if enriched.get("enrichment_status") == "matched":
+            matched_count += 1
+        else:
+            needs_review_count += 1
         if draft_id:
             try:
                 upsert_line_cover_resolution_from_item(
@@ -210,6 +271,26 @@ def enrich_retailer_draft_import_for_confirm(
     draft_import.parsed_payload_json = payload.model_dump(mode="json")
     session.add(draft_import)
     session.flush()
+
+    elapsed = time.monotonic() - started
+    if budget_exceeded:
+        logger.warning(
+            "retailer_catalog_enrich budget exceeded draft=%s budget=%.1fs elapsed=%.2fs enriched=%s skipped=%s",
+            draft_id,
+            time_budget_seconds,
+            elapsed,
+            enriched_count,
+            skipped_count,
+        )
+    return RetailerEnrichmentSummary(
+        total_items=len(payload.items),
+        enriched_items=enriched_count,
+        skipped_items=skipped_count,
+        matched_items=matched_count,
+        needs_review_items=needs_review_count,
+        budget_exceeded=budget_exceeded,
+        elapsed_seconds=elapsed,
+    )
 
 
 def apply_retailer_enrichment_to_confirmed_order(
