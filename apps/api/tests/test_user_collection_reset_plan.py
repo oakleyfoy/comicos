@@ -48,3 +48,31 @@ def test_reset_plan_known_blockers_order() -> None:
     assert_before("portfolio_item", "inventory_copy")
     assert_before("inventory_copy", "order_item")
     assert_before("order_item", "customer_order")
+
+
+def test_reset_plan_excludes_preserved_infrastructure() -> None:
+    plan = build_collection_reset_plan(validate=True)
+    plan_tables = {step.table_name for step in plan}
+
+    preserved_tables = {
+        "lunar_feed_run",
+        "lunar_feed_raw_row",
+        "lunar_feed_error",
+        "lunar_foc_alert",
+        "lunar_schedule_config",
+        "lunar_scheduled_run",
+        "lunar_scheduled_run_error",
+        "user_auth_sessions",
+        "user_auth_session_events",
+        "organization_security_contexts",
+        "organizations",
+    }
+    intersection = plan_tables & preserved_tables
+    assert not intersection, f"preserved infrastructure leaked into plan: {sorted(intersection)}"
+
+
+def test_reset_plan_has_no_sensitive_pattern_violations() -> None:
+    plan = build_collection_reset_plan(validate=True)
+    issues = validate_collection_reset_plan(plan)
+    preserved_issues = [issue for issue in issues if issue.kind == "preserved_table"]
+    assert not preserved_issues, [issue.message for issue in preserved_issues]

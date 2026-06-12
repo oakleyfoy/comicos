@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 import re
 import warnings
@@ -37,6 +38,7 @@ from app.services.user_collection_reset_scope import (
     draft_in,
     gmail_import_predicate,
     inventory_in,
+    is_preserved_model,
     order_in,
     order_item_in,
     owner,
@@ -46,7 +48,23 @@ from app.services.user_collection_reset_scope import (
     retailer_order_snapshot_in,
 )
 
+logger = logging.getLogger(__name__)
+
 ScopePredicate = Callable[[UserCollectionScope], ColumnElement[bool]]
+
+# Broad name patterns that should never appear in an executable delete plan. Matching tables are
+# auth/security/session/feed/catalog/credential infrastructure and must be preserved.
+_SENSITIVE_PLAN_NAME_PATTERNS: tuple[str, ...] = (
+    "auth_session",
+    "session_token",
+    "security_context",
+    "lunar_feed",
+    "lunar_schedule",
+    "lunar_scheduled",
+    "lunar_foc",
+    "release_feed",
+    "credential",
+)
 
 _CUSTOM_PREDICATES: dict[type[SQLModel], ScopePredicate] = {
     CoverImage: cover_image_predicate,
@@ -223,7 +241,7 @@ def _scope_reason_for(model: type[SQLModel], predicate: ScopePredicate) -> str:
 
 
 def build_scope_predicate(model: type[SQLModel]) -> ScopePredicate | None:
-    if model in NEVER_DELETE_MODELS or model is User:
+    if is_preserved_model(model):
         return None
     if model in _CUSTOM_PREDICATES:
         return _CUSTOM_PREDICATES[model]
@@ -378,12 +396,44 @@ def build_collection_reset_plan(*, validate: bool = True) -> list[DeletePlanStep
     ordered_steps = _apply_critical_order(ordered_steps)
     ordered_steps = _repair_delete_order(ordered_steps, fk_edges)
 
+    warn_sensitive_plan_tables(ordered_steps)
+
     if validate:
         issues = validate_collection_reset_plan(ordered_steps, fk_edges)
         if issues:
             raise CollectionResetPlanError(issues)
 
     return ordered_steps
+
+
+# Broad audit patterns: legitimate collection tables can match these (e.g. scan_session), so they
+# are logged as warnings for review rather than excluded outright.
+_SENSITIVE_AUDIT_PATTERNS: tuple[str, ...] = (
+    "auth",
+    "session",
+    "security",
+    "lunar_feed",
+    "release_feed",
+    "catalog",
+    "credential",
+    "account",
+)
+
+
+def warn_sensitive_plan_tables(plan: list[DeletePlanStep]) -> list[str]:
+    """Log a warning for any plan table whose name matches a sensitive audit pattern."""
+    flagged: list[str] = []
+    for step in plan:
+        matched = [pattern for pattern in _SENSITIVE_AUDIT_PATTERNS if pattern in step.table_name]
+        if matched:
+            flagged.append(step.table_name)
+            logger.warning(
+                "collection_reset plan includes sensitive-pattern table=%s patterns=%s scope=%s",
+                step.table_name,
+                matched,
+                step.scope_reason,
+            )
+    return flagged
 
 
 def validate_collection_reset_plan(
@@ -395,6 +445,21 @@ def validate_collection_reset_plan(
     plan_tables = {step.table_name for step in plan}
     index = {step.table_name: step.order for step in plan}
     preserved = {table_name_for(model) for model in NEVER_DELETE_MODELS}
+
+    # Guard: auth/security/session/feed/credential infra must never be in the delete plan.
+    for table_name in sorted(plan_tables):
+        matched = [pattern for pattern in _SENSITIVE_PLAN_NAME_PATTERNS if pattern in table_name]
+        if matched:
+            issues.append(
+                PlanValidationIssue(
+                    kind="preserved_table",
+                    message=(
+                        f"Table {table_name} matches preserved infrastructure pattern(s) "
+                        f"{matched} and must not be in the collection reset plan"
+                    ),
+                    child_table=table_name,
+                )
+            )
 
     for edge in fk_edges:
         if edge.child_table not in plan_tables or edge.parent_table not in plan_tables:

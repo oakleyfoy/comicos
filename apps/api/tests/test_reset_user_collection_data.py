@@ -8,8 +8,11 @@ from sqlmodel import Session, func, select
 from app.models import (
     DraftImport,
     InventoryCopy,
+    LunarFeedRawRow,
+    LunarFeedRun,
     Order,
     OrderItem,
+    OrganizationSecurityContext,
     Portfolio,
     PortfolioItem,
     ReleaseIssue,
@@ -17,6 +20,8 @@ from app.models import (
     RetailerAccount,
     RetailerOrderSnapshot,
     User,
+    UserAuthSession,
+    UserAuthSessionEvent,
 )
 from app.models.p92_import_health import P92ImportHealthEvent
 from app.models.recommendation_v2 import (
@@ -362,3 +367,110 @@ def test_reset_deletes_p92_import_health_event_before_draft_import(client, sessi
         ).one()
         == 1
     )
+
+
+def test_reset_preserves_lunar_feed_and_auth_session_infrastructure(client, session) -> None:
+    email = "reset-preserve-infra@example.com"
+    token = register_and_login(client, email)
+    create_order(client, token)
+
+    user = session.exec(select(User).where(User.email == email)).one()
+    user_id = int(user.id)
+
+    feed_run = LunarFeedRun(
+        owner_user_id=user_id,
+        source_type="WEEKLY",
+        status="COMPLETED",
+        file_name="lunar.csv",
+    )
+    session.add(feed_run)
+    session.commit()
+    session.refresh(feed_run)
+    feed_run_id = int(feed_run.id or 0)
+    session.add(
+        LunarFeedRawRow(
+            feed_run_id=feed_run_id,
+            row_index=0,
+            product_code="ABC123",
+            row_payload_json={"title": "Test"},
+        )
+    )
+
+    auth_session = UserAuthSession(
+        user_id=user_id,
+        session_token_hash="hash-reset-preserve",
+        device_label="Laptop",
+        device_type="web",
+        session_status="active",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+    session.add(auth_session)
+    session.commit()
+    session.refresh(auth_session)
+    auth_session_id = int(auth_session.id or 0)
+    session.add(
+        UserAuthSessionEvent(
+            auth_session_id=auth_session_id,
+            user_id=user_id,
+            event_type="login",
+            event_payload_json={},
+        )
+    )
+    if session.exec(
+        select(OrganizationSecurityContext).where(OrganizationSecurityContext.user_id == user_id)
+    ).first() is None:
+        session.add(OrganizationSecurityContext(user_id=user_id, active_organization_id=None))
+    session.commit()
+    security_contexts_before = session.exec(
+        select(func.count())
+        .select_from(OrganizationSecurityContext)
+        .where(OrganizationSecurityContext.user_id == user_id)
+    ).one()
+    assert security_contexts_before >= 1
+    auth_sessions_before = session.exec(
+        select(func.count()).select_from(UserAuthSession).where(UserAuthSession.user_id == user_id)
+    ).one()
+    auth_events_before = session.exec(
+        select(func.count()).select_from(UserAuthSessionEvent).where(UserAuthSessionEvent.user_id == user_id)
+    ).one()
+
+    inventory_before = len(session.exec(select(InventoryCopy.id).where(InventoryCopy.user_id == user_id)).all())
+    assert inventory_before >= 1
+
+    reset_user_collection_data(session, user=user, execute=True)
+
+    assert session.get(LunarFeedRun, feed_run_id) is not None
+    assert (
+        session.exec(
+            select(func.count())
+            .select_from(LunarFeedRawRow)
+            .where(LunarFeedRawRow.feed_run_id == feed_run_id)
+        ).one()
+        == 1
+    )
+    assert session.get(UserAuthSession, auth_session_id) is not None
+    assert (
+        session.exec(
+            select(func.count()).select_from(UserAuthSession).where(UserAuthSession.user_id == user_id)
+        ).one()
+        == auth_sessions_before
+    )
+    assert (
+        session.exec(
+            select(func.count())
+            .select_from(UserAuthSessionEvent)
+            .where(UserAuthSessionEvent.user_id == user_id)
+        ).one()
+        == auth_events_before
+    )
+    assert (
+        session.exec(
+            select(func.count())
+            .select_from(OrganizationSecurityContext)
+            .where(OrganizationSecurityContext.user_id == user_id)
+        ).one()
+        == security_contexts_before
+    )
+
+    assert len(session.exec(select(InventoryCopy.id).where(InventoryCopy.user_id == user_id)).all()) == 0
+    assert len(session.exec(select(Order.id).where(Order.user_id == user_id)).all()) == 0

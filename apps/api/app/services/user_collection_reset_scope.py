@@ -14,13 +14,24 @@ from app.models import (
     GmailAccount,
     GmailImportRecord,
     InventoryCopy,
+    LunarFeedError,
+    LunarFeedRawRow,
+    LunarFeedRun,
+    LunarFocAlert,
+    LunarScheduleConfig,
+    LunarScheduledRun,
+    LunarScheduledRunError,
     Order,
     OrderItem,
+    Organization,
+    OrganizationSecurityContext,
     Portfolio,
     ReceivingSession,
     RecommendationScoreV2,
     RetailerOrderSnapshot,
     User,
+    UserAuthSession,
+    UserAuthSessionEvent,
 )
 
 
@@ -59,6 +70,29 @@ _PRESERVE_RELEASE_CATALOG_MODELS: frozenset[type[SQLModel]] = frozenset(
     }
 )
 
+# Lunar feed / scheduler ingestion: catalog/release-intelligence infrastructure, not collection data.
+_PRESERVE_LUNAR_FEED_MODELS: frozenset[type[SQLModel]] = frozenset(
+    {
+        LunarFeedRun,
+        LunarFeedRawRow,
+        LunarFeedError,
+        LunarFocAlert,
+        LunarScheduleConfig,
+        LunarScheduledRun,
+        LunarScheduledRunError,
+    }
+)
+
+# Auth / session / security / org-account infrastructure: never touched by a collection reset.
+_PRESERVE_AUTH_SECURITY_MODELS: frozenset[type[SQLModel]] = frozenset(
+    {
+        UserAuthSession,
+        UserAuthSessionEvent,
+        OrganizationSecurityContext,
+        Organization,
+    }
+)
+
 NEVER_DELETE_MODELS: frozenset[type[SQLModel]] = frozenset(
     {
         User,
@@ -77,7 +111,39 @@ NEVER_DELETE_MODELS: frozenset[type[SQLModel]] = frozenset(
         models.CanonicalSeries,
         models.Variant,
     }
-) | _PRESERVE_RELEASE_CATALOG_MODELS
+) | _PRESERVE_RELEASE_CATALOG_MODELS | _PRESERVE_LUNAR_FEED_MODELS | _PRESERVE_AUTH_SECURITY_MODELS
+
+
+# Substring patterns that hard-exclude a table from collection reset. These are precise enough to
+# avoid matching legitimate collection/scan tables (e.g. "auth_session" never matches
+# "scan_authentication_*"; "session" alone is intentionally NOT used here).
+COLLECTION_RESET_EXCLUDED_NAME_PATTERNS: tuple[str, ...] = (
+    "auth_session",
+    "session_token",
+    "security_context",
+    "credential",
+    "lunar_feed",
+    "lunar_schedule",
+    "lunar_scheduled",
+    "lunar_foc",
+    "release_feed",
+)
+
+
+def _table_name(model: type[SQLModel]) -> str:
+    return str(getattr(model, "__tablename__", model.__name__))
+
+
+def is_collection_reset_excluded_table(table_name: str) -> bool:
+    """True if a table name matches preserved auth/security/feed/catalog infrastructure."""
+    return any(pattern in table_name for pattern in COLLECTION_RESET_EXCLUDED_NAME_PATTERNS)
+
+
+def is_preserved_model(model: type[SQLModel]) -> bool:
+    """Combined preserve check: explicit NEVER_DELETE set plus excluded name patterns."""
+    if model in NEVER_DELETE_MODELS or model is User:
+        return True
+    return is_collection_reset_excluded_table(_table_name(model))
 
 
 def _scalar_ids(session: Session, statement) -> tuple[int, ...]:
