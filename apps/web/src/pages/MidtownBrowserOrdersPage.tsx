@@ -7,6 +7,7 @@ import {
   type MidtownBrowserOrdersResponse,
   type MidtownBrowserOrderRead,
   type MidtownBrowserSessionStatusRead,
+  type RetailerAccountRead,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
@@ -96,6 +97,13 @@ export function MidtownBrowserOrdersPage() {
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginAccount, setLoginAccount] = useState<RetailerAccountRead | null>(null);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginSaving, setLoginSaving] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
   const loadOrders = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
@@ -127,6 +135,68 @@ export function MidtownBrowserOrdersPage() {
       setError(selectError instanceof Error ? selectError.message : "Unable to capture the selected order.");
     } finally {
       setIsWorking(false);
+    }
+  }
+
+  async function openLoginModal(): Promise<void> {
+    setLoginError(null);
+    setLoginUsername("");
+    setLoginPassword("");
+    setIsLoginModalOpen(true);
+    try {
+      const accounts = await apiClient.getRetailerAccounts();
+      setLoginAccount(accounts.items.find((item) => item.retailer === "midtown") ?? null);
+    } catch {
+      setLoginAccount(null);
+    }
+  }
+
+  function closeLoginModal(): void {
+    setIsLoginModalOpen(false);
+    setLoginPassword("");
+    setLoginError(null);
+  }
+
+  async function handleSaveLogin(): Promise<void> {
+    const username = loginUsername.trim();
+    const password = loginPassword;
+    if (loginAccount) {
+      if (!username && !password) {
+        setLoginError("Enter a new username or password to update your Midtown login.");
+        return;
+      }
+    } else if (!username || !password) {
+      setLoginError("Username and password are required to connect Midtown.");
+      return;
+    }
+
+    setLoginSaving(true);
+    setLoginError(null);
+    try {
+      if (loginAccount) {
+        await apiClient.updateRetailerAccount(loginAccount.id, {
+          username: username || undefined,
+          password: password || undefined,
+        });
+      } else {
+        await apiClient.saveRetailerAccount({
+          retailer: "midtown",
+          username,
+          password,
+          display_name: "Midtown Comics",
+        });
+      }
+      setIsLoginModalOpen(false);
+      setLoginPassword("");
+      await loadOrders();
+    } catch (saveError) {
+      if (saveError instanceof ApiError || saveError instanceof Error) {
+        setLoginError(saveError.message);
+      } else {
+        setLoginError("Unable to save your Midtown login.");
+      }
+    } finally {
+      setLoginSaving(false);
     }
   }
 
@@ -196,7 +266,7 @@ export function MidtownBrowserOrdersPage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/connected-retailers")}
+              onClick={() => void openLoginModal()}
               className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
             >
               Update Midtown Login
@@ -251,6 +321,77 @@ export function MidtownBrowserOrdersPage() {
           </div>
         </section>
       )}
+
+      {isLoginModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Update Midtown login"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Update Midtown login</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              ComicOS uses these credentials to sign in and load your orders. They are stored securely and
+              never shown again.
+            </p>
+
+            {loginError ? (
+              <div className="mt-4">
+                <StatusBanner tone="error">{loginError}</StatusBanner>
+              </div>
+            ) : null}
+
+            <div className="mt-5 space-y-4">
+              <label className="block space-y-2 text-sm text-slate-200">
+                <span className="font-medium">Username or email</span>
+                <input
+                  value={loginUsername}
+                  onChange={(event) => setLoginUsername(event.target.value)}
+                  placeholder={
+                    loginAccount
+                      ? `Leave blank to keep ${loginAccount.masked_username}`
+                      : "midtown username or email"
+                  }
+                  autoComplete="username"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+              <label className="block space-y-2 text-sm text-slate-200">
+                <span className="font-medium">{loginAccount ? "New password" : "Password"}</span>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  placeholder={loginAccount ? "Leave blank to keep current password" : "Midtown password"}
+                  autoComplete="current-password"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeLoginModal}
+                disabled={loginSaving}
+                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveLogin()}
+                disabled={loginSaving}
+                className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loginSaving ? "Saving..." : "Save & Retry"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }
