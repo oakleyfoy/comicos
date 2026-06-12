@@ -46,6 +46,20 @@ _TITLE_CLASS_TOKENS = ("title", "product-name", "product_name", "item-name", "it
 _SKIP_HREF_PARTS = ("/account/", "/cart", "javascript:", "mailto:", "#pull-list", "pull-list")
 _PRODUCT_PATH_MARKERS = ("/product/", "/store/", "/comics/", "/Product/", "/Store/", "/p/")
 _ORDER_ITEM_CLASS_RE = re.compile(r'\border-item\b', flags=re.IGNORECASE)
+_SAVED_IMAGE_FILE_RE = re.compile(r"(\d+)_ful\.jpg", flags=re.IGNORECASE)
+_PUBLISHER_ALIASES = {
+    "dc": "DC",
+    "dc comics": "DC",
+    "marvel": "Marvel",
+    "marvel comics": "Marvel",
+    "image": "Image",
+    "image comics": "Image",
+    "idw publishing": "IDW Publishing",
+    "idw": "IDW Publishing",
+    "independents": "Independents",
+    "dark horse": "Dark Horse",
+    "dark horse comics": "Dark Horse",
+}
 
 
 class MidtownOrderNumberError(RuntimeError):
@@ -100,6 +114,9 @@ class MidtownOrderItem:
     backordered_qty: int | None = None
     unavailable_qty: int | None = None
     returned_qty: int | None = None
+    condition: str | None = None
+    image_title: str | None = None
+    remote_midtown_image_url: str | None = None
     parse_diagnostics: dict = field(default_factory=dict)
     raw_fragment: str = ""
 
@@ -212,7 +229,7 @@ def _extract_release_date(fragment: str) -> date | None:
     )
 
 
-def _extract_item_quality_snapshot(item: MidtownOrderItem) -> dict:
+def _extract_item_quality_snapshot(item: MidtownOrderItem, *, saved_html_upload: bool = False) -> dict:
     fields = {
         "retailer_item_id": item.retailer_item_id,
         "product_url": item.product_url,
@@ -229,11 +246,22 @@ def _extract_item_quality_snapshot(item: MidtownOrderItem) -> dict:
         "item_status": item.item_status,
         "release_date": item.release_date,
     }
+    optional_fields = {"product_url", "release_date", "retailer_item_id", "cover_artist", "variant_type"}
+    if not saved_html_upload:
+        optional_fields = set()
     extracted = [name for name, value in fields.items() if value not in (None, "", [])]
-    missing = [name for name, value in fields.items() if value in (None, "", [])]
+    missing = [
+        name
+        for name, value in fields.items()
+        if value in (None, "", []) and name not in optional_fields
+    ]
+    enrichment_missing = [
+        name for name in optional_fields if fields.get(name) in (None, "", [])
+    ]
     return {
         "fields_extracted": extracted,
         "fields_missing": missing,
+        "enrichment_fields_missing": enrichment_missing,
         "fields_extracted_count": len(extracted),
         "fields_total": len(fields),
     }
@@ -323,6 +351,27 @@ def _extract_item_fragments_legacy(html_text: str) -> list[str]:
         if div_start != -1 and div_end != -1:
             fragments.append(html_text[div_start : div_end + len("</div>")])
     return fragments
+
+
+def _info_container_header_html(scoped_html: str) -> str:
+    """Return markup before the first ``.order-item`` inside ``.info-container``."""
+    soup = BeautifulSoup(scoped_html, "html.parser")
+    info = soup.select_one(".info-container")
+    if info is None:
+        return scoped_html
+    chunks: list[str] = []
+    for child in info.children:
+        name = getattr(child, "name", None)
+        classes = child.get("class") if name else None
+        if name and classes and "order-item" in classes:
+            break
+        if name:
+            chunks.append(str(child))
+        else:
+            text = str(child).strip()
+            if text:
+                chunks.append(text)
+    return "".join(chunks) if chunks else scoped_html
 
 
 def _scope_saved_order_container(html_text: str) -> tuple[str | None, list[str]]:
@@ -447,6 +496,172 @@ def _parse_order_items_from_visible_text(text: str) -> list[MidtownOrderItem]:
     return items
 
 
+def _normalize_midtown_publisher(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = _clean_html_text(value)
+    if not cleaned:
+        return None
+    return _PUBLISHER_ALIASES.get(cleaned.casefold(), cleaned)
+
+
+def _derive_remote_midtown_image_url(src: str | None) -> str | None:
+    if not src:
+        return None
+    filename = src.replace("\\", "/").split("/")[-1]
+    match = _SAVED_IMAGE_FILE_RE.search(filename)
+    if not match:
+        return None
+    product_id = match.group(1)
+    return f"https://www.midtowncomics.com/images/PRODUCT/FUL/{product_id}_ful.jpg"
+
+
+def _normalize_midtown_saved_image_src(src: str | None) -> tuple[str | None, str | None]:
+    if not src:
+        return None, None
+    cleaned = src.strip()
+    if cleaned.startswith(("http://", "https://")):
+        return cleaned, cleaned
+    remote = _derive_remote_midtown_image_url(cleaned)
+    return cleaned, remote
+
+
+def _label_value_in_nodes(nodes, label: str) -> str | None:
+    pattern = re.compile(rf"^{re.escape(label)}\s*:?\s*(.*)$", flags=re.IGNORECASE)
+    for node in nodes:
+        text = _clean_html_text(node.get_text(" ", strip=True))
+        if not text:
+            continue
+        match = pattern.match(text)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _parse_saved_html_col10_order_item(fragment: str) -> MidtownOrderItem | None:
+    soup = BeautifulSoup(fragment, "html.parser")
+    col10 = soup.select_one(".col-10")
+    if col10 is None:
+        return None
+
+    col2_img = soup.select_one(".col-2 img")
+    img_src = col2_img.get("src") if col2_img else None
+    image_title = _clean_html_text(col2_img.get("title") or "") if col2_img else None
+    image_url, remote_midtown_image_url = _normalize_midtown_saved_image_src(img_src)
+
+    h3_texts = [_clean_html_text(h3.get_text(" ", strip=True)) for h3 in col10.find_all("h3")]
+    h3_texts = [text for text in h3_texts if text]
+    aria_label = _clean_html_text(col10.get("aria-label") or "")
+
+    title = h3_texts[0] if h3_texts else ""
+    if not title and aria_label:
+        title = aria_label
+    if not title and image_title:
+        title = image_title
+    if not title:
+        return None
+
+    publisher: str | None = None
+    item_status: str | None = None
+    for h3_text in h3_texts[1:]:
+        if h3_text.lower().startswith("status:"):
+            item_status = h3_text.split(":", 1)[-1].strip()
+        elif publisher is None:
+            publisher = _normalize_midtown_publisher(h3_text)
+
+    field_nodes = col10.find_all(["p", "div"])
+    unit_price = _parse_price(_label_value_in_nodes(field_nodes, "Each"))
+    total_price = _parse_price(_label_value_in_nodes(field_nodes, "Total"))
+    quantity = _parse_int(_label_value_in_nodes(field_nodes, "QTY")) or 1
+    condition_raw = _label_value_in_nodes(field_nodes, "Condition")
+    condition = condition_raw if condition_raw else None
+
+    status_root = col10.select_one(".item-status") or col10
+    status_nodes = status_root.find_all(["p", "div"])
+    shipped_qty = _parse_int(_label_value_in_nodes(status_nodes, "Shipped"))
+    backordered_qty = _parse_int(_label_value_in_nodes(status_nodes, "Backordered"))
+    unavailable_qty = _parse_int(_label_value_in_nodes(status_nodes, "Not Available"))
+    returned_qty = _parse_int(_label_value_in_nodes(status_nodes, "Returned"))
+
+    issue_number, cover_name = _parse_issue_and_cover(title)
+    item = MidtownOrderItem(
+        title=title,
+        publisher=publisher,
+        issue_number=issue_number,
+        cover_name=cover_name,
+        quantity=quantity,
+        unit_price=unit_price,
+        total_price=total_price,
+        item_status=item_status,
+        condition=condition,
+        image_title=image_title or None,
+        image_url=image_url,
+        thumbnail_url=image_url,
+        remote_midtown_image_url=remote_midtown_image_url,
+        shipped_qty=shipped_qty,
+        backordered_qty=backordered_qty,
+        unavailable_qty=unavailable_qty,
+        returned_qty=returned_qty,
+        raw_fragment=fragment,
+    )
+    item.parse_diagnostics = _extract_item_quality_snapshot(item, saved_html_upload=True)
+    item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
+    item.parse_diagnostics["parse_source"] = "saved_html_col10"
+    return item
+
+
+def _col10_order_item_debug_fields(fragment: str) -> dict:
+    soup = BeautifulSoup(fragment, "html.parser")
+    col10 = soup.select_one(".col-10")
+    col2_img = soup.select_one(".col-2 img")
+    pretty = soup.prettify()
+    field_nodes = col10.find_all(["p", "div"]) if col10 else []
+    status_root = col10.select_one(".item-status") if col10 else None
+    status_nodes = status_root.find_all(["p", "div"]) if status_root else []
+    parsed_item = _parse_saved_html_col10_order_item(fragment)
+    resolved_fields = None
+    if parsed_item is not None:
+        resolved_fields = {
+            "title": parsed_item.title,
+            "publisher": parsed_item.publisher,
+            "image_url": parsed_item.image_url,
+            "remote_midtown_image_url": parsed_item.remote_midtown_image_url,
+            "image_title": parsed_item.image_title,
+            "unit_price": str(parsed_item.unit_price) if parsed_item.unit_price is not None else None,
+            "total_price": str(parsed_item.total_price) if parsed_item.total_price is not None else None,
+            "quantity": parsed_item.quantity,
+            "condition": parsed_item.condition,
+            "item_status": parsed_item.item_status,
+            "shipped_qty": parsed_item.shipped_qty,
+            "backordered_qty": parsed_item.backordered_qty,
+            "unavailable_qty": parsed_item.unavailable_qty,
+            "returned_qty": parsed_item.returned_qty,
+        }
+    return {
+        "item_html_excerpt": pretty[:3000],
+        "prettified_html": pretty[:8000],
+        "item_text": soup.get_text("\n", strip=True),
+        "h3_texts": [_clean_html_text(h3.get_text(" ", strip=True)) for h3 in (col10.find_all("h3") if col10 else [])],
+        "img_src": col2_img.get("src") if col2_img else None,
+        "img_title": _clean_html_text(col2_img.get("title") or "") if col2_img else None,
+        "col10_aria_label": _clean_html_text(col10.get("aria-label") or "") if col10 else None,
+        "p_texts": [_clean_html_text(node.get_text(" ", strip=True)) for node in field_nodes if node.get_text(strip=True)],
+        "item_status_texts": [
+            _clean_html_text(node.get_text(" ", strip=True)) for node in status_nodes if node.get_text(strip=True)
+        ],
+        "classes_in_node": sorted(
+            {cls for element in soup.find_all(True) for cls in (element.get("class") or [])}
+        ),
+        "anchor_texts": [
+            _clean_html_text(anchor.get_text(" ", strip=True))
+            for anchor in soup.find_all("a")
+            if _clean_html_text(anchor.get_text(" ", strip=True))
+        ],
+        "resolved_fields": resolved_fields,
+        "resolved_title": parsed_item.title if parsed_item else None,
+    }
+
+
 def _is_order_item_label_line(line: str) -> bool:
     lower = line.lower()
     return any(lower.startswith(prefix) for prefix in _ITEM_LABEL_PREFIXES)
@@ -520,6 +735,10 @@ def _extract_title_from_order_item(fragment: str) -> tuple[str, str | None, list
 
 def _order_item_debug_fields(fragment: str) -> dict:
     soup = BeautifulSoup(fragment, "html.parser")
+    if soup.select_one(".col-10") is not None:
+        debug = _col10_order_item_debug_fields(fragment)
+        debug["candidate_title_selectors"] = debug.get("h3_texts") or []
+        return debug
     pretty = soup.prettify()
     title, _, selectors = _extract_title_from_order_item(fragment)
     return {
@@ -542,8 +761,15 @@ def _order_item_debug_fields(fragment: str) -> dict:
 def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, str | None]:
     """Return ``(item, skip_reason)`` from a single order line HTML fragment."""
     scoped_order_item = bool(_ORDER_ITEM_CLASS_RE.search(fragment))
-    product_url: str | None = None
     if scoped_order_item:
+        col10_item = _parse_saved_html_col10_order_item(fragment)
+        if col10_item is not None:
+            return col10_item, None
+
+    product_url: str | None = None
+    saved_html_upload = False
+    if scoped_order_item:
+        saved_html_upload = True
         title, product_url, _ = _extract_title_from_order_item(fragment)
     else:
         product_match = re.search(
@@ -553,13 +779,14 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         title = _extract_title(fragment, product_url)
     if not title:
         return None, "missing_title"
-    product_match = None if product_url else re.search(
-        r'href=["\']([^"\']*(?:/product/|/store/|/Store/|/comics/)[^"\']+)["\']',
-        fragment,
-        flags=re.IGNORECASE,
-    )
-    if product_url is None and product_match:
-        product_url = _absolute_url(product_match.group(1))
+    if product_url is None:
+        product_match = re.search(
+            r'href=["\']([^"\']*(?:/product/|/store/|/Store/|/comics/)[^"\']+)["\']',
+            fragment,
+            flags=re.IGNORECASE,
+        )
+        if product_match:
+            product_url = _absolute_url(product_match.group(1))
     issue_number, cover_name = _parse_issue_and_cover(title)
     variant_type = _match_after_label(fragment, "Variant")
     cover_artist = _match_after_label(fragment, "Cover Artist")
@@ -577,13 +804,18 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         or _parse_price(_match_after_label(fragment, "Total"))
     )
     image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
+    image_src = image_match.group(1) if image_match else None
+    image_url, remote_midtown_image_url = _normalize_midtown_saved_image_src(image_src)
+    if image_url and image_url.startswith(("http://", "https://")):
+        image_url = _absolute_url(image_url)
     item = MidtownOrderItem(
         retailer_item_id=_match_after_label(fragment, "Item #") or _match_after_label(fragment, "SKU"),
         product_url=product_url,
-        image_url=_absolute_url(image_match.group(1)) if image_match else None,
-        thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
+        image_url=image_url,
+        thumbnail_url=image_url,
+        remote_midtown_image_url=remote_midtown_image_url,
         title=title,
-        publisher=_match_after_label(fragment, "Publisher"),
+        publisher=_normalize_midtown_publisher(_match_after_label(fragment, "Publisher")),
         issue_number=issue_number,
         cover_name=cover_name,
         variant_type=variant_type,
@@ -599,7 +831,7 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         returned_qty=_parse_int(_match_after_label(fragment, "Returned")),
         raw_fragment=fragment,
     )
-    item.parse_diagnostics = _extract_item_quality_snapshot(item)
+    item.parse_diagnostics = _extract_item_quality_snapshot(item, saved_html_upload=saved_html_upload)
     item.parse_diagnostics["missing_fields"] = item.parse_diagnostics["fields_missing"]
     return item, None
 
@@ -681,10 +913,14 @@ def parse_midtown_order_detail(
     order_total = _extract_order_total_from_scope(parse_context) or _parse_price(
         _match_after_label(parse_context, "Total")
     )
+    order_header_context = (
+        _info_container_header_html(scoped_html) if scoped_html is not None else parse_context
+    )
     detail = MidtownOrderDetail(
         retailer_order_number=retailer_order_number,
-        order_date=_parse_date(_match_after_label(parse_context, "Date")),
-        order_status=_extract_order_status(parse_context) or _match_after_label(parse_context, "Status"),
+        order_date=_parse_date(_match_after_label(order_header_context, "Date")),
+        order_status=_match_after_label(order_header_context, "Status")
+        or _extract_order_status(order_header_context),
         order_total=order_total,
         detail_url=detail_url,
         raw_html=html_text,

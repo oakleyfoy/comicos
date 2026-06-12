@@ -224,13 +224,19 @@ export function RetailerOrderDetailPage() {
               </div>
             </div>
 
-            {order.item_count > 0 &&
-            (order.cover_image_count < order.item_count ||
-              order.product_url_count < order.item_count ||
-              order.price_count < order.item_count ||
-              order.release_date_count < order.item_count) ? (
+            {order.item_count === 0 || order.cover_image_count === 0 || order.price_count === 0 ? (
               <div className="mt-4">
                 <StatusBanner tone="warning">This capture may be incomplete.</StatusBanner>
+              </div>
+            ) : null}
+
+            {order.item_count > 0 &&
+            (order.product_url_count < order.item_count || order.release_date_count < order.item_count) ? (
+              <div className="mt-4">
+                <StatusBanner tone="warning">
+                  Some optional enrichment fields are missing (product links or release dates). ComicOS can fill
+                  these later from catalog data.
+                </StatusBanner>
               </div>
             ) : null}
 

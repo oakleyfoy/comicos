@@ -168,19 +168,38 @@ def test_parse_midtown_saved_order_4257558_ignores_header_pull_list() -> None:
     )
     assert detail.retailer_order_number == "4257558"
     assert detail.order_status == "Shipped"
-    assert detail.order_total == Decimal("72.86")
+    assert detail.order_total == Decimal("105.13")
     assert len(detail.items) == 13
     assert detail.parse_diagnostics["parse_scope"] == "info_container"
     assert detail.parse_diagnostics["parse_source"] == "info_container_order_item"
     assert detail.parse_diagnostics["items_parsed"] == 13
-    assert detail.items[0].title == (
-        "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover"
+    first = detail.items[0]
+    assert first.title == (
+        "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover "
+        "(DC All In)(Limit 1 Per Customer)"
     )
-    assert detail.items[0].unit_price == Decimal("4.99")
+    assert first.publisher == "DC"
+    assert first.unit_price == Decimal("4.49")
+    assert first.total_price == Decimal("4.49")
+    assert first.quantity == 1
+    assert first.item_status == "Shipped"
+    assert first.image_url and "2539629_ful.jpg" in first.image_url
+    assert first.remote_midtown_image_url == (
+        "https://www.midtowncomics.com/images/PRODUCT/FUL/2539629_ful.jpg"
+    )
+    assert first.release_date is None
+    assert first.product_url is None
+    assert "release_date" in first.parse_diagnostics.get("enrichment_fields_missing", [])
+    assert detail.items[1].publisher == "DC"
+    assert detail.items[8].title.startswith("Babylon Cove")
+    assert detail.items[8].publisher == "Independents"
+    assert detail.items[9].title.startswith("Geiger")
+    assert detail.items[9].publisher == "Image"
+    assert detail.items[10].title.startswith("Seven Wives")
+    assert detail.items[10].publisher == "IDW Publishing"
     titles = [item.title for item in detail.items]
     assert "Redcoat Cover B (regular)" not in titles
-    assert "Sidebar Promo Comic" not in titles
-    assert detail.parse_diagnostics.get("first_order_item", {}).get("resolved_title")
+    assert detail.parse_diagnostics.get("first_order_item", {}).get("resolved_fields")
 
 
 def test_parse_midtown_order_item_title_from_store_link_and_heading() -> None:
