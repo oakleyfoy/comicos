@@ -26,6 +26,7 @@ from app.services.retailer_sync.midtown_account_sync import (
     _load_recent_order_details,
     _midtown_login,
     _midtown_page_title,
+    _midtown_visible_error_text,
     _midtown_visible_text,
     MidtownLoginRejectedError,
     MidtownNeedsAttentionError,
@@ -1179,6 +1180,39 @@ def _ensure_midtown_session(account: RetailerAccount) -> tuple[str, list[Midtown
             browser.close()
 
 
+# Cookie name fragments that indicate an authenticated / session-bearing cookie.
+_MIDTOWN_SESSION_COOKIE_MARKERS = ("session", "sess", "auth", "token", "sid", "login", "logged")
+
+
+def _midtown_cookie_summary(context) -> dict[str, Any]:
+    """Summarize cookies after a login attempt without exposing their values."""
+    try:
+        cookies = context.cookies()
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never crash login
+        return {"cookie_count": None, "cookie_names": [], "has_session_cookie": None, "cookie_error": str(exc)}
+    names: list[str] = []
+    for cookie in cookies:
+        if isinstance(cookie, dict) and cookie.get("name"):
+            names.append(str(cookie["name"]))
+    has_session = any(
+        any(marker in name.lower() for marker in _MIDTOWN_SESSION_COOKIE_MARKERS) for name in names
+    )
+    return {
+        "cookie_count": len(names),
+        "cookie_names": names[:40],
+        "has_session_cookie": has_session,
+    }
+
+
+def _midtown_capture_debug_screenshot(account_id: int, page) -> dict[str, Any]:
+    """Capture + persist a screenshot for debugging a rejected login. Never raises."""
+    try:
+        _image_data_url, width, height, source = _capture_or_cached_frame(account_id, page)
+        return {"screenshot_source": source, "screenshot_width": width, "screenshot_height": height}
+    except Exception as exc:  # noqa: BLE001 - debug capture must never crash login
+        return {"screenshot_source": "error", "screenshot_error": str(exc)}
+
+
 def _midtown_attempt_assisted_login(
     account: RetailerAccount,
     *,
@@ -1232,6 +1266,8 @@ def _midtown_attempt_assisted_login(
             outcome="security_challenge",
             current_url=getattr(page, "url", None),
             error_message=str(exc),
+            **getattr(exc, "diagnostics", {}) or {},
+            **_midtown_cookie_summary(context),
         )
         raise
     except MidtownLoginRejectedError as exc:
@@ -1241,8 +1277,21 @@ def _midtown_attempt_assisted_login(
             outcome="rejected",
             current_url=getattr(page, "url", None),
             error_message=str(exc),
+            **getattr(exc, "diagnostics", {}) or {},
+            **_midtown_cookie_summary(context),
+            **_midtown_capture_debug_screenshot(account_id, page),
         )
         raise
+
+    # Diagnostics captured immediately after a successful submit, before we
+    # navigate away — this is where a missing auth/session cookie shows up.
+    _log_event(
+        "midtown_browser_login_post_submit",
+        account_id=account_id,
+        current_url=getattr(page, "url", None),
+        **{k: v for k, v in (login_diagnostics or {}).items() if k != "post_login_title"},
+        **_midtown_cookie_summary(context),
+    )
 
     if post_login_url:
         page.goto(post_login_url, wait_until="domcontentloaded")
@@ -1256,6 +1305,8 @@ def _midtown_attempt_assisted_login(
             account_id=account_id,
             outcome="security_challenge_post_login",
             current_url=getattr(page, "url", None),
+            **_midtown_cookie_summary(context),
+            **_midtown_capture_debug_screenshot(account_id, page),
         )
         raise MidtownSecurityChallengeError(
             "Midtown presented a CAPTCHA or security challenge."
@@ -1266,6 +1317,11 @@ def _midtown_attempt_assisted_login(
             account_id=account_id,
             outcome="rejected_post_login",
             current_url=getattr(page, "url", None),
+            post_submit_url=(login_diagnostics or {}).get("post_submit_url"),
+            error_text=_midtown_visible_error_text(page),
+            login_form_visible=True,
+            **_midtown_cookie_summary(context),
+            **_midtown_capture_debug_screenshot(account_id, page),
         )
         raise MidtownLoginRejectedError(
             "Midtown rejected the sign-in. Check the saved username and password."
@@ -1277,6 +1333,7 @@ def _midtown_attempt_assisted_login(
         outcome="authenticated",
         current_url=getattr(page, "url", None),
         post_login_title=(login_diagnostics or {}).get("post_login_title"),
+        **_midtown_cookie_summary(context),
     )
 
     # Only persist the storage state once we have confirmed an authenticated

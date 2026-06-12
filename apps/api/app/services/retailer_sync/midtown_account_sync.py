@@ -325,13 +325,111 @@ def _best_effort_wait_for_load(page, *, timeout_ms: int = 15000) -> None:
         return
 
 
+# Visible login-button candidates, ordered so the explicit "Log In" CTA wins
+# over a bare form submit. We click the visible button rather than submitting
+# the form / pressing Enter, which some bot-protected forms ignore.
+_MIDTOWN_LOGIN_BUTTON_SELECTORS = (
+    "button:has-text('Log In')",
+    "button:has-text('Login')",
+    "button:has-text('Sign In')",
+    "button:has-text('Sign in')",
+    "input[type='submit']",
+    "button[type='submit']",
+    "a:has-text('Log In')",
+    "a:has-text('Login')",
+)
+
+# Selectors that commonly carry a visible login error / banner.
+_MIDTOWN_LOGIN_ERROR_SELECTORS = (
+    "[role='alert']",
+    ".alert",
+    ".alert-danger",
+    ".error",
+    ".form-error",
+    ".help-block",
+    ".message--error",
+    ".validation-summary-errors",
+    ".notification",
+    "[class*='error']",
+    "[class*='Error']",
+)
+
+
+def _find_visible_login_button(page):
+    """Return ``(locator, selector)`` for the first *visible* login button."""
+    for selector in _MIDTOWN_LOGIN_BUTTON_SELECTORS:
+        try:
+            locator = page.locator(selector)
+            count = locator.count()
+        except Exception:
+            continue
+        for idx in range(min(count, 5)):
+            try:
+                node = locator.nth(idx)
+                if node.is_visible():
+                    return node, selector
+            except Exception:
+                continue
+    return None, None
+
+
+def _midtown_visible_error_text(page, *, limit: int = 300) -> str:
+    """Best-effort read of any visible login error/banner text."""
+    for selector in _MIDTOWN_LOGIN_ERROR_SELECTORS:
+        try:
+            locator = page.locator(selector)
+            count = locator.count()
+        except Exception:
+            continue
+        for idx in range(min(count, 5)):
+            try:
+                node = locator.nth(idx)
+                if node.is_visible():
+                    text = (node.inner_text() or "").strip()
+                    if text:
+                        return text[:limit]
+            except Exception:
+                continue
+    return ""
+
+
+def _collect_login_diagnostics(page, *, stage: str, submit_strategy: str | None = None) -> dict[str, Any]:
+    """Capture non-secret, post-submit page state for diagnostics/logging."""
+    return {
+        "stage": stage,
+        "submit_strategy": submit_strategy,
+        "post_submit_url": getattr(page, "url", None),
+        "post_submit_title": _midtown_page_title(page),
+        "login_form_visible": _locator_is_visible(page, "input[type='password']"),
+        "error_text": _midtown_visible_error_text(page),
+        "visible_text_excerpt": _midtown_visible_text(page, limit=300),
+    }
+
+
+def _login_rejected(message: str, diagnostics: dict[str, Any]) -> MidtownLoginRejectedError:
+    exc = MidtownLoginRejectedError(message)
+    exc.diagnostics = diagnostics  # type: ignore[attr-defined]
+    return exc
+
+
+def _login_challenge(message: str, diagnostics: dict[str, Any]) -> MidtownSecurityChallengeError:
+    exc = MidtownSecurityChallengeError(message)
+    exc.diagnostics = diagnostics  # type: ignore[attr-defined]
+    return exc
+
+
 def _midtown_login(page, *, username: str, password: str) -> dict[str, Any]:
     """Submit the Midtown login form using stored credentials.
 
-    Returns a small diagnostics dict on success (no secrets). Raises
+    Login is performed by explicitly filling the email + password fields and
+    then clicking the *visible* login button (not a form submit / Enter), which
+    some bot-protected forms ignore.
+
+    Returns a diagnostics dict on success (no secrets). Raises
     :class:`MidtownSecurityChallengeError` when a CAPTCHA/security challenge
     blocks the login, and :class:`MidtownLoginRejectedError` when the
-    credentials are rejected or the login form cannot be driven.
+    credentials are rejected or the login form cannot be driven. Both
+    exceptions carry a ``.diagnostics`` dict describing the post-submit state.
     """
     page.goto(MIDTOWN_LOGIN_URL, wait_until="domcontentloaded")
     _best_effort_wait_for_load(page)
@@ -353,50 +451,50 @@ def _midtown_login(page, *, username: str, password: str) -> dict[str, Any]:
         ],
     )
     if username_input is None or password_input is None:
-        raise MidtownLoginRejectedError(
-            "Midtown login form could not be located. Try the live browser fallback."
+        raise _login_rejected(
+            "Midtown login form could not be located. Try the live browser fallback.",
+            _collect_login_diagnostics(page, stage="form_not_found"),
         )
+
+    # 1) fill email, 2) fill password
     username_input.fill(username)
     password_input.fill(password)
-    submit = _first_visible(
-        page,
-        [
-            "button[type='submit']",
-            "input[type='submit']",
-            "button:has-text('Sign In')",
-            "button:has-text('Login')",
-        ],
-    )
+
+    # 3) click the visible LOGIN button (not form submit / Enter)
+    submit, submit_strategy = _find_visible_login_button(page)
     if submit is None:
-        raise MidtownLoginRejectedError(
-            "Midtown login submit action could not be located. Try the live browser fallback."
+        raise _login_rejected(
+            "Midtown login button could not be located. Try the live browser fallback.",
+            _collect_login_diagnostics(page, stage="login_button_not_found"),
         )
     submit.click()
     _best_effort_wait_for_load(page)
-    # Give the SPA time to navigate / render any error banner before we judge
-    # the outcome. Reading the URL/markers too early was the root cause of
-    # silent login failures being reported as a generic "login required" state.
+    # Give the page time to navigate / render any error banner before judging.
     try:
         page.wait_for_timeout(1500)
     except Exception:  # noqa: BLE001 - timing helper only
         pass
 
+    diagnostics = _collect_login_diagnostics(page, stage="post_submit", submit_strategy=submit_strategy)
+
     # A challenge taking over after submit is a security state, not a rejection.
     if _has_midtown_challenge(page):
-        raise MidtownSecurityChallengeError(
-            "Midtown presented a CAPTCHA or security challenge."
+        raise _login_challenge(
+            "Midtown presented a CAPTCHA or security challenge.", diagnostics
         )
 
     # If the login form is still present (URL still on /login or a password
     # field is still visible), the credentials were rejected.
     if _requires_midtown_login(page):
-        raise MidtownLoginRejectedError(
-            "Midtown rejected the sign-in. Check the saved username and password."
+        raise _login_rejected(
+            "Midtown rejected the sign-in. Check the saved username and password.",
+            diagnostics,
         )
 
     return {
         "post_login_url": getattr(page, "url", None),
         "post_login_title": _midtown_page_title(page),
+        **diagnostics,
     }
 
 

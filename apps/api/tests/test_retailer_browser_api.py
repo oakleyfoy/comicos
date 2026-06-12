@@ -1031,3 +1031,76 @@ def test_midtown_login_detection_requires_url_or_visible_password() -> None:
         password_visible=True,
     )
     assert _detect_midtown_login(visible_password)[0] is True
+
+
+class _SelectorPage:
+    """Minimal Playwright-ish fake driven by a {selector: [(visible, text)]} map."""
+
+    def __init__(self, matches: dict[str, list[tuple[bool, str]]]) -> None:
+        self._matches = matches
+
+    def locator(self, selector: str):
+        nodes = self._matches.get(selector, [])
+        page = self
+
+        class _Node:
+            def __init__(self, visible: bool, text: str) -> None:
+                self._visible = visible
+                self._text = text
+                self.clicked = False
+
+            def is_visible(self):
+                return self._visible
+
+            def inner_text(self):
+                return self._text
+
+            def click(self):
+                self.clicked = True
+                page.clicked_selector = selector
+
+        class _Locator:
+            def count(self):
+                return len(nodes)
+
+            def nth(self, idx):
+                visible, text = nodes[idx]
+                return _Node(visible, text)
+
+        return _Locator()
+
+
+def test_find_visible_login_button_prefers_visible_login_cta() -> None:
+    from app.services.retailer_sync.midtown_account_sync import _find_visible_login_button
+
+    # A hidden submit input exists, but the visible "Log In" button must win.
+    page = _SelectorPage(
+        {
+            "input[type='submit']": [(False, "")],
+            "button:has-text('Log In')": [(True, "Log In")],
+        }
+    )
+    node, selector = _find_visible_login_button(page)
+    assert node is not None
+    assert selector == "button:has-text('Log In')"
+
+
+def test_find_visible_login_button_returns_none_when_all_hidden() -> None:
+    from app.services.retailer_sync.midtown_account_sync import _find_visible_login_button
+
+    page = _SelectorPage({"button[type='submit']": [(False, "")]})
+    node, selector = _find_visible_login_button(page)
+    assert node is None
+    assert selector is None
+
+
+def test_midtown_visible_error_text_returns_first_visible_banner() -> None:
+    from app.services.retailer_sync.midtown_account_sync import _midtown_visible_error_text
+
+    page = _SelectorPage(
+        {
+            "[role='alert']": [(False, "hidden banner")],
+            ".alert": [(True, "Invalid email or password.")],
+        }
+    )
+    assert _midtown_visible_error_text(page) == "Invalid email or password."
