@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import traceback
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -35,6 +37,12 @@ from app.models import (
     RetailerSyncRun,
     User,
 )
+from app.models.p92_import_line_cover import P92ImportLineCoverResolution
+from app.models.storage_location import P79InventoryLocationAssignment
+
+logger = logging.getLogger(__name__)
+
+_INVENTORY_FK_FIELD_NAMES = ("inventory_copy_id", "inventory_item_id")
 
 
 @dataclass(frozen=True)
@@ -252,6 +260,16 @@ def _portfolio_related_steps() -> list[DeleteStep]:
 
 def _explicit_delete_steps() -> list[DeleteStep]:
     steps: list[DeleteStep] = [
+        DeleteStep(
+            "p92_import_line_cover_resolution",
+            P92ImportLineCoverResolution,
+            lambda s: _owner(s, P92ImportLineCoverResolution.owner_user_id),
+        ),
+        DeleteStep(
+            "p79_inventory_location_assignment",
+            P79InventoryLocationAssignment,
+            lambda s: _owner(s, P79InventoryLocationAssignment.owner_user_id),
+        ),
         DeleteStep("receiving_session_items", ReceivingSessionItem, lambda s: _receiving_in(s, ReceivingSessionItem.receiving_session_id)),
         DeleteStep("receiving_sessions", ReceivingSession, lambda s: _owner(s, ReceivingSession.owner_user_id)),
         DeleteStep("retailer_order_item_snapshots", RetailerOrderItemSnapshot, lambda s: _owner(s, RetailerOrderItemSnapshot.owner_user_id)),
@@ -341,15 +359,51 @@ def _owner_user_id_sweep_models() -> list[type[SQLModel]]:
     return discovered
 
 
+def _inventory_fk_delete_steps(*, skip_models: frozenset[type[SQLModel]]) -> list[DeleteStep]:
+    """Delete rows in mapped tables that FK-reference inventory_copy for this user's copies."""
+    steps: list[DeleteStep] = []
+    seen_labels: set[str] = set()
+    for value in vars(models).values():
+        if not isinstance(value, type) or not issubclass(value, SQLModel):
+            continue
+        if value in _NEVER_DELETE_MODELS or value is InventoryCopy:
+            continue
+        if value in skip_models:
+            continue
+        if getattr(value, "__table__", None) is None:
+            continue
+        fk_column = None
+        for field_name in _INVENTORY_FK_FIELD_NAMES:
+            if field_name in value.model_fields:
+                fk_column = getattr(value, field_name)
+                break
+        if fk_column is None:
+            continue
+        label = getattr(value, "__tablename__", value.__name__)
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
+        steps.append(
+            DeleteStep(
+                label,
+                value,
+                lambda scope, col=fk_column: _inventory_in(scope, col),
+            )
+        )
+    return steps
+
+
 def _ordered_delete_steps() -> list[DeleteStep]:
     explicit = _explicit_delete_steps()
-    explicit_models = {step.model for step in explicit}
+    explicit_models = frozenset(step.model for step in explicit)
+    inventory_fk = _inventory_fk_delete_steps(skip_models=explicit_models)
+    explicit_models = explicit_models | frozenset(step.model for step in inventory_fk)
     sweep_steps = [
         DeleteStep(getattr(model, "__tablename__", model.__name__), model, lambda s, m=model: _owner(s, m.owner_user_id))
         for model in _owner_user_id_sweep_models()
         if model not in explicit_models
     ]
-    combined = explicit + sweep_steps
+    combined = explicit + inventory_fk + sweep_steps
     table_by_name = {step.model.__table__.name: step for step in combined}
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=r"Cannot correctly sort tables;.*")
@@ -386,9 +440,50 @@ class UserCollectionResetResult:
         return sum(row.row_count for row in self.table_summaries)
 
 
-def _break_delete_cycles(connection: Connection) -> None:
-    connection.execute(update(InventoryCopy.__table__).values(primary_cover_image_id=None))
-    connection.execute(update(DraftImport.__table__).values(primary_cover_image_id=None))
+class UserCollectionResetError(Exception):
+    """Reset delete transaction failed partway through."""
+
+    def __init__(
+        self,
+        *,
+        failed_table: str,
+        message: str,
+        summaries: list[TableDeleteSummary],
+        cause: BaseException | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failed_table = failed_table
+        self.message = message
+        self.summaries = summaries
+        self.cause = cause
+        self.traceback = "".join(traceback.format_exception(type(cause), cause, cause.__traceback__)) if cause else None
+
+
+def _break_delete_cycles(connection: Connection, scope: UserCollectionScope) -> None:
+    if scope.inventory_ids:
+        connection.execute(
+            update(InventoryCopy.__table__)
+            .where(InventoryCopy.id.in_(scope.inventory_ids))
+            .values(primary_cover_image_id=None)
+        )
+    if scope.draft_import_ids:
+        connection.execute(
+            update(DraftImport.__table__)
+            .where(DraftImport.id.in_(scope.draft_import_ids))
+            .values(primary_cover_image_id=None)
+        )
+    if scope.draft_import_ids:
+        connection.execute(
+            update(P92ImportLineCoverResolution.__table__)
+            .where(P92ImportLineCoverResolution.draft_import_id.in_(scope.draft_import_ids))
+            .values(inventory_copy_id=None)
+        )
+    elif scope.inventory_ids:
+        connection.execute(
+            update(P92ImportLineCoverResolution.__table__)
+            .where(P92ImportLineCoverResolution.inventory_copy_id.in_(scope.inventory_ids))
+            .values(inventory_copy_id=None)
+        )
 
 
 def _count_rows(connection: Connection, step: DeleteStep, scope: UserCollectionScope) -> int:
@@ -484,20 +579,71 @@ def reset_user_collection_data(
 
     engine = session.get_bind()
     if execute:
-        with engine.begin() as connection:
-            _break_delete_cycles(connection)
-            for step in steps:
-                deleted = _delete_rows(connection, step, scope)
-                if deleted:
-                    summaries.append(TableDeleteSummary(label=step.label, row_count=deleted))
-                    print(f"deleted {step.label}: {deleted}")
+        logger.info(
+            "collection_reset execute start user_id=%s email=%s inventory=%s orders=%s drafts=%s",
+            user.id,
+            user.email,
+            len(scope.inventory_ids),
+            len(scope.order_ids),
+            len(scope.draft_import_ids),
+        )
+        try:
+            with engine.begin() as connection:
+                _break_delete_cycles(connection, scope)
+                for step in steps:
+                    targeted = _count_rows(connection, step, scope)
+                    logger.info(
+                        "collection_reset deleting table=%s targeted=%s",
+                        step.label,
+                        targeted,
+                    )
+                    if targeted == 0:
+                        continue
+                    try:
+                        deleted = _delete_rows(connection, step, scope)
+                    except Exception as exc:
+                        logger.exception(
+                            "collection_reset failed table=%s targeted=%s deleted_before=%s",
+                            step.label,
+                            targeted,
+                            sum(row.row_count for row in summaries),
+                        )
+                        raise UserCollectionResetError(
+                            failed_table=step.label,
+                            message=str(exc),
+                            summaries=list(summaries),
+                            cause=exc,
+                        ) from exc
+                    logger.info(
+                        "collection_reset deleted table=%s rows=%s",
+                        step.label,
+                        deleted,
+                    )
+                    if deleted:
+                        summaries.append(TableDeleteSummary(label=step.label, row_count=deleted))
+        except UserCollectionResetError:
+            raise
+        except Exception as exc:
+            logger.exception("collection_reset transaction failed user_id=%s", user.id)
+            raise UserCollectionResetError(
+                failed_table="transaction",
+                message=str(exc),
+                summaries=list(summaries),
+                cause=exc,
+            ) from exc
+        logger.info(
+            "collection_reset execute complete user_id=%s tables=%s total_rows=%s",
+            user.id,
+            len(summaries),
+            sum(row.row_count for row in summaries),
+        )
     else:
         with engine.connect() as connection:
             for step in steps:
                 count = _count_rows(connection, step, scope)
                 if count:
                     summaries.append(TableDeleteSummary(label=step.label, row_count=count))
-                    print(f"  - {step.label}: {count}")
+                    logger.debug("collection_reset preview table=%s count=%s", step.label, count)
 
     return UserCollectionResetResult(
         user_id=int(user.id),

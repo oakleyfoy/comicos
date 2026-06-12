@@ -310,6 +310,8 @@ export interface CollectionResetExecuteResponse {
   deleted: CollectionResetSummary;
   deleted_by_table: { label: string; row_count: number }[];
   remaining: CollectionResetRemaining;
+  failed_table?: string | null;
+  error?: string | null;
 }
 
 export interface RetailerAccountRead {

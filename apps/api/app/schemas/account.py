@@ -54,3 +54,5 @@ class CollectionResetExecuteResponse(BaseModel):
     deleted: CollectionResetSummary
     deleted_by_table: list[CollectionResetTableCount] = Field(default_factory=list)
     remaining: CollectionResetRemaining
+    failed_table: str | None = None
+    error: str | None = None

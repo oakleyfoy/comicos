@@ -127,6 +127,19 @@ export function AccountSettingsPage(): JSX.Element {
         navigate("/dashboard");
       }
     } catch (err) {
+      if (err instanceof ApiError && err.data && typeof err.data === "object") {
+        const payload = err.data as CollectionResetExecuteResponse;
+        if (payload.failed_table || payload.error) {
+          setResult(payload);
+          setError(
+            payload.error
+              ? `Reset failed at ${payload.failed_table ?? "unknown"}: ${payload.error}`
+              : err.message,
+          );
+          await loadPreview();
+          return;
+        }
+      }
       setError(err instanceof ApiError ? err.message : "Reset failed.");
     } finally {
       setExecuting(false);

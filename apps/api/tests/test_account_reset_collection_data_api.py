@@ -136,6 +136,7 @@ def test_reset_collection_data_api_scoped_and_preserves_credentials(client, sess
     assert executed.status_code == 200, executed.text
     body = executed.json()
     assert body["status"] == "success"
+    assert body.get("failed_table") is None
     assert body["deleted"]["inventory_copies"] >= 1
     assert body["remaining"]["inventory_copies"] == 0
     assert body["remaining"]["orders"] == 0
@@ -159,3 +160,67 @@ def test_reset_collection_data_api_scoped_and_preserves_credentials(client, sess
     )
     assert outsider_preview.status_code == 200
     assert outsider_preview.json()["summary"]["inventory_copies"] >= 1
+
+
+def test_reset_collection_data_with_p92_line_cover_and_portfolio(client, session) -> None:
+    """Production-like path: import line covers (retailer confirm) must not block reset."""
+    from app.models import DraftImport, InventoryCopy, Portfolio, PortfolioItem
+    from app.models.p92_import_line_cover import P92ImportLineCoverResolution
+
+    email = "reset-p92-cover@example.com"
+    token = register_and_login(client, email)
+    create_order(client, token)
+    user = session.exec(select(User).where(User.email == email)).one()
+    _seed_gmail(session, user_id=int(user.id))
+
+    copy_id = session.exec(select(InventoryCopy.id).where(InventoryCopy.user_id == user.id)).one()
+    draft_id = session.exec(select(DraftImport.id).where(DraftImport.user_id == user.id)).one()
+    session.add(
+        P92ImportLineCoverResolution(
+            owner_user_id=int(user.id),
+            draft_import_id=int(draft_id),
+            line_index=1,
+            inventory_copy_id=int(copy_id),
+            cover_url="https://example.com/cover.jpg",
+            resolution_json={},
+        )
+    )
+    portfolio = Portfolio(
+        owner_user_id=int(user.id),
+        name="Collection",
+        portfolio_type="collection",
+        status="ACTIVE",
+        replay_key="test-collection",
+    )
+    session.add(portfolio)
+    session.flush()
+    session.add(
+        PortfolioItem(
+            portfolio_id=int(portfolio.id),
+            inventory_item_id=int(copy_id),
+            allocation_role="holding",
+        )
+    )
+    session.commit()
+
+    executed = client.post(
+        "/api/v1/account/reset-collection-data",
+        headers=auth_headers(token),
+        json={
+            "confirmation_phrase": COLLECTION_RESET_CONFIRMATION_PHRASE,
+            "acknowledge_permanent_delete": True,
+        },
+    )
+    assert executed.status_code == 200, executed.text
+    body = executed.json()
+    assert body["status"] == "success"
+    assert body["remaining"]["inventory_copies"] == 0
+    assert body["remaining"]["portfolio_items"] == 0
+    assert (
+        len(
+            session.exec(
+                select(P92ImportLineCoverResolution).where(P92ImportLineCoverResolution.owner_user_id == user.id)
+            ).all()
+        )
+        == 0
+    )
