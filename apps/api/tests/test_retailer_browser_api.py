@@ -884,3 +884,106 @@ def test_midtown_browser_session_retry_returns_refreshed_status(client, monkeypa
     response = client.post("/api/v1/retailer-browser/midtown/session/retry", headers=auth_headers(token))
     assert response.status_code == 200, response.text
     assert response.json()["session"]["order_count"] == 9
+
+
+class _DetectionPage:
+    def __init__(self, *, url, title, visible_text, password_visible=False, challenge_selectors=()):
+        self.url = url
+        self._title = title
+        self._visible_text = visible_text
+        self._password_visible = password_visible
+        self._challenge_selectors = set(challenge_selectors)
+
+    def title(self):
+        return self._title
+
+    def inner_text(self, selector):
+        return self._visible_text
+
+    def content(self):
+        # Raw HTML intentionally references Cloudflare/captcha (CDN + widget scripts)
+        # the way a normal Midtown page does. Detection must ignore this.
+        return (
+            "<html><head>"
+            "<script src='https://challenges.cloudflare.com/turnstile/v0/api.js'></script>"
+            "</head><body>captcha cloudflare " + self._visible_text + "</body></html>"
+        )
+
+    def locator(self, selector):
+        page = self
+
+        class _Locator:
+            def count(self):
+                if selector == "input[type='password']":
+                    return 1 if page._password_visible else 0
+                return 1 if selector in page._challenge_selectors else 0
+
+            @property
+            def first(self):
+                class _First:
+                    def is_visible(self_inner):
+                        if selector == "input[type='password']":
+                            return page._password_visible
+                        return selector in page._challenge_selectors
+
+                return _First()
+
+        return _Locator()
+
+
+def test_midtown_detection_ignores_incidental_cloudflare_references() -> None:
+    from app.services.retailer_browser import _detect_midtown_challenge, _detect_midtown_login
+
+    page = _DetectionPage(
+        url="https://www.midtowncomics.com/search?q=batman",
+        title="Search Results | Midtown Comics",
+        visible_text="Showing 24 results for batman. Add to cart.",
+    )
+    assert _detect_midtown_challenge(page)[0] is False
+    assert _detect_midtown_login(page)[0] is False
+
+
+def test_midtown_detection_flags_real_cloudflare_interstitial() -> None:
+    from app.services.retailer_browser import _detect_midtown_challenge
+
+    by_title = _DetectionPage(
+        url="https://www.midtowncomics.com/",
+        title="Just a moment...",
+        visible_text="",
+    )
+    detected, reason = _detect_midtown_challenge(by_title)
+    assert detected is True
+    assert reason and reason.startswith("title:")
+
+    by_text = _DetectionPage(
+        url="https://www.midtowncomics.com/",
+        title="Midtown Comics",
+        visible_text="Checking your browser before accessing midtowncomics.com",
+    )
+    assert _detect_midtown_challenge(by_text)[0] is True
+
+
+def test_midtown_login_detection_requires_url_or_visible_password() -> None:
+    from app.services.retailer_browser import _detect_midtown_login
+
+    login_url = _DetectionPage(
+        url="https://www.midtowncomics.com/login",
+        title="Login",
+        visible_text="Sign in",
+    )
+    assert _detect_midtown_login(login_url)[0] is True
+
+    normal = _DetectionPage(
+        url="https://www.midtowncomics.com/account-settings",
+        title="Account Settings",
+        visible_text="Your order history",
+    )
+    assert _detect_midtown_login(normal)[0] is False
+
+    visible_password = _DetectionPage(
+        url="https://www.midtowncomics.com/account-settings",
+        title="Account Settings",
+        visible_text="Sign in",
+        password_visible=True,
+    )
+    assert _detect_midtown_login(visible_password)[0] is True

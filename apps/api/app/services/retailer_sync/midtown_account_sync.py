@@ -194,24 +194,104 @@ def _first_visible(page, selectors: list[str]):
     return None
 
 
+# Cloudflare / CAPTCHA interstitial markers. These intentionally target the
+# *rendered* challenge page (title + visible body text + visible challenge
+# widgets) rather than raw HTML, because Midtown is fronted by Cloudflare and
+# every normal page embeds the words "cloudflare"/"captcha" in script/CDN URLs.
+_MIDTOWN_CHALLENGE_TITLE_MARKERS = (
+    "just a moment",
+    "attention required",
+    "access denied",
+    "verify you are human",
+)
+_MIDTOWN_CHALLENGE_TEXT_MARKERS = (
+    "checking your browser before accessing",
+    "please stand by, while we are checking your browser",
+    "verify you are human",
+    "verifying you are human",
+    "complete the security check",
+    "needs to review the security of your connection",
+    "enable javascript and cookies to continue",
+)
+_MIDTOWN_CHALLENGE_SELECTORS = (
+    "#challenge-form",
+    "#challenge-running",
+    "#cf-challenge-running",
+    "iframe[src*='challenges.cloudflare.com']",
+    "iframe[title*='Cloudflare security challenge']",
+    "iframe[title*='recaptcha challenge']",
+)
+
+
+def _midtown_page_title(page) -> str:
+    try:
+        return page.title() or ""
+    except Exception:
+        return ""
+
+
+def _midtown_visible_text(page, *, limit: int | None = None) -> str:
+    text: object = ""
+    try:
+        text = page.inner_text("body")
+    except Exception:
+        try:
+            text = page.evaluate("() => (document.body ? document.body.innerText : '')")
+        except Exception:
+            text = ""
+    if not isinstance(text, str):
+        text = ""
+    return text[:limit] if limit else text
+
+
+def _locator_is_visible(page, selector: str) -> bool:
+    try:
+        locator = page.locator(selector)
+        if locator.count() <= 0:
+            return False
+        try:
+            return bool(locator.first.is_visible())
+        except Exception:
+            # If we cannot evaluate visibility, fall back to existence.
+            return True
+    except Exception:
+        return False
+
+
+def _detect_midtown_challenge(page) -> tuple[bool, str | None]:
+    """Detect a real Cloudflare/CAPTCHA interstitial (not incidental references)."""
+    title = _midtown_page_title(page).lower()
+    for marker in _MIDTOWN_CHALLENGE_TITLE_MARKERS:
+        if marker in title:
+            return True, f"title:{marker}"
+    visible_text = _midtown_visible_text(page).lower()
+    for marker in _MIDTOWN_CHALLENGE_TEXT_MARKERS:
+        if marker in visible_text:
+            return True, f"visible_text:{marker}"
+    for selector in _MIDTOWN_CHALLENGE_SELECTORS:
+        if _locator_is_visible(page, selector):
+            return True, f"visible_selector:{selector}"
+    return False, None
+
+
 def _has_midtown_challenge(page) -> bool:
-    page_text = page.content().lower()
-    return "captcha" in page_text or "cloudflare" in page_text or "security challenge" in page_text
+    detected, _ = _detect_midtown_challenge(page)
+    return detected
+
+
+def _detect_midtown_login(page) -> tuple[bool, str | None]:
+    """Detect an actual login page/form (a *visible* password field or login URL)."""
+    lower_url = (getattr(page, "url", "") or "").lower()
+    if "/login" in lower_url or "/sign-in" in lower_url or "/signin" in lower_url:
+        return True, f"url:{lower_url}"
+    if _locator_is_visible(page, "input[type='password']"):
+        return True, "visible_password_input"
+    return False, None
 
 
 def _requires_midtown_login(page) -> bool:
-    lower_url = (page.url or "").lower()
-    if "/login" in lower_url:
-        return True
-    return _first_visible(
-        page,
-        [
-            "input[type='email']",
-            "input[name='email']",
-            "input[name='username']",
-            "input[type='password']",
-        ],
-    ) is not None
+    detected, _ = _detect_midtown_login(page)
+    return detected
 
 
 def _save_session_state(context, *, account_id: int) -> None:

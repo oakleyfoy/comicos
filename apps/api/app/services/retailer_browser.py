@@ -20,9 +20,13 @@ from app.services.retailer_sync.midtown_account_sync import (
     MIDTOWN_LOGIN_URL,
     MIDTOWN_ORDERS_URL,
     SESSION_STATE_ROOT,
+    _detect_midtown_challenge,
+    _detect_midtown_login,
     _has_midtown_challenge,
     _load_recent_order_details,
     _midtown_login,
+    _midtown_page_title,
+    _midtown_visible_text,
     MidtownNeedsAttentionError,
     _parse_midtown_detail_or_raise,
     _requires_midtown_login,
@@ -658,14 +662,48 @@ def _midtown_live_session_is_closed(session: MidtownLiveBrowserSession) -> bool:
 
 
 def _classify_midtown_live_page(account: RetailerAccount, page) -> MidtownBrowserStatus:
+    account_id = int(account.id or 0)
     current_url = getattr(page, "url", None)
-    if _has_midtown_challenge(page):
+    page_title = _midtown_page_title(page)
+    text_excerpt = _midtown_visible_text(page, limit=500)
+
+    # Decisions go through the monkeypatchable bool wrappers; the detect variants
+    # provide the human-readable rule that fired, for diagnostics.
+    challenge = _has_midtown_challenge(page)
+    login = _requires_midtown_login(page)
+    try:
+        _, challenge_reason = _detect_midtown_challenge(page)
+    except Exception:  # noqa: BLE001 - diagnostics only
+        challenge_reason = None
+    try:
+        _, login_reason = _detect_midtown_login(page)
+    except Exception:  # noqa: BLE001 - diagnostics only
+        login_reason = None
+
+    def _emit(detected_status: str, detection_rule: str | None, *, authenticated: bool, order_count: int) -> None:
+        _log_event(
+            "midtown_page_classification",
+            account_id=account_id,
+            current_url=current_url,
+            page_title=page_title,
+            detected_status=detected_status,
+            detection_rule=detection_rule,
+            challenge_detected=challenge,
+            login_detected=login,
+            authenticated=authenticated,
+            order_count=order_count,
+            page_text_excerpt=text_excerpt,
+        )
+
+    if challenge:
+        _emit("security_verification_required", challenge_reason or "challenge", authenticated=False, order_count=0)
         return _security_verification_status(
             account=account,
             current_url=current_url or MIDTOWN_LOGIN_URL,
             order_count=0,
         )
-    if _requires_midtown_login(page):
+    if login:
+        _emit("login_required", login_reason or "login", authenticated=False, order_count=0)
         return _login_required_status(
             account=account,
             current_url=current_url or MIDTOWN_LOGIN_URL,
@@ -674,16 +712,17 @@ def _classify_midtown_live_page(account: RetailerAccount, page) -> MidtownBrowse
     try:
         orders = parse_midtown_order_history(page.content())
     except Exception as exc:
+        _emit("failed", f"parse_error:{type(exc).__name__}", authenticated=False, order_count=0)
         _log_event(
             "midtown_live_page_parse_failed",
-            account_id=int(account.id or 0),
+            account_id=account_id,
             current_url=current_url,
             error_type=type(exc).__name__,
             error_message=str(exc),
         )
         return MidtownBrowserStatus(
             retailer="midtown",
-            account_id=int(account.id or 0),
+            account_id=account_id,
             status="failed",
             message="Midtown page could not be read.",
             current_url=current_url,
@@ -693,7 +732,14 @@ def _classify_midtown_live_page(account: RetailerAccount, page) -> MidtownBrowse
             last_updated_at=utc_now(),
         )
 
-    message = "Midtown orders are ready." if orders else "Midtown browser is open."
+    # No challenge and no login form: this is an authenticated / normal Midtown
+    # page. We do NOT treat it as a security challenge.
+    if orders:
+        _emit("ready", "order_history_parsed", authenticated=True, order_count=len(orders))
+        message = "Midtown orders are ready."
+    else:
+        _emit("authenticated", "no_challenge_no_login", authenticated=True, order_count=0)
+        message = "Signed in to Midtown."
     return _ready_status(
         account=account,
         current_url=current_url,
@@ -1284,6 +1330,58 @@ def get_midtown_browser_session_status(
             return status
 
 
+_MIDTOWN_ACCOUNT_PROBE_URLS = (
+    "https://www.midtowncomics.com/account-settings",
+    "https://www.midtowncomics.com/track_my_order",
+    "https://www.midtowncomics.com/browsing-history",
+)
+
+
+def _probe_midtown_authentication(page, *, account_id: int) -> tuple[str, list[dict[str, Any]]]:
+    """Navigate known Midtown account pages to authoritatively classify auth state.
+
+    Returns ``(status, results)`` where status is one of ``"authenticated"``,
+    ``"login_required"``, or ``"security_verification_required"``. Each result row
+    records whether the account page was directly accessible.
+    """
+    results: list[dict[str, Any]] = []
+    final_status = "login_required"
+    for url in _MIDTOWN_ACCOUNT_PROBE_URLS:
+        entry: dict[str, Any] = {"requested_url": url}
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+            _best_effort_wait_for_load(page)
+        except Exception as exc:  # noqa: BLE001 - probe must never raise
+            entry.update({"error_type": type(exc).__name__, "error_message": str(exc), "accessible": False})
+            results.append(entry)
+            continue
+        challenge, challenge_reason = _detect_midtown_challenge(page)
+        login, login_reason = _detect_midtown_login(page)
+        accessible = not challenge and not login
+        entry.update(
+            {
+                "landed_url": getattr(page, "url", None),
+                "page_title": _midtown_page_title(page),
+                "challenge_detected": challenge,
+                "challenge_reason": challenge_reason,
+                "login_detected": login,
+                "login_reason": login_reason,
+                "accessible": accessible,
+            }
+        )
+        results.append(entry)
+        if challenge:
+            final_status = "security_verification_required"
+            break
+        if accessible:
+            final_status = "authenticated"
+            break
+        final_status = "login_required"
+        break
+    _log_event("midtown_auth_probe", account_id=account_id, final_status=final_status, results=results)
+    return final_status, results
+
+
 def list_midtown_browser_orders(
     session: Session,
     *,
@@ -1292,14 +1390,10 @@ def list_midtown_browser_orders(
     account = _midtown_account_for_user_or_404(session, owner_user_id=owner_user_id)
     account_id = int(account.id or 0)
     with _midtown_single_operation(account_id):
-        state = _read_browser_state(account_id)
-        target_url = str(
-            state.get("current_url")
-            or state.get("orders_url")
-            or state.get("last_known_url")
-            or MIDTOWN_ORDERS_URL
-        )
-        post_login_url = str(state.get("orders_url") or MIDTOWN_ORDERS_URL)
+        # Order history lives on the Midtown account page, so always load that page
+        # rather than a stale last-known URL (e.g. a search-results page).
+        target_url = MIDTOWN_ORDERS_URL
+        post_login_url = MIDTOWN_ORDERS_URL
         with _midtown_request_browser(account, target_url=target_url) as (_browser, context, page):
             try:
                 _midtown_attempt_assisted_login(
@@ -1340,8 +1434,30 @@ def list_midtown_browser_orders(
                 }
                 for order in orders
             ]
+            if not normalized_orders:
+                # No order rows parsed. Confirm whether we are actually signed in by
+                # probing known account pages, so we don't report a logged-out user
+                # as an empty (authenticated) account.
+                probe_status, _ = _probe_midtown_authentication(page, account_id=account_id)
+                if probe_status == "security_verification_required":
+                    security = _security_verification_status(
+                        account=account,
+                        current_url=getattr(page, "url", None) or MIDTOWN_LOGIN_URL,
+                        order_count=0,
+                    )
+                    _write_browser_state(account_id, _browser_state_payload(security))
+                    return MidtownBrowserOrders(status=security, orders=[])
+                if probe_status == "login_required":
+                    login_status = _login_required_status(
+                        account=account,
+                        current_url=getattr(page, "url", None) or MIDTOWN_LOGIN_URL,
+                        order_count=0,
+                    )
+                    _write_browser_state(account_id, _browser_state_payload(login_status))
+                    return MidtownBrowserOrders(status=login_status, orders=[])
+
             status.status = "ready" if normalized_orders else "empty"
-            status.message = "Midtown orders are ready." if normalized_orders else "Midtown browser is open."
+            status.message = "Midtown orders are ready." if normalized_orders else "No Midtown orders found for this account."
             status.order_count = len(normalized_orders)
             status.authenticated = True
             _record_midtown_live_metadata(status)
