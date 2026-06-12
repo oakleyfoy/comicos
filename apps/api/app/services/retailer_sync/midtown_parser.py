@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
@@ -19,6 +20,32 @@ _KNOWN_LABELS = (
     "Item Status|Shipped|Backordered|Unavailable|Returned|SKU|Variant|Cover Artist|Item #|Condition"
 )
 _ORDER_NUMBER_RE = re.compile(r"\border\s*#\s*([0-9]{4,})\b", flags=re.IGNORECASE)
+
+logger = logging.getLogger(__name__)
+
+_ITEM_LABEL_PREFIXES = (
+    "publisher:",
+    "each:",
+    "total:",
+    "qty:",
+    "condition:",
+    "status:",
+    "item #:",
+    "sku:",
+    "line total:",
+    "price:",
+    "shipped:",
+    "backordered:",
+    "unavailable:",
+    "returned:",
+    "variant:",
+    "cover artist:",
+    "release date:",
+)
+_TITLE_CLASS_TOKENS = ("title", "product-name", "product_name", "item-name", "item_name", "comic", "name")
+_SKIP_HREF_PARTS = ("/account/", "/cart", "javascript:", "mailto:", "#pull-list", "pull-list")
+_PRODUCT_PATH_MARKERS = ("/product/", "/store/", "/comics/", "/Product/", "/Store/", "/p/")
+_ORDER_ITEM_CLASS_RE = re.compile(r'\border-item\b', flags=re.IGNORECASE)
 
 
 class MidtownOrderNumberError(RuntimeError):
@@ -420,15 +447,119 @@ def _parse_order_items_from_visible_text(text: str) -> list[MidtownOrderItem]:
     return items
 
 
+def _is_order_item_label_line(line: str) -> bool:
+    lower = line.lower()
+    return any(lower.startswith(prefix) for prefix in _ITEM_LABEL_PREFIXES)
+
+
+def _href_looks_like_product(href: str) -> bool:
+    lower = href.lower()
+    if any(part in lower for part in _SKIP_HREF_PARTS):
+        return False
+    return any(marker.lower() in lower for marker in _PRODUCT_PATH_MARKERS)
+
+
+def _extract_title_from_order_item(fragment: str) -> tuple[str, str | None, list[dict]]:
+    """Extract a line title from a scoped Midtown ``.order-item`` HTML fragment."""
+    soup = BeautifulSoup(fragment, "html.parser")
+    candidates: list[dict] = []
+
+    for anchor in soup.find_all("a", href=True):
+        text = _clean_html_text(anchor.get("title") or "") or _clean_html_text(
+            anchor.get("aria-label") or ""
+        )
+        href = anchor["href"].strip()
+        if not text:
+            text = _clean_html_text(anchor.get_text(" ", strip=True))
+        if text:
+            candidates.append({"kind": "anchor_text", "href": href, "text": text})
+        if text and _href_looks_like_product(href):
+            return text, _absolute_url(href), candidates
+
+    for tag in ("h1", "h2", "h3", "h4", "h5", "h6", "strong", "b"):
+        for element in soup.find_all(tag):
+            text = _clean_html_text(element.get_text(" ", strip=True))
+            if text and len(text) > 5 and not _is_order_item_label_line(text):
+                candidates.append({"kind": f"{tag}_text", "text": text})
+                return text, None, candidates
+
+    for anchor in soup.find_all("a", href=True):
+        text = _clean_html_text(anchor.get_text(" ", strip=True))
+        href = anchor["href"].strip()
+        if text and len(text) > 5 and not _is_order_item_label_line(text):
+            candidates.append({"kind": "anchor_text_fallback", "href": href, "text": text})
+            return text, _absolute_url(href), candidates
+
+    for img in soup.find_all("img"):
+        alt = _clean_html_text(img.get("alt") or "")
+        if alt and len(alt) > 3 and "logo" not in alt.lower():
+            candidates.append({"kind": "img_alt", "text": alt})
+            return alt, None, candidates
+
+    for element in soup.find_all(True):
+        class_tokens = [token.lower() for token in (element.get("class") or [])]
+        if not any(
+            any(hint in token for hint in _TITLE_CLASS_TOKENS) for token in class_tokens
+        ):
+            continue
+        text = _clean_html_text(element.get_text(" ", strip=True))
+        if text and len(text) > 5 and not _is_order_item_label_line(text):
+            candidates.append({"kind": "class_hint", "classes": class_tokens, "text": text})
+            return text, None, candidates
+
+    for line in soup.get_text("\n", strip=True).splitlines():
+        cleaned = line.strip()
+        if not cleaned or _is_order_item_label_line(cleaned) or _ORDER_NUMBER_RE.search(cleaned):
+            continue
+        if len(cleaned) > 5:
+            candidates.append({"kind": "visible_text_line", "text": cleaned})
+            return cleaned, None, candidates
+
+    return "", None, candidates
+
+
+def _order_item_debug_fields(fragment: str) -> dict:
+    soup = BeautifulSoup(fragment, "html.parser")
+    pretty = soup.prettify()
+    title, _, selectors = _extract_title_from_order_item(fragment)
+    return {
+        "item_html_excerpt": pretty[:3000],
+        "prettified_html": pretty[:8000],
+        "item_text": soup.get_text("\n", strip=True),
+        "classes_in_node": sorted(
+            {cls for element in soup.find_all(True) for cls in (element.get("class") or [])}
+        ),
+        "anchor_texts": [
+            _clean_html_text(anchor.get_text(" ", strip=True))
+            for anchor in soup.find_all("a")
+            if _clean_html_text(anchor.get_text(" ", strip=True))
+        ],
+        "candidate_title_selectors": selectors,
+        "resolved_title": title or None,
+    }
+
+
 def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, str | None]:
     """Return ``(item, skip_reason)`` from a single order line HTML fragment."""
-    product_match = re.search(
-        r'href=["\']([^"\']*/product/[^"\']+)["\']', fragment, flags=re.IGNORECASE
-    )
-    image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
-    title = _extract_title(fragment, _absolute_url(product_match.group(1)) if product_match else None)
+    scoped_order_item = bool(_ORDER_ITEM_CLASS_RE.search(fragment))
+    product_url: str | None = None
+    if scoped_order_item:
+        title, product_url, _ = _extract_title_from_order_item(fragment)
+    else:
+        product_match = re.search(
+            r'href=["\']([^"\']*/product/[^"\']+)["\']', fragment, flags=re.IGNORECASE
+        )
+        product_url = _absolute_url(product_match.group(1)) if product_match else None
+        title = _extract_title(fragment, product_url)
     if not title:
         return None, "missing_title"
+    product_match = None if product_url else re.search(
+        r'href=["\']([^"\']*(?:/product/|/store/|/Store/|/comics/)[^"\']+)["\']',
+        fragment,
+        flags=re.IGNORECASE,
+    )
+    if product_url is None and product_match:
+        product_url = _absolute_url(product_match.group(1))
     issue_number, cover_name = _parse_issue_and_cover(title)
     variant_type = _match_after_label(fragment, "Variant")
     cover_artist = _match_after_label(fragment, "Cover Artist")
@@ -445,9 +576,10 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         _parse_price(_match_after_label(fragment, "Line Total"))
         or _parse_price(_match_after_label(fragment, "Total"))
     )
+    image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
     item = MidtownOrderItem(
         retailer_item_id=_match_after_label(fragment, "Item #") or _match_after_label(fragment, "SKU"),
-        product_url=_absolute_url(product_match.group(1)) if product_match else None,
+        product_url=product_url,
         image_url=_absolute_url(image_match.group(1)) if image_match else None,
         thumbnail_url=_absolute_url(image_match.group(1)) if image_match else None,
         title=title,
@@ -575,4 +707,19 @@ def parse_midtown_order_detail(
         "items_skipped": max(blocks_found - len(detail.items), 0),
         "skipped_reasons": skipped_reasons,
     }
+    if item_fragments:
+        first_item_debug = _order_item_debug_fields(item_fragments[0])
+        detail.parse_diagnostics["first_order_item"] = first_item_debug
+        logger.info(
+            "midtown_parser first_order_item_html=%s",
+            first_item_debug["item_html_excerpt"][:1500],
+        )
+        logger.info(
+            "midtown_parser first_order_item_text=%s",
+            first_item_debug["item_text"][:1500],
+        )
+        logger.info(
+            "midtown_parser candidate_title_selectors=%s",
+            first_item_debug["candidate_title_selectors"],
+        )
     return detail

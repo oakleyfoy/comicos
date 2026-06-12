@@ -180,6 +180,58 @@ def test_parse_midtown_saved_order_4257558_ignores_header_pull_list() -> None:
     titles = [item.title for item in detail.items]
     assert "Redcoat Cover B (regular)" not in titles
     assert "Sidebar Promo Comic" not in titles
+    assert detail.parse_diagnostics.get("first_order_item", {}).get("resolved_title")
+
+
+def test_parse_midtown_order_item_title_from_store_link_and_heading() -> None:
+    html = """
+    <div id="right-contents">
+      <div class="info-container">
+        <h1>Order #4257558</h1>
+        <p>Status: Shipped</p>
+        <p>Order Total: $105.13</p>
+        <div class="order-item">
+          <h4>Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover</h4>
+          <a href="/Store/Comics/absolute-green-arrow-1" title="Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover">
+            <img src="/images/cover.jpg" alt="" />
+          </a>
+          <div>Publisher: DC Comics</div>
+          <div>Each: $4.99</div>
+          <div>Total: $4.99</div>
+          <div>QTY: 1</div>
+          <div>Status: Shipped</div>
+        </div>
+      </div>
+    </div>
+    """
+    detail = parse_midtown_order_detail(
+        html,
+        detail_url="https://www.midtowncomics.com/account/orders/view/4257558",
+    )
+    assert len(detail.items) == 1
+    assert detail.items[0].title == "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover"
+    assert detail.items[0].product_url == "https://www.midtowncomics.com/Store/Comics/absolute-green-arrow-1"
+
+
+def test_parse_midtown_order_item_title_from_visible_text_only() -> None:
+    html = """
+    <div id="right-contents">
+      <div class="info-container">
+        <h1>Order #4257558</h1>
+        <div class="order-item">
+          Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover
+          Publisher: DC Comics
+          Each: $4.99
+          Total: $4.99
+          QTY: 1
+          Status: Shipped
+        </div>
+      </div>
+    </div>
+    """
+    detail = parse_midtown_order_detail(html)
+    assert len(detail.items) == 1
+    assert "Absolute Green Arrow #1" in detail.items[0].title
 
 
 def test_parse_midtown_order_detail_visible_text_fallback_in_info_container() -> None:
