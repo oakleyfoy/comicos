@@ -3,6 +3,9 @@ from urllib.parse import quote
 from datetime import date, datetime
 from decimal import Decimal
 import json
+import logging
+import os
+import sys
 from typing import Annotated, Literal
 
 from pydantic import ValidationError
@@ -1311,6 +1314,34 @@ from app.security.session_manager import build_device_label, create_session, det
 
 settings = get_settings()
 validate_production_settings(settings)
+
+
+def configure_logging() -> None:
+    """Ensure application loggers reach stdout (and thus the Render log stream).
+
+    Service code emits structured events (e.g. ``midtown_browser_login_attempt``)
+    via ``logging.getLogger(__name__).info(...)``. Without an explicit handler the
+    root logger defaults to WARNING, so those INFO events are silently dropped.
+
+    Uvicorn configures its own ``uvicorn*`` loggers with ``propagate=False`` and
+    does not configure the root logger, so attaching a single stdout handler to
+    the root logger surfaces ``app.*`` logs without duplicating access logs.
+    Idempotent: safe to call at import time and again on startup.
+    """
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    root = logging.getLogger()
+    root.setLevel(level)
+    if not any(getattr(handler, "_comicos_stdout", False) for handler in root.handlers):
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        handler._comicos_stdout = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    # Keep our own namespace at the configured level even if reconfigured elsewhere.
+    logging.getLogger("app").setLevel(level)
+
+
+configure_logging()
 
 app = FastAPI(title="ComicOS API")
 
