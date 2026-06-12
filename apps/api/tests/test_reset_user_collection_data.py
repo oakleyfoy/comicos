@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 from sqlmodel import Session, func, select
 
 from app.models import (
+    DraftImport,
     InventoryCopy,
     Order,
     OrderItem,
@@ -16,6 +18,7 @@ from app.models import (
     RetailerOrderSnapshot,
     User,
 )
+from app.models.p92_import_health import P92ImportHealthEvent
 from app.models.recommendation_v2 import (
     RecommendationRunV2,
     RecommendationScoreComponentV2,
@@ -300,3 +303,62 @@ def test_reset_deletes_inventory_and_portfolio_before_order_items(client, sessio
         == 0
     )
     assert len(session.exec(select(Portfolio).where(Portfolio.owner_user_id == user.id)).all()) == 0
+
+
+def _seed_draft_import_with_health_event(session: Session, *, user_id: int, tag: str) -> int:
+    draft = DraftImport(
+        user_id=user_id,
+        raw_text=f"draft {tag}",
+        parsed_payload_json={"items": [], "retailer": "Test", "confidence_score": "0.5"},
+        confidence_score=Decimal("0.5"),
+        status="draft",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    session.add(draft)
+    session.commit()
+    session.refresh(draft)
+    draft_id = int(draft.id or 0)
+    session.add(
+        P92ImportHealthEvent(
+            owner_user_id=user_id,
+            draft_import_id=draft_id,
+            event_type="IMPORT_PARSED",
+            payload_json={"tag": tag},
+        )
+    )
+    session.commit()
+    return draft_id
+
+
+def test_reset_deletes_p92_import_health_event_before_draft_import(client, session) -> None:
+    victim_email = "reset-draft-health-victim@example.com"
+    other_email = "reset-draft-health-other@example.com"
+    register_and_login(client, victim_email)
+    register_and_login(client, other_email)
+
+    victim = session.exec(select(User).where(User.email == victim_email)).one()
+    other = session.exec(select(User).where(User.email == other_email)).one()
+    victim_draft_id = _seed_draft_import_with_health_event(session, user_id=int(victim.id), tag="victim")
+    other_draft_id = _seed_draft_import_with_health_event(session, user_id=int(other.id), tag="other")
+
+    reset_user_collection_data(session, user=victim, execute=True)
+
+    assert session.get(DraftImport, victim_draft_id) is None
+    assert (
+        session.exec(
+            select(func.count())
+            .select_from(P92ImportHealthEvent)
+            .where(P92ImportHealthEvent.owner_user_id == victim.id)
+        ).one()
+        == 0
+    )
+    assert session.get(DraftImport, other_draft_id) is not None
+    assert (
+        session.exec(
+            select(func.count())
+            .select_from(P92ImportHealthEvent)
+            .where(P92ImportHealthEvent.draft_import_id == other_draft_id)
+        ).one()
+        == 1
+    )
