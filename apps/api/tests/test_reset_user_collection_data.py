@@ -7,6 +7,9 @@ from sqlmodel import Session, func, select
 from app.models import (
     InventoryCopy,
     Order,
+    OrderItem,
+    Portfolio,
+    PortfolioItem,
     ReleaseIssue,
     ReleaseSeries,
     RetailerAccount,
@@ -247,3 +250,53 @@ def test_reset_preserves_release_catalog_issue_and_variant(client, session) -> N
         session.exec(select(ReleaseIssue).where(ReleaseIssue.id == issue_id, ReleaseIssue.owner_user_id == victim.id)).one()
         is not None
     )
+
+
+def test_reset_deletes_inventory_and_portfolio_before_order_items(client, session) -> None:
+    email = "reset-inv-order-chain@example.com"
+    token = register_and_login(client, email)
+    create_order(client, token)
+
+    user = session.exec(select(User).where(User.email == email)).one()
+    order_id = session.exec(select(Order.id).where(Order.user_id == user.id)).one()
+    order_item_id = session.exec(
+        select(OrderItem.id).where(OrderItem.order_id == order_id)
+    ).one()
+    copy_id = session.exec(select(InventoryCopy.id).where(InventoryCopy.user_id == user.id)).one()
+    copy = session.get(InventoryCopy, int(copy_id))
+    assert copy is not None
+    assert int(copy.order_item_id) == int(order_item_id)
+
+    portfolio = Portfolio(
+        owner_user_id=int(user.id),
+        name="Reset chain",
+        portfolio_type="collection",
+        status="ACTIVE",
+        replay_key="reset-inv-order-chain",
+    )
+    session.add(portfolio)
+    session.flush()
+    session.add(
+        PortfolioItem(
+            portfolio_id=int(portfolio.id),
+            inventory_item_id=int(copy_id),
+            allocation_role="holding",
+        )
+    )
+    session.commit()
+    portfolio_id = int(portfolio.id or 0)
+
+    reset_user_collection_data(session, user=user, execute=True)
+
+    assert session.get(Order, int(order_id)) is None
+    assert session.get(OrderItem, int(order_item_id)) is None
+    assert session.get(InventoryCopy, int(copy_id)) is None
+    assert (
+        len(
+            session.exec(
+                select(PortfolioItem).where(PortfolioItem.portfolio_id == portfolio_id)
+            ).all()
+        )
+        == 0
+    )
+    assert len(session.exec(select(Portfolio).where(Portfolio.owner_user_id == user.id)).all()) == 0

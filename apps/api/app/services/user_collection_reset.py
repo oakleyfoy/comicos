@@ -394,6 +394,55 @@ def _explicit_delete_steps() -> list[DeleteStep]:
     return steps
 
 
+def _split_explicit_at_inventory_copies(explicit: list[DeleteStep]) -> tuple[list[DeleteStep], list[DeleteStep]]:
+    idx = next(i for i, step in enumerate(explicit) if step.label == "inventory_copies")
+    return explicit[:idx], explicit[idx:]
+
+
+def _sort_auxiliary_delete_steps(steps: list[DeleteStep]) -> list[DeleteStep]:
+    if not steps:
+        return []
+    table_by_name = {step.model.__table__.name: step for step in steps}
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r"Cannot correctly sort tables;.*")
+        sorted_tables = sort_tables([step.model.__table__ for step in steps])
+    ordered = [table_by_name[table.name] for table in reversed(sorted_tables) if table.name in table_by_name]
+    seen: set[str] = set()
+    deduped: list[DeleteStep] = []
+    for step in ordered:
+        if step.label in seen:
+            continue
+        seen.add(step.label)
+        deduped.append(step)
+    for step in steps:
+        if step.label not in seen:
+            deduped.append(step)
+    return deduped
+
+
+def _stabilize_collection_delete_order(steps: list[DeleteStep]) -> list[DeleteStep]:
+    """Ensure inventory copies are removed before order items that they reference."""
+    ordered = list(steps)
+    edges: tuple[tuple[str, str], ...] = (
+        ("portfolio_items", "inventory_copies"),
+        ("inventory_copies", "order_items"),
+        ("order_items", "customer_orders"),
+    )
+    labels = [step.label for step in ordered]
+    for before_label, after_label in edges:
+        if before_label not in labels or after_label not in labels:
+            continue
+        before_idx = labels.index(before_label)
+        after_idx = labels.index(after_label)
+        if before_idx < after_idx:
+            continue
+        step = ordered.pop(before_idx)
+        after_idx = labels.index(after_label)
+        ordered.insert(after_idx, step)
+        labels = [item.label for item in ordered]
+    return ordered
+
+
 def _owner_user_id_sweep_models() -> list[type[SQLModel]]:
     discovered: list[type[SQLModel]] = []
     for value in vars(models).values():
@@ -448,6 +497,7 @@ def _inventory_fk_delete_steps(*, skip_models: frozenset[type[SQLModel]]) -> lis
 
 def _ordered_delete_steps() -> list[DeleteStep]:
     explicit = _explicit_delete_steps()
+    before_inventory, inventory_and_orders = _split_explicit_at_inventory_copies(explicit)
     explicit_models = frozenset(step.model for step in explicit)
     inventory_fk = _inventory_fk_delete_steps(skip_models=explicit_models)
     explicit_models = explicit_models | frozenset(step.model for step in inventory_fk)
@@ -456,23 +506,8 @@ def _ordered_delete_steps() -> list[DeleteStep]:
         for model in _owner_user_id_sweep_models()
         if model not in explicit_models
     ]
-    combined = explicit + inventory_fk + sweep_steps
-    table_by_name = {step.model.__table__.name: step for step in combined}
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=r"Cannot correctly sort tables;.*")
-        sorted_tables = sort_tables([step.model.__table__ for step in combined])
-    ordered = [table_by_name[table.name] for table in reversed(sorted_tables) if table.name in table_by_name]
-    seen: set[str] = set()
-    deduped: list[DeleteStep] = []
-    for step in ordered:
-        if step.label in seen:
-            continue
-        seen.add(step.label)
-        deduped.append(step)
-    for step in combined:
-        if step.label not in seen:
-            deduped.append(step)
-    return deduped
+    auxiliary = _sort_auxiliary_delete_steps(inventory_fk + sweep_steps)
+    return _stabilize_collection_delete_order(before_inventory + auxiliary + inventory_and_orders)
 
 
 @dataclass
