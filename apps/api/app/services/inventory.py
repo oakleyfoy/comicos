@@ -35,7 +35,11 @@ from app.schemas.inventory import (
 )
 from app.services.inventory_fmv import build_inventory_fmv_attachment, summarize_inventory_fmv
 from app.services.acquisition_priority import inventory_acquisition_priority_teaser
-from app.services.cover_images import list_cover_reads_for_inventory
+from app.services.cover_images import cover_fetch_path, list_cover_reads_for_inventory
+from app.services.inventory_display_metadata import (
+    resolve_inventory_display_metadata,
+    resolve_inventory_display_metadata_for_copy,
+)
 from app.services.portfolio_registry import inventory_portfolio_teaser
 from app.schemas.order_arrival_intelligence import OrderArrivalClassification
 from app.schemas.ops import (
@@ -157,6 +161,11 @@ def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int,
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.expected_ship_date.label("expected_ship_date"),
             InventoryCopy.received_at.label("received_at"),
+            InventoryCopy.source_image_url.label("source_image_url"),
+            InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
+            OrderItem.catalog_match_id.label("catalog_match_id"),
+            OrderItem.enrichment_status.label("enrichment_status"),
+            OrderItem.foc_date.label("foc_date"),
             asset_state_expr,
             case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
         )
@@ -210,6 +219,13 @@ def build_inventory_detail_query(current_user: User):
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.expected_ship_date.label("expected_ship_date"),
             InventoryCopy.received_at.label("received_at"),
+            InventoryCopy.source_image_url.label("source_image_url"),
+            InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
+            OrderItem.catalog_match_id.label("catalog_match_id"),
+            OrderItem.enrichment_status.label("enrichment_status"),
+            OrderItem.enrichment_confidence.label("enrichment_confidence"),
+            OrderItem.enrichment_notes.label("enrichment_notes"),
+            OrderItem.foc_date.label("foc_date"),
             asset_state_expr,
             case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
             InventoryCopy.created_at.label("created_at"),
@@ -222,6 +238,59 @@ def build_inventory_detail_query(current_user: User):
         .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.user_id == current_user.id)
     )
+
+
+def _merge_display_metadata(row_map: dict, metadata) -> None:
+    """Overlay resolved display metadata onto a query row mapping."""
+    row_map["cover_image_url"] = metadata.cover_image_url
+    row_map["cover_source"] = metadata.cover_source
+    row_map["release_date"] = metadata.release_date
+    row_map["foc_date"] = metadata.foc_date
+    row_map["release_status"] = metadata.release_status
+    row_map["needs_catalog_review"] = metadata.needs_catalog_review
+    row_map["catalog_match_id"] = metadata.catalog_match_id
+    row_map["enrichment_status"] = metadata.enrichment_status
+
+
+def _apply_list_display_metadata(row_map: dict) -> None:
+    """Resolve cover/release/FOC display metadata for an inventory list row.
+
+    Kept dependency-free per row (no catalog match lookup) to keep list queries
+    fast; the detail endpoint performs the richer release-issue fallback.
+    """
+    primary_cover_id = row_map.get("primary_cover_image_id")
+    catalog_cover = cover_fetch_path(int(primary_cover_id)) if primary_cover_id else None
+    metadata = resolve_inventory_display_metadata(
+        catalog_cover_fetch_path=catalog_cover,
+        source_image_url=row_map.get("source_image_url"),
+        copy_release_date=row_map.get("release_date"),
+        copy_release_status=row_map.get("release_status"),
+        order_item_foc_date=row_map.get("foc_date"),
+        catalog_match_id=row_map.get("catalog_match_id"),
+        enrichment_status=row_map.get("enrichment_status"),
+        release_issue=None,
+    )
+    _merge_display_metadata(row_map, metadata)
+
+
+def _detail_catalog_cover_url(cover_reads: list, primary_cover_image_id: int | None) -> str | None:
+    """Best catalog cover URL for the detail view, preferring derivatives."""
+    primary = None
+    for cover in cover_reads:
+        if getattr(cover, "is_primary", False):
+            primary = cover
+            break
+    if primary is None and cover_reads:
+        primary = cover_reads[0]
+    if primary is not None:
+        return (
+            getattr(primary, "medium_fetch_path", None)
+            or getattr(primary, "thumbnail_fetch_path", None)
+            or cover_fetch_path(int(primary.id))
+        )
+    if primary_cover_image_id:
+        return cover_fetch_path(int(primary_cover_image_id))
+    return None
 
 
 def apply_inventory_filters(
@@ -687,6 +756,7 @@ def list_inventory(
     for row in rows:
         row_map = dict(row._mapping)
         inv_pk = int(row_map["inventory_copy_id"])
+        _apply_list_display_metadata(row_map)
         row_map["inventory_intelligence"] = intel_signals.get(inv_pk)
         row_map["ownership_state"] = intel_signals.get(inv_pk).ownership_state if intel_signals.get(inv_pk) else None
         row_map["duplicate_ownership"] = dup_attachments.get(inv_pk)
@@ -839,6 +909,22 @@ def get_inventory_copy_detail(
 
     merged = dict(row._mapping)
     merged["cover_images"] = list_cover_reads_for_inventory(session, inventory_copy_id)
+    detail_metadata = resolve_inventory_display_metadata_for_copy(
+        session,
+        owner_user_id=int(current_user.id),
+        primary_cover_image_id=merged.get("primary_cover_image_id"),
+        source_image_url=merged.get("source_image_url"),
+        copy_release_date=merged.get("release_date"),
+        copy_release_status=merged.get("release_status"),
+        order_item_foc_date=merged.get("foc_date"),
+        catalog_match_id=merged.get("catalog_match_id"),
+        enrichment_status=merged.get("enrichment_status"),
+    )
+    _merge_display_metadata(merged, detail_metadata)
+    # Prefer a derivative cover URL for the detail view when covers are loaded.
+    _detail_cover = _detail_catalog_cover_url(merged["cover_images"], merged.get("primary_cover_image_id"))
+    if _detail_cover is not None:
+        merged["cover_image_url"] = _detail_cover
     _, _, _, intelligence_signals = compute_inventory_intelligence(
         session,
         current_user=current_user,
@@ -1137,6 +1223,7 @@ def inventory_row_for_copy(
         session,
         user=current_user,
     )
+    _apply_list_display_metadata(row_map)
     row_map["inventory_intelligence"] = sigs.get(inventory_copy_id)
     row_map["duplicate_ownership"] = dup_attachments.get(inventory_copy_id)
     row_map["run_detection"] = run_attachments.get(inventory_copy_id)

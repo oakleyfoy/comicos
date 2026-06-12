@@ -14,6 +14,7 @@ import {
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 
 function formatDateTime(value: string | null): string {
   if (!value) {
@@ -157,6 +158,7 @@ export function IntegrationsPage() {
 
   return (
     <AppShell>
+      <LegacyFeatureBanner feature="Gmail receipt integration" />
       <PageHeader
         eyebrow="Integrations"
         title="Email Receipt Integrations"

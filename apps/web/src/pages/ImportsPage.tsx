@@ -14,6 +14,7 @@ import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 import { StatusBanner } from "../components/StatusBanner";
 
 function formatDate(value: string | null): string {
@@ -208,6 +209,7 @@ export function ImportsPage() {
 
   return (
     <AppShell>
+      <LegacyFeatureBanner feature="AI / email import drafts" />
       <PageHeader
         eyebrow="AI Import History"
         title="Saved Import Drafts"

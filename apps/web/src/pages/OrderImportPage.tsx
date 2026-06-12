@@ -20,6 +20,7 @@ import { ImportLineCoverPicker } from "../components/imports/ImportLineCoverPick
 import { useAuth } from "../auth/AuthContext";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
+import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 import { StatusBanner } from "../components/StatusBanner";
 import {
   creatorAliasRowKey,
@@ -1973,6 +1974,10 @@ export function OrderImportPage() {
 
   return (
     <AppShell>
+      <LegacyFeatureBanner
+        feature="AI order import"
+        detail="AI parsing of pasted or emailed orders produces low-confidence inventory. Manual entry remains supported below."
+      />
       <PageHeader
         eyebrow="Import Draft Workspace"
         title="Import Order Draft"

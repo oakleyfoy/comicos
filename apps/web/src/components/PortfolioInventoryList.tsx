@@ -280,6 +280,36 @@ export function PortfolioInventoryList(props: {
                 aria-label={`Select ${item.title}`}
               />
 
+              <Link
+                to={`/inventory/${id}`}
+                className="relative block h-16 w-12 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
+                aria-label={`${item.title} cover`}
+                data-testid="inventory-card-cover"
+              >
+                {item.cover_image_url ? (
+                  <img
+                    src={item.cover_image_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                      const fallback = event.currentTarget.nextElementSibling;
+                      if (fallback instanceof HTMLElement) {
+                        fallback.style.display = "flex";
+                      }
+                    }}
+                  />
+                ) : null}
+                <span
+                  className="absolute inset-0 flex items-center justify-center text-base text-slate-400"
+                  style={{ display: item.cover_image_url ? "none" : "flex" }}
+                  aria-hidden="true"
+                >
+                  📚
+                </span>
+              </Link>
+
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

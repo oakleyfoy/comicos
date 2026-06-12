@@ -31,6 +31,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "acquire",
+    title: "Add Comics",
+    links: [
+      { label: "Retailer Import", to: "/connected-retailers/import", prominent: true },
+      { label: "Scan Intake", to: "/mobile-scan" },
+      { label: "Manual Entry", to: "/orders/new" },
+    ],
+  },
+  {
     id: "buy",
     title: "Buy",
     links: [
@@ -51,9 +60,6 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Portfolio", to: "/dashboard", prominent: true },
       { label: "Collection insights", to: "/dashboard/collection", hiddenFromNav: true },
-      { label: "Gmail Imports", to: "/imports/email" },
-      { label: "Order Import", to: "/orders/import" },
-      { label: "Manual & AI Import", to: "/imports" },
       { label: "Collection Gaps", to: "/collection-gaps" },
       { label: "Market & FMV", to: "/dashboard/market" },
       { label: "FMV Intelligence", to: "/fmv-intelligence" },
@@ -143,7 +149,6 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
-      { label: "Gmail & integrations", to: "/settings/integrations" },
       { label: "Account & data", to: "/settings/account" },
       { label: "Connected Retailers", to: "/connected-retailers" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
@@ -151,11 +156,22 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Workflow Health", to: "/workflow-health" },
     ],
   },
+  {
+    id: "legacy",
+    title: "Legacy / Deprecated",
+    links: [
+      { label: "Gmail Imports", to: "/imports/email" },
+      { label: "Email / Paste Import", to: "/imports/guided" },
+      { label: "AI Import Drafts", to: "/imports" },
+      { label: "Order Import (AI)", to: "/orders/import" },
+      { label: "Gmail & Integrations", to: "/settings/integrations" },
+    ],
+  },
 ];
 
 export const NAV_EXPANDED_STORAGE_KEY = "comic-os.nav.expanded-groups";
 
-export const DEFAULT_EXPANDED_GROUP_IDS = ["home"];
+export const DEFAULT_EXPANDED_GROUP_IDS = ["home", "acquire"];
 
 export function findGroupIdForPath(pathname: string): string | null {
   for (const group of NAV_GROUPS) {
@@ -183,7 +199,17 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname === "/purchase-budget") {
     return "settings";
   }
-  if (pathname.startsWith("/orders") || pathname.startsWith("/imports") || pathname.startsWith("/settings")) {
+  if (
+    pathname.startsWith("/imports") ||
+    pathname === "/orders/import" ||
+    pathname === "/settings/integrations"
+  ) {
+    return "legacy";
+  }
+  if (pathname === "/orders/new" || pathname === "/connected-retailers/import") {
+    return "acquire";
+  }
+  if (pathname.startsWith("/orders") || pathname.startsWith("/settings")) {
     return "settings";
   }
   if (pathname.startsWith("/inventory")) {

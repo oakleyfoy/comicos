@@ -40,6 +40,7 @@ class RetailerEnrichmentSummary:
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            "status": "complete",
             "total_items": self.total_items,
             "enriched_items": self.enriched_items,
             "skipped_items": self.skipped_items,
@@ -344,6 +345,15 @@ def apply_retailer_enrichment_to_confirmed_order(
                 copy.source_image_url = source_url
             if draft_item.parsed_release_date and copy.release_date is None:
                 copy.release_date = draft_item.parsed_release_date
+            # Keep release_year / release_status consistent with the resolved
+            # release date so detail pages don't show "Not recorded" / "unknown"
+            # for a book whose date we actually know.
+            if copy.release_date is not None:
+                copy.release_year = copy.release_date.year
+                if copy.release_status not in ("released", "not_released_yet"):
+                    copy.release_status = (
+                        "released" if copy.release_date <= date.today() else "not_released_yet"
+                    )
             session.add(copy)
 
         if index < len(item_snapshots):

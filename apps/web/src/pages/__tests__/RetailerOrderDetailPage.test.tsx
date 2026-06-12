@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client";
+import { ApiError } from "../../api/apiError";
 import { RetailerOrderDetailPage } from "../RetailerOrderDetailPage";
 
 let navigateMock = vi.fn();
@@ -162,5 +163,76 @@ describe("RetailerOrderDetailPage", () => {
       expect(screen.getByText("confirmed")).toBeInTheDocument();
       expect(screen.getByText("Retailer order confirmed.")).toBeInTheDocument();
     });
+  });
+
+  it("on confirm timeout, polls the order once and shows success if already confirmed", async () => {
+    vi.spyOn(apiClient, "confirmRetailerOrder").mockRejectedValue(
+      new ApiError("Confirmation may still be processing. Refresh or check your Portfolio.", 408),
+    );
+    const getSpy = vi.spyOn(apiClient, "getRetailerOrder");
+    getSpy.mockResolvedValueOnce({
+      id: 11,
+      retailer_account_id: 1,
+      retailer: "midtown",
+      retailer_order_number: "4272232",
+      order_date: "2026-06-08",
+      order_status: "Shipped",
+      order_total: "104.79",
+      source_url: "https://www.midtowncomics.com/account/orders/view/4272232",
+      review_status: "captured",
+      item_count: 2,
+      cover_image_count: 1,
+      product_url_count: 1,
+      price_count: 2,
+      release_date_count: 1,
+      capture_quality_summary_json: {},
+      parser_quality_summary_json: {},
+      raw_fields_summary_json: {},
+      updated_at: "2026-06-09T10:01:00Z",
+      items: [],
+    });
+    // The poll-after-timeout fetch returns a fully confirmed order with inventory.
+    getSpy.mockResolvedValueOnce({
+      id: 11,
+      retailer_account_id: 1,
+      retailer: "midtown",
+      retailer_order_number: "4272232",
+      order_date: "2026-06-08",
+      order_status: "Shipped",
+      order_total: "104.79",
+      source_url: "https://www.midtowncomics.com/account/orders/view/4272232",
+      review_status: "confirmed",
+      linked_order_id: 555,
+      inventory_copies_created: 41,
+      total_ordered_quantity: 41,
+      portfolio_items_added: 41,
+      item_count: 2,
+      cover_image_count: 1,
+      product_url_count: 1,
+      price_count: 2,
+      release_date_count: 1,
+      capture_quality_summary_json: {},
+      parser_quality_summary_json: {},
+      raw_fields_summary_json: {},
+      updated_at: "2026-06-09T10:02:00Z",
+      items: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <RetailerOrderDetailPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Retailer Order" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Confirmed. Created 41 inventory copies in your portfolio.")).toBeInTheDocument();
+    });
+    // Polled exactly once after the timeout (plus the initial load fetch).
+    expect(getSpy).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByText("Confirmation may still be processing. Refresh or check your Portfolio."),
+    ).not.toBeInTheDocument();
   });
 });

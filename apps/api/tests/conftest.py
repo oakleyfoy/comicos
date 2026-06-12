@@ -55,6 +55,22 @@ def reset_live_capture_duplicate_cache() -> None:
 
 
 @pytest.fixture(autouse=True)
+def synchronous_retailer_order_enrichment() -> None:
+    """Run post-confirm retailer enrichment inline for deterministic tests.
+
+    Production dispatches enrichment to a background thread so it never blocks the
+    confirm response; tests run it synchronously so assertions on enrichment results
+    are deterministic. Tests that specifically verify non-blocking behaviour override
+    this scheduler locally.
+    """
+    from app.services import retailer_order_materialization as materialization
+
+    materialization.set_enrichment_scheduler(lambda task: task())
+    yield
+    materialization.reset_enrichment_scheduler()
+
+
+@pytest.fixture(autouse=True)
 def fake_rq_redis(monkeypatch: pytest.MonkeyPatch) -> fakeredis.FakeStrictRedis:
     """Route all default Redis/RQ traffic to one in-memory broker per test."""
 

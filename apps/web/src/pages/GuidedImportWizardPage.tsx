@@ -10,6 +10,7 @@ import {
   type GuidedImportSummaryRead,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 import { GuidedImportExceptionCard } from "../components/imports/guided/GuidedImportExceptionCard";
 import { GuidedImportProgressPanel } from "../components/imports/guided/GuidedImportProgressPanel";
 import { GuidedImportSuccessPanel } from "../components/imports/guided/GuidedImportSuccessPanel";
@@ -121,6 +122,8 @@ export function GuidedImportWizardPage(): JSX.Element {
           <p className="mt-2 text-sm text-slate-400">
             ComicOS detects books, quantities, variants, and pricing — you only review exceptions.
           </p>
+
+          <LegacyFeatureBanner feature="Email / paste import" />
 
           {error ? (
             <p className="mt-4 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</p>

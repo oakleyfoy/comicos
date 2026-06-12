@@ -3242,7 +3242,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             {loadProfile === "portfolio" || loadProfile === "full" ? (
               <>
                 <Link
-                  to="/orders/import"
+                  to="/connected-retailers/import"
                   className="rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
                 >
                   Import
@@ -7224,10 +7224,10 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
               action={
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Link
-                    to="/orders/import"
+                    to="/connected-retailers/import"
                     className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5"
                   >
-                    Paste Receipt/Text
+                    Import Retailer Order
                   </Link>
                   <Link
                     to="/orders/new"
@@ -7747,7 +7747,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 action={
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Link
-                      to="/orders/import"
+                      to="/connected-retailers/import"
                       className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-white/5"
                     >
                       Import Order

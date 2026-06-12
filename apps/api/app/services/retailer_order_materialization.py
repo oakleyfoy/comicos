@@ -1,12 +1,25 @@
-"""Materialize confirmed retailer orders into customer orders and inventory."""
+"""Materialize confirmed retailer orders into customer orders and inventory.
+
+Confirm is deliberately split into two phases:
+
+1. A synchronous, fast, local-only phase that creates the customer order and
+   inventory copies and commits them. This is what the HTTP request waits on and
+   must return within a few seconds even for 13-41 item orders.
+2. A best-effort enrichment phase (catalog matching + cover resolution, which can
+   make slow external network calls) that runs *after* inventory is durably
+   committed. It must never block the confirm response, so it is dispatched through
+   a pluggable scheduler that defaults to a fire-and-forget background thread.
+"""
 
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, Callable
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -26,7 +39,6 @@ from app.models import (
 from app.services.imports import confirm_import_for_user
 from app.services.retailer_draft_import_prep import prepare_draft_import_for_retailer_confirm
 from app.services.retailer_order_catalog_enrichment import (
-    RetailerEnrichmentSummary,
     apply_retailer_enrichment_to_confirmed_order,
     enrich_retailer_draft_import_for_confirm,
 )
@@ -40,6 +52,133 @@ logger = logging.getLogger(__name__)
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# --- Background enrichment dispatch ------------------------------------------------
+#
+# Enrichment runs after inventory is committed. The scheduler is pluggable so tests
+# can run it synchronously (deterministic) or capture it (to prove the confirm
+# response does not wait on it). Production uses a daemon thread with its own DB
+# session so slow/blocking catalog lookups can never hold the HTTP response.
+
+EnrichmentTask = Callable[[], None]
+
+
+def _default_enrichment_scheduler(task: EnrichmentTask) -> None:
+    thread = threading.Thread(target=task, name="retailer-order-enrichment", daemon=True)
+    thread.start()
+
+
+_enrichment_scheduler: Callable[[EnrichmentTask], None] = _default_enrichment_scheduler
+
+
+def set_enrichment_scheduler(scheduler: Callable[[EnrichmentTask], None]) -> None:
+    """Override how post-confirm enrichment is dispatched (used by tests)."""
+    global _enrichment_scheduler
+    _enrichment_scheduler = scheduler
+
+
+def reset_enrichment_scheduler() -> None:
+    global _enrichment_scheduler
+    _enrichment_scheduler = _default_enrichment_scheduler
+
+
+def run_retailer_order_enrichment(
+    *,
+    owner_user_id: int,
+    order_snapshot_id: int,
+    order_id: int,
+    draft_id: int,
+) -> None:
+    """Run best-effort catalog/cover enrichment against an already-confirmed order.
+
+    Opens its own DB session so it is safe to run on a background thread after the
+    confirm request has returned. All failures are logged, never raised.
+    """
+    from app.db.session import get_engine
+
+    start = time.monotonic()
+    logger.info("retailer_confirm_stage start stage=enrichment order_id=%s", order_id)
+    try:
+        with Session(get_engine()) as bg_session:
+            draft = bg_session.get(DraftImport, draft_id)
+            if draft is None:
+                logger.warning("retailer_confirm_enrichment missing draft draft_id=%s order_id=%s", draft_id, order_id)
+                return
+            summary = enrich_retailer_draft_import_for_confirm(
+                bg_session,
+                owner_user_id=owner_user_id,
+                draft_import=draft,
+            )
+            item_snapshots = list_retailer_order_item_snapshots(
+                bg_session, order_snapshot_id=order_snapshot_id
+            )
+            apply_retailer_enrichment_to_confirmed_order(
+                bg_session,
+                owner_user_id=owner_user_id,
+                order_id=order_id,
+                draft_import=draft,
+                item_snapshots=item_snapshots,
+            )
+            order = bg_session.get(RetailerOrderSnapshot, order_snapshot_id)
+            if order is not None:
+                raw = dict(order.raw_snapshot_json or {})
+                raw["comicos_enrichment_summary"] = summary.as_dict()
+                order.raw_snapshot_json = raw
+                order.updated_at = utc_now()
+                bg_session.add(order)
+            bg_session.commit()
+            logger.info(
+                "retailer_confirm_stage done stage=enrichment order_id=%s elapsed=%.3fs summary=%s",
+                order_id,
+                time.monotonic() - start,
+                summary.as_dict(),
+            )
+    except Exception:
+        logger.warning(
+            "retailer_confirm_stage failed stage=enrichment order_id=%s elapsed=%.3fs",
+            order_id,
+            time.monotonic() - start,
+            exc_info=True,
+        )
+
+
+def _pending_enrichment_summary(total_items: int) -> dict[str, Any]:
+    return {
+        "status": "pending",
+        "total_items": total_items,
+        "enriched_items": 0,
+        "skipped_items": 0,
+        "matched_items": 0,
+        "needs_review_items": 0,
+        "budget_exceeded": False,
+        "elapsed_seconds": 0.0,
+    }
+
+
+def _schedule_retailer_order_enrichment(
+    *,
+    owner_user_id: int,
+    order_snapshot_id: int,
+    order_id: int,
+    draft_id: int,
+) -> None:
+    def _task() -> None:
+        run_retailer_order_enrichment(
+            owner_user_id=owner_user_id,
+            order_snapshot_id=order_snapshot_id,
+            order_id=order_id,
+            draft_id=draft_id,
+        )
+
+    try:
+        _enrichment_scheduler(_task)
+    except Exception:
+        logger.warning(
+            "retailer_confirm_enrichment_schedule_failed order_id=%s",
+            order_id,
+            exc_info=True,
+        )
 
 
 @contextmanager
@@ -415,46 +554,18 @@ def materialize_retailer_order_inventory(
             item_snapshots=item_snapshots,
         )
 
-    prepare_draft_import_for_retailer_confirm(session, draft)
-
-    # Enrichment is best-effort and time-boxed: it must never block inventory creation.
-    enrichment_summary: RetailerEnrichmentSummary | None = None
-    with _stage_timer("enrichment", order_number=order_number):
-        try:
-            enrichment_summary = enrich_retailer_draft_import_for_confirm(
-                session,
-                owner_user_id=owner_user_id,
-                draft_import=draft,
-            )
-        except Exception:
-            logger.warning(
-                "retailer_catalog_enrich draft failed order=%s",
-                order_number,
-                exc_info=True,
-            )
+    with _stage_timer("draft_prepare", order_number=order_number):
+        prepare_draft_import_for_retailer_confirm(session, draft)
 
     user = session.get(User, owner_user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    with _stage_timer("import_confirm", order_number=order_number):
+    # Phase 1 (synchronous, fast): create the order + inventory copies. Catalog
+    # enrichment is intentionally deferred to phase 2 so slow external lookups can
+    # never block inventory creation or the confirm response.
+    with _stage_timer("order_inventory_create", order_number=order_number):
         confirm_result = confirm_import_for_user(session, user, int(draft.id))
-
-    with _stage_timer("enrichment_apply", order_number=order_number):
-        try:
-            apply_retailer_enrichment_to_confirmed_order(
-                session,
-                owner_user_id=owner_user_id,
-                order_id=int(confirm_result.order_id),
-                draft_import=draft,
-                item_snapshots=item_snapshots,
-            )
-        except Exception:
-            logger.warning(
-                "retailer_enrichment_apply failed order=%s",
-                confirm_result.order_id,
-                exc_info=True,
-            )
 
     with _stage_timer("portfolio_creation", order_number=order_number):
         portfolio_added = _attach_inventory_to_default_portfolio(
@@ -483,7 +594,7 @@ def materialize_retailer_order_inventory(
             status_code=422,
             detail=f"Expected {expected_qty} inventory copies for order {order_number}, got {copies}.",
         )
-    summary_dict = enrichment_summary.as_dict() if enrichment_summary is not None else None
+    pending_summary = _pending_enrichment_summary(len(item_snapshots))
     _persist_materialization_on_snapshot(
         session,
         order=order,
@@ -491,7 +602,7 @@ def materialize_retailer_order_inventory(
         import_id=int(confirm_result.import_id),
         portfolio_items_added=portfolio_added,
         line_debug=line_debug,
-        enrichment_summary=summary_dict,
+        enrichment_summary=pending_summary,
     )
     raw = dict(order.raw_snapshot_json or {})
     raw["comicos_inventory_copies_created"] = copies
@@ -501,6 +612,15 @@ def materialize_retailer_order_inventory(
     with _stage_timer("commit", order_number=order_number):
         session.commit()
 
+    # Phase 2 (deferred, best-effort): enrich catalog matches + covers off the
+    # request path. Dispatched only after inventory is durably committed.
+    _schedule_retailer_order_enrichment(
+        owner_user_id=owner_user_id,
+        order_snapshot_id=int(order.id or 0),
+        order_id=int(confirm_result.order_id),
+        draft_id=int(draft.id),
+    )
+
     return RetailerOrderMaterializationResult(
         order_id=int(confirm_result.order_id),
         inventory_copies_created=copies,
@@ -508,5 +628,5 @@ def materialize_retailer_order_inventory(
         portfolio_items_added=portfolio_added,
         import_id=int(confirm_result.import_id),
         line_debug=line_debug,
-        enrichment_summary=summary_dict,
+        enrichment_summary=pending_summary,
     )

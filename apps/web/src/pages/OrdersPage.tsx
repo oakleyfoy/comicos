@@ -121,7 +121,7 @@ export function OrdersPage() {
         actions={
           <>
             <Link
-              to="/orders/import"
+              to="/connected-retailers/import"
               className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
             >
               Import Order
@@ -248,10 +248,10 @@ export function OrdersPage() {
                 action={
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Link
-                      to="/orders/import"
+                      to="/connected-retailers/import"
                       className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
                     >
-                      Paste Receipt/Text
+                      Import Retailer Order
                     </Link>
                     <Link
                       to="/orders/new"

@@ -243,20 +243,57 @@ def test_confirm_midtown_order_allows_missing_product_url_and_release_date(clien
     assert confirmed.json()["inventory_copies_created"] == 1
 
 
+def test_first_confirm_returns_success_with_inventory_without_retry(client, session) -> None:
+    """The first confirm click must return a clean success with inventory created."""
+    import time as _time
+
+    token = register_and_login(client, "midtown-confirm-first@example.com")
+    account = _create_account(client, session, token, "midtown-first@example.com")
+    _seed_midtown_order_4272232(session, account=account, order_id=9004272250)
+
+    started = _time.perf_counter()
+    confirmed = client.post("/api/v1/retailer-orders/9004272250/confirm", headers=auth_headers(token))
+    elapsed = _time.perf_counter() - started
+
+    assert confirmed.status_code == 200, confirmed.text
+    assert elapsed < 10.0, f"first confirm must return within 10s, took {elapsed:.2f}s"
+
+    body = confirmed.json()
+    # First response (no refresh / no retry) carries the materialization result.
+    assert body["review_status"] == "confirmed"
+    assert body["linked_order_id"] is not None
+    assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
+    assert body["total_ordered_quantity"] == EXPECTED_TOTAL_QUANTITY
+    assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
+
+    copies = session.exec(
+        select(InventoryCopy)
+        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
+        .where(OrderItem.order_id == body["linked_order_id"])
+    ).all()
+    assert len(copies) == EXPECTED_TOTAL_QUANTITY
+
+
 def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, session, monkeypatch) -> None:
-    """Slow catalog enrichment must never block inventory creation or hang the request."""
+    """Slow catalog enrichment must never block inventory creation or hang the request.
+
+    Inventory is created and committed synchronously; enrichment is dispatched to a
+    deferred task. We capture (not run) the task during the request to prove the
+    confirm response does not wait on enrichment, then run it afterwards to confirm
+    it still completes (or marks lines needs_review).
+    """
     import time as _time
 
     from app.services import retailer_order_catalog_enrichment as enrichment_module
+    from app.services import retailer_order_materialization as materialization_module
 
     token = register_and_login(client, "midtown-confirm-slow@example.com")
     account = _create_account(client, session, token, "midtown-slow@example.com")
     _seed_midtown_order_4272232(session, account=account, order_id=9004272240)
 
-    # Cap the per-order enrichment budget and make each line enrichment slow so the
-    # budget is exceeded almost immediately. Remaining lines should be skipped.
+    # Make per-line enrichment slow with a tiny budget. If enrichment ever runs on
+    # the request path (regression), the confirm response would block on these sleeps.
     monkeypatch.setattr(enrichment_module, "DEFAULT_ENRICH_TIME_BUDGET_SECONDS", 0.5)
-
     original_enrich = enrichment_module.enrich_retailer_draft_item_dict
 
     def _slow_enrich(session, *, owner_user_id, item):
@@ -265,28 +302,42 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
 
     monkeypatch.setattr(enrichment_module, "enrich_retailer_draft_item_dict", _slow_enrich)
 
+    # Capture the enrichment task instead of running it (simulates running "later").
+    captured_tasks: list = []
+    materialization_module.set_enrichment_scheduler(lambda task: captured_tasks.append(task))
+
     started = _time.perf_counter()
     confirmed = client.post("/api/v1/retailer-orders/9004272240/confirm", headers=auth_headers(token))
     elapsed = _time.perf_counter() - started
 
     assert confirmed.status_code == 200, confirmed.text
-    assert elapsed < 15.0, f"confirm took {elapsed:.2f}s (enrichment must be time-boxed)"
+    assert elapsed < 10.0, f"confirm took {elapsed:.2f}s (enrichment must not block the response)"
 
     body = confirmed.json()
     assert body["review_status"] == "confirmed"
     assert body["linked_order_id"] is not None
     assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
     assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
+    # Response carries a pending enrichment marker (enrichment runs after inventory).
     summary = body.get("enrichment_summary")
     assert summary is not None
-    assert summary["budget_exceeded"] is True
-    assert summary["skipped_items"] >= 1
-    assert summary["enriched_items"] + summary["skipped_items"] == EXPECTED_LINE_COUNT
+    assert summary["status"] == "pending"
+    assert len(captured_tasks) == 1
 
-    # Second confirm is idempotent: no new copies, no duplicate portfolio items.
+    # Enrichment finishes later: budget is exceeded so some lines stay needs_review.
+    captured_tasks[0]()
+    session.expire_all()
+    # Re-confirm (idempotent) reads the persisted enrichment summary off the snapshot.
     confirmed_again = client.post("/api/v1/retailer-orders/9004272240/confirm", headers=auth_headers(token))
     assert confirmed_again.status_code == 200, confirmed_again.text
-    assert confirmed_again.json()["portfolio_items_added"] == 0
+    again_body = confirmed_again.json()
+    assert again_body["portfolio_items_added"] == 0
+    later_summary = again_body.get("enrichment_summary")
+    assert later_summary is not None
+    assert later_summary["status"] == "complete"
+    assert later_summary["budget_exceeded"] is True
+    assert later_summary["skipped_items"] >= 1
+    assert later_summary["enriched_items"] + later_summary["skipped_items"] == EXPECTED_LINE_COUNT
 
     copies_after = session.exec(
         select(InventoryCopy)
@@ -294,3 +345,52 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
         .where(OrderItem.order_id == body["linked_order_id"])
     ).all()
     assert len(copies_after) == EXPECTED_TOTAL_QUANTITY
+
+
+def test_inventory_detail_exposes_display_metadata_after_retailer_import(client, session) -> None:
+    """A confirmed retailer import surfaces display metadata on the inventory detail.
+
+    Without a seeded catalog match the item is unmatched, so the detail must still
+    render: it carries release_date/foc_date keys, a cover_source classification,
+    and a needs_catalog_review flag rather than a broken/blank page.
+    """
+    token = register_and_login(client, "midtown-detail-meta@example.com")
+    account = _create_account(client, session, token, "midtown-detail-meta@example.com")
+    _seed_midtown_order_4272232(session, account=account, order_id=9004272260)
+
+    confirmed = client.post("/api/v1/retailer-orders/9004272260/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    linked_order_id = confirmed.json()["linked_order_id"]
+
+    copy = session.exec(
+        select(InventoryCopy)
+        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
+        .where(OrderItem.order_id == linked_order_id)
+        .order_by(InventoryCopy.id.asc())
+    ).first()
+    assert copy is not None
+
+    detail = client.get(f"/inventory/{copy.id}", headers=auth_headers(token))
+    assert detail.status_code == 200, detail.text
+    payload = detail.json()
+
+    # Test #3: detail API includes release_date and foc_date keys.
+    assert "release_date" in payload
+    assert "foc_date" in payload
+    # Unmatched import (no catalog seeded): Needs catalog review, not broken UI.
+    assert payload["needs_catalog_review"] is True
+    assert payload["release_status"] == "unknown"
+    assert payload["cover_source"] in {"placeholder", "retailer_remote", "local_saved_html"}
+    # Raw retailer identity still renders.
+    assert payload["title"]
+    assert payload["publisher"]
+    assert payload["retailer"]
+
+    # The inventory list row also carries the cover/display fields.
+    listing = client.get("/inventory", headers=auth_headers(token))
+    assert listing.status_code == 200, listing.text
+    rows = listing.json()["items"]
+    target = next(row for row in rows if row["inventory_copy_id"] == copy.id)
+    assert "cover_image_url" in target
+    assert target["cover_source"] in {"placeholder", "retailer_remote", "local_saved_html"}
+    assert target["needs_catalog_review"] is True

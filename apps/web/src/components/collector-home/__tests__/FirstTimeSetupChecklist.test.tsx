@@ -36,7 +36,7 @@ describe("FirstTimeSetupChecklist", () => {
     );
     expect(screen.getByTestId("setup-checklist-progress-label")).toHaveTextContent("1 of 6 complete");
     expect(screen.getByTestId("setup-task-import")).toHaveAttribute("data-complete", "false");
-    expect(screen.getByRole("link", { name: "Import order" })).toHaveAttribute("href", "/imports/guided");
+    expect(screen.getByRole("link", { name: "Add comics" })).toHaveAttribute("href", "/connected-retailers/import");
   });
 
   it("shows dismiss control when allowed", () => {

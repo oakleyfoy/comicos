@@ -160,15 +160,29 @@ export function RetailerOrderDetailPage() {
       );
     } catch (confirmError) {
       if (confirmError instanceof ApiError && confirmError.status === 408) {
-        // The confirm request timed out client-side, but the backend may still be
-        // finishing. Surface a non-blocking notice and refresh the order so the UI
-        // self-heals once materialization completes (idempotent on the server).
-        setNotice(confirmError.message);
+        // The confirm request timed out client-side, but the backend may have
+        // already finished (confirm is idempotent). Poll the order once: if it is
+        // now confirmed, show success; otherwise surface a non-blocking notice.
+        const timeoutNotice =
+          confirmError.message || "Confirmation may still be processing. Refresh or check your Portfolio.";
         try {
           const refreshed = await apiClient.getRetailerOrder(order.id);
           setOrder(refreshed);
+          const copies = refreshed.inventory_copies_created ?? refreshed.total_ordered_quantity ?? 0;
+          if (refreshed.review_status === "confirmed" && refreshed.linked_order_id && copies > 0) {
+            setConfirmStats({
+              inventoryCopies: copies,
+              linkedOrderId: refreshed.linked_order_id,
+              retailer: refreshed.retailer,
+            });
+            setSuccess(
+              `Confirmed. Created ${copies} inventory cop${copies === 1 ? "y" : "ies"} in your portfolio.`,
+            );
+          } else {
+            setNotice(timeoutNotice);
+          }
         } catch {
-          // Leave the notice in place; user can refresh manually.
+          setNotice(timeoutNotice);
         }
       } else {
         setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");

@@ -33,6 +33,7 @@ from app.schemas.run_detection import RunDetectionCopyAttachment
 
 ReleaseCalendarPresence = Literal["present", "missing"]
 InventoryAssetState = Literal["in_hand", "ordered_not_received", "preorder_not_released_yet", "cancelled"]
+CoverSourceKind = Literal["catalog_cover", "retailer_remote", "local_saved_html", "placeholder"]
 
 
 class InventoryRow(BaseModel):
@@ -67,12 +68,19 @@ class InventoryRow(BaseModel):
     purchase_date: date | None = None
     release_date: date | None = None
     release_year: int | None = None
+    foc_date: date | None = None
     release_status: Literal["released", "not_released_yet", "unknown"]
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"]
     expected_ship_date: date | None = None
     received_at: datetime | None = None
     asset_state: InventoryAssetState
     is_in_hand: bool = False
+    cover_image_url: str | None = None
+    cover_source: CoverSourceKind = "placeholder"
+    source_image_url: str | None = None
+    catalog_match_id: int | None = None
+    enrichment_status: str | None = None
+    needs_catalog_review: bool = False
     inventory_intelligence: InventoryCopyIntelligenceSignals | None = None
     duplicate_ownership: DuplicateOwnershipCopyAttachment | None = None
     run_detection: RunDetectionCopyAttachment | None = None
@@ -150,12 +158,21 @@ class InventoryDetailResponse(BaseModel):
     purchase_date: date | None = None
     release_date: date | None = None
     release_year: int | None = None
+    foc_date: date | None = None
     release_status: Literal["released", "not_released_yet", "unknown"]
     order_status: Literal["ordered", "preordered", "shipped", "received", "cancelled"]
     expected_ship_date: date | None = None
     received_at: datetime | None = None
     asset_state: InventoryAssetState
     is_in_hand: bool = False
+    cover_image_url: str | None = None
+    cover_source: CoverSourceKind = "placeholder"
+    source_image_url: str | None = None
+    catalog_match_id: int | None = None
+    enrichment_status: str | None = None
+    enrichment_confidence: Decimal | None = None
+    enrichment_notes: str | None = None
+    needs_catalog_review: bool = False
     created_at: datetime
     cover_images: list[CoverImageRead] = Field(default_factory=list)
     inventory_intelligence: InventoryCopyIntelligenceSignals | None = None

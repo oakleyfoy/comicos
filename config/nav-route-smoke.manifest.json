@@ -25,8 +25,11 @@
     { "path": "/collection-gaps", "apis": ["/api/v1/collection-gaps/summary"] },
     { "path": "/collection-valuation-dashboard", "apis": ["/api/v1/collection-valuation/dashboard"] },
     { "path": "/key-issues", "apis": ["/api/v1/key-issues/dashboard"] },
+    { "path": "/connected-retailers/import", "apis": ["/api/v1/retailer-orders/import/retailers"] },
+    { "path": "/orders/new", "apis": [] },
     { "path": "/imports", "apis": ["/imports"] },
     { "path": "/imports/email", "apis": ["/gmail/status", "/gmail/imports"] },
+    { "path": "/imports/guided", "apis": ["/imports"] },
     { "path": "/orders/import", "apis": ["/imports"] },
     { "path": "/storage-dashboard", "apis": ["/api/v1/storage/dashboard"] },
     { "path": "/storage-locations", "apis": ["/api/v1/storage/locations"] },
@@ -72,6 +75,9 @@
     { "path": "/collector-profile", "apis": ["/api/v1/collector-profile/"] },
     { "path": "/collector-budget", "apis": ["/api/v1/collector-profile/budget-status"] },
     { "path": "/settings/integrations", "apis": ["/api/v1/settings/integrations"] },
-    { "path": "/settings/connected-retailers", "apis": ["/api/v1/settings/connected-retailers"] }
+    { "path": "/settings/connected-retailers", "apis": ["/api/v1/settings/connected-retailers"] },
+    { "path": "/settings/account", "apis": [] },
+    { "path": "/connected-retailers", "apis": ["/api/v1/retailer-accounts"] },
+    { "path": "/ops", "apis": [] }
   ]
 }

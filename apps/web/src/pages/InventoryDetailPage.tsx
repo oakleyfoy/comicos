@@ -3437,6 +3437,63 @@ export function InventoryDetailPage() {
                   </section>
                 ) : null}
               </div>
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div
+                  className="relative h-44 w-32 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
+                  data-testid="inventory-cover-preview"
+                >
+                  {detail.cover_image_url ? (
+                    <img
+                      src={detail.cover_image_url}
+                      alt={`${detail.title} cover`}
+                      className="h-full w-full object-cover"
+                      onError={(event) => {
+                        // Never render a broken image: drop to the placeholder.
+                        event.currentTarget.style.display = "none";
+                        const fallback = event.currentTarget.nextElementSibling;
+                        if (fallback instanceof HTMLElement) {
+                          fallback.style.display = "flex";
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center text-[11px] text-slate-500"
+                    style={{ display: detail.cover_image_url ? "none" : "flex" }}
+                    data-testid="inventory-cover-placeholder"
+                  >
+                    <span className="text-2xl">📚</span>
+                    <span>No cover scan yet</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  {detail.needs_catalog_review ? (
+                    <div
+                      className="rounded-2xl border border-amber-400/30 bg-amber-950/20 p-4 text-sm text-amber-100"
+                      data-testid="needs-catalog-review-banner"
+                    >
+                      <p className="font-semibold">Needs catalog review</p>
+                      <p className="mt-1 text-xs text-amber-200/80">
+                        This book was imported from {detail.retailer} but isn&apos;t fully matched to the
+                        catalog yet. Release date, FOC date, and a high-resolution cover will fill in once
+                        enrichment completes.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-emerald-400/25 bg-emerald-950/15 p-4 text-sm text-emerald-100">
+                      <p className="font-semibold">Catalog matched</p>
+                      <p className="mt-1 text-xs text-emerald-200/80">
+                        Cover, release date, and FOC date are sourced from the matched catalog record.
+                      </p>
+                    </div>
+                  )}
+                  {detail.cover_source === "local_saved_html" ? (
+                    <p className="mt-2 text-[11px] text-amber-300/80">
+                      Showing the image saved from your uploaded order page. Re-scan for a production cover.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
               <div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Retailer</p>
@@ -3463,12 +3520,37 @@ export function InventoryDetailPage() {
                   </div>
                 ) : null}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">FOC Date</p>
+                  <p className="mt-2 font-medium text-white">
+                    {detail.foc_date ? (
+                      formatDate(detail.foc_date)
+                    ) : (
+                      <span className="text-amber-300/90">Needs catalog review</span>
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Release Status</p>
                   <p className="mt-2 font-medium text-white">{detail.release_status.replace(/_/g, " ")}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Order Status</p>
                   <p className="mt-2 font-medium text-white">{detail.order_status.replace(/_/g, " ")}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Catalog Match</p>
+                  <p className="mt-2 font-medium text-white" data-testid="catalog-match-status">
+                    {detail.needs_catalog_review
+                      ? "Needs catalog review"
+                      : detail.catalog_match_id != null
+                        ? `Matched #${detail.catalog_match_id}`
+                        : "Matched"}
+                  </p>
+                  {detail.enrichment_status ? (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Enrichment: {detail.enrichment_status.replace(/_/g, " ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

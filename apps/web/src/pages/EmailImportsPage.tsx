@@ -5,6 +5,7 @@ import { ApiError, apiClient, type GmailImportedDraft } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
+import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 import { StatusBanner } from "../components/StatusBanner";
 import { consumeGmailConnectedSearchParam, GMAIL_IMPORTS_PATH, startGmailOAuth } from "../lib/gmailConnect";
 
@@ -282,6 +283,7 @@ export function EmailImportsPage() {
 
   return (
     <AppShell>
+      <LegacyFeatureBanner feature="Gmail receipt import" />
       <PageHeader
         eyebrow="Email Draft Imports"
         title="Gmail Receipt Drafts"

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import time
+
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile, status
 from sqlmodel import Session
 
@@ -64,6 +67,8 @@ from app.services.retailer_accounts import (
 from app.services.retailer_order_materialization import RetailerOrderMaterializationResult
 from app.services.retailer_sync.retailer_import_enrichment import enrich_drafts_from_retailer_orders
 from app.services.imports import serialize_import
+
+logger = logging.getLogger(__name__)
 
 retailer_accounts_v1_router = APIRouter(
     prefix="/api/v1", tags=["Retailer Accounts API v1 (P91-01)"]
@@ -545,12 +550,24 @@ def confirm_retailer_order_route(
     current_user: User = Depends(get_current_user),
 ) -> RetailerOrderSnapshotRead:
     assert current_user.id is not None
+    request_start = time.monotonic()
+    logger.info("retailer_confirm request_start order_id=%s user=%s", order_id, current_user.id)
     order, materialization = confirm_retailer_order(
         session,
         owner_user_id=int(current_user.id),
         order_id=order_id,
     )
-    return _serialize_order(order, session=session, materialization=materialization)
+    serialize_start = time.monotonic()
+    body = _serialize_order(order, session=session, materialization=materialization)
+    now = time.monotonic()
+    logger.info(
+        "retailer_confirm request_done order_id=%s copies=%s serialize=%.3fs total=%.3fs",
+        order_id,
+        materialization.inventory_copies_created,
+        now - serialize_start,
+        now - request_start,
+    )
+    return body
 
 
 @retailer_accounts_v1_router.post(

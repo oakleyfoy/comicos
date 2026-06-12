@@ -25,6 +25,7 @@ from app.services.retailer_credentials import (
 )
 from app.services.retailer_order_materialization import (
     RetailerOrderMaterializationResult,
+    _stage_timer,
     materialize_retailer_order_inventory,
 )
 from app.services.retailer_sync.midtown_account_sync import (
@@ -373,12 +374,13 @@ def confirm_retailer_order(
         owner_user_id=owner_user_id,
         account_id=int(order.retailer_account_id),
     )
-    materialization = materialize_retailer_order_inventory(
-        session,
-        owner_user_id=owner_user_id,
-        order=order,
-        account=account,
-    )
+    with _stage_timer("materialization", order_number=order.retailer_order_number):
+        materialization = materialize_retailer_order_inventory(
+            session,
+            owner_user_id=owner_user_id,
+            order=order,
+            account=account,
+        )
     session.refresh(order)
     order = set_retailer_order_review_status(
         session,
