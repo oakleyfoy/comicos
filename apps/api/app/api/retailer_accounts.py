@@ -27,7 +27,9 @@ from app.schemas.retailer_accounts import (
     RetailerAccountTestResponse,
     RetailerAccountUpdate,
     RetailerOrderItemSnapshotRead,
+    RetailerOrderLineDiagnostic,
     RetailerOrderListResponse,
+    RetailerOrderReEnrichResponse,
     RetailerOrderSnapshotRead,
     RetailerSyncRunListResponse,
     RetailerSyncRunRead,
@@ -65,6 +67,11 @@ from app.services.retailer_accounts import (
     update_retailer_account,
 )
 from app.services.retailer_order_materialization import RetailerOrderMaterializationResult
+from app.services.retailer_order_catalog_enrichment import (
+    apply_retailer_enrichment_to_confirmed_order,
+    reenrich_retailer_draft_import_with_diagnostics,
+)
+from app.services.retailer_order_draft_sync import list_retailer_order_item_snapshots
 from app.services.retailer_sync.retailer_import_enrichment import enrich_drafts_from_retailer_orders
 from app.services.imports import serialize_import
 
@@ -568,6 +575,83 @@ def confirm_retailer_order_route(
         now - request_start,
     )
     return body
+
+
+@retailer_accounts_v1_router.post(
+    "/retailer-orders/{order_id}/re-enrich",
+    response_model=RetailerOrderReEnrichResponse,
+)
+def reenrich_retailer_order_route(
+    order_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> RetailerOrderReEnrichResponse:
+    """Re-run catalog enrichment for an already-confirmed retailer order.
+
+    Runs synchronously (no time budget), re-applies catalog matches/covers/dates onto
+    the linked order's inventory, and returns per-line matching diagnostics so users
+    and ops can see exactly why each line matched or fell to needs_review.
+    """
+    assert current_user.id is not None
+    owner_user_id = int(current_user.id)
+    order = get_retailer_order_for_user_or_404(
+        session, owner_user_id=owner_user_id, order_id=order_id
+    )
+
+    raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
+    linked_order_id = raw.get("comicos_linked_order_id")
+    if linked_order_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Confirm this retailer order before re-running catalog enrichment.",
+        )
+    linked_order_id = int(linked_order_id)
+
+    # Avoid a circular import at module load time (materialization imports enrichment).
+    from app.services.retailer_order_materialization import _find_import_for_retailer_order
+
+    draft = _find_import_for_retailer_order(
+        session,
+        owner_user_id=owner_user_id,
+        retailer_order_number=order.retailer_order_number,
+    )
+    if draft is None or draft.id is None:
+        raise HTTPException(status_code=404, detail="Import draft for this order was not found.")
+
+    summary, diagnostics = reenrich_retailer_draft_import_with_diagnostics(
+        session,
+        owner_user_id=owner_user_id,
+        draft_import=draft,
+    )
+    item_snapshots = list_retailer_order_item_snapshots(
+        session, order_snapshot_id=int(order.id or 0)
+    )
+    apply_retailer_enrichment_to_confirmed_order(
+        session,
+        owner_user_id=owner_user_id,
+        order_id=linked_order_id,
+        draft_import=draft,
+        item_snapshots=item_snapshots,
+    )
+    refreshed_raw = dict(order.raw_snapshot_json or {})
+    refreshed_raw["comicos_enrichment_summary"] = summary.as_dict()
+    order.raw_snapshot_json = refreshed_raw
+    session.add(order)
+    session.commit()
+
+    logger.info(
+        "retailer_reenrich order_id=%s linked_order_id=%s matched=%s needs_review=%s",
+        order_id,
+        linked_order_id,
+        summary.matched_items,
+        summary.needs_review_items,
+    )
+    return RetailerOrderReEnrichResponse(
+        order_id=order_id,
+        linked_order_id=linked_order_id,
+        enrichment_summary=summary.as_dict(),
+        lines=[RetailerOrderLineDiagnostic(**diag.as_dict()) for diag in diagnostics],
+    )
 
 
 @retailer_accounts_v1_router.post(

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { ApiError, apiClient, type RetailerOrderSnapshotRead } from "../api/client";
+import {
+  ApiError,
+  apiClient,
+  type RetailerOrderReEnrichResponse,
+  type RetailerOrderSnapshotRead,
+} from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -89,6 +94,8 @@ export function RetailerOrderDetailPage() {
     linkedOrderId: number;
     retailer: string;
   } | null>(null);
+  const [isReenriching, setIsReenriching] = useState(false);
+  const [enrichResult, setEnrichResult] = useState<RetailerOrderReEnrichResponse | null>(null);
 
   const debugSummary = useMemo(() => {
     if (!order) {
@@ -192,6 +199,38 @@ export function RetailerOrderDetailPage() {
     }
   }
 
+  async function reenrichOrder(): Promise<void> {
+    if (!order) {
+      return;
+    }
+    setIsReenriching(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await apiClient.reenrichRetailerOrder(order.id);
+      setEnrichResult(result);
+      const matched = Number(result.enrichment_summary?.matched_items ?? 0);
+      const needsReview = Number(result.enrichment_summary?.needs_review_items ?? 0);
+      setSuccess(
+        `Catalog enrichment complete: ${matched} matched, ${needsReview} need review.`,
+      );
+      try {
+        const refreshed = await apiClient.getRetailerOrder(order.id);
+        setOrder(refreshed);
+      } catch {
+        // Non-fatal: diagnostics are still shown from the re-enrich response.
+      }
+    } catch (reenrichError) {
+      setError(
+        reenrichError instanceof ApiError
+          ? reenrichError.message
+          : "Unable to re-run catalog enrichment.",
+      );
+    } finally {
+      setIsReenriching(false);
+    }
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -268,6 +307,16 @@ export function RetailerOrderDetailPage() {
                 >
                   {isSaving ? "Saving..." : "Confirm Retailer Order"}
                 </button>
+                {order.linked_order_id ? (
+                  <button
+                    type="button"
+                    onClick={() => void reenrichOrder()}
+                    disabled={isReenriching}
+                    className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isReenriching ? "Matching catalog..." : "Re-run catalog enrichment"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => navigate("/retailer-orders")}
@@ -315,6 +364,62 @@ export function RetailerOrderDetailPage() {
                 </p>
               </div>
             </div>
+
+            {enrichResult ? (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                    Catalog enrichment diagnostics
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    {Number(enrichResult.enrichment_summary?.matched_items ?? 0)} matched ·{" "}
+                    {Number(enrichResult.enrichment_summary?.needs_review_items ?? 0)} need review
+                  </p>
+                </div>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="text-slate-500">
+                      <tr>
+                        <th className="py-1 pr-3 font-medium">Series</th>
+                        <th className="py-1 pr-3 font-medium">Issue</th>
+                        <th className="py-1 pr-3 font-medium">Candidates</th>
+                        <th className="py-1 pr-3 font-medium">Score</th>
+                        <th className="py-1 pr-3 font-medium">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enrichResult.lines.map((line) => {
+                        const reason = line.rejection_reason ?? "";
+                        const catalogMissing =
+                          !line.matched &&
+                          (reason.includes("no_candidates") || reason.includes("missing"));
+                        return (
+                          <tr key={line.line_index} className="border-t border-white/5">
+                            <td className="py-1 pr-3 text-slate-200">
+                              {line.series_search_title || line.raw_title || "—"}
+                            </td>
+                            <td className="py-1 pr-3">{line.parsed_issue_number || "—"}</td>
+                            <td className="py-1 pr-3">{line.candidate_count}</td>
+                            <td className="py-1 pr-3">{line.match_score ?? "—"}</td>
+                            <td className="py-1 pr-3">
+                              {line.matched ? (
+                                <span className="text-emerald-300">Matched</span>
+                              ) : catalogMissing ? (
+                                <span className="text-amber-300">Catalog missing</span>
+                              ) : (
+                                <span className="text-slate-400">
+                                  Needs review{reason ? ` (${reason})` : ""}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
 
             {order.item_count === 0 || order.cover_image_count === 0 || order.price_count === 0 ? (
               <div className="mt-4">

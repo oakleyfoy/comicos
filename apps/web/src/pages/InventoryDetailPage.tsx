@@ -3468,17 +3468,26 @@ export function InventoryDetailPage() {
                 </div>
                 <div className="flex-1">
                   {detail.needs_catalog_review ? (
-                    <div
-                      className="rounded-2xl border border-amber-400/30 bg-amber-950/20 p-4 text-sm text-amber-100"
-                      data-testid="needs-catalog-review-banner"
-                    >
-                      <p className="font-semibold">Needs catalog review</p>
-                      <p className="mt-1 text-xs text-amber-200/80">
-                        This book was imported from {detail.retailer} but isn&apos;t fully matched to the
-                        catalog yet. Release date, FOC date, and a high-resolution cover will fill in once
-                        enrichment completes.
-                      </p>
-                    </div>
+                    (() => {
+                      const notes = (detail.enrichment_notes ?? "").toLowerCase();
+                      const catalogMissing =
+                        notes.includes("no_candidates") || notes.includes("missing");
+                      return (
+                        <div
+                          className="rounded-2xl border border-amber-400/30 bg-amber-950/20 p-4 text-sm text-amber-100"
+                          data-testid="needs-catalog-review-banner"
+                        >
+                          <p className="font-semibold">
+                            {catalogMissing ? "Catalog missing" : "Needs catalog review"}
+                          </p>
+                          <p className="mt-1 text-xs text-amber-200/80">
+                            {catalogMissing
+                              ? `This book imported from ${detail.retailer} has no matching catalog record yet. Re-run catalog enrichment from the retailer order, or it will fill in once the catalog includes this issue.`
+                              : `This book was imported from ${detail.retailer} but isn't fully matched to the catalog yet. Release date, FOC date, and a high-resolution cover will fill in once enrichment completes.`}
+                          </p>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="rounded-2xl border border-emerald-400/25 bg-emerald-950/15 p-4 text-sm text-emerald-100">
                       <p className="font-semibold">Catalog matched</p>

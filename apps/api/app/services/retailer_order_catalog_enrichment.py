@@ -294,6 +294,125 @@ def enrich_retailer_draft_import_for_confirm(
     )
 
 
+@dataclass(frozen=True)
+class RetailerLineEnrichmentDiagnostic:
+    """Per-line catalog matching diagnostics for the re-enrich debug surface."""
+
+    line_index: int
+    raw_title: str | None
+    series_search_title: str | None
+    normalized_title: str | None
+    parsed_issue_number: str | None
+    parsed_cover_name: str | None
+    candidate_count: int
+    matched: bool
+    catalog_match_id: int | None
+    match_score: int | None
+    chosen_source: str | None
+    rejection_reason: str | None
+    release_date: str | None
+    foc_date: str | None
+    cover_image_url: str | None
+    enrichment_status: str | None
+    top_candidates: list[dict[str, Any]]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "line_index": self.line_index,
+            "raw_title": self.raw_title,
+            "series_search_title": self.series_search_title,
+            "normalized_title": self.normalized_title,
+            "parsed_issue_number": self.parsed_issue_number,
+            "parsed_cover_name": self.parsed_cover_name,
+            "candidate_count": self.candidate_count,
+            "matched": self.matched,
+            "catalog_match_id": self.catalog_match_id,
+            "match_score": self.match_score,
+            "chosen_source": self.chosen_source,
+            "rejection_reason": self.rejection_reason,
+            "release_date": self.release_date,
+            "foc_date": self.foc_date,
+            "cover_image_url": self.cover_image_url,
+            "enrichment_status": self.enrichment_status,
+            "top_candidates": self.top_candidates,
+        }
+
+
+def _line_diagnostic_from_enriched(line_index: int, enriched: dict[str, Any]) -> RetailerLineEnrichmentDiagnostic:
+    from app.services.import_catalog_resolution_service import (
+        derive_catalog_search_title,
+        normalize_import_title,
+    )
+
+    raw_title = enriched.get("title") or enriched.get("canonical_title")
+    series_title = derive_catalog_search_title(raw_title)
+    diag = enriched.get("catalog_match_diagnostics") or {}
+    return RetailerLineEnrichmentDiagnostic(
+        line_index=line_index,
+        raw_title=raw_title,
+        series_search_title=series_title,
+        normalized_title=normalize_import_title(series_title),
+        parsed_issue_number=enriched.get("issue_number"),
+        parsed_cover_name=enriched.get("cover_name"),
+        candidate_count=int(diag.get("candidates_examined") or 0),
+        matched=bool(enriched.get("catalog_match_matched")),
+        catalog_match_id=enriched.get("catalog_match_id"),
+        match_score=enriched.get("catalog_match_score"),
+        chosen_source=enriched.get("catalog_match_source"),
+        rejection_reason=diag.get("rejected_reason"),
+        release_date=enriched.get("release_date") or enriched.get("parsed_release_date"),
+        foc_date=enriched.get("foc_date"),
+        cover_image_url=enriched.get("cover_image_url"),
+        enrichment_status=enriched.get("enrichment_status"),
+        top_candidates=list(diag.get("top_candidates") or []),
+    )
+
+
+def reenrich_retailer_draft_import_with_diagnostics(
+    session: Session,
+    *,
+    owner_user_id: int,
+    draft_import: DraftImport,
+) -> tuple[RetailerEnrichmentSummary, list[RetailerLineEnrichmentDiagnostic]]:
+    """Re-run full catalog enrichment (no time budget) and capture per-line diagnostics.
+
+    Used by the manual "Re-run catalog enrichment" action so users/ops can see exactly
+    why each line matched or fell to needs_review.
+    """
+    payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json or {})
+    enriched_items: list[AiDraftOrderItem] = []
+    diagnostics: list[RetailerLineEnrichmentDiagnostic] = []
+    matched_count = 0
+    needs_review_count = 0
+    started = time.monotonic()
+
+    for line_index, item in enumerate(payload.items, start=1):
+        item_dict = item.model_dump(mode="json")
+        enriched = enrich_retailer_draft_item_dict(session, owner_user_id=owner_user_id, item=item_dict)
+        enriched_items.append(AiDraftOrderItem.model_validate(enriched))
+        diagnostics.append(_line_diagnostic_from_enriched(line_index, enriched))
+        if enriched.get("enrichment_status") == "matched":
+            matched_count += 1
+        else:
+            needs_review_count += 1
+
+    payload = payload.model_copy(update={"items": enriched_items})
+    draft_import.parsed_payload_json = payload.model_dump(mode="json")
+    session.add(draft_import)
+    session.flush()
+
+    summary = RetailerEnrichmentSummary(
+        total_items=len(enriched_items),
+        enriched_items=len(enriched_items),
+        skipped_items=0,
+        matched_items=matched_count,
+        needs_review_items=needs_review_count,
+        budget_exceeded=False,
+        elapsed_seconds=time.monotonic() - started,
+    )
+    return summary, diagnostics
+
+
 def apply_retailer_enrichment_to_confirmed_order(
     session: Session,
     *,
@@ -336,6 +455,10 @@ def apply_retailer_enrichment_to_confirmed_order(
                     pass
         session.add(order_item)
 
+        # Preserve the retailer-captured image as the copy's source image. The
+        # display resolver surfaces a remote retailer image as a usable cover and a
+        # local saved-HTML path as a placeholder-with-warning; a downloaded catalog
+        # cover (primary_cover_image_id) takes priority when one is later attached.
         source_url = draft_item.source_image_url or draft_item.retailer_cover_url
         copies = session.exec(
             select(InventoryCopy).where(InventoryCopy.order_item_id == order_item.id)

@@ -125,6 +125,33 @@ class RetailerOrderSnapshotRead(BaseModel):
     items: list[RetailerOrderItemSnapshotRead] = Field(default_factory=list)
 
 
+class RetailerOrderLineDiagnostic(BaseModel):
+    line_index: int
+    raw_title: str | None = None
+    series_search_title: str | None = None
+    normalized_title: str | None = None
+    parsed_issue_number: str | None = None
+    parsed_cover_name: str | None = None
+    candidate_count: int = 0
+    matched: bool = False
+    catalog_match_id: int | None = None
+    match_score: int | None = None
+    chosen_source: str | None = None
+    rejection_reason: str | None = None
+    release_date: str | None = None
+    foc_date: str | None = None
+    cover_image_url: str | None = None
+    enrichment_status: str | None = None
+    top_candidates: list[dict] = Field(default_factory=list)
+
+
+class RetailerOrderReEnrichResponse(BaseModel):
+    order_id: int
+    linked_order_id: int | None = None
+    enrichment_summary: dict
+    lines: list[RetailerOrderLineDiagnostic] = Field(default_factory=list)
+
+
 class RetailerAccountSyncRequest(BaseModel):
     limit_orders: int = Field(default=25, ge=1, le=100)
 

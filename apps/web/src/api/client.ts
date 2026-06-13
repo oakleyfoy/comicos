@@ -405,6 +405,33 @@ export interface RetailerOrderSnapshotRead {
   items: RetailerOrderItemSnapshotRead[];
 }
 
+export interface RetailerOrderLineDiagnostic {
+  line_index: number;
+  raw_title?: string | null;
+  series_search_title?: string | null;
+  normalized_title?: string | null;
+  parsed_issue_number?: string | null;
+  parsed_cover_name?: string | null;
+  candidate_count: number;
+  matched: boolean;
+  catalog_match_id?: number | null;
+  match_score?: number | null;
+  chosen_source?: string | null;
+  rejection_reason?: string | null;
+  release_date?: string | null;
+  foc_date?: string | null;
+  cover_image_url?: string | null;
+  enrichment_status?: string | null;
+  top_candidates: Record<string, unknown>[];
+}
+
+export interface RetailerOrderReEnrichResponse {
+  order_id: number;
+  linked_order_id?: number | null;
+  enrichment_summary: Record<string, unknown>;
+  lines: RetailerOrderLineDiagnostic[];
+}
+
 export interface RetailerAccountsListResponse {
   items: RetailerAccountRead[];
 }
@@ -21032,6 +21059,15 @@ export const apiClient = {
       { method: "POST" },
       30_000,
       "Confirmation may still be processing. Refresh or check your Portfolio.",
+    );
+  },
+
+  reenrichRetailerOrder(orderId: number): Promise<RetailerOrderReEnrichResponse> {
+    return requestWithTimeout<RetailerOrderReEnrichResponse>(
+      `/api/v1/retailer-orders/${orderId}/re-enrich`,
+      { method: "POST" },
+      60_000,
+      "Catalog enrichment is still running. Refresh to see updated matches.",
     );
   },
 

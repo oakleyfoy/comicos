@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from app.models import DraftImport
 from app.schemas.ai import ParseOrderResponse
+from app.services.import_catalog_resolution_service import derive_catalog_search_title
 
 RETAILER_FALLBACK_PUBLISHER = "Unknown Publisher"
 _ISSUE_FROM_TITLE_RE = re.compile(r"#\s*(\d+(?:\.\d+)?)\b", re.IGNORECASE)
@@ -46,8 +47,16 @@ def prepare_draft_import_for_retailer_confirm(session: Session, draft_import: Dr
     normalized_items = []
     for item in payload.items:
         publisher = (item.publisher or "").strip() or RETAILER_FALLBACK_PUBLISHER
-        title = (item.title or "").strip() or "Unknown Title"
-        issue_number = _normalize_issue_number(item.issue_number, title=title)
+        raw_title = (item.title or "").strip() or "Unknown Title"
+        # Derive the issue number from the raw retailer title before cleaning it,
+        # since cleaning strips the "#N" marker.
+        issue_number = _normalize_issue_number(item.issue_number, title=raw_title)
+        # Store the cleaned series name as the book title. Retailer titles carry
+        # cover/variant/promo noise (e.g. "#1 Cover A Regular <Artist> Cover
+        # (DC All In)(Limit 1 Per Customer)"); the display title should be the same
+        # cleaned series name we use for catalog search, with the issue number and
+        # variant rendered from their own fields.
+        title = derive_catalog_search_title(raw_title) or raw_title
         quantity = int(item.quantity or 1)
         raw_price = item.raw_item_price if item.raw_item_price is not None else Decimal("0")
         normalized_items.append(
@@ -55,6 +64,10 @@ def prepare_draft_import_for_retailer_confirm(session: Session, draft_import: Dr
                 update={
                     "publisher": publisher,
                     "title": title,
+                    # Metadata enrichment derives the canonical series (ComicTitle)
+                    # from raw_title when present, so clean it too; the original
+                    # retailer string is preserved on the order snapshot.
+                    "raw_title": title,
                     "issue_number": issue_number,
                     "quantity": quantity,
                     "raw_item_price": raw_price,

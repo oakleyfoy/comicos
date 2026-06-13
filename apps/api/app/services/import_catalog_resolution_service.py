@@ -121,6 +121,34 @@ def normalize_import_publisher_key(value: str | None) -> str:
     return stripped
 
 
+def derive_catalog_search_title(value: str | None) -> str:
+    """Return just the series name for catalog search, stripping issue/variant noise.
+
+    Retailer titles look like::
+
+        "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover (DC All In)(Limit 1 Per Customer)"
+
+    The series name ("Absolute Green Arrow") always precedes the ``#`` issue marker,
+    and the remainder is cover/variant/promo noise (artist names, "Limit N Per
+    Customer", publisher tags). Feeding that whole string into the title token search
+    poisons the SQL prefilter: the longest tokens become noise like "albuquerque" and
+    "customer", which never appear in a catalog series name, so the AND-of-tokens
+    prefilter returns zero candidates and every line falls to needs_review.
+
+    Cutting at the issue marker and dropping parenthetical groups keeps the search
+    anchored on the actual series name.
+    """
+    if not value:
+        return ""
+    text = value
+    hash_index = text.find("#")
+    if hash_index != -1:
+        text = text[:hash_index]
+    text = re.sub(r"\([^)]*\)", " ", text)
+    cleaned = " ".join(text.split()).strip()
+    return cleaned or value
+
+
 def normalize_import_title(value: str | None) -> str:
     if not value:
         return ""
@@ -590,12 +618,17 @@ def resolve_import_catalog_match(
     item: dict[str, Any],
 ) -> ImportCatalogResolutionResult:
     publisher = item.get("publisher") or item.get("canonical_publisher")
-    title = item.get("title") or item.get("canonical_title")
+    raw_title = item.get("title") or item.get("canonical_title")
+    # Search/score against the series name only; the raw retailer title carries
+    # cover/variant/promo noise that poisons the title token prefilter.
+    title = derive_catalog_search_title(raw_title)
     issue_number = item.get("issue_number") or item.get("canonical_issue_number")
     cover_name = item.get("cover_name")
     cover_artist = item.get("cover_artist")
 
     diagnostics = {
+        "raw_input_title": raw_title,
+        "series_search_title": title,
         "normalized_input_title": normalize_import_title(title),
         "normalized_input_publisher": normalize_import_publisher_key(publisher),
         "input_issue_number": _issue_number_key(issue_number),
@@ -691,6 +724,20 @@ def resolve_import_catalog_match(
         "rejected_reason": result.rejected_reason,
         "top_candidates": result.top_candidates,
     }
+    logger.info(
+        "catalog_match raw_title=%r series_title=%r issue=%r matched=%s score=%s "
+        "candidates=%s source=%s source_id=%s rejected=%s top=%s",
+        raw_title,
+        title,
+        _issue_number_key(issue_number),
+        result.matched,
+        result.score,
+        result.candidates_examined,
+        result.source,
+        result.source_id,
+        result.rejected_reason,
+        [(c.get("source"), c.get("source_id"), c.get("score")) for c in result.top_candidates],
+    )
     return result
 
 

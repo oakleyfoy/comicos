@@ -235,4 +235,90 @@ describe("RetailerOrderDetailPage", () => {
       screen.queryByText("Confirmation may still be processing. Refresh or check your Portfolio."),
     ).not.toBeInTheDocument();
   });
+
+  it("re-runs catalog enrichment and renders per-line match diagnostics", async () => {
+    vi.spyOn(apiClient, "getRetailerOrder").mockResolvedValue({
+      id: 11,
+      retailer_account_id: 1,
+      retailer: "midtown",
+      retailer_order_number: "4272232",
+      order_date: "2026-06-08",
+      order_status: "Shipped",
+      order_total: "104.79",
+      source_url: "https://www.midtowncomics.com/account/orders/view/4272232",
+      review_status: "confirmed",
+      linked_order_id: 555,
+      item_count: 2,
+      cover_image_count: 1,
+      product_url_count: 1,
+      price_count: 2,
+      release_date_count: 1,
+      capture_quality_summary_json: {},
+      parser_quality_summary_json: {},
+      raw_fields_summary_json: {},
+      updated_at: "2026-06-09T10:01:00Z",
+      items: [],
+    });
+    const reenrichSpy = vi.spyOn(apiClient, "reenrichRetailerOrder").mockResolvedValue({
+      order_id: 11,
+      linked_order_id: 555,
+      enrichment_summary: { matched_items: 1, needs_review_items: 1 },
+      lines: [
+        {
+          line_index: 1,
+          raw_title: "Absolute Green Arrow #1 Cover A",
+          series_search_title: "Absolute Green Arrow",
+          normalized_title: "absolute green arrow",
+          parsed_issue_number: "1",
+          parsed_cover_name: "Cover A",
+          candidate_count: 3,
+          matched: true,
+          catalog_match_id: 42,
+          match_score: 93,
+          chosen_source: "ReleaseIssue",
+          rejection_reason: null,
+          release_date: "2026-05-06",
+          foc_date: "2026-04-13",
+          cover_image_url: null,
+          enrichment_status: "matched",
+          top_candidates: [],
+        },
+        {
+          line_index: 2,
+          raw_title: "Totally Obscure Mini ZZZ #1",
+          series_search_title: "Totally Obscure Mini ZZZ",
+          normalized_title: "totally obscure mini zzz",
+          parsed_issue_number: "1",
+          parsed_cover_name: null,
+          candidate_count: 0,
+          matched: false,
+          catalog_match_id: null,
+          match_score: null,
+          chosen_source: null,
+          rejection_reason: "no_candidates",
+          release_date: null,
+          foc_date: null,
+          cover_image_url: null,
+          enrichment_status: "needs_review",
+          top_candidates: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <RetailerOrderDetailPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Re-run catalog enrichment" }));
+
+    await waitFor(() => {
+      expect(reenrichSpy).toHaveBeenCalledWith(11);
+      expect(screen.getByText("Catalog enrichment diagnostics")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Matched")).toBeInTheDocument();
+    expect(screen.getByText("Catalog missing")).toBeInTheDocument();
+    expect(screen.getByText("Absolute Green Arrow")).toBeInTheDocument();
+  });
 });
