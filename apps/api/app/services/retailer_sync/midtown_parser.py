@@ -195,6 +195,28 @@ def _parse_issue_and_cover(title: str) -> tuple[str | None, str | None]:
     return issue_number, cover_name
 
 
+_PARENTHETICAL_RE = re.compile(r"\([^()]*\)")
+
+
+def strip_title_parentheticals(value: str | None) -> str:
+    """Remove parenthetical segments from a retailer title for clean display.
+
+    Retailer titles append imprint/promo notes like
+    ``(DC All In)(Limit 1 Per Customer)``. These should never appear in the stored
+    or displayed title. Issue number and cover designation are parsed from the
+    original title before cleaning, so stripping parentheticals is safe.
+    """
+    if not value:
+        return value or ""
+    cleaned = value
+    while True:
+        stripped = _PARENTHETICAL_RE.sub(" ", cleaned)
+        if stripped == cleaned:
+            break
+        cleaned = stripped
+    return _SPACE_RE.sub(" ", cleaned).strip()
+
+
 def _absolute_url(url: str | None) -> str | None:
     if not url:
         return None
@@ -478,7 +500,7 @@ def _parse_order_items_from_visible_text(text: str) -> list[MidtownOrderItem]:
             continue
         issue_number, cover_name = _parse_issue_and_cover(title)
         item = MidtownOrderItem(
-            title=title,
+            title=strip_title_parentheticals(title),
             publisher=publisher,
             issue_number=issue_number,
             cover_name=cover_name,
@@ -585,7 +607,7 @@ def _parse_saved_html_col10_order_item(fragment: str) -> MidtownOrderItem | None
 
     issue_number, cover_name = _parse_issue_and_cover(title)
     item = MidtownOrderItem(
-        title=title,
+        title=strip_title_parentheticals(title),
         publisher=publisher,
         issue_number=issue_number,
         cover_name=cover_name,
@@ -826,7 +848,7 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         thumbnail_url=image_url,
         remote_midtown_image_url=remote_midtown_image_url,
         image_title=image_title,
-        title=title,
+        title=strip_title_parentheticals(title),
         publisher=_normalize_midtown_publisher(_match_after_label(fragment, "Publisher")),
         issue_number=issue_number,
         cover_name=cover_name,

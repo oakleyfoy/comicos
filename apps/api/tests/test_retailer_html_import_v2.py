@@ -60,14 +60,15 @@ def test_generic_parser_extracts_normalized_items() -> None:
     detail = parser.parse(_GENERIC_ORDER_HTML)
     assert detail.retailer_order_number == "ABC-1001"
     titles = {item.title: item for item in detail.items}
-    assert "Saga #1 (Image)" in titles
-    assert "Batman #500 Cover A (DC Comics)" in titles
-    saga = titles["Saga #1 (Image)"]
+    # Parenthetical notes are stripped from stored titles across all parsers.
+    assert "Saga #1" in titles
+    assert "Batman #500 Cover A" in titles
+    saga = titles["Saga #1"]
     assert saga.quantity == 2
     assert str(saga.unit_price) == "3.99"
     assert saga.publisher == "Image"
     assert saga.product_url == "https://shop.example.com/p/saga-1"
-    batman = titles["Batman #500 Cover A (DC Comics)"]
+    batman = titles["Batman #500 Cover A"]
     assert batman.issue_number == "500"
     assert batman.cover_name == "Cover A"
 

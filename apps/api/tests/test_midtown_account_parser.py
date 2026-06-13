@@ -6,7 +6,45 @@ from decimal import Decimal
 from app.services.retailer_sync.midtown_parser import (
     parse_midtown_order_detail,
     parse_midtown_order_history,
+    strip_title_parentheticals,
 )
+
+
+def test_strip_title_parentheticals_removes_all_parenthetical_segments() -> None:
+    dirty = "Absolute Green Arrow #1 Cover A Regular (DC All In)(Limit 1 Per Customer)"
+    assert strip_title_parentheticals(dirty) == "Absolute Green Arrow #1 Cover A Regular"
+    assert strip_title_parentheticals("Babylon Cove #1 (Cover A) Foo") == "Babylon Cove #1 Foo"
+    assert strip_title_parentheticals("Plain Title #2 Cover B") == "Plain Title #2 Cover B"
+    assert strip_title_parentheticals("") == ""
+    assert strip_title_parentheticals(None) == ""
+
+
+def test_parse_midtown_order_detail_strips_parentheticals_from_title() -> None:
+    html = """
+    <div>
+      <h1>Order #4272299</h1>
+      <p>Date: 06/08/2026</p>
+      <p>Status: Shipped</p>
+      <table>
+        <tr>
+          <td><img src="/images/PRODUCT/FUL/2539636_ful.jpg" /></td>
+          <td><a href="/product/2539636/absolute-green-arrow-1">Absolute Green Arrow #1 Cover A Regular (DC All In)(Limit 1 Per Customer)</a></td>
+          <td>Publisher: DC</td>
+          <td>Qty: 1</td>
+          <td>Price: $5.35</td>
+          <td>Status: Shipped</td>
+          <td>SKU: MT-2539636</td>
+        </tr>
+      </table>
+    </div>
+    """
+    detail = parse_midtown_order_detail(html, fallback_order_number="4272299")
+    assert len(detail.items) == 1
+    item = detail.items[0]
+    assert "(" not in item.title and ")" not in item.title
+    assert item.title == "Absolute Green Arrow #1 Cover A Regular"
+    assert item.issue_number == "1"
+    assert item.cover_name == "Cover A"
 
 
 def test_parse_midtown_order_history_extracts_rows() -> None:
@@ -174,10 +212,9 @@ def test_parse_midtown_saved_order_4257558_ignores_header_pull_list() -> None:
     assert detail.parse_diagnostics["parse_source"] == "info_container_order_item"
     assert detail.parse_diagnostics["items_parsed"] == 13
     first = detail.items[0]
-    assert first.title == (
-        "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover "
-        "(DC All In)(Limit 1 Per Customer)"
-    )
+    # Parenthetical imprint/promo notes are stripped from the stored title.
+    assert first.title == "Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover"
+    assert "(" not in first.title and ")" not in first.title
     assert first.publisher == "DC"
     assert first.unit_price == Decimal("4.49")
     assert first.total_price == Decimal("4.49")

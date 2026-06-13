@@ -40,6 +40,7 @@ from app.services.retailer_sync.midtown_html_import import (
     debug_midtown_saved_html,
     import_midtown_order_from_html,
 )
+from app.services.retailer_sync.midtown_parser import strip_title_parentheticals
 from app.services.retailer_sync.retailer_html_common import RetailerHtmlImportError
 from app.services.retailer_sync.retailer_html_import import (
     debug_retailer_order_html,
@@ -124,6 +125,7 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     )
     return base.model_copy(
         update={
+            "title": strip_title_parentheticals(base.title) or base.title,
             "enrichment_status": raw.get("enrichment_status") or base.enrichment_status,
             "enrichment_confidence": raw.get("enrichment_confidence") or base.enrichment_confidence,
             "catalog_match_id": raw.get("catalog_match_id") or base.catalog_match_id,

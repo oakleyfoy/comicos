@@ -24,6 +24,7 @@ from bs4 import BeautifulSoup
 from app.services.retailer_sync.midtown_parser import (
     MidtownOrderNumberError,
     parse_midtown_order_detail,
+    strip_title_parentheticals,
 )
 from app.services.retailer_sync.retailer_html_common import (
     RetailerHtmlImportError,
@@ -218,7 +219,7 @@ class GenericRetailerHtmlParser(RetailerHtmlParser):
         total_price = prices[-1] if len(prices) > 1 else None
         issue_number, cover_name = _parse_issue_and_cover(title)
         item = RetailerOrderItem(
-            title=title,
+            title=strip_title_parentheticals(title),
             publisher=_detect_publisher(joined),
             quantity=quantity,
             unit_price=unit_price,
@@ -273,7 +274,7 @@ class GenericRetailerHtmlParser(RetailerHtmlParser):
             quantity = max(1, int(qty_label.group(1))) if qty_label else 1
             issue_number, cover_name = _parse_issue_and_cover(title)
             item = RetailerOrderItem(
-                title=title,
+                title=strip_title_parentheticals(title),
                 publisher=_detect_publisher(line),
                 quantity=quantity,
                 unit_price=prices[0] if prices else None,
