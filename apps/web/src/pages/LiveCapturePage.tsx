@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -12,6 +12,17 @@ import { CameraFeed } from "../components/live-capture/CameraFeed";
 import { RecognitionOverlay } from "../components/live-capture/RecognitionOverlay";
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
 import { advanceStableFrameTracker, createStableFrameTracker, shouldSuppressDuplicateFingerprint } from "./liveCaptureState";
+import {
+  formatCaptureMode,
+  formatCaptureModeLabel,
+  formatDeviceOptionLabel,
+  formatLastFrameDisplay,
+  formatSessionLabel,
+  liveCapturePhaseLabel,
+  resolveActiveCameraName,
+  resolveLastFrameTimestamp,
+  resolveLiveCapturePhase,
+} from "./liveCaptureUi";
 
 interface LiveCapturePageProps {
   title: string;
@@ -91,6 +102,10 @@ function LiveCapturePageInner({
   const [loading, setLoading] = useState(true);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [lastFrameCapturedAt, setLastFrameCapturedAt] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("Ready to capture.");
   const [stableState, setStableState] = useState(trackerRef.current);
   const retryTimerRef = useRef<number | null>(null);
@@ -161,30 +176,41 @@ function LiveCapturePageInner({
     };
   }, [captureSource]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadDevices(): Promise<void> {
-      try {
-        const mediaDevices = await navigator.mediaDevices.enumerateDevices();
-        if (cancelled) {
-          return;
+  const refreshDeviceList = useCallback(async (): Promise<void> => {
+    try {
+      const mediaDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = mediaDevices.filter((device) => device.kind === "videoinput");
+      setDevices(videoDevices);
+      setDeviceId((current) => {
+        if (current && videoDevices.some((device) => device.deviceId === current)) {
+          return current;
         }
-        const videoDevices = mediaDevices.filter((device) => device.kind === "videoinput");
-        setDevices(videoDevices);
-        if (!deviceId && videoDevices.length > 0) {
-          setDeviceId(videoDevices[0].deviceId);
-        }
-      } catch {
-        if (!cancelled) {
-          setDevices([]);
-        }
-      }
+        return videoDevices[0]?.deviceId ?? null;
+      });
+    } catch {
+      setDevices([]);
     }
-    void loadDevices();
-    return () => {
-      cancelled = true;
-    };
+  }, []);
+
+  useEffect(() => {
+    void refreshDeviceList();
+  }, [refreshDeviceList]);
+
+  useEffect(() => {
+    setCameraReady(false);
+    setCameraError(null);
   }, [deviceId]);
+
+  const handleStreamReady = useCallback((): void => {
+    setCameraReady(true);
+    setCameraError(null);
+    void refreshDeviceList();
+  }, [refreshDeviceList]);
+
+  const handleCameraError = useCallback((message: string): void => {
+    setCameraReady(false);
+    setCameraError(message);
+  }, []);
 
   useEffect(() => {
     if (!session || paused) {
@@ -210,6 +236,7 @@ function LiveCapturePageInner({
         return;
       }
       inFlightFingerprintRef.current = fingerprint;
+      setRecognizing(true);
       void (async () => {
         try {
           const file = await captureVideoFrame(video, captureSource, fingerprint);
@@ -224,11 +251,14 @@ function LiveCapturePageInner({
           });
           recentFingerprintsRef.current.add(fingerprint);
           setSession(uploaded.session);
+          const capturedAt = new Date().toISOString();
+          setLastFrameCapturedAt(capturedAt);
           setStatusMessage(`Captured ${captureSource.replace("_", " ").toLowerCase()}.`);
         } catch (err) {
           setError(err instanceof ApiError ? err.message : "Unable to upload a live capture frame.");
         } finally {
           inFlightFingerprintRef.current = null;
+          setRecognizing(false);
         }
       })();
     }, 250);
@@ -305,6 +335,34 @@ function LiveCapturePageInner({
 
   const liveStats = session?.live_capture_stats_json ?? {};
 
+  const activeCameraName = useMemo(
+    () => resolveActiveCameraName(devices, deviceId),
+    [deviceId, devices],
+  );
+
+  const capturePhase = useMemo(
+    () =>
+      resolveLiveCapturePhase({
+        loading,
+        paused,
+        cameraError,
+        cameraReady,
+        recognizing,
+        stableCount: stableState.sameCount,
+        currentItem,
+      }),
+    [cameraError, cameraReady, currentItem, loading, paused, recognizing, stableState.sameCount],
+  );
+
+  const currentStateLabel = liveCapturePhaseLabel(capturePhase);
+
+  const lastFrameIso = useMemo(
+    () => resolveLastFrameTimestamp(session?.items ?? [], lastFrameCapturedAt),
+    [lastFrameCapturedAt, session?.items],
+  );
+
+  const lastFrameLabel = formatLastFrameDisplay(lastFrameIso);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 px-4 py-4">
@@ -331,18 +389,48 @@ function LiveCapturePageInner({
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.9fr)]">
         <section className="space-y-4">
           {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Capture source</p>
-              <p className="mt-2 text-lg font-semibold">{captureSource.replace("_", " ")}</p>
-            </div>
-            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Stable frames</p>
-              <p className="mt-2 text-lg font-semibold">{stableState.sameCount}</p>
-            </div>
-            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Status</p>
-              <p className="mt-2 text-lg font-semibold">{loading ? "Starting session…" : paused ? "Paused" : "Running"}</p>
+          {cameraError ? <StatusBanner tone="error">{cameraError}</StatusBanner> : null}
+
+          <div
+            className="rounded-3xl border border-slate-800 bg-slate-900 p-4"
+            aria-label="Live capture source and session"
+          >
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Active camera</p>
+                <p className="mt-1 text-lg font-semibold text-white" data-testid="live-capture-active-camera">
+                  {activeCameraName}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Capture mode</p>
+                <p className="mt-1 text-lg font-semibold text-white" data-testid="live-capture-mode">
+                  {formatCaptureMode(captureSource)}
+                </p>
+                <p className="text-xs text-slate-400">{formatCaptureModeLabel(captureSource)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Session</p>
+                <p className="mt-1 text-lg font-semibold text-white" data-testid="live-capture-session">
+                  {formatSessionLabel(session?.id)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current state</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-300" data-testid="live-capture-state">
+                  {currentStateLabel}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Last frame</p>
+                <p className="mt-1 text-lg font-semibold text-white" data-testid="live-capture-last-frame">
+                  {lastFrameLabel}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Stable frames</p>
+                <p className="mt-1 text-lg font-semibold text-white">{stableState.sameCount}</p>
+              </div>
             </div>
           </div>
 
@@ -353,28 +441,33 @@ function LiveCapturePageInner({
                 deviceId={deviceId}
                 mirrored={mirrored}
                 className="h-full w-full"
-                onError={(message) => setError(message)}
+                onError={handleCameraError}
+                onStreamReady={handleStreamReady}
               />
               <RecognitionOverlay
                 title={paused ? "Capture paused" : "Point the camera at a comic"}
-                subtitle={currentItem ? itemTitle(currentItem) : "Waiting for a stable frame"}
-                status={statusMessage}
+                subtitle={currentStateLabel}
+                status={currentItem ? itemTitle(currentItem) : statusMessage}
               />
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <label className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-              Camera device
+            <label className="min-w-[min(100%,20rem)] flex-1 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
+              <span className="block text-xs uppercase tracking-[0.2em] text-slate-500">Switch camera</span>
+              <span className="mt-1 block text-base font-semibold text-white">
+                Selected: {activeCameraName}
+              </span>
               <select
-                className="ml-3 bg-transparent text-white outline-none"
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                aria-label={`Selected camera: ${activeCameraName}`}
                 value={deviceId ?? ""}
                 onChange={(event) => setDeviceId(event.target.value || null)}
               >
-                <option value="">Default</option>
-                {devices.map((device) => (
+                <option value="">Default camera (system pick)</option>
+                {devices.map((device, index) => (
                   <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Camera ${device.deviceId.slice(0, 6)}`}
+                    {formatDeviceOptionLabel(device, index)}
                   </option>
                 ))}
               </select>

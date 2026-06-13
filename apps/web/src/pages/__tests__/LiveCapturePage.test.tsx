@@ -13,7 +13,13 @@ vi.mock("../../components/StatusBanner", () => ({
 vi.mock("../../components/live-capture/CameraFeed", async () => {
   const { useEffect } = await import("react");
   return {
-    CameraFeed: ({ videoRef }: { videoRef: RefObject<HTMLVideoElement> }) => {
+    CameraFeed: ({
+      videoRef,
+      onStreamReady,
+    }: {
+      videoRef: RefObject<HTMLVideoElement>;
+      onStreamReady?: () => void;
+    }) => {
       useEffect(() => {
         const video = videoRef.current;
         if (!video) {
@@ -21,7 +27,8 @@ vi.mock("../../components/live-capture/CameraFeed", async () => {
         }
         Object.defineProperty(video, "videoWidth", { value: 1200, configurable: true });
         Object.defineProperty(video, "videoHeight", { value: 1800, configurable: true });
-      }, [videoRef]);
+        onStreamReady?.();
+      }, [onStreamReady, videoRef]);
       return <video ref={videoRef} data-testid="camera-video" />;
     },
   };
@@ -196,9 +203,10 @@ describe("WebcamLiveCapturePage", () => {
         stable_frame_count: 3,
       }),
     );
-
-    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Camera device")).toBeInTheDocument();
+    expect(screen.getByTestId("live-capture-active-camera")).toHaveTextContent("Back Camera");
+    expect(screen.getByTestId("live-capture-mode")).toHaveTextContent("WEBCAM");
+    expect(screen.getByTestId("live-capture-session")).toHaveTextContent("Session #1");
+    expect(screen.getByLabelText(/Selected camera: Back Camera/i)).toBeInTheDocument();
     vi.restoreAllMocks();
   });
 

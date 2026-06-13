@@ -1,14 +1,24 @@
 import { useEffect, type RefObject } from "react";
 
+import { friendlyCameraError } from "../../pages/liveCaptureUi";
+
 interface CameraFeedProps {
   videoRef: RefObject<HTMLVideoElement>;
   deviceId?: string | null;
   mirrored?: boolean;
   className?: string;
   onError?: (message: string) => void;
+  onStreamReady?: () => void;
 }
 
-export function CameraFeed({ videoRef, deviceId, mirrored = false, className, onError }: CameraFeedProps): JSX.Element {
+export function CameraFeed({
+  videoRef,
+  deviceId,
+  mirrored = false,
+  className,
+  onError,
+  onStreamReady,
+}: CameraFeedProps): JSX.Element {
   useEffect(() => {
     let stream: MediaStream | null = null;
     let cancelled = false;
@@ -30,8 +40,9 @@ export function CameraFeed({ videoRef, deviceId, mirrored = false, className, on
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
         }
+        onStreamReady?.();
       } catch (error) {
-        onError?.(error instanceof Error ? error.message : "Camera access failed.");
+        onError?.(friendlyCameraError(error));
       }
     }
 
@@ -44,7 +55,7 @@ export function CameraFeed({ videoRef, deviceId, mirrored = false, className, on
       }
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [deviceId, onError, videoRef]);
+  }, [deviceId, onError, onStreamReady, videoRef]);
 
   return (
     <div className={className}>
