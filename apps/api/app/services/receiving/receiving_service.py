@@ -179,12 +179,46 @@ def _sorted_items(rows: list[ReceivingSessionItem]) -> list[ReceivingSessionItem
     return sorted(rows, key=lambda row: (row.sequence_index, row.id or 0))
 
 
+def _coerce_json_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _coerce_json_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [entry for entry in value if isinstance(entry, dict)]
+
+
 def _session_summary(row: ReceivingSession) -> ReceivingSessionSummaryRead:
-    return ReceivingSessionSummaryRead.model_validate(row, from_attributes=True)
+    payload = {
+        **row.model_dump(),
+        "capture_source": normalize_live_capture_source(row.capture_source),
+        "allocation_details_json": _coerce_json_dict(row.allocation_details_json),
+        "live_capture_stats_json": _coerce_json_dict(row.live_capture_stats_json),
+    }
+    return ReceivingSessionSummaryRead.model_validate(payload)
 
 
 def _item_to_read(row: ReceivingSessionItem) -> ReceivingSessionItemRead:
-    return ReceivingSessionItemRead.model_validate(row, from_attributes=True)
+    if row.id is None:
+        raise ValueError("Receiving session item is missing a primary key")
+    latency = row.recognition_latency_ms
+    if latency is not None and not isinstance(latency, int):
+        latency = int(latency)
+    confidence = row.recognition_confidence
+    if confidence is not None:
+        confidence = float(confidence)
+    payload = {
+        **row.model_dump(),
+        "capture_source": normalize_live_capture_source(row.capture_source),
+        "recognition_confidence": confidence,
+        "recognition_latency_ms": latency,
+        "recognition_snapshot_json": _coerce_json_dict(row.recognition_snapshot_json),
+        "candidate_snapshot_json": _coerce_json_list(row.candidate_snapshot_json),
+        "capture_metadata_json": _coerce_json_dict(row.capture_metadata_json),
+        "selected_candidate_json": row.selected_candidate_json if isinstance(row.selected_candidate_json, dict) else None,
+    }
+    return ReceivingSessionItemRead.model_validate(payload)
 
 
 def _detail_from_rows(session_row: ReceivingSession, item_rows: list[ReceivingSessionItem]) -> ReceivingSessionDetailRead:

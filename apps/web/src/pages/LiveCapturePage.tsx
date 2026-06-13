@@ -11,7 +11,7 @@ import { StatusBanner } from "../components/StatusBanner";
 import { CameraFeed } from "../components/live-capture/CameraFeed";
 import { RecognitionOverlay } from "../components/live-capture/RecognitionOverlay";
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
-import { advanceStableFrameTracker, createStableFrameTracker, shouldSuppressDuplicateFingerprint } from "./liveCaptureState";
+import { advanceStableFrameTracker, createStableFrameTracker, hasPendingReceivingItem, shouldSuppressDuplicateFingerprint } from "./liveCaptureState";
 import {
   frameFingerprintFromVideo,
   fingerprintsSimilar,
@@ -205,6 +205,10 @@ function LiveCapturePageInner({
         paused,
         inFlight: Boolean(inFlightFingerprintRef.current),
       });
+      if (hasPendingReceivingItem(session.items)) {
+        logLiveCaptureDebug("capture waiting", { reason: "pending item action" });
+        return;
+      }
       const video = videoRef.current;
       if (!video || inFlightFingerprintRef.current) {
         return;
@@ -285,6 +289,7 @@ function LiveCapturePageInner({
       return;
     }
     try {
+      setError(null);
       const response = await apiClient.confirmReceivingSessionItem(session.id, {
         item_id: currentItem.id,
         decision,
@@ -292,6 +297,7 @@ function LiveCapturePageInner({
       });
       setSession(response.session);
       setStatusMessage(decision === "confirm" ? "Confirmed current frame." : "Marked for review.");
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to confirm the current item.");
     }
@@ -302,12 +308,14 @@ function LiveCapturePageInner({
       return;
     }
     try {
+      setError(null);
       const response = await apiClient.skipReceivingSessionItem(session.id, {
         item_id: currentItem.id,
         reason: "Live capture skip",
       });
       setSession(response.session);
       setStatusMessage("Skipped current frame.");
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to skip the current item.");
     }

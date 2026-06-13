@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceStableFrameTracker, createStableFrameTracker, shouldSuppressDuplicateFingerprint } from "../liveCaptureState";
+import { advanceStableFrameTracker, createStableFrameTracker, hasPendingReceivingItem, shouldSuppressDuplicateFingerprint } from "../liveCaptureState";
 
 describe("liveCaptureState", () => {
   it("accepts a stable frame after three matching fingerprints", () => {
@@ -24,5 +24,10 @@ describe("liveCaptureState", () => {
   it("suppresses duplicate fingerprints already seen", () => {
     expect(shouldSuppressDuplicateFingerprint(new Set(["frame-a"]), "frame-a")).toBe(true);
     expect(shouldSuppressDuplicateFingerprint(new Set(["frame-a"]), "frame-b")).toBe(false);
+  });
+
+  it("detects pending receiving items awaiting confirm or skip", () => {
+    expect(hasPendingReceivingItem([{ status: "SKIPPED" }, { status: "CONFIRMED" }])).toBe(false);
+    expect(hasPendingReceivingItem([{ status: "UNKNOWN" }])).toBe(true);
   });
 });

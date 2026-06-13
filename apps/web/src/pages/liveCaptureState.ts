@@ -51,3 +51,9 @@ export function shouldSuppressDuplicateFingerprint(
 ): boolean {
   return recentFingerprints.has(fingerprint);
 }
+
+export function hasPendingReceivingItem(
+  items: ReadonlyArray<{ status: string }> | undefined,
+): boolean {
+  return (items ?? []).some((item) => item.status !== "CONFIRMED" && item.status !== "SKIPPED");
+}
