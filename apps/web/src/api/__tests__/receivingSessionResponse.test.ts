@@ -16,6 +16,12 @@ describe("normalizeReceivingSessionSummaryResponse", () => {
     expect(response.status).toBe("ACTIVE");
   });
 
+  it("accepts a { data } envelope shape defensively", () => {
+    const response = normalizeReceivingSessionSummaryResponse({ data: { id: 56, status: "PENDING" } });
+    expect(response.id).toBe(56);
+    expect(response.status).toBe("PENDING");
+  });
+
   it("throws a friendly error when the response lacks an id", () => {
     expect(() => normalizeReceivingSessionSummaryResponse({ session: {} })).toThrow(ApiError);
     expect(() => normalizeReceivingSessionSummaryResponse({ session: {} })).toThrow(/missing session id/i);

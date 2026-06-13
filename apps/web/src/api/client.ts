@@ -7284,6 +7284,16 @@ async function requestScanV1<T>(path: string, init?: RequestInit): Promise<T> {
   return envelope.data;
 }
 
+/**
+ * Receiving (P95-02) endpoints return flat response models (e.g. `{ id, status, ... }`),
+ * not the `{ data, meta }` envelope used by most scan v1 reads. Using `requestScanV1`
+ * here unwrapped a non-existent `.data` key and produced "missing session id" failures.
+ */
+async function requestScanV1Flat<T>(path: string, init?: RequestInit): Promise<T> {
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return request<T>(`${SCAN_API_V1_PREFIX}${suffix}`, init);
+}
+
 /** P57 executive dashboard aggregates many services; cap wait so UI cannot hang indefinitely. */
 const EXECUTIVE_DASHBOARD_TIMEOUT_MS = 45_000;
 /** Auth bootstrap must fail fast when the API is down or misconfigured. */
@@ -20727,7 +20737,14 @@ export function normalizeReceivingSessionSummaryResponse(
   response: unknown,
   context = "receiving session",
 ): ReceivingSessionSummaryRead {
-  const candidate = isPlainObject(response) && isPlainObject(response.session) ? response.session : response;
+  // Accept the flat body, a `{ session: {...} }` wrapper, or a `{ data: {...} }`
+  // envelope so the UI is resilient to either backend or transport shape.
+  let candidate: unknown = response;
+  if (isPlainObject(candidate) && isPlainObject(candidate.session)) {
+    candidate = candidate.session;
+  } else if (isPlainObject(candidate) && isPlainObject(candidate.data)) {
+    candidate = candidate.data;
+  }
   if (isPlainObject(candidate) && typeof candidate.id === "number") {
     return candidate as unknown as ReceivingSessionSummaryRead;
   }
@@ -20872,6 +20889,176 @@ export interface ReceivingCompletionSummaryRead {
   inventory_copy_ids: number[];
   top_additions: string[];
   order_id?: number | null;
+}
+
+export interface CatalogPublisher {
+  id: number;
+  name: string;
+}
+
+export interface CatalogSeries {
+  id: number;
+  name: string;
+  volume_number?: number | null;
+  start_year?: number | null;
+  end_year?: number | null;
+  publisher?: CatalogPublisher | null;
+}
+
+export interface CatalogVariant {
+  id: number;
+  variant_name?: string | null;
+  cover_artist?: string | null;
+  ratio?: string | null;
+  printing?: string | null;
+}
+
+export interface CatalogImage {
+  id: number;
+  source_url?: string | null;
+  local_path?: string | null;
+  image_type?: string;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface CatalogIssue {
+  id: number;
+  issue_number: string;
+  title?: string | null;
+  release_date?: string | null;
+  store_date?: string | null;
+  cover_price?: string | null;
+  series?: CatalogSeries | null;
+  publisher?: CatalogPublisher | null;
+  primary_cover?: CatalogImage | null;
+  variant?: CatalogVariant | null;
+  key_issue_flags?: string[];
+}
+
+export interface CatalogSearchResult {
+  items: CatalogIssue[];
+  total: number;
+}
+
+export interface CatalogUpcLookupRead {
+  matched: boolean;
+  confidence: number;
+  reason: string;
+  issue?: CatalogIssue | null;
+  variant?: CatalogVariant | null;
+  publisher?: CatalogPublisher | null;
+  series?: CatalogSeries | null;
+  primary_cover?: CatalogImage | null;
+}
+
+export interface RecognitionResult {
+  matched: boolean;
+  recognition_method?: string | null;
+  confidence: number;
+  reason: string;
+  requires_review: boolean;
+  issue?: CatalogIssue | null;
+  variant?: CatalogVariant | null;
+  candidates: Array<{
+    issue_id: number;
+    variant_id?: number | null;
+    confidence: number;
+    reason: string;
+    issue: CatalogIssue;
+  }>;
+  key_issue_flags?: string[];
+}
+
+export interface CatalogScanSessionCreate {
+  name: string;
+  mode?: string;
+  source_type?: string | null;
+  source_name?: string | null;
+  purchase_price?: string | null;
+  acquisition_date?: string | null;
+  storage_location_id?: number | null;
+  box_name?: string | null;
+  notes?: string | null;
+}
+
+export interface P96ScanItem {
+  id: number;
+  session_id: number;
+  raw_upc?: string | null;
+  recognition_method?: string | null;
+  confidence?: number | null;
+  status: string;
+  inventory_copy_id?: number | null;
+  issue?: CatalogIssue | null;
+}
+
+export interface P96CatalogScanSession {
+  id: number;
+  name: string;
+  mode: string;
+  source_type?: string | null;
+  purchase_price?: string | null;
+  status: string;
+  total_scanned: number;
+  total_matched: number;
+  total_unmatched: number;
+  total_accepted: number;
+  items: P96ScanItem[];
+}
+
+export interface ScanItemCorrection {
+  issue_id: number;
+  variant_id?: number | null;
+}
+
+export interface BoxImportSummary {
+  session_id: number;
+  total_scanned: number;
+  total_matched: number;
+  total_accepted: number;
+  total_unmatched: number;
+  total_cost_basis?: string | null;
+  per_book_cost_basis?: string | null;
+  storage_location_id?: number | null;
+  box_name?: string | null;
+}
+
+export interface CatalogHealthJobSnapshot {
+  id: number;
+  status: string;
+  total_seen: number;
+  total_created: number;
+  total_updated: number;
+  total_failed: number;
+  last_error: string | null;
+  updated_at: string;
+}
+
+export interface CatalogHealthRead {
+  counts: {
+    publishers: number;
+    series: number;
+    issues: number;
+    variants: number;
+    upcs: number;
+    cover_image_records: number;
+    downloaded_covers: number;
+    missing_covers: number;
+    failed_cover_downloads: number;
+  };
+  fingerprint_coverage_pct: number;
+  ocr_coverage_pct: number;
+  open_duplicate_candidates: number;
+  open_upc_conflicts: number;
+  open_recognition_gaps: number;
+  latest_jobs: Record<string, CatalogHealthJobSnapshot | null>;
+  latest_certification: {
+    dataset_name: string | null;
+    recognition_rate: number | null;
+    avg_recognition_ms: number | null;
+    failures: number;
+  };
 }
 
 export const apiClient = {
@@ -24195,14 +24382,25 @@ export const apiClient = {
   },
 
   createReceivingSession(payload?: ReceivingSessionCreatePayload): Promise<ReceivingSessionSummaryRead> {
-    return requestScanV1<unknown>("/receiving/session", {
+    return requestScanV1Flat<unknown>("/receiving/session", {
       method: "POST",
       body: payload ? JSON.stringify(payload) : JSON.stringify({}),
-    }).then((response) => normalizeReceivingSessionSummaryResponse(response, "receiving session create"));
+    }).then((response) => {
+      // P95-04 diagnostics (dev only): inspect the raw create-session body and the
+      // normalized session id. Safe to remove once live capture is validated.
+      if (import.meta.env.DEV) {
+        console.debug("[receiving] raw create-session response", response);
+      }
+      const normalized = normalizeReceivingSessionSummaryResponse(response, "receiving session create");
+      if (import.meta.env.DEV) {
+        console.debug("[receiving] normalized session id", normalized.id);
+      }
+      return normalized;
+    });
   },
 
   getReceivingSession(sessionId: number): Promise<ReceivingSessionDetailRead> {
-    return requestScanV1<ReceivingSessionDetailRead>(`/receiving/session/${sessionId}`);
+    return requestScanV1Flat<ReceivingSessionDetailRead>(`/receiving/session/${sessionId}`);
   },
 
   uploadReceivingSessionImages(
@@ -24231,7 +24429,7 @@ export const apiClient = {
     if (payload?.frame_sequence_index != null) {
       form.append("frame_sequence_index", String(payload.frame_sequence_index));
     }
-    return requestScanV1<ReceivingUploadResponse>(`/receiving/session/${sessionId}/upload`, {
+    return requestScanV1Flat<ReceivingUploadResponse>(`/receiving/session/${sessionId}/upload`, {
       method: "POST",
       body: form,
     });
@@ -24241,35 +24439,35 @@ export const apiClient = {
     sessionId: number,
     payload: ReceivingConfirmPayload,
   ): Promise<ReceivingActionResponse> {
-    return requestScanV1<ReceivingActionResponse>(`/receiving/session/${sessionId}/confirm`, {
+    return requestScanV1Flat<ReceivingActionResponse>(`/receiving/session/${sessionId}/confirm`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   skipReceivingSessionItem(sessionId: number, payload: ReceivingSkipPayload): Promise<ReceivingActionResponse> {
-    return requestScanV1<ReceivingActionResponse>(`/receiving/session/${sessionId}/skip`, {
+    return requestScanV1Flat<ReceivingActionResponse>(`/receiving/session/${sessionId}/skip`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   getReceivingSessionSummary(sessionId: number): Promise<ReceivingCompletionSummaryRead> {
-    return requestScanV1<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/summary`);
+    return requestScanV1Flat<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/summary`);
   },
 
   assignReceivingPurchase(
     sessionId: number,
     payload: ReceivingPurchaseAssignmentPayload,
   ): Promise<ReceivingSessionSummaryRead> {
-    return requestScanV1<ReceivingSessionSummaryRead>(`/receiving/session/${sessionId}/assign-purchase`, {
+    return requestScanV1Flat<ReceivingSessionSummaryRead>(`/receiving/session/${sessionId}/assign-purchase`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   completeReceivingSession(sessionId: number): Promise<ReceivingCompletionSummaryRead> {
-    return requestScanV1<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/complete`, {
+    return requestScanV1Flat<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/complete`, {
       method: "POST",
     });
   },
@@ -32659,6 +32857,10 @@ export const apiClient = {
     return requestNavPageV1<P88MarketplaceSearchDashboardRead>("/admin/marketplace-search-dashboard");
   },
 
+  getCatalogHealth(): Promise<CatalogHealthRead> {
+    return requestNavPageV1<CatalogHealthRead>("/admin/catalog-health");
+  },
+
   getBuyOpportunityMarketplaceComparison(opportunityId: number): Promise<P88MarketplaceComparisonResponse> {
     return requestNavPageV1<P88MarketplaceComparisonResponse>(
       `/buy-opportunities/${opportunityId}/marketplace-comparison`,
@@ -32859,6 +33061,57 @@ export const apiClient = {
     safety_notes: string[];
   }> {
     return requestScanV1("/platform/production-dashboard");
+  },
+
+  searchCatalog(params: { q?: string; publisher?: string; year?: number; limit?: number }): Promise<CatalogSearchResult> {
+    const query = new URLSearchParams();
+    if (params.q) query.set("q", params.q);
+    if (params.publisher) query.set("publisher", params.publisher);
+    if (params.year != null) query.set("year", String(params.year));
+    if (params.limit != null) query.set("limit", String(params.limit));
+    return request<CatalogSearchResult>(`/api/v1/catalog/search?${query.toString()}`);
+  },
+
+  lookupCatalogUpc(upc: string): Promise<CatalogUpcLookupRead> {
+    return request<CatalogUpcLookupRead>(`/api/v1/catalog/upc/${encodeURIComponent(upc)}`);
+  },
+
+  recognizeComic(form: FormData): Promise<RecognitionResult> {
+    return request<RecognitionResult>("/api/v1/catalog/recognize", { method: "POST", body: form });
+  },
+
+  createCatalogScanSession(payload: CatalogScanSessionCreate): Promise<P96CatalogScanSession> {
+    return request<P96CatalogScanSession>("/api/v1/inventory/scan-sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getCatalogScanSession(sessionId: number): Promise<P96CatalogScanSession> {
+    return request<P96CatalogScanSession>(`/api/v1/inventory/scan-sessions/${sessionId}`);
+  },
+
+  scanIntoCatalogSession(sessionId: number, form: FormData): Promise<P96ScanItem> {
+    return request<P96ScanItem>(`/api/v1/inventory/scan-sessions/${sessionId}/scan`, { method: "POST", body: form });
+  },
+
+  acceptCatalogScanItem(sessionId: number, itemId: number): Promise<P96ScanItem> {
+    return request<P96ScanItem>(`/api/v1/inventory/scan-sessions/${sessionId}/items/${itemId}/accept`, { method: "POST" });
+  },
+
+  correctCatalogScanItem(sessionId: number, itemId: number, payload: ScanItemCorrection): Promise<P96ScanItem> {
+    return request<P96ScanItem>(`/api/v1/inventory/scan-sessions/${sessionId}/items/${itemId}/correct`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  acceptAllCatalogScanItems(sessionId: number): Promise<P96CatalogScanSession> {
+    return request<P96CatalogScanSession>(`/api/v1/inventory/scan-sessions/${sessionId}/accept-all`, { method: "POST" });
+  },
+
+  completeCatalogScanSession(sessionId: number): Promise<BoxImportSummary> {
+    return request<BoxImportSummary>(`/api/v1/inventory/scan-sessions/${sessionId}/complete`, { method: "POST" });
   },
 };
 
