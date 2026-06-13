@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ApiError,
   apiClient,
+  type RetailerOrderItemSnapshotRead,
   type RetailerOrderReEnrichResponse,
   type RetailerOrderSnapshotRead,
 } from "../api/client";
@@ -59,6 +60,15 @@ function formatSummaryValue(value: unknown): string {
     return String(value);
   }
   return JSON.stringify(value, null, 2);
+}
+
+function reviewReleaseLabel(item: RetailerOrderItemSnapshotRead): string {
+  if (item.release_date) {
+    return formatDate(item.release_date);
+  }
+  // A missing release date is expected before catalog enrichment completes; it is
+  // not an import failure, so frame it as pending catalog review.
+  return "Catalog review pending";
 }
 
 function enrichmentBadgeLabel(status: string | null | undefined): string | null {
@@ -427,12 +437,11 @@ export function RetailerOrderDetailPage() {
               </div>
             ) : null}
 
-            {order.item_count > 0 &&
-            (order.product_url_count < order.item_count || order.release_date_count < order.item_count) ? (
+            {order.item_count > 0 && order.release_date_count < order.item_count ? (
               <div className="mt-4">
-                <StatusBanner tone="warning">
-                  Some optional enrichment fields are missing (product links or release dates). ComicOS can fill
-                  these later from catalog data.
+                <StatusBanner tone="info">
+                  Some release dates are still pending catalog review. ComicOS fills release and FOC dates from
+                  catalog data once each book is matched.
                 </StatusBanner>
               </div>
             ) : null}
@@ -485,7 +494,7 @@ export function RetailerOrderDetailPage() {
                       <span>Qty {item.quantity}</span>
                       <span>Unit {formatMoney(item.unit_price)}</span>
                       <span>Line {formatMoney(item.total_price)}</span>
-                      <span>Release {item.release_date ? formatDate(item.release_date) : "Missing"}</span>
+                      <span>Release {reviewReleaseLabel(item)}</span>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-3">
@@ -499,6 +508,9 @@ export function RetailerOrderDetailPage() {
                           {item.variant_type}
                         </span>
                       ) : null}
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                        Catalog: {enrichmentBadgeLabel(item.enrichment_status) ?? "Review pending"}
+                      </span>
                       {item.product_url ? (
                         <a
                           href={item.product_url}
@@ -508,11 +520,7 @@ export function RetailerOrderDetailPage() {
                         >
                           Open product
                         </a>
-                      ) : (
-                        <span className="rounded-full border border-amber-400/30 px-3 py-1 text-xs text-amber-100">
-                          Product URL missing
-                        </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </article>
@@ -532,6 +540,32 @@ export function RetailerOrderDetailPage() {
                     </pre>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Per-line diagnostics</p>
+                <table className="mt-2 w-full min-w-[640px] text-left text-xs text-slate-300">
+                  <thead className="text-slate-500">
+                    <tr>
+                      <th className="py-1 pr-3">Title</th>
+                      <th className="py-1 pr-3">Enrichment</th>
+                      <th className="py-1 pr-3">Catalog match</th>
+                      <th className="py-1 pr-3">Release date</th>
+                      <th className="py-1 pr-3">Product URL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.items.map((item) => (
+                      <tr key={item.id} className="border-t border-white/5">
+                        <td className="py-1 pr-3 text-slate-200">{item.title}</td>
+                        <td className="py-1 pr-3">{item.enrichment_status ?? "pending"}</td>
+                        <td className="py-1 pr-3">{item.catalog_match_id ?? "none"}</td>
+                        <td className="py-1 pr-3">{item.release_date ? formatDate(item.release_date) : "missing"}</td>
+                        <td className="py-1 pr-3">{item.product_url ? "present" : "missing"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </details>
           </>

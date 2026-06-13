@@ -154,7 +154,10 @@ describe("RetailerOrderDetailPage", () => {
     expect(screen.getByText("Release dates found")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(screen.getByText("No cover")).toBeInTheDocument();
-    expect(screen.getByText("Product URL missing")).toBeInTheDocument();
+    // "Product URL missing" is no longer a user-facing warning (optional enrichment).
+    expect(screen.queryByText("Product URL missing")).not.toBeInTheDocument();
+    // A missing release date reads as pending catalog review, not an import failure.
+    expect(screen.getByText(/Catalog review pending/)).toBeInTheDocument();
 
     // Review covers must render as constrained thumbnails, never full-width.
     const covers = screen.getAllByTestId("retailer-review-cover");
