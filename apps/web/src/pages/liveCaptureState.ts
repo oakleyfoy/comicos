@@ -1,7 +1,6 @@
 export interface StableFrameTracker {
   lastFingerprint: string | null;
   sameCount: number;
-  acceptedFingerprint: string | null;
   paused: boolean;
 }
 
@@ -9,34 +8,40 @@ export function createStableFrameTracker(): StableFrameTracker {
   return {
     lastFingerprint: null,
     sameCount: 0,
-    acceptedFingerprint: null,
     paused: false,
   };
 }
+
+export type FingerprintSimilarity = (previous: string, current: string) => boolean;
 
 export function advanceStableFrameTracker(
   tracker: StableFrameTracker,
   fingerprint: string,
   threshold = 3,
-): { tracker: StableFrameTracker; accepted: boolean } {
+  isSimilar: FingerprintSimilarity = (previous, current) => previous === current,
+): { tracker: StableFrameTracker; accepted: boolean; stableIncremented: boolean } {
   if (tracker.paused) {
-    return { tracker, accepted: false };
+    return { tracker, accepted: false, stableIncremented: false };
   }
 
+  const priorCount = tracker.sameCount;
   let sameCount = 1;
-  if (tracker.lastFingerprint === fingerprint) {
+  let stableIncremented = false;
+  if (tracker.lastFingerprint && isSimilar(tracker.lastFingerprint, fingerprint)) {
     sameCount = tracker.sameCount + 1;
+    stableIncremented = sameCount > priorCount;
   }
 
-  const accepted = sameCount >= threshold && tracker.acceptedFingerprint !== fingerprint;
+  // Fire once when the streak crosses the threshold (not on every subsequent tick).
+  const accepted = sameCount >= threshold && priorCount < threshold;
   return {
     tracker: {
       ...tracker,
       lastFingerprint: fingerprint,
       sameCount,
-      acceptedFingerprint: accepted ? fingerprint : tracker.acceptedFingerprint,
     },
     accepted,
+    stableIncremented,
   };
 }
 

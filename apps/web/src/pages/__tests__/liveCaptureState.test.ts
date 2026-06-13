@@ -15,7 +15,10 @@ describe("liveCaptureState", () => {
     const accepted = advanceStableFrameTracker(tracker, "frame-a", 3);
     expect(accepted.accepted).toBe(true);
     expect(accepted.tracker.sameCount).toBe(3);
-    expect(accepted.tracker.acceptedFingerprint).toBe("frame-a");
+
+    const repeat = advanceStableFrameTracker(accepted.tracker, "frame-a", 3);
+    expect(repeat.accepted).toBe(false);
+    expect(repeat.tracker.sameCount).toBe(4);
   });
 
   it("suppresses duplicate fingerprints already seen", () => {

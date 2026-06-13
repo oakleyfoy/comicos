@@ -13,6 +13,11 @@ import { RecognitionOverlay } from "../components/live-capture/RecognitionOverla
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
 import { advanceStableFrameTracker, createStableFrameTracker, shouldSuppressDuplicateFingerprint } from "./liveCaptureState";
 import {
+  frameFingerprintFromVideo,
+  fingerprintsSimilar,
+  logLiveCaptureDebug,
+} from "./liveCaptureFingerprint";
+import {
   formatCaptureMode,
   formatCaptureModeLabel,
   formatDeviceOptionLabel,
@@ -30,28 +35,6 @@ interface LiveCapturePageProps {
   routeLabel: string;
   mirrored?: boolean;
   keyboardShortcuts?: boolean;
-}
-
-function frameFingerprintFromVideo(video: HTMLVideoElement): string | null {
-  if (!video.videoWidth || !video.videoHeight) {
-    return null;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = 16;
-  canvas.height = 16;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return null;
-  }
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  let hash = 2166136261;
-  for (let index = 0; index < data.length; index += 16) {
-    const value = Math.floor((data[index] + data[index + 1] + data[index + 2]) / 3);
-    hash ^= value;
-    hash = Math.imul(hash, 16777619);
-  }
-  return `f${(hash >>> 0).toString(16)}`;
 }
 
 async function captureVideoFrame(video: HTMLVideoElement, captureSource: string, fingerprint: string): Promise<File | null> {
@@ -217,22 +200,38 @@ function LiveCapturePageInner({
       return;
     }
     const timer = window.setInterval(() => {
+      logLiveCaptureDebug("capture tick", {
+        hasSession: Boolean(session),
+        paused,
+        inFlight: Boolean(inFlightFingerprintRef.current),
+      });
       const video = videoRef.current;
       if (!video || inFlightFingerprintRef.current) {
         return;
       }
       const fingerprint = frameFingerprintFromVideo(video);
       if (!fingerprint) {
+        logLiveCaptureDebug("frame extracted", { ok: false, reason: "no fingerprint" });
         return;
       }
-      const next = advanceStableFrameTracker(trackerRef.current, fingerprint, 3);
+      logLiveCaptureDebug("frame extracted", { ok: true, fingerprint });
+      const next = advanceStableFrameTracker(trackerRef.current, fingerprint, 3, fingerprintsSimilar);
       trackerRef.current = next.tracker;
       setStableState(next.tracker);
+      logLiveCaptureDebug("frame compared", {
+        sameCount: next.tracker.sameCount,
+        stableIncremented: next.stableIncremented,
+        accepted: next.accepted,
+      });
+      if (next.stableIncremented) {
+        logLiveCaptureDebug("stable count incremented", { sameCount: next.tracker.sameCount });
+      }
       if (!next.accepted) {
         return;
       }
       if (shouldSuppressDuplicateFingerprint(recentFingerprintsRef.current, fingerprint)) {
         setStatusMessage("Duplicate frame suppressed.");
+        logLiveCaptureDebug("capture skipped", { reason: "duplicate fingerprint" });
         return;
       }
       inFlightFingerprintRef.current = fingerprint;
@@ -241,8 +240,11 @@ function LiveCapturePageInner({
         try {
           const file = await captureVideoFrame(video, captureSource, fingerprint);
           if (!file) {
+            setStatusMessage("Could not encode camera frame for upload.");
+            logLiveCaptureDebug("capture failed", { reason: "canvas encode returned null" });
             return;
           }
+          logLiveCaptureDebug("uploading frame", { sessionId: session.id, fingerprint });
           const uploaded = await apiClient.uploadReceivingSessionImages(session.id, [file], {
             capture_source: captureSource,
             frame_fingerprint: fingerprint,
@@ -254,8 +256,14 @@ function LiveCapturePageInner({
           const capturedAt = new Date().toISOString();
           setLastFrameCapturedAt(capturedAt);
           setStatusMessage(`Captured ${captureSource.replace("_", " ").toLowerCase()}.`);
+          logLiveCaptureDebug("capture complete", { capturedAt });
+          trackerRef.current = createStableFrameTracker();
+          setStableState(trackerRef.current);
         } catch (err) {
           setError(err instanceof ApiError ? err.message : "Unable to upload a live capture frame.");
+          logLiveCaptureDebug("capture failed", {
+            reason: err instanceof Error ? err.message : "upload error",
+          });
         } finally {
           inFlightFingerprintRef.current = null;
           setRecognizing(false);
