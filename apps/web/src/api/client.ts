@@ -24366,7 +24366,10 @@ export const apiClient = {
   identifyComicFromImage(file: File): Promise<RecognitionIdentifyRead> {
     const form = new FormData();
     form.append("image", file);
-    return requestScanV1<RecognitionIdentifyRead>("/recognition/identify", {
+    // P95-01 recognition endpoints return a flat result model (no `{ data, meta }`
+    // envelope), so use the flat transport. requestScanV1 would unwrap a missing
+    // `.data` key and surface `undefined` results.
+    return requestScanV1Flat<RecognitionIdentifyRead>("/recognition/identify", {
       method: "POST",
       body: form,
     });
@@ -24375,7 +24378,7 @@ export const apiClient = {
   listComicRecognitionCandidates(file: File): Promise<RecognitionCandidateRead[]> {
     const form = new FormData();
     form.append("image", file);
-    return requestScanV1<RecognitionCandidateRead[]>("/recognition/candidates", {
+    return requestScanV1Flat<RecognitionCandidateRead[]>("/recognition/candidates", {
       method: "POST",
       body: form,
     });

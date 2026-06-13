@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from PIL import Image, UnidentifiedImageError
+
+LOGGER = logging.getLogger(__name__)
 
 from app.services.cover_images import (
     KNOWN_PUBLISHERS,
@@ -88,12 +91,32 @@ def _ocr_confidence(raw_text: str, *, title: str | None, issue_number: str | Non
     return round(max(0.0, min(base, 1.0)), 6)
 
 
+def _empty_ocr_signal() -> RecognitionOCRSignal:
+    """OCR-unavailable fallback so recognition can still use image/fingerprint signals."""
+    return RecognitionOCRSignal(
+        raw_text="",
+        normalized_text=None,
+        title=None,
+        issue_number=None,
+        publisher=None,
+        variant=None,
+        confidence=0.0,
+    )
+
+
 def extract_ocr_signal(image_bytes: bytes, *, source_name: str = "upload") -> RecognitionOCRSignal:
-    with TemporaryDirectory(prefix="recognition-ocr-") as tmpdir:
-        temp_path = Path(tmpdir) / f"{source_name}.png"
-        with Image.open(io.BytesIO(image_bytes)) as image:
-            image.save(temp_path, format="PNG")
-        raw_text = _run_tesseract_ocr_with_test_compat(temp_path, timeout_seconds=15.0)
+    try:
+        with TemporaryDirectory(prefix="recognition-ocr-") as tmpdir:
+            temp_path = Path(tmpdir) / f"{source_name}.png"
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                image.save(temp_path, format="PNG")
+            raw_text = _run_tesseract_ocr_with_test_compat(temp_path, timeout_seconds=15.0)
+    except (ValueError, OSError, UnidentifiedImageError) as exc:
+        # OCR is a best-effort signal. When the Tesseract engine is unavailable,
+        # times out, or the image cannot be rasterized, degrade gracefully to an
+        # empty OCR signal rather than failing the whole recognition request.
+        LOGGER.warning("recognition OCR skipped source=%r reason=%s", source_name, str(exc)[:300])
+        return _empty_ocr_signal()
 
     normalized_text = normalize_ocr_text(raw_text)
     lines = [line.strip() for line in raw_text.splitlines() if line.strip()]

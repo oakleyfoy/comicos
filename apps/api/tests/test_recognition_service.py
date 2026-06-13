@@ -129,3 +129,28 @@ def test_recognition_identify_no_match_returns_unknown(
     assert data["bucket"] == "UNKNOWN"
     assert data["confidence"] < 0.70
 
+
+def test_recognition_identify_degrades_when_ocr_engine_unavailable(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OCR engine errors must not 500 the endpoint; recognition should continue."""
+
+    def _raise_ocr_unavailable(image_path, timeout_seconds=None):  # type: ignore[no-untyped-def]
+        raise ValueError("Local Tesseract OCR engine is unavailable on this host.")
+
+    monkeypatch.setattr(
+        "app.services.recognition.ocr_matcher._run_tesseract_ocr_with_test_compat",
+        _raise_ocr_unavailable,
+    )
+    token = register_and_login(client, "recognition-ocr-down@example.com")
+    response = client.post(
+        "/api/v1/recognition/identify",
+        headers=auth_headers(token),
+        files={"image": ("ocr-down.png", _png_bytes(color=(15, 15, 15)), "image/png")},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["bucket"] == "UNKNOWN"
+

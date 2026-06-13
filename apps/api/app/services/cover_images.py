@@ -109,6 +109,20 @@ DERIVATIVE_LONGEST_SIDE = {
 }
 
 OCR_ENGINE_NAME = "tesseract"
+
+
+def _resolve_ocr_engine_cmd() -> str:
+    """Resolve the Tesseract executable, honoring the TESSERACT_CMD setting.
+
+    Falls back to the bare ``tesseract`` name (resolved via PATH) when the
+    setting is empty. This lets hosts without tesseract on PATH still run OCR
+    by pointing TESSERACT_CMD at the installed binary.
+    """
+    try:
+        configured = (get_settings().tesseract_cmd or "").strip()
+    except Exception:  # noqa: BLE001 - settings must never block OCR resolution
+        configured = ""
+    return configured or OCR_ENGINE_NAME
 OCR_SOURCE_PROCESSING_VERSION = "cover-image-processing-v1"
 OCR_NORMALIZATION_VERSION = "cover-image-ocr-normalization-v1"
 OCR_REPLAY_REASON_MAX_CHARS = 500
@@ -5270,7 +5284,7 @@ def normalize_ocr_text(raw_text: str) -> str | None:
 def get_tesseract_engine_version() -> str | None:
     try:
         result = subprocess.run(
-            [OCR_ENGINE_NAME, "--version"],
+            [_resolve_ocr_engine_cmd(), "--version"],
             capture_output=True,
             text=True,
             check=False,
@@ -5289,7 +5303,7 @@ def get_tesseract_engine_version() -> str | None:
 def _run_tesseract_ocr_on_cover_path(image_path: Path, *, timeout_seconds: float | None = None) -> str:
     try:
         kwargs: dict[str, object] = {
-            "args": [OCR_ENGINE_NAME, str(image_path), "stdout"],
+            "args": [_resolve_ocr_engine_cmd(), str(image_path), "stdout"],
             "capture_output": True,
             "text": True,
             "check": False,
