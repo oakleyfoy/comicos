@@ -153,8 +153,19 @@ describe("RetailerOrderDetailPage", () => {
     expect(screen.getByText("Prices found")).toBeInTheDocument();
     expect(screen.getByText("Release dates found")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(2);
-    expect(screen.getByText("No cover image")).toBeInTheDocument();
+    expect(screen.getByText("No cover")).toBeInTheDocument();
     expect(screen.getByText("Product URL missing")).toBeInTheDocument();
+
+    // Review covers must render as constrained thumbnails, never full-width.
+    const covers = screen.getAllByTestId("retailer-review-cover");
+    expect(covers).toHaveLength(2);
+    for (const cover of covers) {
+      expect(cover.className).toMatch(/\bw-20\b/);
+      expect(cover.className).toMatch(/\bshrink-0\b/);
+      expect(cover.className).toMatch(/h-\[120px\]/);
+    }
+    const coverImg = screen.getByAltText("Immortal Thor #1 Cover A") as HTMLImageElement;
+    expect(coverImg.className).toContain("object-cover");
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm Retailer Order" }));
 

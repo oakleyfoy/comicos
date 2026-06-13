@@ -441,9 +441,12 @@ export function RetailerOrderDetailPage() {
               {order.items.map((item) => (
                 <article
                   key={item.id}
-                  className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 md:grid-cols-[120px,1fr]"
+                  className="flex gap-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4"
                 >
-                  <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/80">
+                  <div
+                    data-testid="retailer-review-cover"
+                    className="h-[120px] w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/80 sm:h-[132px] sm:w-[88px]"
+                  >
                     {item.cover_image_url || item.image_url ? (
                       <img
                         src={item.cover_image_url || item.image_url || ""}
@@ -452,13 +455,13 @@ export function RetailerOrderDetailPage() {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-36 items-center justify-center text-xs uppercase tracking-[0.16em] text-slate-500">
-                        No cover image
+                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                        No cover
                       </div>
                     )}
                   </div>
 
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold text-white">{item.title}</h3>
