@@ -803,8 +803,19 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         _parse_price(_match_after_label(fragment, "Line Total"))
         or _parse_price(_match_after_label(fragment, "Total"))
     )
-    image_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', fragment, flags=re.IGNORECASE)
-    image_src = image_match.group(1) if image_match else None
+    image_tag_match = re.search(r"<img[^>]*>", fragment, flags=re.IGNORECASE)
+    image_src: str | None = None
+    image_title: str | None = None
+    if image_tag_match:
+        image_tag = image_tag_match.group(0)
+        src_match = re.search(r'src=["\']([^"\']+)["\']', image_tag, flags=re.IGNORECASE)
+        image_src = src_match.group(1) if src_match else None
+        title_match = re.search(r'title=["\']([^"\']*)["\']', image_tag, flags=re.IGNORECASE)
+        alt_match = re.search(r'alt=["\']([^"\']*)["\']', image_tag, flags=re.IGNORECASE)
+        image_title = (
+            _clean_html_text((title_match.group(1) if title_match else "") or (alt_match.group(1) if alt_match else ""))
+            or None
+        )
     image_url, remote_midtown_image_url = _normalize_midtown_saved_image_src(image_src)
     if image_url and image_url.startswith(("http://", "https://")):
         image_url = _absolute_url(image_url)
@@ -814,6 +825,7 @@ def _parse_item_from_fragment(fragment: str) -> tuple[MidtownOrderItem | None, s
         image_url=image_url,
         thumbnail_url=image_url,
         remote_midtown_image_url=remote_midtown_image_url,
+        image_title=image_title,
         title=title,
         publisher=_normalize_midtown_publisher(_match_after_label(fragment, "Publisher")),
         issue_number=issue_number,

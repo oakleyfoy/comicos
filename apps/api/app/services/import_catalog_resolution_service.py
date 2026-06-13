@@ -611,6 +611,60 @@ def _pick_resolution(scored: list[ScoredCatalogCandidate]) -> ImportCatalogResol
     )
 
 
+def find_external_catalog_issue_for_item(
+    session: Session,
+    *,
+    item: dict[str, Any],
+) -> ExternalCatalogIssue | None:
+    """Best external/LOCG catalog issue for an item's series + issue number.
+
+    Used to complete release/FOC dates and covers when the chosen local match
+    (e.g. a bare ReleaseIssue) is missing them. Strict matching (exact normalized
+    series title + exact issue number) avoids cross-series leakage; a row carrying a
+    date or cover is preferred.
+    """
+    raw_title = item.get("title") or item.get("canonical_title")
+    title = derive_catalog_search_title(raw_title)
+    issue_number = item.get("issue_number") or item.get("canonical_issue_number")
+    want_title = normalize_import_title(title)
+    want_issue = _issue_number_key(issue_number)
+    if not want_title or not issue_number_variants(issue_number):
+        return None
+    candidates = _collect_external_catalog_candidates(
+        session, issue_number=str(issue_number), title=title
+    )
+    fallback: ExternalCatalogIssue | None = None
+    for candidate in candidates:
+        if want_issue and _issue_number_key(candidate.issue_number) != want_issue:
+            continue
+        row = session.get(ExternalCatalogIssue, candidate.source_id)
+        if row is None:
+            continue
+        if normalize_import_title(row.series_name or row.title) != want_title:
+            continue
+        if fallback is None:
+            fallback = row
+        if row.release_date or row.foc_date or row.cover_image_url or row.high_resolution_image_url:
+            return row
+    return fallback
+
+
+def _backfill_release_date_from_candidates(
+    result: ImportCatalogResolutionResult,
+    scored: list[ScoredCatalogCandidate],
+) -> None:
+    """Fill a matched result's missing release_date from a dated sibling candidate."""
+    want_issue = _issue_number_key(result.issue_number)
+    for row in sorted(scored, key=lambda r: -r.score):
+        candidate = row.candidate
+        if candidate.release_date is None:
+            continue
+        if want_issue and _issue_number_key(candidate.issue_number) != want_issue:
+            continue
+        result.release_date = candidate.release_date
+        return
+
+
 def resolve_import_catalog_match(
     session: Session | None,
     *,
@@ -667,10 +721,16 @@ def resolve_import_catalog_match(
     result = _pick_resolution(scored)
     hydrate_diag: dict[str, Any] = {}
     should_try_locg_hydrate = (
-        not result.matched
-        and result.score < ACCEPT_SCORE
-        and bool(normalize_import_title(title))
+        bool(normalize_import_title(title))
         and bool(issue_number_variants(issue_number))
+        and (
+            (not result.matched and result.score < ACCEPT_SCORE)
+            # Matched to a local catalog row that is missing the release date (e.g.
+            # a bare ReleaseIssue from a prior import). A live LOCG lookup can still
+            # fill the date/cover; enrichment runs off the request path so the slow
+            # call is acceptable.
+            or (result.matched and result.release_date is None)
+        )
     )
     if should_try_locg_hydrate:
         from app.services.import_locg_hydrate_service import (
@@ -712,6 +772,14 @@ def resolve_import_catalog_match(
                     "locg_hydrated": False,
                     "locg_hydrate_no_match_reason": "resolve_guard",
                 }
+
+    # A matched local record (e.g. ReleaseIssue) may be missing the release date.
+    # Backfill it from the best-scoring sibling candidate for the same issue that
+    # does carry a date (typically the external/LOCG record), so the date flows even
+    # when the dateless local row wins on source priority.
+    if result.matched and result.release_date is None:
+        _backfill_release_date_from_candidates(result, scored)
+
     result.diagnostics = {
         **diagnostics,
         **hydrate_diag,

@@ -204,7 +204,9 @@ def test_confirm_midtown_order_4272232_with_catalog_enrichment(client, session) 
         select(InventoryCopy).where(InventoryCopy.order_item_id == barbara_line.id)
     ).all()
     assert len(barbara_copies) == 2
-    assert barbara_copies[0].source_image_url == "/images/local/cover-1.jpg"
+    # Matched item: the resolved catalog (Cover A) cover wins over the broken local
+    # retailer image for display.
+    assert barbara_copies[0].source_image_url == "https://catalog.example.com/barbara-a.jpg"
     assert barbara_copies[0].release_date == date(2026, 7, 15)
 
     detail = client.get("/api/v1/retailer-orders/9104272232", headers=auth_headers(token))

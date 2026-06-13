@@ -23,6 +23,7 @@ from app.models import (
     User,
 )
 from app.models.asset_ledger import ComicIssue, ComicTitle, Variant
+from app.models.external_catalog import ExternalCatalogIssue
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
 from app.services.import_catalog_resolution_service import derive_catalog_search_title
 from test_inventory import auth_headers, register_and_login
@@ -212,6 +213,108 @@ def test_reenrich_endpoint_returns_match_diagnostics(client, session) -> None:
         assert line["match_score"] >= 70
         assert line["candidate_count"] >= 1
         assert line["rejection_reason"] is None
+
+
+def test_confirm_completes_dates_and_cover_from_external_catalog(client, session, monkeypatch) -> None:
+    # Force the local (DB-only) external-catalog fallback path; no live LOCG calls.
+    monkeypatch.setenv("IMPORT_LOCG_HYDRATE", "0")
+    token = register_and_login(client, "midtown-external-complete@example.com")
+    user = session.exec(select(User).where(User.email == "midtown-external-complete@example.com")).one()
+    account = _create_account(client, session, token, "midtown-external-complete@example.com")
+
+    # A bare ReleaseIssue (matches on title+issue) with no dates...
+    series = ReleaseSeries(
+        owner_user_id=int(user.id),
+        publisher="DC",
+        series_name="Absolute Green Arrow",
+        series_type="ONGOING",
+        status="ACTIVE",
+    )
+    session.add(series)
+    session.flush()
+    session.add(
+        ReleaseIssue(
+            owner_user_id=int(user.id),
+            series_id=int(series.id),
+            issue_number="1",
+            title="Absolute Green Arrow",
+            release_date=None,
+            foc_date=None,
+            release_status="unknown",
+        )
+    )
+    # ...and an external/LOCG catalog row for the same book WITH date, FOC, and cover.
+    session.add(
+        ExternalCatalogIssue(
+            source_name="locg",
+            title="Absolute Green Arrow #1",
+            publisher="DC",
+            series_name="Absolute Green Arrow",
+            issue_number="1",
+            release_date=date(2026, 5, 6),
+            foc_date=date(2026, 4, 13),
+            cover_image_url="https://catalog.example.com/green-arrow-1.jpg",
+        )
+    )
+    session.commit()
+
+    order = RetailerOrderSnapshot(
+        id=9100000010,
+        owner_user_id=account.owner_user_id,
+        retailer_account_id=int(account.id),
+        retailer=account.retailer,
+        retailer_order_number="9100000010",
+        order_date=date(2026, 5, 8),
+        order_status="Shipped",
+        order_total=Decimal("5.99"),
+        raw_snapshot_json={"comicos_review_status": "captured"},
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    session.add(order)
+    session.flush()
+    session.add(
+        RetailerOrderItemSnapshot(
+            owner_user_id=account.owner_user_id,
+            retailer_order_snapshot_id=int(order.id),
+            retailer=account.retailer,
+            retailer_order_number="9100000010",
+            retailer_item_id="9100000010-001",
+            product_url=None,
+            # Broken local saved-HTML image (would otherwise render as a placeholder).
+            image_url="./Order_files/local-broken.jpg",
+            thumbnail_url="./Order_files/local-broken-thumb.jpg",
+            title="Absolute Green Arrow #1 Cover A Regular Rafael Albuquerque Cover (DC All In)(Limit 1 Per Customer)",
+            publisher="DC",
+            issue_number="1",
+            cover_name="Cover A",
+            variant_type="Regular",
+            quantity=1,
+            unit_price=Decimal("5.99"),
+            total_price=Decimal("5.99"),
+            item_status="Shipped",
+            release_date=None,
+            raw_item_json={"line": 1},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    session.commit()
+    session.refresh(order)
+
+    confirmed = client.post("/api/v1/retailer-orders/9100000010/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    linked_order_id = confirmed.json()["linked_order_id"]
+    session.expire_all()
+
+    order_item = session.exec(select(OrderItem).where(OrderItem.order_id == linked_order_id)).one()
+    assert order_item.enrichment_status == "matched", order_item.enrichment_notes
+    assert order_item.foc_date == date(2026, 4, 13)
+
+    copy = session.exec(select(InventoryCopy).where(InventoryCopy.order_item_id == order_item.id)).one()
+    assert copy.release_date == date(2026, 5, 6)
+    assert copy.release_year == 2026
+    assert copy.source_image_url == "https://catalog.example.com/green-arrow-1.jpg"
 
 
 def test_reenrich_requires_confirmed_order(client, session) -> None:

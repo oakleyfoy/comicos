@@ -352,6 +352,8 @@ export interface RetailerOrderItemSnapshotRead {
   product_url?: string | null;
   image_url?: string | null;
   thumbnail_url?: string | null;
+  remote_midtown_image_url?: string | null;
+  image_title?: string | null;
   title: string;
   publisher?: string | null;
   issue_number?: string | null;

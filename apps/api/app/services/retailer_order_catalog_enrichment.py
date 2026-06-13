@@ -77,15 +77,27 @@ def _confidence_from_item(item: dict[str, Any]) -> Decimal | None:
 
 
 def _lookup_foc_date(session: Session, item: dict[str, Any]) -> date | None:
-    if item.get("catalog_match_source") != "ReleaseIssue":
-        return None
+    from app.models.external_catalog import ExternalCatalogIssue
+    from app.services.import_catalog_resolution_service import (
+        find_external_catalog_issue_for_item,
+    )
+
+    source = item.get("catalog_match_source")
     source_id = item.get("catalog_match_source_id")
-    if source_id is None:
-        return None
-    row = session.get(ReleaseIssue, int(source_id))
-    if row is None:
-        return None
-    return row.foc_date
+    if source == "ReleaseIssue" and source_id is not None:
+        row = session.get(ReleaseIssue, int(source_id))
+        if row is not None and row.foc_date is not None:
+            return row.foc_date
+    if source == "ExternalCatalogIssue" and source_id is not None:
+        ext = session.get(ExternalCatalogIssue, int(source_id))
+        if ext is not None and ext.foc_date is not None:
+            return ext.foc_date
+    # The matched local record has no FOC date; fall back to the external/LOCG
+    # catalog issue for the same series + issue.
+    ext_issue = find_external_catalog_issue_for_item(session, item=item)
+    if ext_issue is not None:
+        return ext_issue.foc_date
+    return None
 
 
 def _apply_cover_resolution_to_dict(
@@ -455,11 +467,15 @@ def apply_retailer_enrichment_to_confirmed_order(
                     pass
         session.add(order_item)
 
-        # Preserve the retailer-captured image as the copy's source image. The
-        # display resolver surfaces a remote retailer image as a usable cover and a
-        # local saved-HTML path as a placeholder-with-warning; a downloaded catalog
-        # cover (primary_cover_image_id) takes priority when one is later attached.
-        source_url = draft_item.source_image_url or draft_item.retailer_cover_url
+        # Cover priority for display: resolved catalog cover first, then the
+        # retailer-captured image. A broken local saved-HTML path is never used as a
+        # cover URL (it would render as a placeholder), so a catalog cover always
+        # wins over it.
+        catalog_cover = (draft_item.cover_image_url or "").strip()
+        if _is_broken_local_retailer_image(catalog_cover):
+            catalog_cover = ""
+        retailer_source = (draft_item.source_image_url or draft_item.retailer_cover_url or "").strip()
+        source_url = catalog_cover or retailer_source or None
         copies = session.exec(
             select(InventoryCopy).where(InventoryCopy.order_item_id == order_item.id)
         ).all()

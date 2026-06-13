@@ -124,6 +124,13 @@ def _resolve_retailer_cover(item: dict[str, Any]) -> ImportCoverResolutionResult
     url = (item.get("retailer_cover_url") or "").strip()
     if not url:
         return None
+    # A saved-HTML local path (e.g. "./Order_files/x.jpg") is not web-servable and
+    # would render as a broken image, so don't treat it as the resolved cover. Fall
+    # through to catalog cover resolution; the local path is still retained as the
+    # copy's source image for provenance.
+    lowered = url.lower()
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        return None
     source = "midtown_product" if (item.get("retailer_lookup_status") == "matched" or item.get("retailer_product_url")) else "retailer_cover"
     return ImportCoverResolutionResultPayload(
         cover_image_url=url,
@@ -396,12 +403,26 @@ def _resolve_external_issue_id(
                 return match.external_issue_id
 
     fresh = resolve_import_catalog_match(session, owner_user_id=owner_user_id, item=item)
-    return _external_issue_id_from_catalog_resolution(
+    linked = _external_issue_id_from_catalog_resolution(
         session,
         owner_user_id=owner_user_id,
         item=item,
         catalog_resolution=fresh,
     )
+    if linked is not None:
+        return linked
+
+    # Fallback: a direct external/LOCG catalog lookup by series + issue. Covers the
+    # case where the match landed on a bare ReleaseIssue (no External link) but LOCG
+    # holds a row with a usable cover for the same book.
+    from app.services.import_catalog_resolution_service import (
+        find_external_catalog_issue_for_item,
+    )
+
+    ext_issue = find_external_catalog_issue_for_item(session, item=item)
+    if ext_issue is not None and ext_issue.id is not None and _external_issue_matches_item(ext_issue, item):
+        return int(ext_issue.id)
+    return None
 
 
 def _resolve_external_catalog_cover(

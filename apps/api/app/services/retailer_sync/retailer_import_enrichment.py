@@ -47,7 +47,23 @@ def _match_existing_item(
     return None
 
 
+def _snapshot_cover_url(snapshot: RetailerOrderItemSnapshot) -> str | None:
+    """Web-servable retailer cover URL.
+
+    Saved-HTML imports store a *local* file path in ``image_url`` (e.g.
+    ``./Order_files/2539636_ful.jpg``) plus a derived remote URL
+    (``remote_midtown_image_url``) in ``raw_item_json``. Prefer the remote URL so
+    the cover renders without a catalog match; fall back to the stored ``image_url``.
+    """
+    raw = snapshot.raw_item_json if isinstance(snapshot.raw_item_json, dict) else {}
+    remote = raw.get("remote_midtown_image_url")
+    if isinstance(remote, str) and remote.strip():
+        return remote.strip()
+    return snapshot.image_url
+
+
 def _snapshot_to_item(snapshot: RetailerOrderItemSnapshot) -> AiDraftOrderItem:
+    cover_url = _snapshot_cover_url(snapshot)
     return AiDraftOrderItem(
         title=snapshot.title,
         publisher=snapshot.publisher,
@@ -57,8 +73,8 @@ def _snapshot_to_item(snapshot: RetailerOrderItemSnapshot) -> AiDraftOrderItem:
         cover_artist=snapshot.cover_artist,
         quantity=snapshot.quantity,
         raw_item_price=snapshot.unit_price,
-        retailer_cover_url=snapshot.image_url,
-        retailer_thumbnail_url=snapshot.thumbnail_url,
+        retailer_cover_url=cover_url,
+        retailer_thumbnail_url=cover_url or snapshot.thumbnail_url,
         retailer_product_url=snapshot.product_url,
         retailer_sku=snapshot.retailer_item_id,
         retailer_order_number=snapshot.retailer_order_number,
@@ -99,8 +115,10 @@ def _merge_item(
         "cover_artist": existing.cover_artist or snapshot.cover_artist,
         "quantity": existing.quantity or snapshot.quantity,
         "raw_item_price": existing.raw_item_price or snapshot.unit_price,
-        "retailer_cover_url": snapshot.image_url or existing.retailer_cover_url,
-        "retailer_thumbnail_url": snapshot.thumbnail_url or existing.retailer_thumbnail_url,
+        "retailer_cover_url": _snapshot_cover_url(snapshot) or existing.retailer_cover_url,
+        "retailer_thumbnail_url": _snapshot_cover_url(snapshot)
+        or snapshot.thumbnail_url
+        or existing.retailer_thumbnail_url,
         "retailer_product_url": snapshot.product_url or existing.retailer_product_url,
         "retailer_sku": snapshot.retailer_item_id or existing.retailer_sku,
         "retailer_order_number": snapshot.retailer_order_number,

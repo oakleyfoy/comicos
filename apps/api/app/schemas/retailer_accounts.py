@@ -69,6 +69,8 @@ class RetailerOrderItemSnapshotRead(BaseModel):
     product_url: str | None = None
     image_url: str | None = None
     thumbnail_url: str | None = None
+    remote_midtown_image_url: str | None = None
+    image_title: str | None = None
     title: str
     publisher: str | None = None
     issue_number: str | None = None
