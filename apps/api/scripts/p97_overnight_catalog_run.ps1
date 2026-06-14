@@ -1457,9 +1457,9 @@ function Write-ForeverProgressBlock {
     Write-Host "Fingerprints: $(Format-Count -Value ([int]$CatalogSnapshot.fingerprints))"
     Write-Host "OCR Rows: $(Format-Count -Value ([int]$CatalogSnapshot.ocr_rows))"
     Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s (floor=$($ComicVineForeverMinSleepSeconds)s)"
-    $last420Text = if ($null -ne $rate.last_420_at -and -not [string]::IsNullOrWhiteSpace([string]$rate.last_420_at)) { [string]$rate.last_420_at } else { "—" }
+    $last420Text = if ($null -ne $rate.last_420_at -and -not [string]::IsNullOrWhiteSpace([string]$rate.last_420_at)) { [string]$rate.last_420_at } else { "N/A" }
     $mins420 = Get-MinutesSinceLast420 -State $rate
-    $mins420Text = if ($null -ne $mins420) { "$mins420" } else { "—" }
+    $mins420Text = if ($null -ne $mins420) { "$mins420" } else { "N/A" }
     Write-Host "Last 420 At: $last420Text  (minutes_since_last_420=$mins420Text)"
     Write-Host "420 Count This Run: $($Script:ForeverState.total_420_count_this_run)"
     Write-Host "Last Successful Chunk: $($Script:ForeverState.last_successful_chunk_at)"
