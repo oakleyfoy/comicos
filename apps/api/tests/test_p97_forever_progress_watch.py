@@ -26,8 +26,9 @@ def test_format_dashboard_includes_key_sections() -> None:
         "current_offset": 4300,
         "current_chunk_limit": 100,
         "chunks_completed_this_run": 43,
-        "current_sleep_seconds": 7,
-        "sleep_floor": 7,
+        "current_sleep_seconds": 10,
+        "sleep_floor": 10,
+        "downtrim_enabled": False,
         "last_420_at": "2026-06-14T16:53:24.5000931Z",
         "minutes_since_last_420": 42.5,
         "last_chunk_result": {"created": 72, "updated": 211, "skipped": 228, "failed": 0},
@@ -41,4 +42,6 @@ def test_format_dashboard_includes_key_sections() -> None:
     assert "150k progress" in text
     assert "created=72" in text
     assert "Sleep floor:" in text
+    assert "Downtrim enabled:" in text
+    assert "False" in text
     assert "Minutes since 420:" in text

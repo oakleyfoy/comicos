@@ -26,7 +26,7 @@ $ThrottleRetryMax = 6
 $ThrottleSleepSeconds = 900
 $ComicVineBaseSleepSeconds = 2
 $ComicVineOvernightMinSleepSeconds = 1.5
-$ComicVineForeverMinSleepSeconds = 7
+$ComicVineForeverMinSleepSeconds = 10
 $ComicVineMaxSleepSeconds = 10
 
 $env:DATABASE_URL = "postgresql+pg8000://postgres:postgres@localhost:5433/comic_os"
@@ -314,7 +314,7 @@ function Enforce-ComicVineForeverSleepFloor {
     $beforeSleep = [double]$State.current_sleep_seconds
     if ($beforeSleep -lt $floor) {
         $State.current_sleep_seconds = $floor
-        Write-Log "Forever sleep floor enforced: $beforeSleep -> 7"
+        Write-Log "Forever sleep floor enforced: $beforeSleep -> $floor"
         $changed = $true
     }
     if ([double]$State.min_sleep_seconds -lt $floor) {
@@ -399,6 +399,7 @@ function Get-ComicVine420Counts {
 
 function Apply-ComicVineSleepRecovery {
     param([Parameter(Mandatory = $true)]$State)
+    if ($Forever) { return }
     $minSleep = [double](Get-ComicVineEffectiveMinSleepSeconds)
     $before = [double]$State.current_sleep_seconds
     if ($before -le $minSleep) { return }
@@ -436,6 +437,11 @@ function Register-ComicVine420 {
     $State.throttle_420_timestamps = @($list)
     Update-ComicVineRateThrottleWindows -State $State
     $counts = Get-ComicVine420Counts -State $State
+    if ($Forever) {
+        [void](Enforce-ComicVineForeverSleepFloor -State $State)
+        Write-Log "420 detected (forever steady crawl); total_420_count=$($State.total_420_count) throttle_count_last_hour=$($State.throttle_count_last_hour); sleep held at $($State.current_sleep_seconds)s" -Level "WARN"
+        return
+    }
     $bump = 1
     if ($counts.count60 -ge 3) {
         $bump = 5
@@ -734,6 +740,11 @@ function Invoke-ExternalPython {
     }
 }
 
+function Get-ImportThrottleRetryMax {
+    if ($Forever) { return 0 }
+    return [int]$ThrottleRetryMax
+}
+
 function Invoke-ImportWithThrottle {
     param(
         [Parameter(Mandatory = $true)][scriptblock]$ImportScript,
@@ -741,13 +752,14 @@ function Invoke-ImportWithThrottle {
     )
     $throttleAttempts = 0
     $importResult = $null
+    $retryMax = Get-ImportThrottleRetryMax
     do {
         $importResult = & $ImportScript
-        if ($importResult.throttled -and $throttleAttempts -lt $ThrottleRetryMax) {
+        if ($importResult.throttled -and $throttleAttempts -lt $retryMax) {
             $throttleAttempts++
             $Script:RunStats.throttle_events++
             $retrySleep = Get-ComicVineImportSleepSeconds
-            Write-Log "HTTP 420/throttle for $Label; sleep_seconds=$retrySleep; cooldown ${ThrottleSleepSeconds}s (retry $throttleAttempts/$ThrottleRetryMax)" -Level "WARN"
+            Write-Log "HTTP 420/throttle for $Label; sleep_seconds=$retrySleep; cooldown ${ThrottleSleepSeconds}s (retry $throttleAttempts/$retryMax)" -Level "WARN"
             if (-not $WhatIf) { Start-Sleep -Seconds $ThrottleSleepSeconds }
         } else {
             break
@@ -1185,6 +1197,16 @@ function Release-AcquisitionRunnerLock {
     }
 }
 
+function Initialize-ComicVineForeverRateState {
+    $state = Load-ComicVineRateState
+    $floor = [double]$ComicVineForeverMinSleepSeconds
+    $state.current_sleep_seconds = $floor
+    $state.min_sleep_seconds = $floor
+    [void](Enforce-ComicVineForeverSleepFloor -State $state)
+    Save-ComicVineRateState -State $state
+    Write-Log "Forever ComicVine rate state initialized at ${floor}s (downtrim disabled)"
+}
+
 function Initialize-ForeverRunState {
     param(
         [Parameter(Mandatory = $true)][datetime]$StartTime,
@@ -1376,6 +1398,7 @@ function Write-ForeverProgressArtifacts {
         total_420_count_this_run = $Script:ForeverState.total_420_count_this_run
         current_sleep_seconds = $Script:ForeverState.current_sleep_seconds
         sleep_floor = [double]$ComicVineForeverMinSleepSeconds
+        downtrim_enabled = $false
         last_420_at = $(if ($null -ne $rate.last_420_at) { [string]$rate.last_420_at } else { $null })
         minutes_since_last_420 = $minutesSinceLast420
         last_successful_chunk_at = $Script:ForeverState.last_successful_chunk_at
@@ -1456,7 +1479,7 @@ function Write-ForeverProgressBlock {
     Write-Host "Pending Covers: $(Format-Count -Value ([int]$CatalogSnapshot.pending_covers))"
     Write-Host "Fingerprints: $(Format-Count -Value ([int]$CatalogSnapshot.fingerprints))"
     Write-Host "OCR Rows: $(Format-Count -Value ([int]$CatalogSnapshot.ocr_rows))"
-    Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s (floor=$($ComicVineForeverMinSleepSeconds)s)"
+    Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s (floor=$($ComicVineForeverMinSleepSeconds)s, downtrim=off)"
     $last420Text = if ($null -ne $rate.last_420_at -and -not [string]::IsNullOrWhiteSpace([string]$rate.last_420_at)) { [string]$rate.last_420_at } else { "N/A" }
     $mins420 = Get-MinutesSinceLast420 -State $rate
     $mins420Text = if ($null -ne $mins420) { "$mins420" } else { "N/A" }
@@ -1589,7 +1612,7 @@ function Invoke-ForeverPublisherChunk {
         Invoke-PublisherImport -PublisherName $PublisherName -Offset $offset -Limit $chunkLimit -ForeverChunk
     }
     $importResult = $wrapped.result
-    $maxThrottle = ($importResult.throttled -and $wrapped.throttle_attempts -ge $ThrottleRetryMax)
+    $maxThrottle = [bool]$importResult.throttled
     $mismatchOnly = ($importResult.skipped_mismatch_only -eq $true)
     if (-not $mismatchOnly) {
         $mismatchOnly = Test-ForeverPublisherMismatchOnlyChunk -ImportResult $importResult
@@ -1623,13 +1646,17 @@ function Invoke-ForeverPublisherChunk {
     $pubRow = $Script:ForeverState.publisher_progress[$PublisherName]
     if ($null -eq $pubRow.mismatch_only_chunks) { $pubRow.mismatch_only_chunks = 0 }
     if ($null -eq $pubRow.skipped_mismatch_volumes) { $pubRow.skipped_mismatch_volumes = 0 }
-    $pubRow."420s" += [int]$wrapped.throttle_attempts
+    $pubRow."420s" += $(if ($importResult.throttled) { 1 } else { [int]$wrapped.throttle_attempts })
 
     if ($maxThrottle) {
-        Set-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName -Reason "HTTP_420_RETRY_LIMIT"
+        Set-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName -Reason "HTTP_420_THROTTLED"
         $pubRow.status = "PAUSED"
         $Script:RunStats.publishers_failed++
-        Write-Log "Forever chunk throttled out for $PublisherName; offset unchanged at $offset" -Level "WARN"
+        Write-Log "Forever chunk throttled for $PublisherName at sleep floor; publisher paused; offset unchanged at $offset" -Level "WARN"
+        if (-not $WhatIf) {
+            Write-Log "Forever 420 cooldown ${ThrottleSleepSeconds}s before next publisher" -Level "WARN"
+            Start-Sleep -Seconds $ThrottleSleepSeconds
+        }
         return
     }
 
@@ -1687,10 +1714,7 @@ function Start-ForeverAcquisitionDaemon {
     )
     Register-ForeverCancelHandler
     $Script:ForeverDaemonStartTime = $StartTime
-    $rateBootstrap = Load-ComicVineRateState
-    if (Enforce-ComicVineForeverSleepFloor -State $rateBootstrap) {
-        Save-ComicVineRateState -State $rateBootstrap
-    }
+    Initialize-ComicVineForeverRateState
     $ProgressDoc.series_exhausted = $true
     $ProgressDoc.acquisition_phase = "publisher"
     $Script:RunStats.acquisition_phase = "publisher"
@@ -1773,6 +1797,7 @@ function Show-ForeverWhatIfPlan {
     Write-Host "Publisher pause file=$PublisherPauseStateFile"
     Write-Host "Rate limiter state file=$RateStateFile"
     Write-Host "current_sleep_seconds=$($rate.current_sleep_seconds) total_420_count=$($rate.total_420_count)"
+    Write-Host "Forever sleep floor=${ComicVineForeverMinSleepSeconds}s (starts at floor; downtrim/recovery disabled)"
     Write-Host "Publisher queue ($($PublisherTargets.Count)):"
     foreach ($name in $PublisherTargets) {
         $entry = $ProgressDoc.publishers[$name]

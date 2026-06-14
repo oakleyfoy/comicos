@@ -78,6 +78,7 @@ def format_dashboard(doc: dict) -> str:
         f"Chunks this run:      {_fmt_count(doc.get('chunks_completed_this_run'))}",
         f"ComicVine sleep:      {doc.get('current_sleep_seconds', '—')}s",
         f"Sleep floor:          {doc.get('sleep_floor', '—')}s",
+        f"Downtrim enabled:     {doc.get('downtrim_enabled', '—')}",
         f"420 count (run):      {_fmt_count(doc.get('total_420_count_this_run'))}",
         f"Last 420 at:          {doc.get('last_420_at') or '—'}",
         f"Minutes since 420:    {doc.get('minutes_since_last_420', '—')}",
