@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode, RefObject } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +35,7 @@ vi.mock("../../components/live-capture/CameraFeed", async () => {
 });
 
 beforeEach(() => {
+  cleanup();
   intervalCallbacks.length = 0;
   vi.restoreAllMocks();
   Object.defineProperty(navigator, "mediaDevices", {
@@ -415,5 +416,67 @@ describe("WebcamLiveCapturePage", () => {
     });
 
     expect(screen.getByText(/missing session id/i)).toBeInTheDocument();
+  });
+
+  it("starts a fresh session when New session is clicked", async () => {
+    const createSpy = vi.spyOn(apiClient, "createReceivingSession");
+    const getSpy = vi.spyOn(apiClient, "getReceivingSession");
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+
+    createSpy.mockResolvedValueOnce({
+      id: 99,
+      status: "PENDING",
+      total_items: 0,
+      verified_items: 0,
+      review_items: 0,
+      unknown_items: 0,
+      confirmed_items: 0,
+      skipped_items: 0,
+      capture_source: "WEBCAM",
+      created_at: "2026-06-09T16:00:00Z",
+      updated_at: "2026-06-09T16:00:00Z",
+      started_at: null,
+      completed_at: null,
+      session_notes: null,
+      live_capture_stats_json: {},
+    });
+    getSpy.mockResolvedValueOnce({
+      id: 99,
+      status: "ACTIVE",
+      total_items: 0,
+      verified_items: 0,
+      review_items: 0,
+      unknown_items: 0,
+      confirmed_items: 0,
+      skipped_items: 0,
+      capture_source: "WEBCAM",
+      created_at: "2026-06-09T16:00:00Z",
+      updated_at: "2026-06-09T16:00:00Z",
+      started_at: null,
+      completed_at: null,
+      session_notes: null,
+      items: [],
+      live_capture_stats_json: {},
+    });
+
+    await act(async () => {
+      screen.getByTestId("live-capture-new-session").click();
+      await Promise.resolve();
+    });
+
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    expect(getSpy).toHaveBeenCalledWith(99);
+    expect(screen.getByTestId("live-capture-session")).toHaveTextContent("#99");
   });
 });

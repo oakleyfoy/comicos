@@ -36,6 +36,12 @@ export function RecognitionResultCard({
         ? `${Math.round(identification.confidence * 100)}%`
         : "—";
   const bucket = item?.recognition_bucket ?? identification?.bucket ?? "—";
+  const snapshot =
+    item?.recognition_snapshot_json && typeof item.recognition_snapshot_json === "object"
+      ? (item.recognition_snapshot_json as Record<string, unknown>)
+      : null;
+  const catalogIssueId = snapshot?.catalog_issue_id ?? identification?.catalog_issue_id;
+  const winningSource = snapshot?.winning_source ?? identification?.winning_source;
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-slate-100 shadow-lg">
@@ -46,6 +52,13 @@ export function RecognitionResultCard({
           <p className="mt-1 text-sm text-slate-400">
             Bucket {bucket} · Confidence {confidence}
           </p>
+          {catalogIssueId != null || winningSource ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {catalogIssueId != null ? `Catalog issue ${String(catalogIssueId)}` : null}
+              {catalogIssueId != null && winningSource ? " · " : null}
+              {winningSource ? `Source ${String(winningSource)}` : null}
+            </p>
+          ) : null}
         </div>
         {keyboardHint ? <div className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300">{keyboardHint}</div> : null}
       </div>

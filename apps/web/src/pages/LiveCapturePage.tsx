@@ -359,6 +359,32 @@ function LiveCapturePageInner({
     setSession(await apiClient.getReceivingSession(session.id));
   }
 
+  async function startNewSession(): Promise<void> {
+    armCaptureHoldAfterUserAction();
+    recentFingerprintsRef.current.clear();
+    setLoading(true);
+    setError(null);
+    try {
+      const created = await apiClient.createReceivingSession({ capture_source: captureSource });
+      const sessionId = created?.id;
+      if (typeof sessionId !== "number") {
+        throw new Error("Invalid receiving session response: missing session id.");
+      }
+      const detail = await apiClient.getReceivingSession(sessionId);
+      sessionAttemptRef.current = 0;
+      setSession(detail);
+      setLastFrameCapturedAt(null);
+      setStatusMessage("New live capture session started.");
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Unable to start a new session.";
+      setError(message);
+      setStatusMessage("Could not start a new session.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleConfirm(decision: "confirm" | "wrong_match" = "confirm"): Promise<void> {
     if (!session || !currentItem) {
       return;
@@ -484,6 +510,15 @@ function LiveCapturePageInner({
             <Link to="/receiving" className="text-sm text-slate-300 underline-offset-2 hover:underline">
               Receiving station
             </Link>
+            <button
+              type="button"
+              data-testid="live-capture-new-session"
+              onClick={() => void startNewSession()}
+              disabled={loading}
+              className="rounded-full border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-50"
+            >
+              New session
+            </button>
             <button
               type="button"
               onClick={() => setPaused((value) => !value)}

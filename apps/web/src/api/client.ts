@@ -20719,6 +20719,12 @@ export interface RecognitionIdentifyRead {
   publisher?: string | null;
   release_date?: string | null;
   cover_image_url?: string | null;
+  catalog_issue_id?: number | null;
+  winning_source?: string | null;
+  catalog_fingerprint_score?: number | null;
+  external_catalog_score?: number | null;
+  ocr_score?: number | null;
+  final_confidence?: number | null;
   candidate_count: number;
   candidates: RecognitionCandidateRead[];
   metrics: Record<string, number>;
