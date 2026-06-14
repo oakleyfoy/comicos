@@ -5,6 +5,8 @@
 .PARAMETER Forever
   Run publisher acquisition continuously until Ctrl+C (import-only; no enrichment post-processing).
   Default: major-publisher sequential mode (Marvel -> DC -> Image -> Dark Horse -> IDW -> Boom).
+  Marvel: after 3 consecutive publisher-offset chunks with zero issues created/updated, Forever runs
+  a fixed Marvel series queue via --series-name --import-issues, then marks Marvel complete and continues at DC.
 .PARAMETER AllPublishers
   With -Forever, include minor publishers (AWA, Oni, etc.) before majors are complete and use
   one-chunk rotation across the full publisher list (legacy behavior).
@@ -52,6 +54,31 @@ $ForeverPublisherPauseMinutes = 60
 $MarvelForeverChunkLimit = 25
 $MarvelForeverPauseHours = 4
 $MarvelForeverImportSleepSeconds = 10
+$MarvelForeverPublisherZeroIssueStreakLimit = 3
+$MarvelForeverSeriesTargets = @(
+    "Amazing Spider-Man",
+    "Spider-Man",
+    "Avengers",
+    "Fantastic Four",
+    "X-Men",
+    "Uncanny X-Men",
+    "Wolverine",
+    "Incredible Hulk",
+    "Captain America",
+    "Iron Man",
+    "Thor",
+    "Daredevil",
+    "Doctor Strange",
+    "New Mutants",
+    "X-Force",
+    "Venom",
+    "Punisher",
+    "Deadpool",
+    "Moon Knight",
+    "Black Panther",
+    "Guardians of the Galaxy",
+    "Silver Surfer"
+)
 $GoalIssuesPrimary = 150000
 $GoalIssuesStretch = 200000
 
@@ -195,7 +222,16 @@ function New-ProgressDocument {
     foreach ($name in $PublisherTargets) {
         $doc.publishers[$name] = New-PublisherProgressEntry -PublisherName $name
     }
+    $doc.marvel_forever = New-MarvelForeverProgressEntry
     return $doc
+}
+
+function New-MarvelForeverProgressEntry {
+    return [ordered]@{
+        mode = "publisher_offset"
+        zero_issue_streak = 0
+        exhausted_series = @()
+    }
 }
 
 function New-SeriesProgressEntry {
@@ -258,7 +294,16 @@ function Load-ProgressDocument {
                     }
                 }
             }
-        } else {
+        }
+        if ($null -ne $raw.marvel_forever) {
+            $mf = $raw.marvel_forever
+            if ($null -ne $mf.mode) { $doc.marvel_forever.mode = [string]$mf.mode }
+            if ($null -ne $mf.zero_issue_streak) { $doc.marvel_forever.zero_issue_streak = [int]$mf.zero_issue_streak }
+            if ($null -ne $mf.exhausted_series) {
+                $doc.marvel_forever.exhausted_series = @($mf.exhausted_series)
+            }
+        }
+        if ($null -eq $raw.publishers) {
             foreach ($name in $PublisherTargets) {
                 $doc.publishers[$name] = New-PublisherProgressEntry -PublisherName $name
             }
@@ -862,7 +907,8 @@ function Invoke-SeriesImport {
     param(
         [Parameter(Mandatory = $true)][string]$SeriesName,
         [Parameter(Mandatory = $true)][int]$Offset,
-        [int]$Limit = $PerSeriesLimit
+        [int]$Limit = $PerSeriesLimit,
+        [switch]$ForeverMarvel
     )
     $sleepPlaceholder = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
     $importArgs = @(
@@ -874,7 +920,12 @@ function Invoke-SeriesImport {
         "--sleep-seconds", $sleepPlaceholder,
         "--resume"
     )
-    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import series: $SeriesName (offset=$Offset)"
+    $sleepOverride = -1
+    if ($ForeverMarvel) {
+        $sleepOverride = Get-PublisherImportSleepSeconds -PublisherName "Marvel"
+    }
+    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import series: $SeriesName (offset=$Offset)" `
+        -SleepSecondsOverride $sleepOverride
 }
 
 function Invoke-PublisherImport {
@@ -1206,6 +1257,96 @@ function Get-ForeverProgressPublisherEntry {
         return $pubs.$PublisherName
     }
     return $null
+}
+
+function Get-MarvelForeverProgress {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    if ($null -eq $ProgressDoc.marvel_forever) {
+        $ProgressDoc.marvel_forever = New-MarvelForeverProgressEntry
+    }
+    return $ProgressDoc.marvel_forever
+}
+
+function Test-MarvelForeverSeriesQueueActive {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    return ($mf.mode -eq "series_queue")
+}
+
+function Test-MarvelForeverPublisherOffsetActive {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    return ($mf.mode -eq "publisher_offset")
+}
+
+function Test-ForeverChunkProducedZeroIssues {
+    param([Parameter(Mandatory = $true)]$ImportResult)
+    $created = [int]$ImportResult.metrics.issues_created
+    $updated = [int]$ImportResult.metrics.issues_updated
+    return ($created -le 0 -and $updated -le 0)
+}
+
+function Enter-MarvelForeverSeriesQueueMode {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    $mf.mode = "series_queue"
+    $mf.zero_issue_streak = 0
+    Write-Log ("Forever Marvel: {0} consecutive zero-issue publisher-offset chunks; switching to series queue ({1} series)" -f `
+        $MarvelForeverPublisherZeroIssueStreakLimit, $MarvelForeverSeriesTargets.Count) -Level "WARN"
+    Save-ProgressDocument -Progress $ProgressDoc
+}
+
+function Update-MarvelForeverPublisherZeroIssueStreak {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$ImportResult
+    )
+    if (-not (Test-MarvelForeverPublisherOffsetActive -ProgressDoc $ProgressDoc)) { return $false }
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    if (Test-ForeverChunkProducedZeroIssues -ImportResult $ImportResult) {
+        $mf.zero_issue_streak = [int]$mf.zero_issue_streak + 1
+        Write-Log ("Forever Marvel publisher-offset zero-issue streak={0}/{1}" -f `
+            $mf.zero_issue_streak, $MarvelForeverPublisherZeroIssueStreakLimit) -Level "INFO"
+    } else {
+        $mf.zero_issue_streak = 0
+    }
+    if ([int]$mf.zero_issue_streak -ge $MarvelForeverPublisherZeroIssueStreakLimit) {
+        Enter-MarvelForeverSeriesQueueMode -ProgressDoc $ProgressDoc
+        return $true
+    }
+    return $false
+}
+
+function Test-MarvelForeverSeriesQueueComplete {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    $exhausted = @($mf.exhausted_series)
+    foreach ($name in $MarvelForeverSeriesTargets) {
+        if ($exhausted -notcontains $name) { return $false }
+    }
+    return $true
+}
+
+function Select-MarvelForeverSeriesName {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    $exhausted = @($mf.exhausted_series)
+    foreach ($name in $MarvelForeverSeriesTargets) {
+        if ($exhausted -notcontains $name) { return $name }
+    }
+    return $null
+}
+
+function Complete-MarvelForeverAcquisition {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+    $mf.mode = "complete"
+    $ProgressDoc.publishers["Marvel"].publisher_exhausted = $true
+    if ($null -ne $Script:ForeverState -and $Script:ForeverState.publisher_progress.ContainsKey("Marvel")) {
+        $Script:ForeverState.publisher_progress["Marvel"].status = "EXHAUSTED"
+    }
+    Write-Log "Forever Marvel complete (series queue finished); resuming major queue at DC publisher mode" -Level "INFO"
+    Save-ProgressDocument -Progress $ProgressDoc
 }
 
 function Test-ForeverPublisherExhausted {
@@ -1656,6 +1797,10 @@ function Write-ForeverProgressArtifacts {
         current_major_publisher = $currentMajor
         next_major_publisher = $nextMajor
         publisher_work_queue = @($workQueue)
+        marvel_forever_mode = $(if ($null -ne $ProgressDoc.marvel_forever) { [string]$ProgressDoc.marvel_forever.mode } else { "publisher_offset" })
+        marvel_forever_zero_issue_streak = $(if ($null -ne $ProgressDoc.marvel_forever) { [int]$ProgressDoc.marvel_forever.zero_issue_streak } else { 0 })
+        marvel_forever_series_queue = @($MarvelForeverSeriesTargets)
+        marvel_forever_series_exhausted = $(if ($null -ne $ProgressDoc.marvel_forever) { @($ProgressDoc.marvel_forever.exhausted_series) } else { @() })
         status = $Script:ForeverState.status
         started_at = $Script:ForeverState.started_at
         updated_at = (Get-Date).ToUniversalTime().ToString("o")
@@ -1888,6 +2033,105 @@ function Register-ForeverCancelHandler {
     }
 }
 
+function Invoke-ForeverMarvelSeriesChunk {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    if (Test-MarvelForeverSeriesQueueComplete -ProgressDoc $ProgressDoc) {
+        Complete-MarvelForeverAcquisition -ProgressDoc $ProgressDoc
+        return
+    }
+    $seriesName = Select-MarvelForeverSeriesName -ProgressDoc $ProgressDoc
+    if (-not $seriesName) {
+        Complete-MarvelForeverAcquisition -ProgressDoc $ProgressDoc
+        return
+    }
+    $entry = $ProgressDoc.series[$seriesName]
+    $offset = [int]$entry.last_offset
+    $chunkLimit = Get-PublisherChunkLimit -PublisherName "Marvel"
+    $Script:ForeverState.current_publisher = "Marvel"
+    $Script:ForeverState.current_offset = $offset
+    $Script:ForeverState.current_chunk_limit = $chunkLimit
+    $Script:RunStats.last_publisher = "Marvel"
+    $Script:RunStats.last_series = $seriesName
+    $Script:RunStats.last_offset = $offset
+    $Script:RunStats.series_attempted++
+
+    $wrapped = Invoke-ImportWithThrottle -Label "forever Marvel series=$seriesName" -ImportScript {
+        Invoke-SeriesImport -SeriesName $seriesName -Offset $offset -Limit $chunkLimit -ForeverMarvel
+    }
+    $importResult = $wrapped.result
+    $maxThrottle = [bool]$importResult.throttled
+    $created = [int]$importResult.metrics.issues_created
+    $updated = [int]$importResult.metrics.issues_updated
+    $chunkOutcome = "ok"
+    if ($importResult.exit_code -ne 0 -and -not $maxThrottle) {
+        $chunkOutcome = "failed"
+    }
+
+    $Script:ForeverState.last_chunk_result = @{
+        created = $created
+        updated = $updated
+        skipped = [int]$importResult.metrics.cover_images_skipped + [int]$importResult.metrics.skipped_quality_gate
+        failed = $(if ($chunkOutcome -eq "failed") { 1 } else { 0 })
+        outcome = $chunkOutcome
+    }
+
+    $pubRow = $Script:ForeverState.publisher_progress["Marvel"]
+    $pubRow."420s" += $(if ($importResult.throttled) { 1 } else { [int]$wrapped.throttle_attempts })
+
+    if ($maxThrottle) {
+        Set-PublisherPaused -PauseState $PauseState -PublisherName "Marvel" -Reason "HTTP_420_THROTTLED"
+        $pubRow.status = "PAUSED"
+        $Script:RunStats.publishers_failed++
+        Write-Log ("Forever Marvel series 420: paused {0} hours; series={1} offset unchanged at {2}" -f `
+            $MarvelForeverPauseHours, $seriesName, $offset) -Level "WARN"
+        return
+    }
+
+    $entry.last_run_at = (Get-Date).ToUniversalTime().ToString("o")
+    $entry.last_exit_code = [int]$importResult.exit_code
+    if ($importResult.exit_code -eq 0) {
+        $entry.success_count++
+        if ($null -ne $importResult.metrics.final_offset) {
+            $entry.last_offset = [int]$importResult.metrics.final_offset
+        }
+        $Script:RunStats.series_successful++
+        $Script:ForeverState.last_successful_chunk_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    } else {
+        $entry.failure_count++
+        $Script:RunStats.series_failed++
+        Write-Log "Forever Marvel series chunk failed series=$seriesName exit=$($importResult.exit_code)" -Level "WARN"
+    }
+
+    $totalSeen = [int]$importResult.metrics.total_candidates_seen
+    if ($importResult.exit_code -eq 0 -and $totalSeen -eq 0) {
+        $mf = Get-MarvelForeverProgress -ProgressDoc $ProgressDoc
+        $exhausted = [System.Collections.ArrayList]@($mf.exhausted_series)
+        if ($exhausted -notcontains $seriesName) {
+            [void]$exhausted.Add($seriesName)
+            $mf.exhausted_series = @($exhausted)
+            Write-Log "Forever Marvel series exhausted (zero candidates): $seriesName" -Level "INFO"
+        }
+    }
+
+    $pubRow.chunks++
+    $pubRow.created += $created
+    $pubRow.updated += $updated
+    $Script:ForeverState.chunks_completed_this_run++
+    $Script:RunStats.publishers_attempted++
+    $Script:RunStats.issues_created_total += $created
+    $Script:RunStats.cover_images_created_total += [int]$importResult.metrics.cover_images_created
+    $Script:RunStats.last_offset = [int]$entry.last_offset
+
+    Save-ProgressDocument -Progress $ProgressDoc
+
+    if (Test-MarvelForeverSeriesQueueComplete -ProgressDoc $ProgressDoc) {
+        Complete-MarvelForeverAcquisition -ProgressDoc $ProgressDoc
+    }
+}
+
 function Invoke-ForeverPublisherChunk {
     param(
         [Parameter(Mandatory = $true)][string]$PublisherName,
@@ -1992,6 +2236,10 @@ function Invoke-ForeverPublisherChunk {
     $Script:RunStats.issues_created_total += $created
     $Script:RunStats.cover_images_created_total += [int]$importResult.metrics.cover_images_created
 
+    if ($PublisherName -eq "Marvel") {
+        [void](Update-MarvelForeverPublisherZeroIssueStreak -ProgressDoc $ProgressDoc -ImportResult $importResult)
+    }
+
     Save-ProgressDocument -Progress $ProgressDoc
 
     if ($mismatchOnly -and $null -ne $Script:ForeverLastCatalogSnapshot -and $null -ne $Script:ForeverDaemonStartTime) {
@@ -2084,20 +2332,31 @@ function Start-ForeverAcquisitionDaemon {
                 $Script:ForeverState.publisher_progress[$publisher].status = "PAUSED"
                 break
             }
+            if ($publisher -eq "Marvel" -and (Test-MarvelForeverSeriesQueueActive -ProgressDoc $ProgressDoc)) {
+                Invoke-ForeverMarvelSeriesChunk -ProgressDoc $ProgressDoc -PauseState $PauseState
+                break
+            }
             Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
             $PauseState = Load-PublisherPauseState
             if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
+                break
+            }
+            if ($publisher -eq "Marvel" -and (Test-MarvelForeverSeriesQueueActive -ProgressDoc $ProgressDoc)) {
                 break
             }
             while (
                 -not $Script:ForeverStopRequested -and
                 $Script:ForeverState.last_chunk_result.outcome -eq "skipped_mismatch_only" -and
                 -not (Test-ForeverPublisherExhausted -PublisherEntry (Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $publisher)) -and
-                -not (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher)
+                -not (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher) -and
+                -not ($publisher -eq "Marvel" -and (Test-MarvelForeverSeriesQueueActive -ProgressDoc $ProgressDoc))
             ) {
                 Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
                 $PauseState = Load-PublisherPauseState
                 if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
+                    break
+                }
+                if ($publisher -eq "Marvel" -and (Test-MarvelForeverSeriesQueueActive -ProgressDoc $ProgressDoc)) {
                     break
                 }
             }
@@ -2135,6 +2394,8 @@ function Show-ForeverWhatIfPlan {
         Write-Host "Deferred minors: $($ForeverMinorPublishers -join ', ')"
         Write-Host ("Marvel Forever throttle profile: chunk_limit={0} sleep_seconds={1} pause_hours={2}" -f `
             $MarvelForeverChunkLimit, $MarvelForeverImportSleepSeconds, $MarvelForeverPauseHours)
+        Write-Host ("Marvel Forever series-first: after {0} consecutive zero-issue publisher chunks, run {1} named series (--series-name --import-issues), then DC publisher mode" -f `
+            $MarvelForeverPublisherZeroIssueStreakLimit, $MarvelForeverSeriesTargets.Count)
     }
     Write-Host "TargetRuntimeHours=IGNORED MinimumRuntimeHours=IGNORED"
     Write-Host "Enrichment=DISABLED (import only)"
