@@ -26,6 +26,7 @@ $ThrottleRetryMax = 6
 $ThrottleSleepSeconds = 900
 $ComicVineBaseSleepSeconds = 2
 $ComicVineOvernightMinSleepSeconds = 1.5
+$ComicVineForeverMinSleepSeconds = 7
 $ComicVineMaxSleepSeconds = 10
 
 $env:DATABASE_URL = "postgresql+pg8000://postgres:postgres@localhost:5433/comic_os"
@@ -298,6 +299,50 @@ function Load-ComicVineRateState {
     }
 }
 
+function Get-ComicVineEffectiveMinSleepSeconds {
+    if ($Forever) {
+        return [double]$ComicVineForeverMinSleepSeconds
+    }
+    return [double]$ComicVineOvernightMinSleepSeconds
+}
+
+function Enforce-ComicVineForeverSleepFloor {
+    param([Parameter(Mandatory = $true)]$State)
+    if (-not $Forever) { return $false }
+    $floor = [double]$ComicVineForeverMinSleepSeconds
+    $changed = $false
+    $beforeSleep = [double]$State.current_sleep_seconds
+    if ($beforeSleep -lt $floor) {
+        $State.current_sleep_seconds = $floor
+        Write-Log "Forever sleep floor enforced: $beforeSleep -> 7"
+        $changed = $true
+    }
+    if ([double]$State.min_sleep_seconds -lt $floor) {
+        $State.min_sleep_seconds = $floor
+        $changed = $true
+    }
+    if ([double]$State.max_sleep_seconds -gt [double]$ComicVineMaxSleepSeconds) {
+        $State.max_sleep_seconds = [double]$ComicVineMaxSleepSeconds
+        $changed = $true
+    }
+    return $changed
+}
+
+function Get-MinutesSinceLast420 {
+    param([Parameter(Mandatory = $true)]$State)
+    if ($null -eq $State.last_420_at -or [string]::IsNullOrWhiteSpace([string]$State.last_420_at)) {
+        return $null
+    }
+    try {
+        $last420 = [datetimeoffset]::Parse([string]$State.last_420_at).UtcDateTime
+        $minutes = ((Get-Date).ToUniversalTime() - $last420).TotalMinutes
+        if ($minutes -lt 0) { $minutes = 0 }
+        return [math]::Round($minutes, 1)
+    } catch {
+        return $null
+    }
+}
+
 function Save-ComicVineRateState {
     param([Parameter(Mandatory = $true)]$State)
     $State.updated_at = (Get-Date).ToUniversalTime().ToString("o")
@@ -354,12 +399,13 @@ function Get-ComicVine420Counts {
 
 function Apply-ComicVineSleepRecovery {
     param([Parameter(Mandatory = $true)]$State)
+    $minSleep = [double](Get-ComicVineEffectiveMinSleepSeconds)
     $before = [double]$State.current_sleep_seconds
-    if ($before -le [double]$ComicVineOvernightMinSleepSeconds) { return }
+    if ($before -le $minSleep) { return }
 
     if ($null -eq $State.last_420_at -or [string]::IsNullOrWhiteSpace([string]$State.last_420_at)) {
-        if ($before -le [double]$ComicVineBaseSleepSeconds) { return }
-        $State.current_sleep_seconds = [math]::Max([double]$ComicVineOvernightMinSleepSeconds, $before - 0.25)
+        if (-not $Forever -and $before -le [double]$ComicVineBaseSleepSeconds) { return }
+        $State.current_sleep_seconds = [math]::Max($minSleep, $before - 0.25)
         if ($State.current_sleep_seconds -ne $before) {
             Write-Log "ComicVine sleep recovery (no prior 420): $before -> $($State.current_sleep_seconds)"
         }
@@ -368,7 +414,7 @@ function Apply-ComicVineSleepRecovery {
     try {
         $last420 = [datetimeoffset]::Parse([string]$State.last_420_at).UtcDateTime
         if ((Get-Date).ToUniversalTime() - $last420 -gt [TimeSpan]::FromMinutes(30)) {
-            $State.current_sleep_seconds = [math]::Max([double]$ComicVineOvernightMinSleepSeconds, $before - 0.25)
+            $State.current_sleep_seconds = [math]::Max($minSleep, $before - 0.25)
             if ($State.current_sleep_seconds -ne $before) {
                 Write-Log "ComicVine sleep recovery (no 420 in 30m): $before -> $($State.current_sleep_seconds)"
             }
@@ -404,6 +450,7 @@ function Register-ComicVine420 {
 function Get-ComicVineImportSleepSeconds {
     $state = Load-ComicVineRateState
     Apply-ComicVineSleepRecovery -State $state
+    [void](Enforce-ComicVineForeverSleepFloor -State $state)
     Save-ComicVineRateState -State $state
     Write-Log "ComicVine current_sleep_seconds=$($state.current_sleep_seconds)"
     return [double]$state.current_sleep_seconds
@@ -420,6 +467,7 @@ function Update-ComicVineRateAfterImport {
         Register-ComicVine420 -State $state
     }
     Update-ComicVineRateThrottleWindows -State $state
+    [void](Enforce-ComicVineForeverSleepFloor -State $state)
     Save-ComicVineRateState -State $state
     Write-Log "ComicVine current_sleep_seconds=$($state.current_sleep_seconds)"
 }
@@ -1266,6 +1314,9 @@ function Write-ForeverProgressArtifacts {
     )
     $rate = Load-ComicVineRateState
     Update-ComicVineRateThrottleWindows -State $rate
+    if (Enforce-ComicVineForeverSleepFloor -State $rate) {
+        Save-ComicVineRateState -State $rate
+    }
     $Script:ForeverState.issues_now = [int]$CatalogSnapshot.total_issues
     $Script:ForeverState.images_now = [int]$CatalogSnapshot.total_images
     $Script:ForeverState.ready_covers = [int]$CatalogSnapshot.ready_covers
@@ -1276,6 +1327,7 @@ function Write-ForeverProgressArtifacts {
     $Script:ForeverState.images_added_this_run = [math]::Max(0, $Script:ForeverState.images_now - $Script:ForeverState.images_before_run)
     $Script:ForeverState.total_420_count_this_run = [math]::Max(0, [int]$rate.total_420_count - $Script:ForeverState.total_420_count_at_start)
     $Script:ForeverState.current_sleep_seconds = [double]$rate.current_sleep_seconds
+    $minutesSinceLast420 = Get-MinutesSinceLast420 -State $rate
     $runtimeSeconds = ((Get-Date) - $StartTime).TotalSeconds
     $goal150 = if ($GoalIssuesPrimary -gt 0) { [math]::Round(100.0 * $Script:ForeverState.issues_now / $GoalIssuesPrimary, 1) } else { 0.0 }
     $goal200 = if ($GoalIssuesStretch -gt 0) { [math]::Round(100.0 * $Script:ForeverState.issues_now / $GoalIssuesStretch, 1) } else { 0.0 }
@@ -1323,6 +1375,9 @@ function Write-ForeverProgressArtifacts {
         publisher_progress = $pubProgress
         total_420_count_this_run = $Script:ForeverState.total_420_count_this_run
         current_sleep_seconds = $Script:ForeverState.current_sleep_seconds
+        sleep_floor = [double]$ComicVineForeverMinSleepSeconds
+        last_420_at = $(if ($null -ne $rate.last_420_at) { [string]$rate.last_420_at } else { $null })
+        minutes_since_last_420 = $minutesSinceLast420
         last_successful_chunk_at = $Script:ForeverState.last_successful_chunk_at
         last_chunk_result = $lastChunkExport
         goal_150k_progress_pct = $goal150
@@ -1401,7 +1456,11 @@ function Write-ForeverProgressBlock {
     Write-Host "Pending Covers: $(Format-Count -Value ([int]$CatalogSnapshot.pending_covers))"
     Write-Host "Fingerprints: $(Format-Count -Value ([int]$CatalogSnapshot.fingerprints))"
     Write-Host "OCR Rows: $(Format-Count -Value ([int]$CatalogSnapshot.ocr_rows))"
-    Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s"
+    Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s (floor=$($ComicVineForeverMinSleepSeconds)s)"
+    $last420Text = if ($null -ne $rate.last_420_at -and -not [string]::IsNullOrWhiteSpace([string]$rate.last_420_at)) { [string]$rate.last_420_at } else { "—" }
+    $mins420 = Get-MinutesSinceLast420 -State $rate
+    $mins420Text = if ($null -ne $mins420) { "$mins420" } else { "—" }
+    Write-Host "Last 420 At: $last420Text  (minutes_since_last_420=$mins420Text)"
     Write-Host "420 Count This Run: $($Script:ForeverState.total_420_count_this_run)"
     Write-Host "Last Successful Chunk: $($Script:ForeverState.last_successful_chunk_at)"
     Write-Host "Last Chunk Result: created=$($last.created) updated=$($last.updated) skipped=$($last.skipped) failed=$($last.failed) outcome=$($last.outcome)"
@@ -1628,6 +1687,10 @@ function Start-ForeverAcquisitionDaemon {
     )
     Register-ForeverCancelHandler
     $Script:ForeverDaemonStartTime = $StartTime
+    $rateBootstrap = Load-ComicVineRateState
+    if (Enforce-ComicVineForeverSleepFloor -State $rateBootstrap) {
+        Save-ComicVineRateState -State $rateBootstrap
+    }
     $ProgressDoc.series_exhausted = $true
     $ProgressDoc.acquisition_phase = "publisher"
     $Script:RunStats.acquisition_phase = "publisher"

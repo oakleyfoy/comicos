@@ -26,6 +26,10 @@ def test_format_dashboard_includes_key_sections() -> None:
         "current_offset": 4300,
         "current_chunk_limit": 100,
         "chunks_completed_this_run": 43,
+        "current_sleep_seconds": 7,
+        "sleep_floor": 7,
+        "last_420_at": "2026-06-14T16:53:24.5000931Z",
+        "minutes_since_last_420": 42.5,
         "last_chunk_result": {"created": 72, "updated": 211, "skipped": 228, "failed": 0},
         "publisher_progress": {
             "Marvel": {"offset": 4300, "chunks": 43, "created": 1290, "updated": 4021, "420s": 3, "status": "ACTIVE"},
@@ -36,3 +40,5 @@ def test_format_dashboard_includes_key_sections() -> None:
     assert "Marvel" in text
     assert "150k progress" in text
     assert "created=72" in text
+    assert "Sleep floor:" in text
+    assert "Minutes since 420:" in text
