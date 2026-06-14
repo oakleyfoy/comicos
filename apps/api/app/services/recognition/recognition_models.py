@@ -22,6 +22,22 @@ class RecognitionCandidateRead(BaseModel):
     source_id: int | None = None
 
 
+class RecognitionCatalogCandidateRead(BaseModel):
+    """P95-06 catalog candidate card for the recognition review modal."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    catalog_issue_id: int
+    series: str
+    issue_number: str
+    variant: str | None = None
+    publisher: str | None = None
+    cover_image_url: str | None = None
+    release_date: date | None = None
+    confidence: float = 0.0
+    source: str = "catalog_search"
+
+
 class RecognitionIdentifyRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

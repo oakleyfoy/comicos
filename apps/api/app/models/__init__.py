@@ -285,7 +285,7 @@ from app.models.catalog_p97 import (
     RecognitionCertificationRun,
     RecognitionGap,
 )
-from app.models.receiving import ReceivingSession, ReceivingSessionItem
+from app.models.receiving import ReceivingSession, ReceivingSessionItem, RecognitionCorrectionEvent
 from app.models.buy_queue_intelligence import BuyQueueItem, BuyQueueSnapshot
 from app.models.collector_intelligence import (
     AutoWatchlist,
@@ -1388,6 +1388,7 @@ __all__ = [
     "RecognitionGap",
     "P97ComicVineVolumeQueue",
     "P97ComicVineRequestLedger",
+    "RecognitionCorrectionEvent",
     "BuyQueueSnapshot",
     "BuyQueueItem",
     "FOCAlertSnapshot",

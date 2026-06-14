@@ -371,6 +371,173 @@ describe("WebcamLiveCapturePage", () => {
     });
   });
 
+  function reviewItem() {
+    return {
+      id: 11,
+      receiving_session_id: 1,
+      sequence_index: 0,
+      source_filename: "webcam-frame.jpg",
+      mime_type: "image/jpeg",
+      image_width: 1200,
+      image_height: 1800,
+      image_sha256: "rev123",
+      capture_source: "WEBCAM",
+      frame_fingerprint: "f1",
+      frame_sequence_index: 0,
+      stable_frame_count: 3,
+      recognition_bucket: "REVIEW",
+      status: "REVIEW",
+      recognition_confidence: 0.88,
+      recognition_latency_ms: 20,
+      capture_started_at: "2026-06-09T15:01:00Z",
+      capture_completed_at: "2026-06-09T15:01:00Z",
+      recognition_snapshot_json: {
+        bucket: "REVIEW",
+        confidence: 0.88,
+        series: "Venom",
+        issue_number: "7",
+        publisher: "Marvel",
+        catalog_issue_id: 700,
+        winning_source: "catalog_image_fingerprint",
+      },
+      candidate_snapshot_json: [],
+      selected_candidate_index: null,
+      selected_candidate_json: null,
+      duplicate_of_item_id: null,
+      duplicate_suppressed: false,
+      action_taken: null,
+      action_reason: null,
+      capture_metadata_json: {},
+      uploaded_at: "2026-06-09T15:01:00Z",
+      recognized_at: "2026-06-09T15:01:00Z",
+      confirmed_at: null,
+      skipped_at: null,
+      created_at: "2026-06-09T15:01:00Z",
+      updated_at: "2026-06-09T15:01:00Z",
+    };
+  }
+
+  function mockCanvas() {
+    const originalCreateElement = document.createElement.bind(document);
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: vi.fn(),
+        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
+      }),
+      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
+    };
+    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      if (tagName === "canvas") {
+        return fakeCanvas as never;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+  }
+
+  it("auto-opens the review modal for a REVIEW capture and pauses further uploads", async () => {
+    mockCanvas();
+    vi.spyOn(apiClient, "uploadReceivingSessionImages").mockResolvedValue({
+      uploaded_count: 1,
+      session: {
+        id: 1,
+        status: "ACTIVE",
+        total_items: 1,
+        verified_items: 0,
+        review_items: 1,
+        unknown_items: 0,
+        confirmed_items: 0,
+        skipped_items: 0,
+        capture_source: "WEBCAM",
+        created_at: "2026-06-09T15:00:00Z",
+        updated_at: "2026-06-09T15:01:00Z",
+        started_at: "2026-06-09T15:00:00Z",
+        completed_at: null,
+        session_notes: null,
+        live_capture_stats_json: {},
+        items: [reviewItem()],
+      },
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId("recognition-review-modal")).toBeInTheDocument();
+
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the review modal without confirming the item", async () => {
+    mockCanvas();
+    const confirmSpy = vi.spyOn(apiClient, "confirmReceivingSessionItem");
+    vi.spyOn(apiClient, "uploadReceivingSessionImages").mockResolvedValue({
+      uploaded_count: 1,
+      session: {
+        id: 1,
+        status: "ACTIVE",
+        total_items: 1,
+        verified_items: 0,
+        review_items: 1,
+        unknown_items: 0,
+        confirmed_items: 0,
+        skipped_items: 0,
+        capture_source: "WEBCAM",
+        created_at: "2026-06-09T15:00:00Z",
+        updated_at: "2026-06-09T15:01:00Z",
+        started_at: "2026-06-09T15:00:00Z",
+        completed_at: null,
+        session_notes: null,
+        live_capture_stats_json: {},
+        items: [reviewItem()],
+      },
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+
+    expect(await screen.findByTestId("recognition-review-modal")).toBeInTheDocument();
+
+    await act(async () => {
+      screen.getByTestId("review-cancel").click();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("recognition-review-modal")).not.toBeInTheDocument();
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
   it("creates a mobile live session with the mobile capture source", async () => {
     render(
       <MemoryRouter>

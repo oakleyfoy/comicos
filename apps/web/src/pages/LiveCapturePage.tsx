@@ -11,6 +11,7 @@ import { StatusBanner } from "../components/StatusBanner";
 import { CameraFeed } from "../components/live-capture/CameraFeed";
 import { RecognitionOverlay } from "../components/live-capture/RecognitionOverlay";
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
+import { RecognitionReviewModal, type RecognitionReviewCloseAction } from "../components/live-capture/RecognitionReviewModal";
 import {
   advanceStableFrameTracker,
   createStableFrameTracker,
@@ -66,6 +67,17 @@ async function captureVideoFrame(video: HTMLVideoElement, captureSource: string,
   return new File([blob], `${captureSource.toLowerCase()}-${fingerprint}.jpg`, { type: "image/jpeg" });
 }
 
+function shouldAutoOpenReview(item: ReceivingSessionItemRead): boolean {
+  const bucket = item.recognition_bucket;
+  if (bucket === "REVIEW") {
+    return true;
+  }
+  if (bucket === "UNKNOWN" && (item.candidate_snapshot_json?.length ?? 0) > 0) {
+    return true;
+  }
+  return false;
+}
+
 function itemTitle(item: ReceivingSessionItemRead): string {
   const candidate = item.selected_candidate_json;
   if (candidate && typeof candidate === "object") {
@@ -118,11 +130,16 @@ function LiveCapturePageInner({
   const [lastFrameCapturedAt, setLastFrameCapturedAt] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("Ready to capture.");
   const [stableState, setStableState] = useState(trackerRef.current);
+  const [manualReviewItemId, setManualReviewItemId] = useState<number | null>(null);
+  const [dismissedReviewIds, setDismissedReviewIds] = useState<number[]>([]);
+  const [capturedFrameUrl, setCapturedFrameUrl] = useState<string | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const sessionAttemptRef = useRef(0);
   const sessionRef = useRef<ReceivingSessionDetailRead | null>(null);
   const userActionEpochRef = useRef(0);
   const captureHoldUntilRef = useRef(0);
+  const reviewModalOpenRef = useRef(false);
+  const capturedFrameUrlRef = useRef<string | null>(null);
 
   sessionRef.current = session;
 
@@ -145,6 +162,21 @@ function LiveCapturePageInner({
     () => session?.items.find((item) => item.status !== "CONFIRMED" && item.status !== "SKIPPED") ?? null,
     [session],
   );
+
+  const reviewModalOpen = useMemo(() => {
+    if (!currentItem || !session) {
+      return false;
+    }
+    if (manualReviewItemId === currentItem.id) {
+      return true;
+    }
+    if (dismissedReviewIds.includes(currentItem.id)) {
+      return false;
+    }
+    return shouldAutoOpenReview(currentItem);
+  }, [currentItem, dismissedReviewIds, manualReviewItemId, session]);
+
+  reviewModalOpenRef.current = reviewModalOpen;
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +284,10 @@ function LiveCapturePageInner({
         paused,
         inFlight: uploadInFlightRef.current,
       });
+      if (reviewModalOpenRef.current) {
+        logLiveCaptureDebug("capture waiting", { reason: "review modal open" });
+        return;
+      }
       if (
         !shouldStartLiveCaptureUpload({
           uploadInFlight: uploadInFlightRef.current,
@@ -317,6 +353,16 @@ function LiveCapturePageInner({
             frame_sequence_index: session.items.length,
           });
           recentFingerprintsRef.current.add(fingerprint);
+          try {
+            const nextFrameUrl = URL.createObjectURL(file);
+            if (capturedFrameUrlRef.current) {
+              URL.revokeObjectURL(capturedFrameUrlRef.current);
+            }
+            capturedFrameUrlRef.current = nextFrameUrl;
+            setCapturedFrameUrl(nextFrameUrl);
+          } catch {
+            // Object URL preview is best-effort; ignore environments without URL support.
+          }
           setSession(uploaded.session);
           const capturedAt = new Date().toISOString();
           setLastFrameCapturedAt(capturedAt);
@@ -440,6 +486,30 @@ function LiveCapturePageInner({
     }
   }
 
+  function handleReviewSessionUpdate(updated: ReceivingSessionDetailRead): void {
+    setSession(updated);
+  }
+
+  function handleReviewModalClose(action: RecognitionReviewCloseAction): void {
+    const itemId = currentItem?.id ?? null;
+    setManualReviewItemId(null);
+    if (action === "accept") {
+      armCaptureHoldAfterUserAction();
+      setStatusMessage("Accepted match.");
+      return;
+    }
+    if (itemId != null) {
+      setDismissedReviewIds((prev) => (prev.includes(itemId) ? prev : [...prev, itemId]));
+    }
+    setStatusMessage("Review canceled. Confirm or skip this capture to continue.");
+  }
+
+  function handleOpenReview(): void {
+    if (currentItem) {
+      setManualReviewItemId(currentItem.id);
+    }
+  }
+
   useEffect(() => {
     if (!keyboardShortcuts) {
       return;
@@ -461,7 +531,7 @@ function LiveCapturePageInner({
         void handleSkip();
       } else if (event.key.toLowerCase() === "r") {
         event.preventDefault();
-        void handleConfirm("wrong_match");
+        handleOpenReview();
       }
     };
     window.addEventListener("keydown", handler);
@@ -651,7 +721,7 @@ function LiveCapturePageInner({
             keyboardHint={keyboardShortcuts ? "Enter=Confirm · Space=Skip · R=Review · Esc=Pause" : null}
             onConfirm={() => void handleConfirm("confirm")}
             onSkip={() => void handleSkip()}
-            onReview={() => void handleConfirm("wrong_match")}
+            onReview={handleOpenReview}
           />
 
           <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
@@ -681,6 +751,17 @@ function LiveCapturePageInner({
           </div>
         </aside>
       </main>
+
+      {reviewModalOpen && session && currentItem ? (
+        <RecognitionReviewModal
+          open={reviewModalOpen}
+          sessionId={session.id}
+          item={currentItem}
+          capturedFrameUrl={capturedFrameUrl}
+          onSessionUpdate={handleReviewSessionUpdate}
+          onClose={handleReviewModalClose}
+        />
+      ) : null}
     </div>
   );
 }

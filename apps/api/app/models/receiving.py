@@ -74,6 +74,15 @@ class ReceivingSessionItem(SQLModel, table=True):
     candidate_snapshot_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     selected_candidate_index: int | None = Field(default=None, nullable=True)
     selected_candidate_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    # P95-06 recognition review & correction. original_* preserves the first machine
+    # recognition; corrected_* captures the user's chosen catalog issue (future training data).
+    original_recognition_snapshot_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    corrected_recognition_snapshot_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    corrected_catalog_issue_id: int | None = Field(default=None, nullable=True, index=True)
+    user_corrected: bool = Field(default=False, nullable=False)
+    correction_reason: str | None = Field(default=None, max_length=64, nullable=True)
+    user_corrected_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    user_corrected_by: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
     inventory_copy_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True, index=True)
     duplicate_of_item_id: int | None = Field(default=None, foreign_key="receiving_session_item.id", nullable=True, index=True)
     duplicate_suppressed: bool = Field(default=False, nullable=False)
@@ -86,4 +95,22 @@ class ReceivingSessionItem(SQLModel, table=True):
     skipped_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class RecognitionCorrectionEvent(SQLModel, table=True):
+    """P95-06 lightweight correction log — future recognition training signal."""
+
+    __tablename__ = "recognition_correction_event"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    receiving_session_id: int = Field(foreign_key="receiving_session.id", nullable=False, index=True)
+    receiving_session_item_id: int = Field(foreign_key="receiving_session_item.id", nullable=False, index=True)
+    original_catalog_issue_id: int | None = Field(default=None, nullable=True, index=True)
+    corrected_catalog_issue_id: int | None = Field(default=None, nullable=True, index=True)
+    original_confidence: float | None = Field(default=None, nullable=True)
+    original_source: str | None = Field(default=None, max_length=64, nullable=True)
+    correction_reason: str | None = Field(default=None, max_length=64, nullable=True)
+    captured_image_sha256: str | None = Field(default=None, max_length=64, nullable=True, index=True)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 

@@ -23,8 +23,14 @@ from app.models import (
     Publisher,
     Variant,
 )
-from app.models.receiving import ReceivingSession, ReceivingSessionItem, utc_now
+from app.models.receiving import (
+    ReceivingSession,
+    ReceivingSessionItem,
+    RecognitionCorrectionEvent,
+    utc_now,
+)
 from app.services.cover_images import sha256_raw_bytes
+from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 from app.services.receiving_live_capture_service import (
     normalize_live_capture_source,
     should_suppress_duplicate_capture,
@@ -45,6 +51,7 @@ from app.schemas.receiving import (
     ReceivingActionResponse,
     ReceivingCompletionSummaryRead,
     ReceivingConfirmPayload,
+    ReceivingCorrectionPayload,
     ReceivingPurchaseAssignmentPayload,
     ReceivingSessionCreatePayload,
     ReceivingSessionDetailRead,
@@ -919,6 +926,104 @@ def confirm_receiving_session_item(
     return ReceivingActionResponse(session=_detail_from_rows(sess, session.exec(
         select(ReceivingSessionItem).where(ReceivingSessionItem.receiving_session_id == receiving_session_id)
     ).all()), item=_item_to_read(item))
+
+
+def _corrected_snapshot_from_catalog(session: Session, catalog_issue_id: int) -> dict[str, Any]:
+    identity = load_catalog_issue_identity(session, catalog_issue_id)
+    if identity is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog issue not found")
+    return {
+        "series": identity.series,
+        "issue_number": identity.issue_number,
+        "variant": None,
+        "publisher": identity.publisher,
+        "release_date": None,
+        "confidence": 1.0,
+        "cover_image_url": identity.cover_image_url,
+        "catalog_issue_id": identity.catalog_issue_id,
+        "source": "user_correction",
+        "source_id": identity.catalog_issue_id,
+        "winning_source": "user_correction",
+    }
+
+
+def correct_receiving_session_item(
+    session: Session,
+    *,
+    owner_user_id: int,
+    receiving_session_id: int,
+    item_id: int,
+    payload: ReceivingCorrectionPayload,
+) -> ReceivingActionResponse:
+    """P95-06: point a receiving item at a user-chosen catalog issue, preserving the original match."""
+    sess = _require_owner(session, owner_user_id=owner_user_id, receiving_session_id=receiving_session_id)
+    item = session.get(ReceivingSessionItem, item_id)
+    if item is None or item.receiving_session_id != receiving_session_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receiving item not found")
+    if item.status in FINAL_STATUSES:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Receiving item already finalized")
+
+    corrected_snapshot = _corrected_snapshot_from_catalog(session, payload.catalog_issue_id)
+    original_snapshot = _coerce_json_dict(item.recognition_snapshot_json)
+
+    # Preserve the very first machine recognition only once, even across repeated corrections.
+    if not item.original_recognition_snapshot_json:
+        item.original_recognition_snapshot_json = original_snapshot
+
+    original_catalog_issue_id = original_snapshot.get("catalog_issue_id")
+    original_source = original_snapshot.get("winning_source")
+    original_confidence = item.recognition_confidence
+
+    # Append the corrected issue as a selectable candidate so the existing confirm flow uses it.
+    candidates = _coerce_json_list(item.candidate_snapshot_json)
+    candidates = [*candidates, corrected_snapshot]
+    corrected_index = len(candidates) - 1
+
+    now = utc_now()
+    item.candidate_snapshot_json = candidates
+    item.corrected_recognition_snapshot_json = corrected_snapshot
+    item.corrected_catalog_issue_id = payload.catalog_issue_id
+    item.selected_candidate_index = corrected_index
+    item.selected_candidate_json = corrected_snapshot
+    item.user_corrected = True
+    item.correction_reason = payload.reason
+    item.user_corrected_at = now
+    item.user_corrected_by = owner_user_id
+    item.updated_at = now
+    session.add(item)
+
+    event = RecognitionCorrectionEvent(
+        user_id=owner_user_id,
+        receiving_session_id=receiving_session_id,
+        receiving_session_item_id=item_id,
+        original_catalog_issue_id=int(original_catalog_issue_id) if isinstance(original_catalog_issue_id, int) else None,
+        corrected_catalog_issue_id=payload.catalog_issue_id,
+        original_confidence=float(original_confidence) if original_confidence is not None else None,
+        original_source=str(original_source) if original_source else None,
+        correction_reason=payload.reason,
+        captured_image_sha256=item.image_sha256,
+        created_at=now,
+    )
+    session.add(event)
+
+    session.commit()
+    session.refresh(item)
+    session.refresh(sess)
+    LOGGER.info(
+        "receiving_item_corrected session_id=%s item_id=%s corrected_catalog_issue_id=%s",
+        receiving_session_id,
+        item_id,
+        payload.catalog_issue_id,
+    )
+    return ReceivingActionResponse(
+        session=_detail_from_rows(
+            sess,
+            session.exec(
+                select(ReceivingSessionItem).where(ReceivingSessionItem.receiving_session_id == receiving_session_id)
+            ).all(),
+        ),
+        item=_item_to_read(item),
+    )
 
 
 def skip_receiving_session_item(

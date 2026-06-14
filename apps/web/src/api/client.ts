@@ -20709,6 +20709,27 @@ export interface RecognitionCandidateRead {
   source_id?: number | null;
 }
 
+export interface RecognitionCatalogCandidateRead {
+  catalog_issue_id: number;
+  series: string;
+  issue_number: string;
+  variant?: string | null;
+  publisher?: string | null;
+  cover_image_url?: string | null;
+  release_date?: string | null;
+  confidence: number;
+  source: string;
+}
+
+export interface RecognitionCatalogCandidateQuery {
+  q?: string;
+  series?: string;
+  issue_number?: string;
+  publisher?: string;
+  catalog_issue_id?: number;
+  limit?: number;
+}
+
 export interface RecognitionIdentifyRead {
   status: "success";
   bucket: RecognitionBucket;
@@ -20820,6 +20841,13 @@ export interface ReceivingSessionItemRead {
   candidate_snapshot_json: Record<string, unknown>[];
   selected_candidate_index?: number | null;
   selected_candidate_json?: Record<string, unknown> | null;
+  original_recognition_snapshot_json?: Record<string, unknown> | null;
+  corrected_recognition_snapshot_json?: Record<string, unknown> | null;
+  corrected_catalog_issue_id?: number | null;
+  user_corrected?: boolean;
+  correction_reason?: string | null;
+  user_corrected_at?: string | null;
+  user_corrected_by?: number | null;
   inventory_copy_id?: number | null;
   duplicate_of_item_id?: number | null;
   duplicate_suppressed?: boolean;
@@ -20852,6 +20880,11 @@ export interface ReceivingConfirmPayload {
 
 export interface ReceivingSkipPayload {
   item_id: number;
+  reason?: string | null;
+}
+
+export interface ReceivingCorrectionPayload {
+  catalog_issue_id: number;
   reason?: string | null;
 }
 
@@ -24390,6 +24423,13 @@ export const apiClient = {
     });
   },
 
+  listRecognitionCatalogCandidates(
+    query: RecognitionCatalogCandidateQuery,
+  ): Promise<RecognitionCatalogCandidateRead[]> {
+    const q = buildQueryString(query as Record<string, string | number | undefined>);
+    return requestScanV1Flat<RecognitionCatalogCandidateRead[]>(`/recognition/catalog-candidates${q}`);
+  },
+
   createReceivingSession(payload?: ReceivingSessionCreatePayload): Promise<ReceivingSessionSummaryRead> {
     return requestScanV1Flat<unknown>("/receiving/session", {
       method: "POST",
@@ -24459,6 +24499,20 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  correctReceivingSessionItem(
+    sessionId: number,
+    itemId: number,
+    payload: ReceivingCorrectionPayload,
+  ): Promise<ReceivingActionResponse> {
+    return requestScanV1Flat<ReceivingActionResponse>(
+      `/receiving/session/${sessionId}/items/${itemId}/correct`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
   },
 
   getReceivingSessionSummary(sessionId: number): Promise<ReceivingCompletionSummaryRead> {

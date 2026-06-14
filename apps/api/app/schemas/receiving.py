@@ -86,6 +86,13 @@ class ReceivingSessionItemRead(BaseModel):
     candidate_snapshot_json: list[dict[str, Any]] = Field(default_factory=list)
     selected_candidate_index: int | None = None
     selected_candidate_json: dict[str, Any] | None = None
+    original_recognition_snapshot_json: dict[str, Any] | None = None
+    corrected_recognition_snapshot_json: dict[str, Any] | None = None
+    corrected_catalog_issue_id: int | None = None
+    user_corrected: bool = False
+    correction_reason: str | None = None
+    user_corrected_at: datetime | None = None
+    user_corrected_by: int | None = None
     inventory_copy_id: int | None = None
     duplicate_of_item_id: int | None = None
     duplicate_suppressed: bool = False
@@ -123,6 +130,11 @@ class ReceivingConfirmPayload(BaseModel):
 
 class ReceivingSkipPayload(BaseModel):
     item_id: int
+    reason: str | None = None
+
+
+class ReceivingCorrectionPayload(BaseModel):
+    catalog_issue_id: int
     reason: str | None = None
 
 

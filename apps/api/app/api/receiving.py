@@ -10,6 +10,7 @@ from app.schemas.receiving import (
     ReceivingActionResponse,
     ReceivingCompletionSummaryRead,
     ReceivingConfirmPayload,
+    ReceivingCorrectionPayload,
     ReceivingPurchaseAssignmentPayload,
     ReceivingSessionCreatePayload,
     ReceivingSessionCreateResponse,
@@ -22,6 +23,7 @@ from app.services.receiving.receiving_service import (
     assign_receiving_purchase,
     complete_receiving_session,
     confirm_receiving_session_item,
+    correct_receiving_session_item,
     create_receiving_session,
     get_receiving_session_detail,
     get_receiving_session_summary,
@@ -108,6 +110,27 @@ def skip_item(
         session,
         owner_user_id=int(current_user.id),
         receiving_session_id=session_id,
+        payload=payload,
+    )
+
+
+@receiving_v1_router.post(
+    "/receiving/session/{session_id}/items/{item_id}/correct",
+    response_model=ReceivingActionResponse,
+)
+def correct_item(
+    session_id: int,
+    item_id: int,
+    payload: ReceivingCorrectionPayload = Body(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ReceivingActionResponse:
+    assert current_user.id is not None
+    return correct_receiving_session_item(
+        session,
+        owner_user_id=int(current_user.id),
+        receiving_session_id=session_id,
+        item_id=item_id,
         payload=payload,
     )
 
