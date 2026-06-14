@@ -139,6 +139,37 @@ def comicvine_volume_id_for_series(series: CatalogSeries) -> str | None:
     return str(key) if key is not None else None
 
 
+def dedupe_catalog_series_ids_for_issue_import(
+    session: Session,
+    series_ids: list[int],
+) -> tuple[list[int], int]:
+    """At most one catalog series per ComicVine volume id (preserves first occurrence order)."""
+    unique: list[int] = []
+    seen_volume_ids: set[str] = set()
+    duplicates_removed = 0
+    for catalog_series_id in series_ids:
+        series = session.get(CatalogSeries, catalog_series_id)
+        if series is None:
+            unique.append(catalog_series_id)
+            continue
+        volume_id = comicvine_volume_id_for_series(series)
+        if not volume_id:
+            unique.append(catalog_series_id)
+            continue
+        if volume_id in seen_volume_ids:
+            duplicates_removed += 1
+            continue
+        seen_volume_ids.add(volume_id)
+        unique.append(catalog_series_id)
+    return unique, duplicates_removed
+
+
+def comicvine_accepted_volume_metrics(volume_ids: list[str]) -> tuple[int, int, int]:
+    raw = len(volume_ids)
+    unique = len(set(volume_ids))
+    return raw, unique, raw - unique
+
+
 def publisher_distribution_for_series(session: Session, series_ids: list[int]) -> dict[str, int]:
     dist: dict[str, int] = {}
     for sid in series_ids:
@@ -174,6 +205,12 @@ class ComicVineImportStats:
     total_candidates_seen: int = 0
     accepted_volumes: int = 0
     final_offset: int = 0
+    accepted_comicvine_volume_ids: list[str] = field(default_factory=list)
+    accepted_volumes_raw: int = 0
+    accepted_volumes_unique: int = 0
+    duplicate_volumes_removed: int = 0
+    issue_imports_started: int = 0
+    issue_imports_completed: int = 0
 
 
 class ComicVineCatalogImporter:
@@ -369,6 +406,9 @@ class ComicVineCatalogImporter:
         ).quality_tier
         stats.publisher_quality_summary[tier] = stats.publisher_quality_summary.get(tier, 0) + 1
         stats.accepted_volumes += 1
+        comicvine_id = row.get("id")
+        if comicvine_id is not None:
+            stats.accepted_comicvine_volume_ids.append(str(comicvine_id))
         if self.dry_run:
             if job is not None:
                 record_updated(session, job)
@@ -615,6 +655,7 @@ class ComicVineCatalogImporter:
         )
         session.commit()
         aggregate = ComicVineImportStats(issue_import_ran=True, issue_job_id=int(issue_job.id or 0))
+        processed_volume_ids: set[str] = set()
         for catalog_series_id in series_ids:
             series = session.get(CatalogSeries, catalog_series_id)
             if series is None:
@@ -633,6 +674,16 @@ class ComicVineCatalogImporter:
                     error_message=msg,
                 )
                 continue
+            if volume_id in processed_volume_ids:
+                LOGGER.error(
+                    "comicvine duplicate volume_id=%s catalog_series_id=%s in volume_issues job_id=%s; skipping",
+                    volume_id,
+                    catalog_series_id,
+                    issue_job.id,
+                )
+                continue
+            processed_volume_ids.add(volume_id)
+            aggregate.issue_imports_started += 1
             aggregate.issue_import_volumes_attempted += 1
             LOGGER.info(
                 "comicvine issue import volume_id=%s catalog_series_id=%s job_id=%s",
@@ -647,6 +698,7 @@ class ComicVineCatalogImporter:
                 limit=issues_per_volume_limit,
                 job=issue_job,
             )
+            aggregate.issue_imports_completed += 1
             aggregate.processed += chunk.processed
             aggregate.created_issues += chunk.created_issues
             aggregate.updated_issues += chunk.updated_issues
@@ -730,9 +782,32 @@ class ComicVineCatalogImporter:
                 stats.issue_import_ran = True
                 LOGGER.info("dry_run: skipping ComicVine issue import phase (volume metadata only)")
             elif stats.imported_series_ids:
+                series_ids_raw = list(stats.imported_series_ids)
+                vol_raw, vol_unique, vol_dupes = comicvine_accepted_volume_metrics(stats.accepted_comicvine_volume_ids)
+                if vol_raw:
+                    stats.accepted_volumes_raw = vol_raw
+                    stats.accepted_volumes_unique = vol_unique
+                    stats.duplicate_volumes_removed = vol_dupes
+                else:
+                    stats.accepted_volumes_raw = len(series_ids_raw)
+                    stats.accepted_volumes_unique = len(series_ids_raw)
+                    stats.duplicate_volumes_removed = 0
+                deduped_series_ids, series_dupes = dedupe_catalog_series_ids_for_issue_import(session, series_ids_raw)
+                if not vol_raw and series_dupes:
+                    stats.duplicate_volumes_removed = series_dupes
+                    stats.accepted_volumes_unique = len(deduped_series_ids)
+                LOGGER.info(
+                    "comicvine issue import plan accepted_volumes_raw=%s accepted_volumes_unique=%s "
+                    "duplicate_volumes_removed=%s series_ids_raw=%s series_ids_for_import=%s",
+                    stats.accepted_volumes_raw,
+                    stats.accepted_volumes_unique,
+                    stats.duplicate_volumes_removed,
+                    len(series_ids_raw),
+                    len(deduped_series_ids),
+                )
                 issue_stats = self._run_issue_import_phase(
                     session,
-                    series_ids=list(stats.imported_series_ids),
+                    series_ids=deduped_series_ids,
                     publisher_filter=publisher_filter,
                     series_name=series_name,
                     strict_publisher=strict_publisher,
@@ -741,6 +816,8 @@ class ComicVineCatalogImporter:
                 stats.issue_import_ran = issue_stats.issue_import_ran
                 stats.issue_job_id = issue_stats.issue_job_id
                 stats.issue_import_volumes_attempted = issue_stats.issue_import_volumes_attempted
+                stats.issue_imports_started = issue_stats.issue_imports_started
+                stats.issue_imports_completed = issue_stats.issue_imports_completed
                 stats.created_issues = issue_stats.created_issues
                 stats.updated_issues = issue_stats.updated_issues
                 stats.cover_images_created = issue_stats.cover_images_created

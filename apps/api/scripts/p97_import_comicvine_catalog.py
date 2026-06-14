@@ -114,6 +114,11 @@ def main() -> int:
     if args.import_issues:
         print(f"issue_job_id={stats.issue_job_id}")
         print(f"issue_import_ran={stats.issue_import_ran}")
+        print(f"accepted_volumes_raw={stats.accepted_volumes_raw}")
+        print(f"accepted_volumes_unique={stats.accepted_volumes_unique}")
+        print(f"duplicate_volumes_removed={stats.duplicate_volumes_removed}")
+        print(f"issue_imports_started={stats.issue_imports_started}")
+        print(f"issue_imports_completed={stats.issue_imports_completed}")
         print(f"issue_import_volumes_attempted={stats.issue_import_volumes_attempted}")
         print(f"issues_created={stats.created_issues}")
         print(f"issues_updated={stats.updated_issues}")
