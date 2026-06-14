@@ -57,3 +57,36 @@ export function hasPendingReceivingItem(
 ): boolean {
   return (items ?? []).some((item) => item.status !== "CONFIRMED" && item.status !== "SKIPPED");
 }
+
+/** Pause auto-capture briefly after confirm/skip so the next frame does not race the action. */
+export const LIVE_CAPTURE_POST_ACTION_HOLD_MS = 3000;
+
+export function nextCaptureHoldUntil(
+  nowMs: number,
+  holdMs: number = LIVE_CAPTURE_POST_ACTION_HOLD_MS,
+): number {
+  return nowMs + holdMs;
+}
+
+export function isCaptureHoldActive(holdUntilMs: number, nowMs: number): boolean {
+  return nowMs < holdUntilMs;
+}
+
+export function shouldIgnoreCaptureFailure(actionEpochAtStart: number, actionEpoch: number): boolean {
+  return actionEpochAtStart !== actionEpoch;
+}
+
+/** Background uploads after an item is resolved should not use the fatal error banner. */
+export function shouldSurfaceCaptureFailure(
+  items: ReadonlyArray<{ status: string }> | undefined,
+): boolean {
+  return hasPendingReceivingItem(items);
+}
+
+export function receivingActionItemFinalized(
+  items: ReadonlyArray<{ id: number; status: string }>,
+  itemId: number,
+): boolean {
+  const item = items.find((row) => row.id === itemId);
+  return Boolean(item && (item.status === "CONFIRMED" || item.status === "SKIPPED"));
+}

@@ -11,7 +11,17 @@ import { StatusBanner } from "../components/StatusBanner";
 import { CameraFeed } from "../components/live-capture/CameraFeed";
 import { RecognitionOverlay } from "../components/live-capture/RecognitionOverlay";
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
-import { advanceStableFrameTracker, createStableFrameTracker, hasPendingReceivingItem, shouldSuppressDuplicateFingerprint } from "./liveCaptureState";
+import {
+  advanceStableFrameTracker,
+  createStableFrameTracker,
+  hasPendingReceivingItem,
+  isCaptureHoldActive,
+  nextCaptureHoldUntil,
+  receivingActionItemFinalized,
+  shouldIgnoreCaptureFailure,
+  shouldSurfaceCaptureFailure,
+  shouldSuppressDuplicateFingerprint,
+} from "./liveCaptureState";
 import {
   frameFingerprintFromVideo,
   fingerprintsSimilar,
@@ -68,6 +78,21 @@ function itemTitle(item: ReceivingSessionItemRead): string {
   return `${series} #${issue}`;
 }
 
+async function tryRecoverReceivingActionSession(
+  sessionId: number,
+  itemId: number,
+): Promise<ReceivingSessionDetailRead | null> {
+  try {
+    const refreshed = await apiClient.getReceivingSession(sessionId);
+    if (receivingActionItemFinalized(refreshed.items, itemId)) {
+      return refreshed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function LiveCapturePageInner({
   title,
   captureSource,
@@ -93,6 +118,25 @@ function LiveCapturePageInner({
   const [stableState, setStableState] = useState(trackerRef.current);
   const retryTimerRef = useRef<number | null>(null);
   const sessionAttemptRef = useRef(0);
+  const sessionRef = useRef<ReceivingSessionDetailRead | null>(null);
+  const userActionEpochRef = useRef(0);
+  const captureHoldUntilRef = useRef(0);
+
+  sessionRef.current = session;
+
+  const resetStableFrameTracking = useCallback((): void => {
+    trackerRef.current = createStableFrameTracker();
+    setStableState(trackerRef.current);
+  }, []);
+
+  const armCaptureHoldAfterUserAction = useCallback((): number => {
+    userActionEpochRef.current += 1;
+    captureHoldUntilRef.current = nextCaptureHoldUntil(Date.now());
+    inFlightFingerprintRef.current = null;
+    setRecognizing(false);
+    resetStableFrameTracking();
+    return userActionEpochRef.current;
+  }, [resetStableFrameTracking]);
 
   const currentItem = useMemo(
     () => session?.items.find((item) => item.status !== "CONFIRMED" && item.status !== "SKIPPED") ?? null,
@@ -205,6 +249,10 @@ function LiveCapturePageInner({
         paused,
         inFlight: Boolean(inFlightFingerprintRef.current),
       });
+      if (isCaptureHoldActive(captureHoldUntilRef.current, Date.now())) {
+        logLiveCaptureDebug("capture waiting", { reason: "post-action hold" });
+        return;
+      }
       if (hasPendingReceivingItem(session.items)) {
         logLiveCaptureDebug("capture waiting", { reason: "pending item action" });
         return;
@@ -240,6 +288,7 @@ function LiveCapturePageInner({
       }
       inFlightFingerprintRef.current = fingerprint;
       setRecognizing(true);
+      const actionEpochAtStart = userActionEpochRef.current;
       void (async () => {
         try {
           const file = await captureVideoFrame(video, captureSource, fingerprint);
@@ -261,12 +310,25 @@ function LiveCapturePageInner({
           setLastFrameCapturedAt(capturedAt);
           setStatusMessage(`Captured ${captureSource.replace("_", " ").toLowerCase()}.`);
           logLiveCaptureDebug("capture complete", { capturedAt });
-          trackerRef.current = createStableFrameTracker();
-          setStableState(trackerRef.current);
+          resetStableFrameTracking();
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : "Unable to upload a live capture frame.");
+          if (shouldIgnoreCaptureFailure(actionEpochAtStart, userActionEpochRef.current)) {
+            logLiveCaptureDebug("capture failed ignored", { reason: "user action or stale upload" });
+            return;
+          }
+          const message = err instanceof ApiError ? err.message : "Unable to upload a live capture frame.";
+          if (shouldSurfaceCaptureFailure(sessionRef.current?.items)) {
+            setError(message);
+          } else {
+            setStatusMessage(
+              message === "Internal server error"
+                ? "Auto-capture hit a server error. Pause or point at the next comic."
+                : message,
+            );
+          }
           logLiveCaptureDebug("capture failed", {
             reason: err instanceof Error ? err.message : "upload error",
+            surfaced: shouldSurfaceCaptureFailure(sessionRef.current?.items),
           });
         } finally {
           inFlightFingerprintRef.current = null;
@@ -275,7 +337,7 @@ function LiveCapturePageInner({
       })();
     }, 250);
     return () => window.clearInterval(timer);
-  }, [captureSource, paused, session]);
+  }, [captureSource, paused, resetStableFrameTracking, session]);
 
   async function refreshSession(): Promise<void> {
     if (!session) {
@@ -288,10 +350,12 @@ function LiveCapturePageInner({
     if (!session || !currentItem) {
       return;
     }
+    const itemId = currentItem.id;
+    armCaptureHoldAfterUserAction();
     try {
       setError(null);
       const response = await apiClient.confirmReceivingSessionItem(session.id, {
-        item_id: currentItem.id,
+        item_id: itemId,
         decision,
         selected_candidate_index: currentItem.selected_candidate_index ?? 0,
       });
@@ -299,6 +363,13 @@ function LiveCapturePageInner({
       setStatusMessage(decision === "confirm" ? "Confirmed current frame." : "Marked for review.");
       setError(null);
     } catch (err) {
+      const recovered = await tryRecoverReceivingActionSession(session.id, itemId);
+      if (recovered) {
+        setSession(recovered);
+        setStatusMessage(decision === "confirm" ? "Confirmed current frame." : "Marked for review.");
+        setError(null);
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "Unable to confirm the current item.");
     }
   }
@@ -307,16 +378,25 @@ function LiveCapturePageInner({
     if (!session || !currentItem) {
       return;
     }
+    const itemId = currentItem.id;
+    armCaptureHoldAfterUserAction();
     try {
       setError(null);
       const response = await apiClient.skipReceivingSessionItem(session.id, {
-        item_id: currentItem.id,
+        item_id: itemId,
         reason: "Live capture skip",
       });
       setSession(response.session);
       setStatusMessage("Skipped current frame.");
       setError(null);
     } catch (err) {
+      const recovered = await tryRecoverReceivingActionSession(session.id, itemId);
+      if (recovered) {
+        setSession(recovered);
+        setStatusMessage("Skipped current frame.");
+        setError(null);
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "Unable to skip the current item.");
     }
   }
