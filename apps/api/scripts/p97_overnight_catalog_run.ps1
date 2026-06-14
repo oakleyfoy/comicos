@@ -1652,11 +1652,7 @@ function Invoke-ForeverPublisherChunk {
         Set-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName -Reason "HTTP_420_THROTTLED"
         $pubRow.status = "PAUSED"
         $Script:RunStats.publishers_failed++
-        Write-Log "Forever chunk throttled for $PublisherName at sleep floor; publisher paused; offset unchanged at $offset" -Level "WARN"
-        if (-not $WhatIf) {
-            Write-Log "Forever 420 cooldown ${ThrottleSleepSeconds}s before next publisher" -Level "WARN"
-            Start-Sleep -Seconds $ThrottleSleepSeconds
-        }
+        Write-Log "Forever chunk throttled for $PublisherName at sleep floor; publisher paused; offset unchanged at $offset; continuing to next publisher (no global cooldown)" -Level "WARN"
         return
     }
 
