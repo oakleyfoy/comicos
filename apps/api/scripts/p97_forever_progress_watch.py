@@ -83,7 +83,8 @@ def format_dashboard(doc: dict) -> str:
             f"Last chunk:           created={last_chunk.get('created', 0)} "
             f"updated={last_chunk.get('updated', 0)} "
             f"skipped={last_chunk.get('skipped', 0)} "
-            f"failed={last_chunk.get('failed', 0)}"
+            f"failed={last_chunk.get('failed', 0)} "
+            f"outcome={last_chunk.get('outcome', '—')}"
         ),
         "",
         "Throughput",
@@ -100,14 +101,24 @@ def format_dashboard(doc: dict) -> str:
     else:
         for name in sorted(publisher_progress.keys()):
             row = publisher_progress[name]
-            lines.append(
-                f"{name:<14} offset={_fmt_count(row.get('offset'))} "
-                f"chunks={row.get('chunks', 0)} "
-                f"created={row.get('created', 0)} "
-                f"updated={row.get('updated', 0)} "
-                f"420s={row.get('420s', row.get('throttle_420_count', 0))} "
-                f"status={row.get('status', '—')}"
-            )
+            if (row.get("mismatch_only_chunks") or 0) > 0 or (row.get("skipped_mismatch_volumes") or 0) > 0:
+                lines.append(
+                    f"{name:<14} offset={_fmt_count(row.get('offset'))} "
+                    f"chunks={row.get('chunks', 0)} "
+                    f"mismatch_chunks={row.get('mismatch_only_chunks', 0)} "
+                    f"skipped_vol={_fmt_count(row.get('skipped_mismatch_volumes', 0))} "
+                    f"420s={row.get('420s', row.get('throttle_420_count', 0))} "
+                    f"status={row.get('status', '—')}"
+                )
+            else:
+                lines.append(
+                    f"{name:<14} offset={_fmt_count(row.get('offset'))} "
+                    f"chunks={row.get('chunks', 0)} "
+                    f"created={row.get('created', 0)} "
+                    f"updated={row.get('updated', 0)} "
+                    f"420s={row.get('420s', row.get('throttle_420_count', 0))} "
+                    f"status={row.get('status', '—')}"
+                )
     lines.append("")
     return "\n".join(lines)
 

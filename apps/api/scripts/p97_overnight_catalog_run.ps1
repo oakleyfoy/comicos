@@ -435,24 +435,151 @@ function Parse-ImportMetrics {
     $metrics = @{
         final_offset = $null
         total_candidates_seen = 0
+        imported_series = 0
+        accepted_volumes = 0
+        skipped_publisher = 0
         issues_created = 0
         issues_updated = 0
         cover_images_created = 0
         cover_images_skipped = 0
         skipped_quality_gate = 0
         failures = 0
+        issue_import_ran = $false
     }
     foreach ($line in $Lines) {
         if ($line -match "^final_offset=(\d+)") { $metrics.final_offset = [int]$Matches[1] }
         if ($line -match "^total_candidates_seen=(\d+)") { $metrics.total_candidates_seen = [int]$Matches[1] }
+        if ($line -match "^imported_series=(\d+)") { $metrics.imported_series = [int]$Matches[1] }
+        if ($line -match "^accepted_volumes=(\d+)") { $metrics.accepted_volumes = [int]$Matches[1] }
+        if ($line -match "^skipped_publisher=(\d+)") { $metrics.skipped_publisher = [int]$Matches[1] }
         if ($line -match "^issues_created=(\d+)") { $metrics.issues_created = [int]$Matches[1] }
         if ($line -match "^issues_updated=(\d+)") { $metrics.issues_updated = [int]$Matches[1] }
         if ($line -match "^cover_images_created=(\d+)") { $metrics.cover_images_created = [int]$Matches[1] }
         if ($line -match "^cover_images_skipped=(\d+)") { $metrics.cover_images_skipped = [int]$Matches[1] }
         if ($line -match "^skipped_quality_gate=(\d+)") { $metrics.skipped_quality_gate = [int]$Matches[1] }
         if ($line -match "^failures=(\d+)") { $metrics.failures = [int]$Matches[1] }
+        if ($line -match "^issue_import_ran=(True|False)") { $metrics.issue_import_ran = ($Matches[1] -eq "True") }
     }
     return $metrics
+}
+
+function Count-StrictPublisherMismatchLines {
+    param([string[]]$Lines)
+    $count = 0
+    foreach ($line in $Lines) {
+        if ($line -match "STRICT_PUBLISHER_MISMATCH") { $count++ }
+    }
+    return $count
+}
+
+function Test-ForeverImportTrueApiFailure {
+    param(
+        [Parameter(Mandatory = $true)]$ImportResult
+    )
+    if ($ImportResult.throttled) { return $true }
+    $m = $ImportResult.metrics
+    if ([int]$m.failures -gt 0) { return $true }
+    $blob = @($ImportResult.output) -join "`n"
+    if ($blob -match "(?i)Traceback \(most recent call last\)") { return $true }
+    if ($blob -match "(?i)ConnectionError|TimeoutError|Read timed out") { return $true }
+    if ($blob -match "HTTP/1\.1 5\d\d") { return $true }
+    if ($blob -match "HTTP/1\.1 420") { return $true }
+    return $false
+}
+
+function Test-ForeverPublisherMismatchOnlyChunk {
+    param(
+        [Parameter(Mandatory = $true)]$ImportResult
+    )
+    if ($ImportResult.throttled) { return $false }
+    if (Test-ForeverImportTrueApiFailure -ImportResult $ImportResult) { return $false }
+
+    $m = $ImportResult.metrics
+    $blob = @($ImportResult.output) -join "`n"
+    $mismatchLines = Count-StrictPublisherMismatchLines -Lines @($ImportResult.output)
+    $skippedPublisher = [int]$m.skipped_publisher
+    if ($skippedPublisher -le 0 -and $mismatchLines -gt 0) {
+        $skippedPublisher = $mismatchLines
+    }
+    $candidatesSeen = [int]$m.total_candidates_seen
+    if ($candidatesSeen -le 0 -and $skippedPublisher -gt 0) {
+        $candidatesSeen = $skippedPublisher
+    }
+
+    if ([int]$m.imported_series -gt 0 -or [int]$m.accepted_volumes -gt 0) { return $false }
+    if ([int]$m.issues_created -gt 0 -or [int]$m.issues_updated -gt 0) { return $false }
+    if ($skippedPublisher -le 0 -or $candidatesSeen -le 0) { return $false }
+
+    if ([int]$ImportResult.exit_code -eq 3) {
+        if ($blob -notmatch "STRICT_PUBLISHER_MISMATCH") { return $false }
+        if ($blob -notmatch "(?i)no issue import phase ran") { return $false }
+        return $true
+    }
+    if ([int]$ImportResult.exit_code -ne 0) { return $false }
+    return $true
+}
+
+function Test-ForeverStrictPublisherMismatchEmptyChunk {
+    param([Parameter(Mandatory = $true)]$ImportResult)
+    return (Test-ForeverPublisherMismatchOnlyChunk -ImportResult $ImportResult)
+}
+
+function Apply-ForeverPublisherMismatchOnlyOffset {
+    param(
+        [Parameter(Mandatory = $true)]$Entry,
+        [Parameter(Mandatory = $true)]$PubRow,
+        [Parameter(Mandatory = $true)][int]$OffsetBefore,
+        [Parameter(Mandatory = $true)][int]$ChunkLimit,
+        [Parameter(Mandatory = $true)]$ImportResult
+    )
+    $nextOffset = $OffsetBefore + $ChunkLimit
+    if ($null -ne $ImportResult.metrics.final_offset) {
+        $finalOffset = [int]$ImportResult.metrics.final_offset
+        if ($finalOffset -gt $nextOffset) {
+            $nextOffset = $finalOffset
+        }
+    }
+    $Entry.last_offset = $nextOffset
+    $PubRow.offset = $nextOffset
+    $PubRow.status = "ACTIVE"
+}
+
+function Write-ForeverImportFailureLog {
+    param(
+        [Parameter(Mandatory = $true)]$ImportResult,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string[]]$ImportArgs
+    )
+    $exitCode = [int]$ImportResult.exit_code
+    if ($exitCode -eq 0) { return }
+    $output = @($ImportResult.output)
+    $excerpt = ($output | Select-Object -Last 25) -join " | "
+    if ($excerpt.Length -gt 2000) { $excerpt = $excerpt.Substring(0, 2000) }
+    Write-Log "Command failed: $Label" -Level "WARN"
+    Write-Log "  > python $($ImportArgs -join ' ')" -Level "WARN"
+    Write-Log "  exit_code=$exitCode" -Level "WARN"
+    Write-Log "  output_excerpt: $excerpt" -Level "WARN"
+}
+
+function Apply-ForeverPublisherOffsetAfterChunk {
+    param(
+        [Parameter(Mandatory = $true)]$Entry,
+        [Parameter(Mandatory = $true)]$PubRow,
+        [Parameter(Mandatory = $true)]$ImportResult,
+        [Parameter(Mandatory = $true)][string]$PublisherName,
+        [Parameter(Mandatory = $true)][int]$OffsetBefore
+    )
+    if ($null -ne $ImportResult.metrics.final_offset) {
+        $Entry.last_offset = [int]$ImportResult.metrics.final_offset
+        $PubRow.offset = $Entry.last_offset
+    }
+    if ([int]$ImportResult.metrics.total_candidates_seen -eq 0) {
+        $Entry.publisher_exhausted = $true
+        $PubRow.status = "EXHAUSTED"
+        Write-Log "Publisher exhausted (zero candidates): $PublisherName at offset $OffsetBefore"
+    } else {
+        $PubRow.status = "ACTIVE"
+    }
 }
 
 function Invoke-PostProcessing {
@@ -496,7 +623,8 @@ function Invoke-ExternalPython {
     param(
         [Parameter(Mandatory = $true)][string[]]$ArgumentList,
         [Parameter(Mandatory = $true)][string]$Label,
-        [switch]$StrictFailure
+        [switch]$StrictFailure,
+        [switch]$SuppressFailureLog
     )
     $stdoutLines = New-Object System.Collections.Generic.List[string]
     $stderrLines = New-Object System.Collections.Generic.List[string]
@@ -531,14 +659,14 @@ function Invoke-ExternalPython {
     foreach ($line in $stderrLines) {
         Write-Host $line
         Add-Content -Path $LogFile -Value $line -Encoding utf8
-        if ($exitCode -ne 0) {
+        if ($exitCode -ne 0 -and -not $SuppressFailureLog) {
             Write-Log "stderr: $line" -Level "WARN"
         } else {
             Write-Log "stderr: $line" -Level "INFO"
         }
     }
 
-    if ($exitCode -ne 0) {
+    if ($exitCode -ne 0 -and -not $SuppressFailureLog) {
         $excerpt = ($allLines | Select-Object -Last 25) -join " | "
         if ($excerpt.Length -gt 2000) { $excerpt = $excerpt.Substring(0, 2000) }
         Write-Log "Command failed: $Label" -Level "WARN"
@@ -586,7 +714,8 @@ function Invoke-ImportWithThrottle {
 function Invoke-ComicVineImport {
     param(
         [Parameter(Mandatory = $true)][string[]]$ImportArgs,
-        [Parameter(Mandatory = $true)][string]$Label
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$ForeverQuietFailureLog
     )
     Write-Log "START $Label"
     if (-not $WhatIf) {
@@ -604,7 +733,7 @@ function Invoke-ComicVineImport {
             metrics = @{ final_offset = 0; total_candidates_seen = 0; issues_created = 0; cover_images_created = 0 }
         }
     }
-    $run = Invoke-ExternalPython -ArgumentList $ImportArgs -Label $Label
+    $run = Invoke-ExternalPython -ArgumentList $ImportArgs -Label $Label -SuppressFailureLog:$ForeverQuietFailureLog
     $exitCode = $run.exit_code
     $output = @($run.output)
     $blob = $output -join "`n"
@@ -612,12 +741,22 @@ function Invoke-ComicVineImport {
     if (-not $WhatIf) {
         Update-ComicVineRateAfterImport -OutputBlob $blob -Throttled:$throttled
     }
-    return @{
+    $result = @{
         exit_code = $exitCode
         output = $output
         throttled = $throttled
         metrics = (Parse-ImportMetrics -Lines $output)
     }
+    if ($ForeverQuietFailureLog) {
+        $mismatchOnly = Test-ForeverPublisherMismatchOnlyChunk -ImportResult $result
+        $result.skipped_mismatch_only = $mismatchOnly
+        if ($exitCode -ne 0 -and -not $mismatchOnly) {
+            Write-ForeverImportFailureLog -ImportResult $result -Label $Label -ImportArgs $ImportArgs
+        } elseif ($mismatchOnly) {
+            Write-Log "Forever mismatch-only chunk (exit=$exitCode): offset will advance; not a hard failure" -Level "INFO"
+        }
+    }
+    return $result
 }
 
 function Set-ImportSleepArgument {
@@ -662,7 +801,8 @@ function Invoke-PublisherImport {
     param(
         [Parameter(Mandatory = $true)][string]$PublisherName,
         [Parameter(Mandatory = $true)][int]$Offset,
-        [int]$Limit = $PerSeriesLimit
+        [int]$Limit = $PerSeriesLimit,
+        [switch]$ForeverChunk
     )
     # Publisher volumes API filter + strict client match; English/US gate remains default (no --allow-international-editions).
     $sleepPlaceholder = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
@@ -676,7 +816,7 @@ function Invoke-PublisherImport {
         "--sleep-seconds", $sleepPlaceholder,
         "--resume"
     )
-    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import publisher: $PublisherName (offset=$Offset)"
+    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import publisher: $PublisherName (offset=$Offset)" -ForeverQuietFailureLog:$ForeverChunk
 }
 
 function Update-ProgressFromImport {
@@ -1013,7 +1153,7 @@ function Initialize-ForeverRunState {
         total_420_count_this_run = 0
         issue_samples = New-Object System.Collections.Generic.List[object]
         publisher_progress = @{}
-        last_chunk_result = @{ created = 0; updated = 0; skipped = 0; failed = 0 }
+        last_chunk_result = @{ created = 0; updated = 0; skipped = 0; failed = 0; outcome = "ok" }
         last_successful_chunk_at = $null
         current_publisher = ""
         current_offset = 0
@@ -1029,6 +1169,8 @@ function Initialize-ForeverRunState {
             created = 0
             updated = 0
             "420s" = 0
+            mismatch_only_chunks = 0
+            skipped_mismatch_volumes = 0
             status = "PENDING"
         }
     }
@@ -1107,6 +1249,8 @@ function Export-ForeverPublisherProgressJson {
             created = [int]$row.created
             updated = [int]$row.updated
             throttle_420_count = [int]$row."420s"
+            mismatch_only_chunks = [int]$row.mismatch_only_chunks
+            skipped_mismatch_volumes = [int]$row.skipped_mismatch_volumes
             status = [string]$row.status
         }
     }
@@ -1150,6 +1294,7 @@ function Write-ForeverProgressArtifacts {
         updated = [int]$lastChunk.updated
         skipped = [int]$lastChunk.skipped
         failed = [int]$lastChunk.failed
+        outcome = [string]($lastChunk.outcome)
     }
 
     $pubProgress = Export-ForeverPublisherProgressJson
@@ -1259,15 +1404,16 @@ function Write-ForeverProgressBlock {
     Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s"
     Write-Host "420 Count This Run: $($Script:ForeverState.total_420_count_this_run)"
     Write-Host "Last Successful Chunk: $($Script:ForeverState.last_successful_chunk_at)"
-    Write-Host "Last Chunk Result: created=$($last.created) updated=$($last.updated) skipped=$($last.skipped) failed=$($last.failed)"
+    Write-Host "Last Chunk Result: created=$($last.created) updated=$($last.updated) skipped=$($last.skipped) failed=$($last.failed) outcome=$($last.outcome)"
     Write-Host "Status: $($Script:ForeverState.status)"
     Write-Host ""
     Write-Host "Publisher Progress"
     Write-Host ("-" * 52)
     foreach ($name in $PublisherTargets) {
         $row = $Script:ForeverState.publisher_progress[$name]
-        Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  th420={5}  status={6}" -f `
-            $name, (Format-Count -Value ([int]$row.offset)), $row.chunks, $row.created, $row.updated, $row."420s", $row.status)
+        Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  th420={5}  mismatch_chunks={6}  skipped_vol={7}  status={8}" -f `
+            $name, (Format-Count -Value ([int]$row.offset)), $row.chunks, $row.created, $row.updated, $row."420s", `
+            $row.mismatch_only_chunks, (Format-Count -Value ([int]$row.skipped_mismatch_volumes)), $row.status)
     }
     Write-Host ""
     Write-Host "Catalog Goal Progress"
@@ -1381,25 +1527,43 @@ function Invoke-ForeverPublisherChunk {
     $Script:RunStats.last_offset = $offset
 
     $wrapped = Invoke-ImportWithThrottle -Label "forever publisher=$PublisherName" -ImportScript {
-        Invoke-PublisherImport -PublisherName $PublisherName -Offset $offset -Limit $chunkLimit
+        Invoke-PublisherImport -PublisherName $PublisherName -Offset $offset -Limit $chunkLimit -ForeverChunk
     }
     $importResult = $wrapped.result
     $maxThrottle = ($importResult.throttled -and $wrapped.throttle_attempts -ge $ThrottleRetryMax)
+    $mismatchOnly = ($importResult.skipped_mismatch_only -eq $true)
+    if (-not $mismatchOnly) {
+        $mismatchOnly = Test-ForeverPublisherMismatchOnlyChunk -ImportResult $importResult
+    }
 
     $created = [int]$importResult.metrics.issues_created
     $updated = [int]$importResult.metrics.issues_updated
-    $skipped = [int]$importResult.metrics.cover_images_skipped + [int]$importResult.metrics.skipped_quality_gate
+    $skippedPublisher = [int]$importResult.metrics.skipped_publisher
+    if ($mismatchOnly -and $skippedPublisher -le 0) {
+        $skippedPublisher = Count-StrictPublisherMismatchLines -Lines @($importResult.output)
+    }
+    $skipped = [int]$importResult.metrics.cover_images_skipped + [int]$importResult.metrics.skipped_quality_gate + $skippedPublisher
     $failed = [int]$importResult.metrics.failures
-    if ($importResult.exit_code -ne 0 -and -not $maxThrottle) { $failed = [math]::Max($failed, 1) }
+    $chunkOutcome = "ok"
+    if ($mismatchOnly) {
+        $chunkOutcome = "skipped_mismatch_only"
+        $failed = 0
+    } elseif ($importResult.exit_code -ne 0 -and -not $maxThrottle) {
+        $failed = [math]::Max($failed, 1)
+        $chunkOutcome = "failed"
+    }
 
     $Script:ForeverState.last_chunk_result = @{
         created = $created
         updated = $updated
         skipped = $skipped
         failed = $failed
+        outcome = $chunkOutcome
     }
 
     $pubRow = $Script:ForeverState.publisher_progress[$PublisherName]
+    if ($null -eq $pubRow.mismatch_only_chunks) { $pubRow.mismatch_only_chunks = 0 }
+    if ($null -eq $pubRow.skipped_mismatch_volumes) { $pubRow.skipped_mismatch_volumes = 0 }
     $pubRow."420s" += [int]$wrapped.throttle_attempts
 
     if ($maxThrottle) {
@@ -1413,19 +1577,20 @@ function Invoke-ForeverPublisherChunk {
     $entry.last_run_at = (Get-Date).ToUniversalTime().ToString("o")
     $entry.last_exit_code = [int]$importResult.exit_code
 
-    if ($importResult.exit_code -eq 0) {
+    if ($mismatchOnly) {
         $entry.success_count++
-        if ($null -ne $importResult.metrics.final_offset) {
-            $entry.last_offset = [int]$importResult.metrics.final_offset
-            $pubRow.offset = $entry.last_offset
-        }
-        if ([int]$importResult.metrics.total_candidates_seen -eq 0) {
-            $entry.publisher_exhausted = $true
-            $pubRow.status = "EXHAUSTED"
-            Write-Log "Publisher exhausted (zero candidates): $PublisherName at offset $offset"
-        } else {
-            $pubRow.status = "ACTIVE"
-        }
+        Apply-ForeverPublisherMismatchOnlyOffset -Entry $entry -PubRow $pubRow -OffsetBefore $offset -ChunkLimit $chunkLimit -ImportResult $importResult
+        $pubRow.mismatch_only_chunks++
+        $pubRow.skipped_mismatch_volumes += $skippedPublisher
+        $newOffset = [int]$entry.last_offset
+        Write-Log "Forever mismatch-only chunk skipped publisher=$PublisherName offset=$offset->${newOffset} (+chunk_limit=$chunkLimit) skipped_publisher=$skippedPublisher total_seen=$($importResult.metrics.total_candidates_seen)" -Level "WARN"
+        $Script:ForeverState.last_successful_chunk_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        $Script:RunStats.publishers_successful++
+        $Script:RunStats.last_offset = $newOffset
+    } elseif ($importResult.exit_code -eq 0) {
+        $entry.success_count++
+        Apply-ForeverPublisherOffsetAfterChunk -Entry $entry -PubRow $pubRow -ImportResult $importResult `
+            -PublisherName $PublisherName -OffsetBefore $offset
         $Script:ForeverState.last_successful_chunk_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         $Script:RunStats.publishers_successful++
     } else {
@@ -1444,6 +1609,15 @@ function Invoke-ForeverPublisherChunk {
     $Script:RunStats.cover_images_created_total += [int]$importResult.metrics.cover_images_created
 
     Save-ProgressDocument -Progress $ProgressDoc
+
+    if ($mismatchOnly -and $null -ne $Script:ForeverLastCatalogSnapshot -and $null -ne $Script:ForeverDaemonStartTime) {
+        try {
+            [void](Write-ForeverProgressArtifacts -StartTime $Script:ForeverDaemonStartTime -ProgressDoc $ProgressDoc `
+                -PauseState $PauseState -CatalogSnapshot $Script:ForeverLastCatalogSnapshot)
+        } catch {
+            Write-Log "forever_progress_immediate_flush_failed=$($_.Exception.Message)" -Level "WARN"
+        }
+    }
 }
 
 function Start-ForeverAcquisitionDaemon {
@@ -1453,12 +1627,14 @@ function Start-ForeverAcquisitionDaemon {
         [Parameter(Mandatory = $true)]$PauseState
     )
     Register-ForeverCancelHandler
+    $Script:ForeverDaemonStartTime = $StartTime
     $ProgressDoc.series_exhausted = $true
     $ProgressDoc.acquisition_phase = "publisher"
     $Script:RunStats.acquisition_phase = "publisher"
     Save-ProgressDocument -Progress $ProgressDoc
 
     $catalog = Get-CatalogProgressSnapshot
+    $Script:ForeverLastCatalogSnapshot = $catalog
     Initialize-ForeverRunState -StartTime $StartTime -CatalogSnapshot $catalog
     Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc
     Start-ForeverHeartbeatTimer -StartTime $StartTime
@@ -1482,7 +1658,15 @@ function Start-ForeverAcquisitionDaemon {
             }
             $activePublishers++
             Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+            while (
+                -not $Script:ForeverStopRequested -and
+                $Script:ForeverState.last_chunk_result.outcome -eq "skipped_mismatch_only" -and
+                -not $ProgressDoc.publishers[$publisher].publisher_exhausted
+            ) {
+                Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+            }
             $catalog = Get-CatalogProgressSnapshot
+            $Script:ForeverLastCatalogSnapshot = $catalog
             [void]$Script:ForeverState.issue_samples.Add(@{
                 at = (Get-Date).ToUniversalTime().ToString("o")
                 issues = [int]$catalog.total_issues
