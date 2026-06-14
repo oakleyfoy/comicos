@@ -90,3 +90,20 @@ export function receivingActionItemFinalized(
   const item = items.find((row) => row.id === itemId);
   return Boolean(item && (item.status === "CONFIRMED" || item.status === "SKIPPED"));
 }
+
+export function shouldStartLiveCaptureUpload(input: {
+  uploadInFlight: boolean;
+  holdActive: boolean;
+  hasPendingItem: boolean;
+}): boolean {
+  if (input.uploadInFlight) {
+    return false;
+  }
+  if (input.holdActive) {
+    return false;
+  }
+  if (input.hasPendingItem) {
+    return false;
+  }
+  return true;
+}

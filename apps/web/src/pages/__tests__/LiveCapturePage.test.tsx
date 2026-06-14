@@ -35,6 +35,7 @@ vi.mock("../../components/live-capture/CameraFeed", async () => {
 });
 
 beforeEach(() => {
+  intervalCallbacks.length = 0;
   vi.restoreAllMocks();
   Object.defineProperty(navigator, "mediaDevices", {
     value: {
@@ -207,7 +208,166 @@ describe("WebcamLiveCapturePage", () => {
     expect(screen.getByTestId("live-capture-mode")).toHaveTextContent("WEBCAM");
     expect(screen.getByTestId("live-capture-session")).toHaveTextContent("Session #1");
     expect(screen.getByLabelText(/Selected camera: Back Camera/i)).toBeInTheDocument();
-    vi.restoreAllMocks();
+  });
+
+  it("does not upload again while a pending item awaits user action", async () => {
+    const originalCreateElement = document.createElement.bind(document);
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: vi.fn(),
+        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
+      }),
+      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
+    };
+    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      if (tagName === "canvas") {
+        return fakeCanvas as never;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a second upload while the first upload is in flight", async () => {
+    const originalCreateElement = document.createElement.bind(document);
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: vi.fn(),
+        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
+      }),
+      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
+    };
+    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      if (tagName === "canvas") {
+        return fakeCanvas as never;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    let resolveUpload: ((value: Awaited<ReturnType<typeof apiClient.uploadReceivingSessionImages>>) => void) | undefined;
+    const uploadDeferred = new Promise<Awaited<ReturnType<typeof apiClient.uploadReceivingSessionImages>>>((resolve) => {
+      resolveUpload = resolve;
+    });
+    vi.spyOn(apiClient, "uploadReceivingSessionImages").mockReturnValue(uploadDeferred);
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+    expect(apiClient.uploadReceivingSessionImages).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveUpload?.({
+        uploaded_count: 1,
+        session: {
+          id: 1,
+          status: "ACTIVE",
+          total_items: 1,
+          verified_items: 1,
+          review_items: 0,
+          unknown_items: 0,
+          confirmed_items: 0,
+          skipped_items: 0,
+          capture_source: "WEBCAM",
+          created_at: "2026-06-09T15:00:00Z",
+          updated_at: "2026-06-09T15:01:00Z",
+          started_at: "2026-06-09T15:00:00Z",
+          completed_at: null,
+          session_notes: null,
+          live_capture_stats_json: {},
+          items: [
+            {
+              id: 10,
+              receiving_session_id: 1,
+              sequence_index: 0,
+              source_filename: "webcam-frame.jpg",
+              mime_type: "image/jpeg",
+              image_width: 1200,
+              image_height: 1800,
+              image_sha256: "abc123",
+              capture_source: "WEBCAM",
+              frame_fingerprint: "f1",
+              frame_sequence_index: 0,
+              stable_frame_count: 3,
+              recognition_bucket: "VERIFIED",
+              status: "VERIFIED",
+              recognition_confidence: 0.99,
+              recognition_latency_ms: 20,
+              capture_started_at: "2026-06-09T15:01:00Z",
+              capture_completed_at: "2026-06-09T15:01:00Z",
+              recognition_snapshot_json: {},
+              candidate_snapshot_json: [],
+              selected_candidate_index: null,
+              selected_candidate_json: null,
+              duplicate_of_item_id: null,
+              duplicate_suppressed: false,
+              action_taken: null,
+              action_reason: null,
+              capture_metadata_json: {},
+              uploaded_at: "2026-06-09T15:01:00Z",
+              recognized_at: "2026-06-09T15:01:00Z",
+              confirmed_at: null,
+              skipped_at: null,
+              created_at: "2026-06-09T15:01:00Z",
+              updated_at: "2026-06-09T15:01:00Z",
+            },
+          ],
+        },
+      });
+      await uploadDeferred;
+    });
   });
 
   it("creates a mobile live session with the mobile capture source", async () => {

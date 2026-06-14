@@ -19,6 +19,7 @@ import {
   nextCaptureHoldUntil,
   receivingActionItemFinalized,
   shouldIgnoreCaptureFailure,
+  shouldStartLiveCaptureUpload,
   shouldSurfaceCaptureFailure,
   shouldSuppressDuplicateFingerprint,
 } from "./liveCaptureState";
@@ -104,6 +105,7 @@ function LiveCapturePageInner({
   const trackerRef = useRef(createStableFrameTracker());
   const recentFingerprintsRef = useRef<Set<string>>(new Set());
   const inFlightFingerprintRef = useRef<string | null>(null);
+  const uploadInFlightRef = useRef(false);
   const [session, setSession] = useState<ReceivingSessionDetailRead | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -134,6 +136,7 @@ function LiveCapturePageInner({
     captureHoldUntilRef.current = nextCaptureHoldUntil(Date.now());
     inFlightFingerprintRef.current = null;
     setRecognizing(false);
+    uploadInFlightRef.current = false;
     resetStableFrameTracking();
     return userActionEpochRef.current;
   }, [resetStableFrameTracking]);
@@ -247,18 +250,26 @@ function LiveCapturePageInner({
       logLiveCaptureDebug("capture tick", {
         hasSession: Boolean(session),
         paused,
-        inFlight: Boolean(inFlightFingerprintRef.current),
+        inFlight: uploadInFlightRef.current,
       });
-      if (isCaptureHoldActive(captureHoldUntilRef.current, Date.now())) {
-        logLiveCaptureDebug("capture waiting", { reason: "post-action hold" });
-        return;
-      }
-      if (hasPendingReceivingItem(session.items)) {
-        logLiveCaptureDebug("capture waiting", { reason: "pending item action" });
+      if (
+        !shouldStartLiveCaptureUpload({
+          uploadInFlight: uploadInFlightRef.current,
+          holdActive: isCaptureHoldActive(captureHoldUntilRef.current, Date.now()),
+          hasPendingItem: hasPendingReceivingItem(session.items),
+        })
+      ) {
+        if (uploadInFlightRef.current) {
+          logLiveCaptureDebug("capture waiting", { reason: "upload in flight" });
+        } else if (isCaptureHoldActive(captureHoldUntilRef.current, Date.now())) {
+          logLiveCaptureDebug("capture waiting", { reason: "post-action hold" });
+        } else if (hasPendingReceivingItem(session.items)) {
+          logLiveCaptureDebug("capture waiting", { reason: "pending item action" });
+        }
         return;
       }
       const video = videoRef.current;
-      if (!video || inFlightFingerprintRef.current) {
+      if (!video) {
         return;
       }
       const fingerprint = frameFingerprintFromVideo(video);
@@ -287,6 +298,7 @@ function LiveCapturePageInner({
         return;
       }
       inFlightFingerprintRef.current = fingerprint;
+      uploadInFlightRef.current = true;
       setRecognizing(true);
       const actionEpochAtStart = userActionEpochRef.current;
       void (async () => {
@@ -332,6 +344,7 @@ function LiveCapturePageInner({
           });
         } finally {
           inFlightFingerprintRef.current = null;
+          uploadInFlightRef.current = false;
           setRecognizing(false);
         }
       })();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceStableFrameTracker, createStableFrameTracker, hasPendingReceivingItem, isCaptureHoldActive, nextCaptureHoldUntil, receivingActionItemFinalized, shouldIgnoreCaptureFailure, shouldSurfaceCaptureFailure, shouldSuppressDuplicateFingerprint } from "../liveCaptureState";
+import { advanceStableFrameTracker, createStableFrameTracker, hasPendingReceivingItem, isCaptureHoldActive, nextCaptureHoldUntil, receivingActionItemFinalized, shouldIgnoreCaptureFailure, shouldStartLiveCaptureUpload, shouldSurfaceCaptureFailure, shouldSuppressDuplicateFingerprint } from "../liveCaptureState";
 
 describe("liveCaptureState", () => {
   it("accepts a stable frame after three matching fingerprints", () => {
@@ -41,5 +41,29 @@ describe("liveCaptureState", () => {
     expect(shouldSurfaceCaptureFailure([{ status: "CONFIRMED" }])).toBe(false);
     expect(receivingActionItemFinalized([{ id: 5, status: "SKIPPED" }], 5)).toBe(true);
     expect(receivingActionItemFinalized([{ id: 5, status: "VERIFIED" }], 5)).toBe(false);
+  });
+
+  it("blocks live capture uploads while in flight or pending user action", () => {
+    expect(
+      shouldStartLiveCaptureUpload({
+        uploadInFlight: true,
+        holdActive: false,
+        hasPendingItem: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldStartLiveCaptureUpload({
+        uploadInFlight: false,
+        holdActive: false,
+        hasPendingItem: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldStartLiveCaptureUpload({
+        uploadInFlight: false,
+        holdActive: false,
+        hasPendingItem: false,
+      }),
+    ).toBe(true);
   });
 });

@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import threading
 from collections import Counter
+from dataclasses import dataclass
 from io import BytesIO
 from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func
+from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from PIL import Image
 
@@ -54,6 +56,9 @@ from app.schemas.receiving import (
 from app.services.recognition.recognition_service import identify_comic_cover_read
 
 LOGGER = logging.getLogger(__name__)
+
+RECEIVING_ITEM_SEQUENCE_CONSTRAINT = "uq_receiving_session_item_sequence_idx"
+MAX_SEQUENCE_INDEX_RETRIES = 3
 
 QUEUE_BUCKETS = ("VERIFIED", "REVIEW", "UNKNOWN")
 FINAL_STATUSES = {"CONFIRMED", "SKIPPED"}
@@ -622,7 +627,143 @@ def _latest_sequence_index(session: Session, receiving_session_id: int) -> int:
             ReceivingSessionItem.receiving_session_id == receiving_session_id
         )
     ).first()
-    return int(max_idx or -1)
+    if max_idx is None:
+        return -1
+    return int(max_idx)
+
+
+def _lock_receiving_session_row(
+    session: Session,
+    *,
+    owner_user_id: int,
+    receiving_session_id: int,
+) -> ReceivingSession:
+    bind = session.get_bind()
+    if bind.dialect.name == "postgresql":
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_key)"),
+            {"lock_key": receiving_session_id},
+        )
+    row = session.exec(
+        select(ReceivingSession)
+        .where(
+            ReceivingSession.id == receiving_session_id,
+            ReceivingSession.owner_user_id == owner_user_id,
+        )
+        .with_for_update()
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receiving session not found")
+    return row
+
+
+def _is_receiving_sequence_index_violation(exc: IntegrityError) -> bool:
+    message = str(exc).lower()
+    if RECEIVING_ITEM_SEQUENCE_CONSTRAINT.lower() in message:
+        return True
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        orig_message = str(orig).lower()
+        return "23505" in orig_message and "sequence_index" in orig_message
+    return False
+
+
+@dataclass(frozen=True)
+class _PreparedReceivingUpload:
+    body: bytes
+    source_filename: str | None
+    mime_type: str | None
+    frame_fingerprint: str
+    recognition: Any
+    recognition_latency_ms: int
+    capture_started_at: Any
+    capture_completed_at: Any
+    image_width: int
+    image_height: int
+
+
+def _persist_receiving_upload_item(
+    session: Session,
+    *,
+    owner_user_id: int,
+    receiving_session_id: int,
+    prepared: _PreparedReceivingUpload,
+    normalized_capture_source: str,
+    stable_frame_count: int,
+    frame_sequence_index: int | None,
+    uploaded_at: Any,
+) -> ReceivingSessionItem:
+    last_error: IntegrityError | None = None
+    for attempt in range(MAX_SEQUENCE_INDEX_RETRIES):
+        try:
+            _lock_receiving_session_row(
+                session,
+                owner_user_id=owner_user_id,
+                receiving_session_id=receiving_session_id,
+            )
+            sequence_index = _latest_sequence_index(session, receiving_session_id) + 1
+            item = ReceivingSessionItem(
+                receiving_session_id=receiving_session_id,
+                sequence_index=sequence_index,
+                source_filename=prepared.source_filename,
+                mime_type=prepared.mime_type,
+                image_width=prepared.image_width,
+                image_height=prepared.image_height,
+                image_sha256=sha256_raw_bytes(prepared.body),
+                capture_source=normalized_capture_source,
+                frame_fingerprint=prepared.frame_fingerprint,
+                frame_sequence_index=frame_sequence_index if frame_sequence_index is not None else sequence_index,
+                stable_frame_count=stable_frame_count,
+                recognition_bucket=prepared.recognition.bucket,
+                status=prepared.recognition.bucket,
+                recognition_confidence=prepared.recognition.confidence,
+                recognition_latency_ms=prepared.recognition_latency_ms,
+                capture_started_at=prepared.capture_started_at,
+                capture_completed_at=prepared.capture_completed_at,
+                recognition_snapshot_json=prepared.recognition.model_dump(mode="json"),
+                candidate_snapshot_json=[
+                    candidate.model_dump(mode="json") for candidate in prepared.recognition.candidates
+                ],
+                selected_candidate_index=None,
+                selected_candidate_json=None,
+                action_taken=None,
+                action_reason=None,
+                capture_metadata_json={
+                    "capture_source": normalized_capture_source,
+                    "frame_fingerprint": prepared.frame_fingerprint,
+                    "stable_frame_count": stable_frame_count,
+                },
+                uploaded_at=uploaded_at,
+                recognized_at=uploaded_at,
+                confirmed_at=None,
+                skipped_at=None,
+                created_at=uploaded_at,
+                updated_at=uploaded_at,
+            )
+            session.add(item)
+            session.flush()
+            session.commit()
+            session.refresh(item)
+            return item
+        except IntegrityError as exc:
+            session.rollback()
+            last_error = exc
+            if not _is_receiving_sequence_index_violation(exc):
+                raise
+            LOGGER.warning(
+                "receiving_upload_sequence_retry session_id=%s attempt=%s",
+                receiving_session_id,
+                attempt + 1,
+            )
+    LOGGER.error(
+        "receiving_upload_sequence_exhausted session_id=%s attempts=%s",
+        receiving_session_id,
+        MAX_SEQUENCE_INDEX_RETRIES,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Concurrent live capture uploads collided; retry the frame.",
+    ) from last_error
 
 
 async def upload_receiving_session_images(
@@ -640,22 +781,19 @@ async def upload_receiving_session_images(
     if not images:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one image is required")
 
-    next_idx = _latest_sequence_index(session, receiving_session_id) + 1
     uploaded = 0
     duplicate_suppressed_count = 0
     now = utc_now()
     normalized_capture_source = normalize_live_capture_source(capture_source) or sess.capture_source or "WEBCAM"
-    sess.capture_source = normalized_capture_source
-    if sess.started_at is None:
-        sess.started_at = now
-    sess.status = "ACTIVE"
 
-    for offset, image in enumerate(images):
+    prepared_uploads: list[_PreparedReceivingUpload] = []
+    for image in images:
         body = await _read_upload_bytes(image)
         start = utc_now()
+        next_fingerprint = frame_fingerprint or sha256_raw_bytes(body)
         duplicate_suppressed = should_suppress_duplicate_capture(
             capture_source=normalized_capture_source,
-            frame_fingerprint=frame_fingerprint or sha256_raw_bytes(body),
+            frame_fingerprint=next_fingerprint,
             now=start,
         )
         if duplicate_suppressed:
@@ -672,56 +810,48 @@ async def upload_receiving_session_images(
         with Image.open(BytesIO(body)) as img:
             image_width = int(img.width)
             image_height = int(img.height)
-        next_fingerprint = frame_fingerprint or sha256_raw_bytes(body)
-        item = ReceivingSessionItem(
-            receiving_session_id=receiving_session_id,
-            sequence_index=next_idx + offset,
-            source_filename=image.filename,
-            mime_type=image.content_type,
-            image_width=image_width,
-            image_height=image_height,
-            image_sha256=sha256_raw_bytes(body),
-            capture_source=normalized_capture_source,
-            frame_fingerprint=next_fingerprint,
-            frame_sequence_index=frame_sequence_index if frame_sequence_index is not None else next_idx + offset,
-            stable_frame_count=stable_frame_count,
-            recognition_bucket=recognition.bucket,
-            status=recognition.bucket,
-            recognition_confidence=recognition.confidence,
-            recognition_latency_ms=recognition_latency_ms,
-            capture_started_at=start,
-            capture_completed_at=end,
-            recognition_snapshot_json=recognition.model_dump(mode="json"),
-            candidate_snapshot_json=[candidate.model_dump(mode="json") for candidate in recognition.candidates],
-            selected_candidate_index=None,
-            selected_candidate_json=None,
-            action_taken=None,
-            action_reason=None,
-            capture_metadata_json={
-                "capture_source": normalized_capture_source,
-                "frame_fingerprint": next_fingerprint,
-                "stable_frame_count": stable_frame_count,
-            },
-            uploaded_at=now,
-            recognized_at=now,
-            confirmed_at=None,
-            skipped_at=None,
-            created_at=now,
-            updated_at=now,
+        prepared_uploads.append(
+            _PreparedReceivingUpload(
+                body=body,
+                source_filename=image.filename,
+                mime_type=image.content_type,
+                frame_fingerprint=next_fingerprint,
+                recognition=recognition,
+                recognition_latency_ms=recognition_latency_ms,
+                capture_started_at=start,
+                capture_completed_at=end,
+                image_width=image_width,
+                image_height=image_height,
+            )
         )
-        session.add(item)
+
+    for prepared in prepared_uploads:
+        _persist_receiving_upload_item(
+            session,
+            owner_user_id=owner_user_id,
+            receiving_session_id=receiving_session_id,
+            prepared=prepared,
+            normalized_capture_source=normalized_capture_source,
+            stable_frame_count=stable_frame_count,
+            frame_sequence_index=frame_sequence_index if frame_sequence_index is not None else None,
+            uploaded_at=now,
+        )
         uploaded += 1
         _increment_metrics(
             uploaded=1,
-            reviewed=int(recognition.bucket == "REVIEW"),
-            unknown=int(recognition.bucket == "UNKNOWN"),
+            reviewed=int(prepared.recognition.bucket == "REVIEW"),
+            unknown=int(prepared.recognition.bucket == "UNKNOWN"),
             live_capture_frames=1,
             stable_frames=int(stable_frame_count >= 3),
             capture_source=normalized_capture_source,
-            recognition_latency_ms=recognition_latency_ms,
+            recognition_latency_ms=prepared.recognition_latency_ms,
         )
 
-    session.add(sess)
+    sess = _require_owner(session, owner_user_id=owner_user_id, receiving_session_id=receiving_session_id)
+    sess.capture_source = normalized_capture_source
+    if sess.started_at is None:
+        sess.started_at = now
+    sess.status = "ACTIVE"
     _recompute_session_counters(session, receiving_session_id)
     sess.live_capture_stats_json = update_live_capture_stats(
         sess.live_capture_stats_json,
