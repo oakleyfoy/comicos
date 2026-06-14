@@ -4,13 +4,18 @@
   P97 continuous overnight catalog acquisition (series queue, then publisher mode + post-processing).
 .PARAMETER Forever
   Run publisher acquisition continuously until Ctrl+C (import-only; no enrichment post-processing).
+  Default: major-publisher sequential mode (Marvel → DC → Image → Dark Horse → IDW → Boom).
+.PARAMETER AllPublishers
+  With -Forever, include minor publishers (AWA, Oni, etc.) before majors are complete and use
+  one-chunk rotation across the full publisher list (legacy behavior).
 .PARAMETER WhatIf
   Print configuration and planned commands; run safety checks only.
 #>
 param(
     [switch]$WhatIf,
     [switch]$TestImportHelper,
-    [switch]$Forever
+    [switch]$Forever,
+    [switch]$AllPublishers
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,6 +57,29 @@ $PublisherChunkLimits = @{
     "DC Comics"  = 100
 }
 
+# Forever major sequential queue (minors deferred until all majors report exhausted)
+$ForeverMajorPublishers = @(
+    "Marvel",
+    "DC Comics",
+    "Image",
+    "Dark Horse",
+    "IDW",
+    "Boom"
+)
+
+$ForeverMinorPublishers = @(
+    "Dynamite",
+    "Valiant",
+    "Skybound",
+    "Titan",
+    "Oni",
+    "Aftershock",
+    "AWA",
+    "Mad Cave",
+    "DSTLRY"
+)
+
+$Script:ForeverMajorOnly = $false
 $Script:ForeverStopRequested = $false
 $Script:ForeverHeartbeatTimer = $null
 $Script:ForeverCancelHandlerRegistered = $false
@@ -109,23 +137,7 @@ $SeriesTargets = @(
     "Turok", "Star Trek", "Doctor Who", "Rocketeer", "Baltimore", "Black Hammer", "Lazarus", "Critical Role"
 )
 
-$PublisherTargets = @(
-    "Marvel",
-    "DC Comics",
-    "Image",
-    "Dark Horse",
-    "Boom",
-    "IDW",
-    "Dynamite",
-    "Valiant",
-    "Skybound",
-    "Titan",
-    "Oni",
-    "Aftershock",
-    "AWA",
-    "Mad Cave",
-    "DSTLRY"
-)
+$PublisherTargets = @($ForeverMajorPublishers + $ForeverMinorPublishers)
 
 function Enter-PublisherAcquisitionPhase {
     param([Parameter(Mandatory = $true)][string]$Reason)
@@ -1150,6 +1162,98 @@ function Set-PublisherPaused {
     Write-Log "Publisher paused: $PublisherName until $($PauseState.publishers[$PublisherName].paused_until) reason=$Reason" -Level "WARN"
 }
 
+function Test-ForeverPublisherEligible {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string]$PublisherName
+    )
+    $entry = $ProgressDoc.publishers[$PublisherName]
+    if ($null -eq $entry) { return $false }
+    if ($entry.publisher_exhausted) { return $false }
+    if (Test-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName) { return $false }
+    return $true
+}
+
+function Test-AllForeverMajorPublishersComplete {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    foreach ($name in $ForeverMajorPublishers) {
+        if (-not $ProgressDoc.publishers[$name].publisher_exhausted) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Get-ForeverPublisherWorkQueue {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    if ($Script:ForeverMajorOnly) {
+        if (-not (Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc)) {
+            return @($ForeverMajorPublishers)
+        }
+        return @($ForeverMajorPublishers + $ForeverMinorPublishers)
+    }
+    return @($PublisherTargets)
+}
+
+function Select-ForeverPublisherToRun {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    $queue = Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc
+    foreach ($name in $queue) {
+        if (Test-ForeverPublisherEligible -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherName $name) {
+            return $name
+        }
+    }
+    return $null
+}
+
+function Get-NextForeverMajorPublisher {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [string]$AfterPublisher
+    )
+    $startIdx = 0
+    if (-not [string]::IsNullOrWhiteSpace($AfterPublisher)) {
+        $idx = [array]::IndexOf($ForeverMajorPublishers, $AfterPublisher)
+        if ($idx -ge 0) {
+            $startIdx = $idx + 1
+        }
+    }
+    for ($i = $startIdx; $i -lt $ForeverMajorPublishers.Count; $i++) {
+        $name = $ForeverMajorPublishers[$i]
+        if (Test-ForeverPublisherEligible -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherName $name) {
+            return $name
+        }
+    }
+    for ($i = 0; $i -lt $ForeverMajorPublishers.Count; $i++) {
+        $name = $ForeverMajorPublishers[$i]
+        if ($name -eq $AfterPublisher) { continue }
+        if (Test-ForeverPublisherEligible -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherName $name) {
+            return $name
+        }
+    }
+    return $null
+}
+
+function Reset-ForeverPublisherExhaustedFlags {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string[]]$PublisherNames
+    )
+    foreach ($name in $PublisherNames) {
+        if (Test-PublisherPaused -PauseState $PauseState -PublisherName $name) { continue }
+        $ProgressDoc.publishers[$name].publisher_exhausted = $false
+        if ($Script:ForeverState -and $Script:ForeverState.publisher_progress.ContainsKey($name)) {
+            $Script:ForeverState.publisher_progress[$name].status = "PENDING"
+        }
+    }
+}
+
 function Test-AcquisitionLockActive {
     param([Parameter(Mandatory = $true)][string]$LockPath)
     if (-not (Test-Path -LiteralPath $LockPath)) { return $false }
@@ -1374,8 +1478,23 @@ function Write-ForeverProgressArtifacts {
     $pubProgress = Export-ForeverPublisherProgressJson
     $issuesLastHour = Get-IssuesAddedLastHour
 
+    $currentPub = [string]$Script:ForeverState.current_publisher
+    $currentMajor = $null
+    if ($ForeverMajorPublishers -contains $currentPub) {
+        $currentMajor = $currentPub
+    }
+    $majorPhaseComplete = Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc
+    $nextMajor = Get-NextForeverMajorPublisher -ProgressDoc $ProgressDoc -PauseState $PauseState -AfterPublisher $currentMajor
+    $workQueue = Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc
+
     $doc = [ordered]@{
-        mode = "forever"
+        mode = $(if ($Script:ForeverMajorOnly) { "forever_major" } else { "forever_all" })
+        forever_major_only = [bool]$Script:ForeverMajorOnly
+        major_publishers_phase_complete = [bool]$majorPhaseComplete
+        major_publisher_order = @($ForeverMajorPublishers)
+        current_major_publisher = $currentMajor
+        next_major_publisher = $nextMajor
+        publisher_work_queue = @($workQueue)
         status = $Script:ForeverState.status
         started_at = $Script:ForeverState.started_at
         updated_at = (Get-Date).ToUniversalTime().ToString("o")
@@ -1465,8 +1584,14 @@ function Write-ForeverProgressBlock {
     Write-Host ""
     Write-Host "P97 FOREVER PROGRESS"
     Write-Host ("-" * 52)
-    Write-Host "Mode: FOREVER"
+    Write-Host "Mode: $(if ($Script:ForeverMajorOnly) { 'FOREVER MAJOR SEQUENTIAL' } else { 'FOREVER ALL PUBLISHERS' })"
     Write-Host "Runtime: $runtimeText"
+    $currentPub = [string]$Script:ForeverState.current_publisher
+    $currentMajor = if ($ForeverMajorPublishers -contains $currentPub) { $currentPub } else { "—" }
+    $nextMajor = Get-NextForeverMajorPublisher -ProgressDoc $ProgressDoc -PauseState (Load-PublisherPauseState) -AfterPublisher $(if ($currentMajor -ne "—") { $currentMajor } else { $null })
+    Write-Host "Current Major Publisher: $currentMajor"
+    Write-Host "Next Major Publisher: $(if ($nextMajor) { $nextMajor } else { '—' })"
+    Write-Host "Major Phase Complete: $(Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc)"
     Write-Host "Current Publisher: $($Script:ForeverState.current_publisher)"
     Write-Host "Publisher Offset: $(Format-Count -Value ([int]$Script:ForeverState.current_offset))"
     Write-Host "Chunk Limit: $(Format-Count -Value ([int]$Script:ForeverState.current_chunk_limit))"
@@ -1491,7 +1616,12 @@ function Write-ForeverProgressBlock {
     Write-Host ""
     Write-Host "Publisher Progress"
     Write-Host ("-" * 52)
-    foreach ($name in $PublisherTargets) {
+    $progressPublishers = if ($Script:ForeverMajorOnly -and -not (Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc)) {
+        $ForeverMajorPublishers
+    } else {
+        $PublisherTargets
+    }
+    foreach ($name in $progressPublishers) {
         $row = $Script:ForeverState.publisher_progress[$name]
         Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  th420={5}  mismatch_chunks={6}  skipped_vol={7}  status={8}" -f `
             $name, (Format-Count -Value ([int]$row.offset)), $row.chunks, $row.created, $row.updated, $row."420s", `
@@ -1709,6 +1839,12 @@ function Start-ForeverAcquisitionDaemon {
         [Parameter(Mandatory = $true)]$PauseState
     )
     Register-ForeverCancelHandler
+    $Script:ForeverMajorOnly = -not $AllPublishers
+    if ($Script:ForeverMajorOnly) {
+        Write-Log "Forever major-only sequential mode (minors deferred until majors exhausted)"
+    } else {
+        Write-Log "Forever all-publishers rotation mode (-AllPublishers)"
+    }
     $Script:ForeverDaemonStartTime = $StartTime
     Initialize-ComicVineForeverRateState
     $ProgressDoc.series_exhausted = $true
@@ -1728,49 +1864,60 @@ function Start-ForeverAcquisitionDaemon {
     Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
 
     while (-not $Script:ForeverStopRequested) {
-        $activePublishers = 0
-        foreach ($publisher in $PublisherTargets) {
-            if ($Script:ForeverStopRequested) { break }
+        $workQueue = Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc
+        $publisher = Select-ForeverPublisherToRun -ProgressDoc $ProgressDoc -PauseState $PauseState
+        if (-not $publisher) {
+            $anyEligible = $false
+            foreach ($name in $workQueue) {
+                if (-not $ProgressDoc.publishers[$name].publisher_exhausted) {
+                    $anyEligible = $true
+                    break
+                }
+            }
+            if (-not $anyEligible) {
+                Write-Log "Forever work queue exhausted; resetting exhausted flags for queue ($($workQueue.Count) publishers)"
+                Reset-ForeverPublisherExhaustedFlags -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherNames $workQueue
+                $Script:RunStats.publisher_passes++
+                Save-ProgressDocument -Progress $ProgressDoc
+                Start-Sleep -Seconds 5
+                continue
+            }
+            Write-Log "Forever: all eligible publishers paused; waiting 30s before retry" -Level "WARN"
+            Start-Sleep -Seconds 30
+            continue
+        }
+
+        while (-not $Script:ForeverStopRequested -and -not $ProgressDoc.publishers[$publisher].publisher_exhausted) {
             if (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher) {
                 $Script:ForeverState.publisher_progress[$publisher].status = "PAUSED"
-                continue
+                break
             }
-            $entry = $ProgressDoc.publishers[$publisher]
-            if ($entry.publisher_exhausted) {
-                continue
-            }
-            $activePublishers++
             Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+            if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
+                break
+            }
             while (
                 -not $Script:ForeverStopRequested -and
                 $Script:ForeverState.last_chunk_result.outcome -eq "skipped_mismatch_only" -and
-                -not $ProgressDoc.publishers[$publisher].publisher_exhausted
+                -not $ProgressDoc.publishers[$publisher].publisher_exhausted -and
+                -not (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher)
             ) {
                 Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
-            }
-            $catalog = Get-CatalogProgressSnapshot
-            $Script:ForeverLastCatalogSnapshot = $catalog
-            [void]$Script:ForeverState.issue_samples.Add(@{
-                at = (Get-Date).ToUniversalTime().ToString("o")
-                issues = [int]$catalog.total_issues
-            })
-            $foreverDoc = Write-ForeverProgressArtifacts -StartTime $StartTime -ProgressDoc $ProgressDoc -PauseState $PauseState -CatalogSnapshot $catalog
-            Write-ForeverProgressBlock -StartTime $StartTime -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog -ForeverDoc $foreverDoc
-            Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
-        }
-
-        if ($activePublishers -eq 0) {
-            Write-Log "All publishers exhausted or paused; starting new forever pass without resetting offsets"
-            foreach ($name in $PublisherTargets) {
-                if (-not (Test-PublisherPaused -PauseState $PauseState -PublisherName $name)) {
-                    $ProgressDoc.publishers[$name].publisher_exhausted = $false
-                    $Script:ForeverState.publisher_progress[$name].status = "PENDING"
+                if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
+                    break
                 }
             }
-            $Script:RunStats.publisher_passes++
-            Save-ProgressDocument -Progress $ProgressDoc
-            Start-Sleep -Seconds 5
         }
+
+        $catalog = Get-CatalogProgressSnapshot
+        $Script:ForeverLastCatalogSnapshot = $catalog
+        [void]$Script:ForeverState.issue_samples.Add(@{
+            at = (Get-Date).ToUniversalTime().ToString("o")
+            issues = [int]$catalog.total_issues
+        })
+        $foreverDoc = Write-ForeverProgressArtifacts -StartTime $StartTime -ProgressDoc $ProgressDoc -PauseState $PauseState -CatalogSnapshot $catalog
+        Write-ForeverProgressBlock -StartTime $StartTime -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog -ForeverDoc $foreverDoc
+        Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
     }
 
     Stop-ForeverHeartbeatTimer
@@ -1786,6 +1933,13 @@ function Show-ForeverWhatIfPlan {
     )
     $rate = Load-ComicVineRateState
     Write-Host "Forever mode enabled"
+    if ($AllPublishers) {
+        Write-Host "Publisher strategy=ALL (legacy one-chunk rotation across full list)"
+    } else {
+        Write-Host "Publisher strategy=MAJOR SEQUENTIAL (default; minors after majors exhausted)"
+        Write-Host "Major order: $($ForeverMajorPublishers -join ' -> ')"
+        Write-Host "Deferred minors: $($ForeverMinorPublishers -join ', ')"
+    }
     Write-Host "TargetRuntimeHours=IGNORED MinimumRuntimeHours=IGNORED"
     Write-Host "Enrichment=DISABLED (import only)"
     Write-Host "Lock file=$AcquisitionLockFile"

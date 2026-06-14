@@ -72,6 +72,10 @@ def format_dashboard(doc: dict) -> str:
         "",
         "Current chunk",
         "-" * 56,
+        f"Major sequential:     {doc.get('forever_major_only', '—')}",
+        f"Major phase complete: {doc.get('major_publishers_phase_complete', '—')}",
+        f"Current major:        {doc.get('current_major_publisher') or '—'}",
+        f"Next major:           {doc.get('next_major_publisher') or '—'}",
         f"Publisher:            {doc.get('current_publisher', '—')}",
         f"Offset:               {_fmt_count(doc.get('current_offset'))}",
         f"Chunk limit:          {_fmt_count(doc.get('current_chunk_limit'))}",
@@ -103,7 +107,12 @@ def format_dashboard(doc: dict) -> str:
     if not publisher_progress:
         lines.append("(no publisher stats yet)")
     else:
-        for name in sorted(publisher_progress.keys()):
+        major_order = doc.get("major_publisher_order") or []
+        work_queue = doc.get("publisher_work_queue") or []
+        display_names = work_queue if work_queue else sorted(publisher_progress.keys())
+        if major_order and doc.get("forever_major_only") and not doc.get("major_publishers_phase_complete"):
+            display_names = [n for n in major_order if n in publisher_progress]
+        for name in display_names:
             row = publisher_progress[name]
             if (row.get("mismatch_only_chunks") or 0) > 0 or (row.get("skipped_mismatch_volumes") or 0) > 0:
                 lines.append(

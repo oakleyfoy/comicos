@@ -12,7 +12,13 @@ from p97_forever_progress_watch import format_dashboard  # noqa: E402
 
 def test_format_dashboard_includes_key_sections() -> None:
     doc = {
-        "mode": "forever",
+        "mode": "forever_major",
+        "forever_major_only": True,
+        "major_publishers_phase_complete": False,
+        "current_major_publisher": "Marvel",
+        "next_major_publisher": "DC Comics",
+        "major_publisher_order": ["Marvel", "DC Comics", "Image"],
+        "publisher_work_queue": ["Marvel", "DC Comics", "Image", "Dark Horse", "IDW", "Boom"],
         "updated_at": "2026-06-14T12:00:00Z",
         "runtime_seconds": 13320,
         "status": "RUNNING",
@@ -39,6 +45,9 @@ def test_format_dashboard_includes_key_sections() -> None:
     text = format_dashboard(doc)
     assert "P97 Forever Catalog Acquisition" in text
     assert "Marvel" in text
+    assert "Current major:" in text
+    assert "Next major:" in text
+    assert "DC Comics" in text
     assert "150k progress" in text
     assert "created=72" in text
     assert "Sleep floor:" in text
