@@ -242,7 +242,7 @@ def main() -> int:
 
     report = run_once()
     if args.json:
-        print(json.dumps(json_export(report), indent=2))
+        print(json.dumps(json_export(report), separators=(",", ":")))
     else:
         print(format_table(report))
     return 0

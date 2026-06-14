@@ -105,7 +105,7 @@ def format_dashboard(doc: dict) -> str:
                 f"chunks={row.get('chunks', 0)} "
                 f"created={row.get('created', 0)} "
                 f"updated={row.get('updated', 0)} "
-                f"420s={row.get('420s', 0)} "
+                f"420s={row.get('420s', row.get('throttle_420_count', 0))} "
                 f"status={row.get('status', '—')}"
             )
     lines.append("")

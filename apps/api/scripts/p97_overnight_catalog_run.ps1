@@ -53,6 +53,7 @@ $PublisherChunkLimits = @{
 
 $Script:ForeverStopRequested = $false
 $Script:ForeverHeartbeatTimer = $null
+$Script:ForeverCancelHandlerRegistered = $false
 
 $Script:ComicVineKeySource = $null
 $Script:InSafetyBootstrap = $false
@@ -805,9 +806,52 @@ function Format-Count {
 function Format-RuntimeHoursMinutes {
     param([Parameter(Mandatory = $true)][double]$TotalHours)
     $totalMinutes = [math]::Max(0, [int][math]::Floor($TotalHours * 60))
-    $hours = [math]::Floor($totalMinutes / 60)
-    $minutes = $totalMinutes % 60
+    $hours = [int][math]::Floor($totalMinutes / 60)
+    $minutes = [int]($totalMinutes % 60)
     return ("{0:D2}h {1:D2}m" -f $hours, $minutes)
+}
+
+function ConvertFrom-PythonStdoutJson {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$StdoutLines,
+        [string]$LogLabel = "python_json"
+    )
+    if ($null -eq $StdoutLines -or $StdoutLines.Count -eq 0) {
+        Write-Log "${LogLabel}_parse_success=False (empty stdout)" -Level "WARN"
+        throw "Python JSON output was empty ($LogLabel)"
+    }
+    $text = ($StdoutLines -join "`n").Trim()
+    if ($text.Length -ge 1 -and [int][char]$text[0] -eq 0xFEFF) {
+        $text = $text.Substring(1)
+    }
+    if ($text -isnot [string]) {
+        $text = [string]$text
+    }
+    if ($text -match "^\s*\{") {
+        # Already a single JSON object string (possibly multi-line pretty-print).
+    } elseif ($StdoutLines.Count -eq 1 -and ($StdoutLines[0] -is [pscustomobject] -or $StdoutLines[0] -is [hashtable])) {
+        Write-Log "${LogLabel}_parse_success=True (stdout already parsed object)" -Level "INFO"
+        return $StdoutLines[0]
+    }
+    $start = $text.IndexOf("{")
+    $end = $text.LastIndexOf("}")
+    if ($start -lt 0 -or $end -le $start) {
+        $excerpt = if ($text.Length -gt 240) { $text.Substring(0, 240) } else { $text }
+        Write-Log "raw_${LogLabel}_json_excerpt=$excerpt" -Level "WARN"
+        Write-Log "${LogLabel}_parse_success=False (no JSON object braces)" -Level "WARN"
+        throw "No JSON object found in Python output ($LogLabel)"
+    }
+    $jsonText = $text.Substring($start, $end - $start + 1)
+    $excerptLen = [math]::Min(240, $jsonText.Length)
+    Write-Log "raw_${LogLabel}_json_excerpt=$($jsonText.Substring(0, $excerptLen))"
+    try {
+        $parsed = $jsonText | ConvertFrom-Json
+        Write-Log "${LogLabel}_parse_success=True"
+        return $parsed
+    } catch {
+        Write-Log "${LogLabel}_parse_success=False error=$($_.Exception.Message)" -Level "WARN"
+        throw
+    }
 }
 
 function Get-CatalogProgressSnapshot {
@@ -822,14 +866,10 @@ function Get-CatalogProgressSnapshot {
         }
     }
     $run = Invoke-ExternalPython -ArgumentList @("scripts\p97_progress_watch.py", "--json") -Label "catalog progress snapshot"
-    if ($run.exit_code -ne 0 -or $run.stdout.Count -eq 0) {
+    if ($run.exit_code -ne 0) {
         throw "Failed to read catalog progress snapshot (exit $($run.exit_code))"
     }
-    $jsonLine = ($run.stdout | Where-Object { $_ -match "^\s*\{" }) -join ""
-    if ([string]::IsNullOrWhiteSpace($jsonLine)) {
-        $jsonLine = $run.stdout[-1]
-    }
-    return ($jsonLine | ConvertFrom-Json)
+    return (ConvertFrom-PythonStdoutJson -StdoutLines @($run.stdout) -LogLabel "catalog_progress")
 }
 
 function New-PublisherPauseState {
@@ -1009,18 +1049,36 @@ function Update-ForeverPublisherProgressFromProgressDoc {
 }
 
 function Get-IssuesAddedLastHour {
-    $now = (Get-Date).ToUniversalTime()
-    $cutoff = $now.AddHours(-1)
-    $samples = @($Script:ForeverState.issue_samples)
-    $baseline = $Script:ForeverState.issues_before_run
-    foreach ($sample in ($samples | Sort-Object { $_.at })) {
+    if ($null -eq $Script:ForeverState) { return 0 }
+    $cutoff = (Get-Date).ToUniversalTime().AddHours(-1)
+    $baseline = [int]$Script:ForeverState.issues_before_run
+    $samplesEnum = $Script:ForeverState.issue_samples
+    if ($null -eq $samplesEnum) {
+        return [math]::Max(0, [int]$Script:ForeverState.issues_added_this_run)
+    }
+    foreach ($sample in $samplesEnum) {
+        if ($null -eq $sample) { continue }
         try {
-            $at = [datetimeoffset]::Parse([string]$sample.at).UtcDateTime
-            if ($at -le $cutoff) { $baseline = [int]$sample.issues }
-        } catch { continue }
+            $atText = $null
+            $issuesVal = $null
+            if ($sample -is [System.Collections.IDictionary]) {
+                $atText = [string]$sample["at"]
+                $issuesVal = [int]$sample["issues"]
+            } else {
+                $atText = [string]$sample.at
+                $issuesVal = [int]$sample.issues
+            }
+            if ([string]::IsNullOrWhiteSpace($atText)) { continue }
+            $at = [datetimeoffset]::Parse($atText).UtcDateTime
+            if ($at -le $cutoff) { $baseline = $issuesVal }
+        } catch {
+            continue
+        }
     }
     $currentIssues = [int]$Script:ForeverState.issues_now
-    if ($currentIssues -lt $baseline) { $baseline = $Script:ForeverState.issues_before_run }
+    if ($currentIssues -lt $baseline) {
+        $baseline = [int]$Script:ForeverState.issues_before_run
+    }
     return [math]::Max(0, $currentIssues - $baseline)
 }
 
@@ -1037,6 +1095,22 @@ function Get-EstimatedTimeTo150k {
     $hoursRemaining = $chunksNeeded * $hoursPerChunk
     if ($hoursRemaining -gt 8760) { return "UNKNOWN" }
     return ("{0:0.#}h" -f $hoursRemaining)
+}
+
+function Export-ForeverPublisherProgressJson {
+    $export = [ordered]@{}
+    foreach ($name in $PublisherTargets) {
+        $row = $Script:ForeverState.publisher_progress[$name]
+        $export[$name] = [ordered]@{
+            offset = [int]$row.offset
+            chunks = [int]$row.chunks
+            created = [int]$row.created
+            updated = [int]$row.updated
+            throttle_420_count = [int]$row."420s"
+            status = [string]$row.status
+        }
+    }
+    return $export
 }
 
 function Write-ForeverProgressArtifacts {
@@ -1070,6 +1144,17 @@ function Write-ForeverProgressArtifacts {
     $publishersExhausted = @($PublisherTargets | Where-Object { $ProgressDoc.publishers[$_].publisher_exhausted })
     $publishersPaused = @($PublisherTargets | Where-Object { Test-PublisherPaused -PauseState $PauseState -PublisherName $_ })
 
+    $lastChunk = $Script:ForeverState.last_chunk_result
+    $lastChunkExport = [ordered]@{
+        created = [int]$lastChunk.created
+        updated = [int]$lastChunk.updated
+        skipped = [int]$lastChunk.skipped
+        failed = [int]$lastChunk.failed
+    }
+
+    $pubProgress = Export-ForeverPublisherProgressJson
+    $issuesLastHour = Get-IssuesAddedLastHour
+
     $doc = [ordered]@{
         mode = "forever"
         status = $Script:ForeverState.status
@@ -1079,7 +1164,7 @@ function Write-ForeverProgressArtifacts {
         issues_before_run = $Script:ForeverState.issues_before_run
         issues_now = $Script:ForeverState.issues_now
         issues_added_this_run = $Script:ForeverState.issues_added_this_run
-        issues_added_last_hour = (Get-IssuesAddedLastHour)
+        issues_added_last_hour = $issuesLastHour
         images_now = $Script:ForeverState.images_now
         images_added_this_run = $Script:ForeverState.images_added_this_run
         ready_covers = $Script:ForeverState.ready_covers
@@ -1090,11 +1175,11 @@ function Write-ForeverProgressArtifacts {
         current_offset = $Script:ForeverState.current_offset
         current_chunk_limit = $Script:ForeverState.current_chunk_limit
         chunks_completed_this_run = $Script:ForeverState.chunks_completed_this_run
-        publisher_progress = $Script:ForeverState.publisher_progress
+        publisher_progress = $pubProgress
         total_420_count_this_run = $Script:ForeverState.total_420_count_this_run
         current_sleep_seconds = $Script:ForeverState.current_sleep_seconds
         last_successful_chunk_at = $Script:ForeverState.last_successful_chunk_at
-        last_chunk_result = $Script:ForeverState.last_chunk_result
+        last_chunk_result = $lastChunkExport
         goal_150k_progress_pct = $goal150
         goal_200k_progress_pct = $goal200
         goal_150k_remaining = [math]::Max(0, $GoalIssuesPrimary - $Script:ForeverState.issues_now)
@@ -1105,7 +1190,13 @@ function Write-ForeverProgressArtifacts {
         publishers_paused = @($publishersPaused)
         total_chunks_completed = $Script:ForeverState.chunks_completed_this_run
     }
-    $doc | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ForeverProgressFile -Encoding utf8
+    try {
+        $jsonText = ($doc | ConvertTo-Json -Depth 8)
+        Set-Content -LiteralPath $ForeverProgressFile -Value $jsonText -Encoding utf8
+    } catch {
+        Write-Log "forever_progress_json_write_failed=$($_.Exception.Message)" -Level "ERROR"
+        throw
+    }
     return $doc
 }
 
@@ -1175,7 +1266,7 @@ function Write-ForeverProgressBlock {
     Write-Host ("-" * 52)
     foreach ($name in $PublisherTargets) {
         $row = $Script:ForeverState.publisher_progress[$name]
-        Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  420s={5}  status={6}" -f `
+        Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  th420={5}  status={6}" -f `
             $name, (Format-Count -Value ([int]$row.offset)), $row.chunks, $row.created, $row.updated, $row."420s", $row.status)
     }
     Write-Host ""
@@ -1256,15 +1347,22 @@ function Stop-ForeverHeartbeatTimer {
 }
 
 function Register-ForeverCancelHandler {
-    $Script:ForeverCancelHandler = {
-        param($sender, $e)
-        $e.Cancel = $true
-        $script:ForeverStopRequested = $true
-        $script:interrupted = $true
-        if ($Script:ForeverState) { $Script:ForeverState.status = "STOPPING" }
-        Write-Log "Ctrl+C received; finishing current work and saving progress..." -Level "WARN"
+    if ($Script:ForeverCancelHandlerRegistered) { return }
+    $Script:ForeverCancelHandlerRegistered = $true
+    try {
+        [Console]::TreatControlCAsInput = $false
+        $handler = [ConsoleCancelEventHandler] {
+            param([object]$sender, [ConsoleCancelEventArgs]$e)
+            $e.Cancel = $true
+            $script:ForeverStopRequested = $true
+            $script:interrupted = $true
+            if ($Script:ForeverState) { $Script:ForeverState.status = "STOPPING" }
+            Write-Log "Ctrl+C received; finishing current work and saving progress..." -Level "WARN"
+        }
+        [Console]::Add_CancelKeyPress($handler)
+    } catch {
+        Write-Log "Could not register Ctrl+C handler: $($_.Exception.Message)" -Level "WARN"
     }
-    [Console]::Add_CancelKeyPress($Script:ForeverCancelHandler)
 }
 
 function Invoke-ForeverPublisherChunk {
@@ -1765,6 +1863,8 @@ try {
     if (Test-Path -LiteralPath $healthScript) {
         if ($WhatIf) {
             Write-Log "(WhatIf: would run p97_catalog_health.py)"
+        } elseif ($Forever) {
+            Write-Log "(Forever mode: skipping p97_catalog_health.py on shutdown; use p97_forever_progress_watch.py)"
         } else {
             Write-Log "Running catalog health report"
             $healthRun = Invoke-ExternalPython -ArgumentList @($healthScript) -Label "catalog health"
