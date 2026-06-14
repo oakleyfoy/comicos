@@ -166,6 +166,31 @@ def extract_ocr_from_image_path_result(path: str) -> OcrExtractResult:
     return OcrExtractResult(normalized)
 
 
+def tesseract_runtime_diagnostics() -> dict:
+    binary = resolve_tesseract_binary()
+    return {
+        "ocr_enabled": get_settings().ocr_enabled,
+        "tesseract_cmd_setting": (get_settings().tesseract_cmd or "").strip() or None,
+        "resolved_tesseract_binary": binary,
+        "tesseract_version": tesseract_version(binary),
+        "pytesseract_installed": pytesseract_installed(),
+        "pillow_installed": pillow_installed(),
+        "tesseract_available": bool(binary and (Path(binary).is_file() or shutil.which(binary))),
+    }
+
+
+def classify_ocr_skip_bucket(skip_reason: str | None) -> str:
+    if skip_reason in (MISSING_TESSERACT_BINARY, MISSING_PYTESSERACT, OCR_DISABLED):
+        return "skipped_missing_tesseract"
+    if skip_reason == MISSING_LOCAL_IMAGE:
+        return "skipped_missing_file"
+    if skip_reason == OCR_EMPTY_RESULT:
+        return "skipped_empty_text"
+    if skip_reason in (OCR_EXCEPTION, MISSING_PILLOW):
+        return "skipped_image_load_error"
+    return "skipped_other"
+
+
 def log_ocr_skip(*, image_id: int | None, reason: str, detail: str | None = None) -> None:
     if detail:
         LOGGER.info("ocr skip image_id=%s reason=%s detail=%s", image_id, reason, detail)

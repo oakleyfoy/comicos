@@ -24,6 +24,18 @@ def ensure_p97_env_loaded() -> None:
         load_dotenv(api_env, override=False)
 
 
+def ensure_p97_tesseract_env() -> None:
+    """Ensure TESSERACT_CMD is visible to OCR workers (matches overnight runner default)."""
+    import os
+
+    ensure_p97_env_loaded()
+    if (os.environ.get("TESSERACT_CMD") or "").strip():
+        return
+    default_tesseract = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.name == "nt" and os.path.isfile(default_tesseract):
+        os.environ["TESSERACT_CMD"] = default_tesseract
+
+
 def resolve_p97_database_url(cli_database_url: str | None = None) -> str:
     if cli_database_url and cli_database_url.strip():
         return cli_database_url.strip()

@@ -102,18 +102,32 @@ def select_ready_covers_needing_ocr(
     limit: int,
     after_image_id: int | None = None,
 ) -> list[CatalogImage]:
-    statement = (
-        select(CatalogImage)
-        .outerjoin(CatalogOcrMetadata, CatalogOcrMetadata.image_id == CatalogImage.id)
-        .where(*_ready_cover_filters())
-        .where(CatalogOcrMetadata.id.is_(None))
-        .order_by(CatalogImage.id)
-    )
-    if after_image_id is not None:
-        statement = statement.where(CatalogImage.id > after_image_id)
-    fetch_limit = max(limit * 5, limit)
-    candidates = list(session.exec(statement.limit(fetch_limit)).all())
-    return _filter_with_resolvable_local_path(session, candidates, limit)
+    selected: list[CatalogImage] = []
+    cursor = after_image_id or 0
+    page = max(limit * 5, limit)
+    while len(selected) < limit:
+        statement = (
+            select(CatalogImage)
+            .outerjoin(CatalogOcrMetadata, CatalogOcrMetadata.image_id == CatalogImage.id)
+            .where(*_ready_cover_filters())
+            .where(CatalogOcrMetadata.id.is_(None))
+            .where(CatalogImage.id > cursor)
+            .order_by(CatalogImage.id)
+            .limit(page)
+        )
+        batch = list(session.exec(statement).all())
+        if not batch:
+            break
+        for image in batch:
+            cursor = int(image.id or cursor)
+            if resolve_catalog_image_local_path(session, image) is None:
+                continue
+            selected.append(image)
+            if len(selected) >= limit:
+                break
+        if len(batch) < page:
+            break
+    return selected
 
 
 def select_ready_covers_with_ocr(

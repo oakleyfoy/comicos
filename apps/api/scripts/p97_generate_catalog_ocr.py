@@ -12,7 +12,7 @@ from sqlmodel import Session  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
 from app.services.catalog_bulk_ocr_service import count_ocr_remaining, run_bulk_ocr  # noqa: E402
-from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
+from p97_db import ensure_p97_tesseract_env, get_p97_engine, resolve_p97_database_url  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ def main() -> int:
         help="SQLAlchemy database URL (default: apps/api/.env DATABASE_URL or comic_os on localhost:5433)",
     )
     args = parser.parse_args()
+    ensure_p97_tesseract_env()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     batch = args.batch_size or get_settings().catalog_import_batch_size
     database_url = resolve_p97_database_url(args.database_url)

@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
-from app.core.config import get_settings
+from app.core.config import API_ROOT, get_settings
 from app.models.catalog_master import CatalogImage, CatalogImageFingerprint, CatalogIssue, CatalogSeries, utc_now
 from app.services.catalog_import_job_service import (
     complete_job,
@@ -26,12 +26,21 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
 
 
+def _resolve_storage_path(path: str | Path) -> Path:
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    for base in (Path.cwd(), API_ROOT):
+        candidate = base / p
+        if candidate.exists():
+            return candidate
+    return API_ROOT / p
+
+
 def _cover_root() -> Path:
     settings = get_settings()
     root = settings.catalog_cover_storage_root.strip() or f"{settings.catalog_storage_root.strip()}/covers"
-    path = Path(root)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return _resolve_storage_path(root)
 
 
 def _target_path(image: CatalogImage, session: Session) -> Path:
@@ -48,13 +57,13 @@ def _http_timeout(seconds: float) -> httpx.Timeout:
 
 
 def resolve_catalog_image_local_path(session: Session, image: CatalogImage) -> Path | None:
-    if not image.local_path:
-        candidates: list[Path] = []
-    else:
+    candidates: list[Path] = []
+    if image.local_path:
         stored = Path(image.local_path)
-        candidates = [stored]
+        candidates.append(stored)
         if not stored.is_absolute():
             candidates.append(Path.cwd() / stored)
+            candidates.append(API_ROOT / stored)
     canonical = _target_path(image, session)
     if canonical not in candidates:
         candidates.append(canonical)
