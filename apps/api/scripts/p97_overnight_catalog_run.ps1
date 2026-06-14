@@ -4,7 +4,7 @@
   P97 continuous overnight catalog acquisition (series queue, then publisher mode + post-processing).
 .PARAMETER Forever
   Run publisher acquisition continuously until Ctrl+C (import-only; no enrichment post-processing).
-  Default: major-publisher sequential mode (Marvel → DC → Image → Dark Horse → IDW → Boom).
+  Default: major-publisher sequential mode (Marvel -> DC -> Image -> Dark Horse -> IDW -> Boom).
 .PARAMETER AllPublishers
   With -Forever, include minor publishers (AWA, Oni, etc.) before majors are complete and use
   one-chunk rotation across the full publisher list (legacy behavior).
@@ -1584,15 +1584,19 @@ function Write-ForeverProgressBlock {
     Write-Host ""
     Write-Host "P97 FOREVER PROGRESS"
     Write-Host ("-" * 52)
-    Write-Host "Mode: $(if ($Script:ForeverMajorOnly) { 'FOREVER MAJOR SEQUENTIAL' } else { 'FOREVER ALL PUBLISHERS' })"
-    Write-Host "Runtime: $runtimeText"
+    $naLabel = "N/A"
+    $modeText = if ($Script:ForeverMajorOnly) { "FOREVER MAJOR SEQUENTIAL" } else { "FOREVER ALL PUBLISHERS" }
+    Write-Host ("Mode: {0}" -f $modeText)
+    Write-Host ("Runtime: {0}" -f $runtimeText)
     $currentPub = [string]$Script:ForeverState.current_publisher
-    $currentMajor = if ($ForeverMajorPublishers -contains $currentPub) { $currentPub } else { "—" }
-    $nextMajor = Get-NextForeverMajorPublisher -ProgressDoc $ProgressDoc -PauseState (Load-PublisherPauseState) -AfterPublisher $(if ($currentMajor -ne "—") { $currentMajor } else { $null })
-    Write-Host "Current Major Publisher: $currentMajor"
-    Write-Host "Next Major Publisher: $(if ($nextMajor) { $nextMajor } else { '—' })"
-    Write-Host "Major Phase Complete: $(Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc)"
-    Write-Host "Current Publisher: $($Script:ForeverState.current_publisher)"
+    $currentMajor = if ($ForeverMajorPublishers -contains $currentPub) { $currentPub } else { $naLabel }
+    $afterMajor = if ($currentMajor -ne $naLabel) { $currentMajor } else { $null }
+    $nextMajor = Get-NextForeverMajorPublisher -ProgressDoc $ProgressDoc -PauseState (Load-PublisherPauseState) -AfterPublisher $afterMajor
+    Write-Host ("Current Major Publisher: {0}" -f $currentMajor)
+    $nextMajorText = if ($nextMajor) { $nextMajor } else { $naLabel }
+    Write-Host ("Next Major Publisher: {0}" -f $nextMajorText)
+    Write-Host ("Major Phase Complete: {0}" -f (Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc))
+    Write-Host ("Current Publisher: {0}" -f $Script:ForeverState.current_publisher)
     Write-Host "Publisher Offset: $(Format-Count -Value ([int]$Script:ForeverState.current_offset))"
     Write-Host "Chunk Limit: $(Format-Count -Value ([int]$Script:ForeverState.current_chunk_limit))"
     Write-Host "Chunk: $($Script:ForeverState.chunks_completed_this_run) completed this run"
@@ -1795,7 +1799,9 @@ function Invoke-ForeverPublisherChunk {
         $pubRow.mismatch_only_chunks++
         $pubRow.skipped_mismatch_volumes += $skippedPublisher
         $newOffset = [int]$entry.last_offset
-        Write-Log "Forever mismatch-only chunk skipped publisher=$PublisherName offset=$offset->${newOffset} (+chunk_limit=$chunkLimit) skipped_publisher=$skippedPublisher total_seen=$($importResult.metrics.total_candidates_seen)" -Level "WARN"
+        $totalSeen = [int]$importResult.metrics.total_candidates_seen
+        Write-Log ("Forever mismatch-only chunk skipped publisher={0} offset={1}->{2} chunk_limit={3} skipped_publisher={4} total_seen={5}" -f `
+            $PublisherName, $offset, $newOffset, $chunkLimit, $skippedPublisher, $totalSeen) -Level "WARN"
         $Script:ForeverState.last_successful_chunk_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         $Script:RunStats.publishers_successful++
         $Script:RunStats.last_offset = $newOffset
