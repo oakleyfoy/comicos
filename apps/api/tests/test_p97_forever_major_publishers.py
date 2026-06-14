@@ -68,3 +68,14 @@ def test_forever_selector_reload_pause_and_idle_guards() -> None:
     assert "Test-ForeverWorkQueueAllNonExhaustedPaused" in daemon
     assert "Get-ForeverProgressPublisherEntry" in text
     assert "Test-ForeverPublisherExhausted" in text
+
+
+def test_forever_marvel_throttle_profile() -> None:
+    text = _runner_text()
+    assert "$MarvelForeverChunkLimit = 25" in text
+    assert "$MarvelForeverPauseHours = 4" in text
+    assert "$MarvelForeverImportSleepSeconds = 10" in text
+    assert "function Get-PublisherPauseMinutes" in text
+    assert "function Get-PublisherImportSleepSeconds" in text
+    chunk = text.split("function Get-PublisherChunkLimit", 1)[1].split("\nfunction ", 1)[0]
+    assert "Marvel" in chunk and "MarvelForeverChunkLimit" in chunk

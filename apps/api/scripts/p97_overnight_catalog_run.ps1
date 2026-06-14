@@ -49,6 +49,9 @@ $PublisherPauseStateFile = Join-Path $LogDir "comicvine_publisher_pause_state.js
 $AcquisitionLockFile = Join-Path $LogDir "acquisition_runner.lock"
 $ForeverHeartbeatSeconds = 60
 $ForeverPublisherPauseMinutes = 60
+$MarvelForeverChunkLimit = 25
+$MarvelForeverPauseHours = 4
+$MarvelForeverImportSleepSeconds = 10
 $GoalIssuesPrimary = 150000
 $GoalIssuesStretch = 200000
 
@@ -787,11 +790,16 @@ function Invoke-ComicVineImport {
     param(
         [Parameter(Mandatory = $true)][string[]]$ImportArgs,
         [Parameter(Mandatory = $true)][string]$Label,
-        [switch]$ForeverQuietFailureLog
+        [switch]$ForeverQuietFailureLog,
+        [double]$SleepSecondsOverride = -1
     )
     Write-Log "START $Label"
     if (-not $WhatIf) {
-        $sleepSeconds = Get-ComicVineImportSleepSeconds
+        if ($SleepSecondsOverride -ge 0) {
+            $sleepSeconds = $SleepSecondsOverride
+        } else {
+            $sleepSeconds = Get-ComicVineImportSleepSeconds
+        }
         Write-Log "ComicVine sleep seconds before import: $sleepSeconds"
         $ImportArgs = Set-ImportSleepArgument -ImportArgs $ImportArgs -SleepSeconds $sleepSeconds
     }
@@ -888,7 +896,12 @@ function Invoke-PublisherImport {
         "--sleep-seconds", $sleepPlaceholder,
         "--resume"
     )
-    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import publisher: $PublisherName (offset=$Offset)" -ForeverQuietFailureLog:$ForeverChunk
+    $sleepOverride = -1
+    if ($ForeverChunk) {
+        $sleepOverride = Get-PublisherImportSleepSeconds -PublisherName $PublisherName
+    }
+    return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import publisher: $PublisherName (offset=$Offset)" `
+        -ForeverQuietFailureLog:$ForeverChunk -SleepSecondsOverride $sleepOverride
 }
 
 function Update-ProgressFromImport {
@@ -1004,10 +1017,21 @@ function Write-SummaryJson {
 
 function Get-PublisherChunkLimit {
     param([Parameter(Mandatory = $true)][string]$PublisherName)
+    if ($Forever -and $PublisherName -eq "Marvel") {
+        return [int]$MarvelForeverChunkLimit
+    }
     if ($PublisherChunkLimits.ContainsKey($PublisherName)) {
         return [int]$PublisherChunkLimits[$PublisherName]
     }
     return 250
+}
+
+function Get-PublisherImportSleepSeconds {
+    param([Parameter(Mandatory = $true)][string]$PublisherName)
+    if ($Forever -and $PublisherName -eq "Marvel") {
+        return [double]$MarvelForeverImportSleepSeconds
+    }
+    return [double](Get-ComicVineImportSleepSeconds)
 }
 
 function Format-Count {
@@ -1217,19 +1241,29 @@ function Sync-ForeverPublisherRunStatuses {
     }
 }
 
+function Get-PublisherPauseMinutes {
+    param([Parameter(Mandatory = $true)][string]$PublisherName)
+    if ($Forever -and $PublisherName -eq "Marvel") {
+        return [int]($MarvelForeverPauseHours * 60)
+    }
+    return [int]$ForeverPublisherPauseMinutes
+}
+
 function Set-PublisherPaused {
     param(
         [Parameter(Mandatory = $true)]$PauseState,
         [Parameter(Mandatory = $true)][string]$PublisherName,
         [Parameter(Mandatory = $true)][string]$Reason
     )
-    $until = (Get-Date).ToUniversalTime().AddMinutes($ForeverPublisherPauseMinutes)
+    $pauseMinutes = Get-PublisherPauseMinutes -PublisherName $PublisherName
+    $until = (Get-Date).ToUniversalTime().AddMinutes($pauseMinutes)
     $PauseState.publishers[$PublisherName] = @{
         paused_until = $until.ToString("o")
         last_reason = $Reason
     }
     Save-PublisherPauseState -State $PauseState
-    Write-Log "Publisher paused: $PublisherName until $($PauseState.publishers[$PublisherName].paused_until) reason=$Reason" -Level "WARN"
+    Write-Log ("Publisher paused: {0} for {1} minutes until {2} reason={3}" -f `
+        $PublisherName, $pauseMinutes, $PauseState.publishers[$PublisherName].paused_until, $Reason) -Level "WARN"
 }
 
 function Test-ForeverPublisherEligible {
@@ -1913,7 +1947,12 @@ function Invoke-ForeverPublisherChunk {
         Set-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName -Reason "HTTP_420_THROTTLED"
         $pubRow.status = "PAUSED"
         $Script:RunStats.publishers_failed++
-        Write-Log "Forever chunk throttled for $PublisherName at sleep floor; publisher paused; offset unchanged at $offset; continuing to next publisher (no global cooldown)" -Level "WARN"
+        if ($PublisherName -eq "Marvel") {
+            Write-Log ("Forever Marvel 420: paused {0} hours (chunk_limit={1}, sleep={2}s); offset unchanged at {3}; continuing to next major publisher" -f `
+                $MarvelForeverPauseHours, $chunkLimit, $MarvelForeverImportSleepSeconds, $offset) -Level "WARN"
+        } else {
+            Write-Log "Forever chunk throttled for $PublisherName at sleep floor; publisher paused; offset unchanged at $offset; continuing to next publisher (no global cooldown)" -Level "WARN"
+        }
         return
     }
 
@@ -2094,6 +2133,8 @@ function Show-ForeverWhatIfPlan {
         Write-Host "Publisher strategy=MAJOR SEQUENTIAL (default; minors after majors exhausted)"
         Write-Host "Major order: $($ForeverMajorPublishers -join ' -> ')"
         Write-Host "Deferred minors: $($ForeverMinorPublishers -join ', ')"
+        Write-Host ("Marvel Forever throttle profile: chunk_limit={0} sleep_seconds={1} pause_hours={2}" -f `
+            $MarvelForeverChunkLimit, $MarvelForeverImportSleepSeconds, $MarvelForeverPauseHours)
     }
     Write-Host "TargetRuntimeHours=IGNORED MinimumRuntimeHours=IGNORED"
     Write-Host "Enrichment=DISABLED (import only)"
