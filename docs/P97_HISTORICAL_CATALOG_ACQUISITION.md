@@ -66,3 +66,26 @@ python scripts/p97_audit_catalog_publishers.py
 ```
 
 Writes `data/p97/catalog_international_audit.csv` under `CATALOG_STORAGE_ROOT`.
+
+## Overnight catalog population (one command)
+
+From `apps/api`, set execution policy for the session if needed and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\p97_overnight_catalog_run.ps1
+```
+
+This script:
+
+- Sets `DATABASE_URL` and `TESSERACT_CMD` for local Postgres and Tesseract
+- Logs to `data/p97/overnight_catalog_run.log` (and echoes to the console)
+- Runs safety checks (paths, DB URL, Tesseract binary)
+- Imports a fixed list of flagship series (`--limit 250 --import-issues --sleep-seconds 1` each; continues on per-series failure)
+- Runs cover harvest, fingerprint, and OCR batches
+- Prints start/end/runtime and runs `p97_catalog_health.py` when present
+
+Dry-run planned commands only (no imports):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\p97_overnight_catalog_run.ps1 -WhatIf
+```
