@@ -15,6 +15,12 @@ from app.services.import_catalog_resolution_service import (
     normalize_import_publisher_key,
     normalize_import_title,
 )
+from app.services.recognition.catalog_matcher import (
+    CATALOG_FINGERPRINT_VERIFIED_THRESHOLD,
+    CatalogFingerprintMatch,
+    load_catalog_issue_identity,
+    search_catalog_fingerprint_matches,
+)
 from app.services.recognition.confidence_service import bucket_for_confidence, combine_confidence
 from app.services.recognition.cover_matcher import score_cover_image
 from app.services.recognition.ocr_matcher import extract_ocr_signal, is_valid_comic_image
@@ -256,6 +262,45 @@ def _fallback_candidate_from_ocr(ocr: RecognitionOCRSignal) -> RecognitionCandid
     )
 
 
+def _candidate_from_catalog_match(session: Session, match: CatalogFingerprintMatch) -> RecognitionCandidate | None:
+    identity = load_catalog_issue_identity(session, match.issue_id)
+    if identity is None:
+        return None
+    return RecognitionCandidate(
+        series=identity.series,
+        issue_number=identity.issue_number,
+        variant=None,
+        publisher=identity.publisher,
+        release_date=None,
+        confidence=match.confidence,
+        cover_image_url=identity.cover_image_url,
+        source="CatalogIssue",
+        source_id=identity.catalog_issue_id,
+    )
+
+
+def _winning_source(
+    *,
+    catalog_fingerprint_score: float,
+    external_catalog_score: float,
+    ocr_score: float,
+    best_candidate: RecognitionCandidate | None,
+) -> str:
+    if catalog_fingerprint_score >= CATALOG_FINGERPRINT_VERIFIED_THRESHOLD:
+        return "catalog_image_fingerprint"
+    scores: list[tuple[float, str]] = [
+        (catalog_fingerprint_score, "catalog_image_fingerprint"),
+        (external_catalog_score, "ExternalCatalogIssue"),
+        (ocr_score, "ocr"),
+    ]
+    scores.sort(key=lambda row: row[0], reverse=True)
+    if scores[0][0] <= 0.0:
+        if best_candidate is not None:
+            return best_candidate.source
+        return "none"
+    return scores[0][1]
+
+
 def identify_comic_cover(
     session: Session,
     *,
@@ -268,19 +313,106 @@ def identify_comic_cover(
 
     image_signal: RecognitionImageSignal = score_cover_image(session, image_bytes)
     ocr_signal = extract_ocr_signal(image_bytes, source_name=source_name)
-    candidates = _search_external_catalog_candidates(session, ocr=ocr_signal)
+    ocr_score = ocr_signal.confidence
 
-    best_candidate = candidates[0] if candidates else _fallback_candidate_from_ocr(ocr_signal)
-    title_match_confidence = best_candidate.confidence if best_candidate is not None else 0.0
-    issue_match_confidence = 1.0 if best_candidate and best_candidate.issue_number and ocr_signal.issue_number and issue_number_variants(best_candidate.issue_number) & set(issue_number_variants(ocr_signal.issue_number)) else 0.0
+    catalog_matches = search_catalog_fingerprint_matches(session, image_bytes)
+    catalog_fingerprint_score = catalog_matches[0].confidence if catalog_matches else 0.0
+
+    if catalog_matches and catalog_fingerprint_score >= CATALOG_FINGERPRINT_VERIFIED_THRESHOLD:
+        top_match = catalog_matches[0]
+        identity = load_catalog_issue_identity(session, top_match.issue_id)
+        catalog_candidate = _candidate_from_catalog_match(session, top_match)
+        candidates = [catalog_candidate] if catalog_candidate is not None else []
+        confidence = catalog_fingerprint_score
+        bucket: str = "VERIFIED"
+        result = RecognitionResult(
+            bucket=bucket,
+            confidence=confidence,
+            series=identity.series if identity else (catalog_candidate.series if catalog_candidate else None),
+            issue_number=identity.issue_number if identity else (catalog_candidate.issue_number if catalog_candidate else None),
+            variant=None,
+            publisher=identity.publisher if identity else (catalog_candidate.publisher if catalog_candidate else None),
+            release_date=None,
+            cover_image_url=identity.cover_image_url if identity else (catalog_candidate.cover_image_url if catalog_candidate else None),
+            candidate_count=len(candidates),
+            candidates=candidates,
+            image_confidence=image_signal.confidence,
+            ocr_confidence=ocr_score,
+            title_match_confidence=catalog_fingerprint_score,
+            issue_match_confidence=1.0,
+            ocr_text=normalize_ocr_text(ocr_signal.raw_text),
+            catalog_issue_id=top_match.issue_id,
+            winning_source="catalog_image_fingerprint",
+            catalog_fingerprint_score=catalog_fingerprint_score,
+            external_catalog_score=0.0,
+            ocr_score=ocr_score,
+            final_confidence=confidence,
+        )
+        if record_metrics:
+            _record_result(confidence, bucket)
+        LOGGER.info(
+            "recognition_attempt bucket=%s confidence=%.3f catalog_fp=%.3f winning=%s catalog_issue_id=%s",
+            bucket,
+            confidence,
+            catalog_fingerprint_score,
+            result.winning_source,
+            top_match.issue_id,
+        )
+        return result
+
+    external_candidates = _search_external_catalog_candidates(session, ocr=ocr_signal)
+    external_catalog_score = external_candidates[0].confidence if external_candidates else 0.0
+
+    catalog_candidate = _candidate_from_catalog_match(session, catalog_matches[0]) if catalog_matches else None
+    prefer_catalog = (
+        catalog_candidate is not None
+        and catalog_fingerprint_score >= external_catalog_score
+        and catalog_fingerprint_score >= 0.70
+    )
+
+    if prefer_catalog and catalog_candidate is not None:
+        best_candidate = catalog_candidate
+        title_match_confidence = catalog_fingerprint_score
+        issue_match_confidence = 1.0
+        candidates = [catalog_candidate, *external_candidates[:4]]
+    else:
+        best_candidate = external_candidates[0] if external_candidates else _fallback_candidate_from_ocr(ocr_signal)
+        title_match_confidence = best_candidate.confidence if best_candidate is not None else 0.0
+        if best_candidate and best_candidate.source == "CatalogIssue":
+            issue_match_confidence = 1.0
+        else:
+            issue_match_confidence = (
+                1.0
+                if best_candidate
+                and best_candidate.issue_number
+                and ocr_signal.issue_number
+                and issue_number_variants(best_candidate.issue_number) & set(issue_number_variants(ocr_signal.issue_number))
+                else 0.0
+            )
+        candidates = external_candidates
+        if catalog_candidate is not None and catalog_candidate not in candidates:
+            candidates = [catalog_candidate, *candidates[:4]]
 
     confidence = combine_confidence(
         image_confidence=image_signal.confidence,
-        ocr_confidence=ocr_signal.confidence,
+        ocr_confidence=ocr_score,
         title_match_confidence=title_match_confidence,
         issue_match_confidence=issue_match_confidence,
     )
     bucket = bucket_for_confidence(confidence)
+
+    catalog_issue_id = None
+    if best_candidate and best_candidate.source == "CatalogIssue" and best_candidate.source_id is not None:
+        catalog_issue_id = int(best_candidate.source_id)
+    elif prefer_catalog and catalog_matches:
+        catalog_issue_id = catalog_matches[0].issue_id
+
+    winning_source = _winning_source(
+        catalog_fingerprint_score=catalog_fingerprint_score,
+        external_catalog_score=external_catalog_score,
+        ocr_score=ocr_score,
+        best_candidate=best_candidate,
+    )
 
     series = best_candidate.series if best_candidate else ocr_signal.title
     issue_number = best_candidate.issue_number if best_candidate else ocr_signal.issue_number
@@ -301,22 +433,31 @@ def identify_comic_cover(
         candidate_count=len(candidates),
         candidates=candidates,
         image_confidence=image_signal.confidence,
-        ocr_confidence=ocr_signal.confidence,
+        ocr_confidence=ocr_score,
         title_match_confidence=title_match_confidence,
         issue_match_confidence=issue_match_confidence,
         ocr_text=normalize_ocr_text(ocr_signal.raw_text),
+        catalog_issue_id=catalog_issue_id,
+        winning_source=winning_source,
+        catalog_fingerprint_score=catalog_fingerprint_score,
+        external_catalog_score=external_catalog_score,
+        ocr_score=ocr_score,
+        final_confidence=confidence,
     )
     if record_metrics:
         _record_result(confidence, bucket)
     LOGGER.info(
-        "recognition_attempt bucket=%s confidence=%.3f candidates=%d image=%.3f ocr=%.3f title=%.3f issue=%.3f",
+        "recognition_attempt bucket=%s confidence=%.3f candidates=%d image=%.3f ocr=%.3f title=%.3f issue=%.3f catalog_fp=%.3f external=%.3f winning=%s",
         bucket,
         confidence,
         len(candidates),
         image_signal.confidence,
-        ocr_signal.confidence,
+        ocr_score,
         title_match_confidence,
         issue_match_confidence,
+        catalog_fingerprint_score,
+        external_catalog_score,
+        winning_source,
     )
     return result
 
@@ -337,6 +478,12 @@ def identify_comic_cover_read(
         publisher=result.publisher,
         release_date=result.release_date,
         cover_image_url=result.cover_image_url,
+        catalog_issue_id=result.catalog_issue_id,
+        winning_source=result.winning_source,
+        catalog_fingerprint_score=result.catalog_fingerprint_score,
+        external_catalog_score=result.external_catalog_score,
+        ocr_score=result.ocr_score,
+        final_confidence=result.final_confidence,
         candidate_count=result.candidate_count,
         candidates=[_catalog_candidate_to_read(candidate) for candidate in result.candidates],
         metrics=recognition_metrics_snapshot(),

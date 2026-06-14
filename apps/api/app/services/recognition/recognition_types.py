@@ -59,4 +59,10 @@ class RecognitionResult:
     title_match_confidence: float = 0.0
     issue_match_confidence: float = 0.0
     ocr_text: str | None = None
+    catalog_issue_id: int | None = None
+    winning_source: str = "none"
+    catalog_fingerprint_score: float = 0.0
+    external_catalog_score: float = 0.0
+    ocr_score: float = 0.0
+    final_confidence: float = 0.0
 

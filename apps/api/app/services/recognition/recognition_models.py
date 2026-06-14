@@ -34,6 +34,12 @@ class RecognitionIdentifyRead(BaseModel):
     publisher: str | None = None
     release_date: date | None = None
     cover_image_url: str | None = None
+    catalog_issue_id: int | None = None
+    winning_source: str = "none"
+    catalog_fingerprint_score: float = 0.0
+    external_catalog_score: float = 0.0
+    ocr_score: float = 0.0
+    final_confidence: float = 0.0
     candidate_count: int = 0
     candidates: list[RecognitionCandidateRead] = Field(default_factory=list)
     metrics: dict[str, Any] = Field(default_factory=dict)

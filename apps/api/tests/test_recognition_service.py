@@ -9,8 +9,17 @@ from PIL import Image
 from sqlmodel import Session
 
 from app.models.asset_ledger import CoverImageFingerprint
+from app.models.catalog_master import (
+    CatalogImage,
+    CatalogImageFingerprint,
+    CatalogIssue,
+    CatalogPublisher,
+    CatalogSeries,
+)
 from app.models.external_catalog import ExternalCatalogIssue
+from app.services.catalog_fingerprint_service import fingerprint_image_path
 from app.services.cover_images import generate_perceptual_hash
+from app.services.recognition.recognition_service import identify_comic_cover
 from test_inventory import auth_headers, register_and_login
 
 
@@ -43,6 +52,127 @@ def _seed_issue(session: Session, *, issue_number: str, title: str, release_date
     session.refresh(issue)
     assert issue.id is not None
     return issue
+
+
+def _seed_p97_catalog_issue(
+    session: Session,
+    tmp_path,
+    image_bytes: bytes,
+    *,
+    catalog_issue_id: int = 6327,
+    series_name: str = "Venom",
+    issue_number: str = "1",
+    publisher_name: str = "Marvel",
+) -> CatalogIssue:
+    publisher = CatalogPublisher(name=publisher_name, normalized_name=publisher_name.lower())
+    session.add(publisher)
+    session.flush()
+    series = CatalogSeries(name=series_name, normalized_name=series_name.lower(), publisher_id=publisher.id)
+    session.add(series)
+    session.flush()
+    issue = CatalogIssue(
+        id=catalog_issue_id,
+        series_id=series.id,
+        publisher_id=publisher.id,
+        issue_number=issue_number,
+        normalized_issue_number=issue_number,
+    )
+    session.add(issue)
+    session.flush()
+    cover_path = tmp_path / f"catalog-{catalog_issue_id}.png"
+    cover_path.write_bytes(image_bytes)
+    image = CatalogImage(
+        issue_id=issue.id,
+        image_type="cover",
+        download_status="ready",
+        source="test",
+        local_path=str(cover_path),
+        source_url=f"https://example.com/{series_name.lower()}-{issue_number}.jpg",
+    )
+    session.add(image)
+    session.flush()
+    phash, dhash, ahash = fingerprint_image_path(cover_path)
+    session.add(
+        CatalogImageFingerprint(
+            image_id=image.id,
+            issue_id=issue.id,
+            phash=phash,
+            dhash=dhash,
+            ahash=ahash,
+        )
+    )
+    session.commit()
+    session.refresh(issue)
+    assert issue.id == catalog_issue_id
+    return issue
+
+
+def _seed_external_issue_166_noise(session: Session, *, title: str) -> None:
+    session.add(
+        ExternalCatalogIssue(
+            source_name="locg",
+            title=f"{title} #166",
+            publisher="Marvel",
+            series_name=title,
+            issue_number="166",
+            release_date=date(2018, 1, 1),
+            cover_image_url="https://example.com/wrong-166.jpg",
+        )
+    )
+    session.commit()
+
+
+def test_recognition_catalog_fingerprint_verified_venom_6327(
+    client: TestClient,
+    session: Session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_bytes = _png_bytes(color=(120, 20, 40))
+    _seed_p97_catalog_issue(session, tmp_path, image_bytes, catalog_issue_id=6327)
+    _stub_ocr(monkeypatch, "Lov#166\nMARVEL")
+    _seed_external_issue_166_noise(session, title="Back Issue")
+    _seed_external_issue_166_noise(session, title="Blue Exorcist")
+
+    token = register_and_login(client, "recognition-venom-catalog@example.com")
+    response = client.post(
+        "/api/v1/recognition/identify",
+        headers=auth_headers(token),
+        files={"image": ("venom-1.png", image_bytes, "image/png")},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["bucket"] == "VERIFIED"
+    assert data["catalog_issue_id"] == 6327
+    assert data["series"] == "Venom"
+    assert data["issue_number"] == "1"
+    assert data["publisher"] == "Marvel"
+    assert data["confidence"] >= 0.95
+    assert data["final_confidence"] >= 0.95
+    assert data["catalog_fingerprint_score"] >= 0.95
+    assert data["winning_source"] == "catalog_image_fingerprint"
+    assert data["candidates"][0]["source"] == "CatalogIssue"
+    assert data["candidates"][0]["source_id"] == 6327
+
+
+def test_recognition_fingerprint_beats_wrong_ocr_issue_number(
+    session: Session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_bytes = _png_bytes(color=(90, 45, 200))
+    _seed_p97_catalog_issue(session, tmp_path, image_bytes, catalog_issue_id=6327)
+    _stub_ocr(monkeypatch, "Lov#166\nMARVEL")
+    _seed_external_issue_166_noise(session, title="Misread Series")
+
+    result = identify_comic_cover(session, image_bytes=image_bytes, record_metrics=False)
+    assert result.bucket == "VERIFIED"
+    assert result.catalog_issue_id == 6327
+    assert result.series == "Venom"
+    assert result.issue_number == "1"
+    assert result.confidence >= 0.95
+    assert result.winning_source == "catalog_image_fingerprint"
+    assert result.issue_match_confidence == 1.0
 
 
 def test_recognition_identify_exact_match_and_candidate_endpoint(

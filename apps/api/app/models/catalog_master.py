@@ -17,7 +17,7 @@ class CatalogPublisher(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=255, nullable=False, index=True)
-    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False)
     aliases: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     external_source_ids: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -32,9 +32,9 @@ class CatalogSeries(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    publisher_id: int | None = Field(default=None, foreign_key="catalog_publisher.id", nullable=True, index=True)
+    publisher_id: int | None = Field(default=None, foreign_key="catalog_publisher.id", nullable=True)
     name: str = Field(max_length=255, nullable=False, index=True)
-    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False)
     volume_number: int | None = Field(default=None, nullable=True)
     start_year: int | None = Field(default=None, nullable=True)
     end_year: int | None = Field(default=None, nullable=True)
@@ -53,9 +53,9 @@ class CatalogIssue(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     series_id: int = Field(foreign_key="catalog_series.id", nullable=False, index=True)
-    publisher_id: int | None = Field(default=None, foreign_key="catalog_publisher.id", nullable=True, index=True)
+    publisher_id: int | None = Field(default=None, foreign_key="catalog_publisher.id", nullable=True)
     issue_number: str = Field(max_length=32, nullable=False, index=True)
-    normalized_issue_number: str = Field(max_length=32, nullable=False, index=True)
+    normalized_issue_number: str = Field(max_length=32, nullable=False)
     title: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     cover_date: date | None = Field(default=None, nullable=True)
@@ -74,7 +74,7 @@ class CatalogVariant(SQLModel, table=True):
     __table_args__ = (SAIndex("ix_catalog_variant_issue_id", "issue_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    issue_id: int = Field(foreign_key="catalog_issue.id", nullable=False, index=True)
+    issue_id: int = Field(foreign_key="catalog_issue.id", nullable=False)
     variant_name: str | None = Field(default=None, max_length=200, nullable=True)
     cover_artist: str | None = Field(default=None, max_length=160, nullable=True)
     ratio: str | None = Field(default=None, max_length=32, nullable=True)
@@ -108,7 +108,7 @@ class CatalogImage(SQLModel, table=True):
     __table_args__ = (SAIndex("ix_catalog_image_issue_id", "issue_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
+    issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True)
     variant_id: int | None = Field(default=None, foreign_key="catalog_variant.id", nullable=True, index=True)
     source_url: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     local_path: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
@@ -149,7 +149,7 @@ class CatalogOcrMetadata(SQLModel, table=True):
     __table_args__ = (SAIndex("ix_catalog_ocr_metadata_image_id", "image_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    image_id: int | None = Field(default=None, foreign_key="catalog_image.id", nullable=True, index=True)
+    image_id: int | None = Field(default=None, foreign_key="catalog_image.id", nullable=True)
     issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
     variant_id: int | None = Field(default=None, foreign_key="catalog_variant.id", nullable=True, index=True)
     ocr_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
@@ -168,7 +168,7 @@ class CatalogCreator(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=255, nullable=False, index=True)
-    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False)
     aliases: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     external_source_ids: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -181,7 +181,7 @@ class CatalogCharacter(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=255, nullable=False, index=True)
-    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False)
     aliases: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     external_source_ids: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -194,7 +194,7 @@ class CatalogStoryArc(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=255, nullable=False, index=True)
-    normalized_name: str = Field(max_length=255, nullable=False, index=True)
+    normalized_name: str = Field(max_length=255, nullable=False)
     external_source_ids: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -230,7 +230,7 @@ class CatalogMatchFeedback(SQLModel, table=True):
     __table_args__ = (SAIndex("ix_catalog_match_feedback_scan_session", "scan_session_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    scan_session_id: int | None = Field(default=None, foreign_key="inventory_scan_session.id", nullable=True, index=True)
+    scan_session_id: int | None = Field(default=None, foreign_key="inventory_scan_session.id", nullable=True)
     scan_item_id: int | None = Field(default=None, foreign_key="inventory_scan_item.id", nullable=True, index=True)
     submitted_image_path: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     submitted_upc: str | None = Field(default=None, max_length=32, nullable=True)
