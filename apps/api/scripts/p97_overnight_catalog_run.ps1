@@ -6,7 +6,8 @@
   Print configuration and planned commands; run safety checks only.
 #>
 param(
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [switch]$TestImportHelper
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,9 @@ $SeriesCooldownSeconds = 60
 $PostProcessingEveryHours = 3
 $ThrottleRetryMax = 6
 $ThrottleSleepSeconds = 900
+$ComicVineBaseSleepSeconds = 2
+$ComicVineOvernightMinSleepSeconds = 1.5
+$ComicVineMaxSleepSeconds = 10
 
 $env:DATABASE_URL = "postgresql+pg8000://postgres:postgres@localhost:5433/comic_os"
 $env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -30,8 +34,10 @@ $LogDir = Join-Path $ApiRoot "data\p97"
 $LogFile = Join-Path $LogDir "overnight_catalog_run.log"
 $ProgressFile = Join-Path $LogDir "overnight_series_progress.json"
 $SummaryFile = Join-Path $LogDir "overnight_catalog_run_summary.json"
+$RateStateFile = Join-Path $LogDir "comicvine_rate_state.json"
 
 $Script:ComicVineKeySource = $null
+$Script:InSafetyBootstrap = $false
 $Script:RunStats = @{
     start_time = $null
     end_time = $null
@@ -231,8 +237,173 @@ function Save-ProgressDocument {
     $Progress | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ProgressFile -Encoding utf8
 }
 
+function New-ComicVineRateState {
+    return [ordered]@{
+        current_sleep_seconds = [double]$ComicVineBaseSleepSeconds
+        min_sleep_seconds = 1.0
+        max_sleep_seconds = [double]$ComicVineMaxSleepSeconds
+        last_420_at = $null
+        throttle_count_last_hour = 0
+        total_420_count = 0
+        total_requests_observed = 0
+        throttle_420_timestamps = @()
+        updated_at = (Get-Date).ToUniversalTime().ToString("o")
+    }
+}
+
+function Load-ComicVineRateState {
+    if (-not (Test-Path -LiteralPath $RateStateFile)) {
+        return New-ComicVineRateState
+    }
+    try {
+        $raw = Get-Content -LiteralPath $RateStateFile -Raw -Encoding utf8 | ConvertFrom-Json
+        $state = New-ComicVineRateState
+        if ($null -ne $raw.current_sleep_seconds) { $state.current_sleep_seconds = [double]$raw.current_sleep_seconds }
+        if ($null -ne $raw.min_sleep_seconds) { $state.min_sleep_seconds = [double]$raw.min_sleep_seconds }
+        if ($null -ne $raw.max_sleep_seconds) { $state.max_sleep_seconds = [double]$raw.max_sleep_seconds }
+        $state.last_420_at = $raw.last_420_at
+        if ($null -ne $raw.throttle_count_last_hour) { $state.throttle_count_last_hour = [int]$raw.throttle_count_last_hour }
+        if ($null -ne $raw.total_420_count) { $state.total_420_count = [int]$raw.total_420_count }
+        if ($null -ne $raw.total_requests_observed) { $state.total_requests_observed = [int]$raw.total_requests_observed }
+        if ($null -ne $raw.throttle_420_timestamps) {
+            $state.throttle_420_timestamps = @($raw.throttle_420_timestamps)
+        }
+        return $state
+    } catch {
+        Write-Log "Rate state corrupt; resetting: $($_.Exception.Message)" -Level "WARN"
+        return New-ComicVineRateState
+    }
+}
+
+function Save-ComicVineRateState {
+    param([Parameter(Mandatory = $true)]$State)
+    $State.updated_at = (Get-Date).ToUniversalTime().ToString("o")
+    $State | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $RateStateFile -Encoding utf8
+}
+
+function Format-ComicVineSleepSeconds {
+    param([Parameter(Mandatory = $true)][double]$Seconds)
+    $rounded = [math]::Round($Seconds, 2)
+    if ($rounded -eq [math]::Floor($rounded)) {
+        return ([int]$rounded).ToString()
+    }
+    return $rounded.ToString("0.##", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Update-ComicVineRateThrottleWindows {
+    param([Parameter(Mandatory = $true)]$State)
+    $now = Get-Date
+    $cutoffHour = $now.AddHours(-1)
+    $kept = New-Object System.Collections.Generic.List[string]
+    foreach ($ts in @($State.throttle_420_timestamps)) {
+        if ([string]::IsNullOrWhiteSpace($ts)) { continue }
+        try {
+            $dt = [datetimeoffset]::Parse($ts)
+            if ($dt.UtcDateTime -ge $cutoffHour.ToUniversalTime()) {
+                [void]$kept.Add($ts)
+            }
+        } catch {
+            continue
+        }
+    }
+    $State.throttle_420_timestamps = @($kept)
+    $State.throttle_count_last_hour = $State.throttle_420_timestamps.Count
+}
+
+function Get-ComicVine420Counts {
+    param([Parameter(Mandatory = $true)]$State)
+    $now = Get-Date
+    $cutoff30 = $now.AddMinutes(-30).ToUniversalTime()
+    $cutoff60 = $now.AddHours(-1).ToUniversalTime()
+    $count30 = 0
+    $count60 = 0
+    foreach ($ts in @($State.throttle_420_timestamps)) {
+        try {
+            $dt = [datetimeoffset]::Parse($ts).UtcDateTime
+            if ($dt -ge $cutoff60) { $count60++ }
+            if ($dt -ge $cutoff30) { $count30++ }
+        } catch {
+            continue
+        }
+    }
+    return @{ count30 = $count30; count60 = $count60 }
+}
+
+function Apply-ComicVineSleepRecovery {
+    param([Parameter(Mandatory = $true)]$State)
+    $before = [double]$State.current_sleep_seconds
+    if ($before -le [double]$ComicVineOvernightMinSleepSeconds) { return }
+
+    if ($null -eq $State.last_420_at -or [string]::IsNullOrWhiteSpace([string]$State.last_420_at)) {
+        if ($before -le [double]$ComicVineBaseSleepSeconds) { return }
+        $State.current_sleep_seconds = [math]::Max([double]$ComicVineOvernightMinSleepSeconds, $before - 0.25)
+        if ($State.current_sleep_seconds -ne $before) {
+            Write-Log "ComicVine sleep recovery (no prior 420): $before -> $($State.current_sleep_seconds)"
+        }
+        return
+    }
+    try {
+        $last420 = [datetimeoffset]::Parse([string]$State.last_420_at).UtcDateTime
+        if ((Get-Date).ToUniversalTime() - $last420 -gt [TimeSpan]::FromMinutes(30)) {
+            $State.current_sleep_seconds = [math]::Max([double]$ComicVineOvernightMinSleepSeconds, $before - 0.25)
+            if ($State.current_sleep_seconds -ne $before) {
+                Write-Log "ComicVine sleep recovery (no 420 in 30m): $before -> $($State.current_sleep_seconds)"
+            }
+        }
+    } catch {
+        return
+    }
+}
+
+function Register-ComicVine420 {
+    param([Parameter(Mandatory = $true)]$State)
+    $nowIso = (Get-Date).ToUniversalTime().ToString("o")
+    $before = [double]$State.current_sleep_seconds
+    $State.last_420_at = $nowIso
+    $State.total_420_count = [int]$State.total_420_count + 1
+    $list = New-Object System.Collections.Generic.List[string]
+    foreach ($ts in @($State.throttle_420_timestamps)) { [void]$list.Add($ts) }
+    [void]$list.Add($nowIso)
+    $State.throttle_420_timestamps = @($list)
+    Update-ComicVineRateThrottleWindows -State $State
+    $counts = Get-ComicVine420Counts -State $State
+    $bump = 1
+    if ($counts.count60 -ge 3) {
+        $bump = 5
+    } elseif ($counts.count30 -ge 2) {
+        $bump = 2
+    }
+    $State.current_sleep_seconds = [math]::Min([double]$State.max_sleep_seconds, $before + $bump)
+    Write-Log "420 detected; total_420_count=$($State.total_420_count) throttle_count_last_hour=$($State.throttle_count_last_hour)" -Level "WARN"
+    Write-Log "ComicVine throttle detected; sleep_seconds increased $before -> $($State.current_sleep_seconds)" -Level "WARN"
+}
+
+function Get-ComicVineImportSleepSeconds {
+    $state = Load-ComicVineRateState
+    Apply-ComicVineSleepRecovery -State $state
+    Save-ComicVineRateState -State $state
+    Write-Log "ComicVine current_sleep_seconds=$($state.current_sleep_seconds)"
+    return [double]$state.current_sleep_seconds
+}
+
+function Update-ComicVineRateAfterImport {
+    param(
+        [Parameter(Mandatory = $true)][string]$OutputBlob,
+        [switch]$Throttled
+    )
+    $state = Load-ComicVineRateState
+    $state.total_requests_observed = [int]$state.total_requests_observed + 1
+    if ($Throttled -or (Test-OutputThrottle420 -OutputBlob $OutputBlob)) {
+        Register-ComicVine420 -State $state
+    }
+    Update-ComicVineRateThrottleWindows -State $state
+    Save-ComicVineRateState -State $state
+    Write-Log "ComicVine current_sleep_seconds=$($state.current_sleep_seconds)"
+}
+
 function Test-OutputThrottle420 {
     param([string]$OutputBlob)
+    if ($OutputBlob -match "HTTP/1\.1 420") { return $true }
     return ($OutputBlob -match "\b420\b") -or ($OutputBlob -match "(?i)too many requests") -or ($OutputBlob -match "(?i)throttle")
 }
 
@@ -277,9 +448,8 @@ function Invoke-PostProcessing {
             Write-Log "  (WhatIf: skipped)"
             continue
         }
-        & $step.Command[0] @($step.Command[1..($step.Command.Length - 1)])
-        $code = $LASTEXITCODE
-        if ($null -eq $code) { $code = 0 }
+        $run = Invoke-ExternalPython -ArgumentList $step.Command[1..($step.Command.Length - 1)] -Label $step.Label
+        $code = $run.exit_code
         if ($code -ne 0) {
             Write-Log "Post-processing step failed: $($step.Label) (exit $code)" -Level "WARN"
         } else {
@@ -288,6 +458,72 @@ function Invoke-PostProcessing {
     }
     if (-not $WhatIf) {
         $Script:RunStats.post_processing_runs++
+    }
+}
+
+function Invoke-ExternalPython {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$ArgumentList,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$StrictFailure
+    )
+    $stdoutLines = New-Object System.Collections.Generic.List[string]
+    $stderrLines = New-Object System.Collections.Generic.List[string]
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & python @ArgumentList 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $text = $_.ToString()
+                if ($_.Exception -and $_.Exception.Message) {
+                    $text = $_.Exception.Message
+                }
+                [void]$stderrLines.Add($text)
+            } else {
+                [void]$stdoutLines.Add([string]$_)
+            }
+        }
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    $exitCode = $LASTEXITCODE
+    if ($null -eq $exitCode) { $exitCode = 0 }
+
+    $allLines = @()
+    foreach ($line in $stdoutLines) { $allLines += $line }
+    foreach ($line in $stderrLines) { $allLines += $line }
+
+    foreach ($line in $stdoutLines) {
+        Write-Host $line
+        Add-Content -Path $LogFile -Value $line -Encoding utf8
+    }
+    foreach ($line in $stderrLines) {
+        Write-Host $line
+        Add-Content -Path $LogFile -Value $line -Encoding utf8
+        if ($exitCode -ne 0) {
+            Write-Log "stderr: $line" -Level "WARN"
+        } else {
+            Write-Log "stderr: $line" -Level "INFO"
+        }
+    }
+
+    if ($exitCode -ne 0) {
+        $excerpt = ($allLines | Select-Object -Last 25) -join " | "
+        if ($excerpt.Length -gt 2000) { $excerpt = $excerpt.Substring(0, 2000) }
+        Write-Log "Command failed: $Label" -Level "WARN"
+        Write-Log "  > python $($ArgumentList -join ' ')" -Level "WARN"
+        Write-Log "  exit_code=$exitCode" -Level "WARN"
+        Write-Log "  output_excerpt: $excerpt" -Level "WARN"
+        if ($StrictFailure) {
+            throw "Command failed with exit code ${exitCode}: $Label"
+        }
+    }
+
+    return @{
+        exit_code = [int]$exitCode
+        stdout = @($stdoutLines)
+        stderr = @($stderrLines)
+        output = $allLines
     }
 }
 
@@ -303,7 +539,8 @@ function Invoke-ImportWithThrottle {
         if ($importResult.throttled -and $throttleAttempts -lt $ThrottleRetryMax) {
             $throttleAttempts++
             $Script:RunStats.throttle_events++
-            Write-Log "HTTP 420/throttle for $Label; sleeping ${ThrottleSleepSeconds}s (retry $throttleAttempts/$ThrottleRetryMax)" -Level "WARN"
+            $retrySleep = Get-ComicVineImportSleepSeconds
+            Write-Log "HTTP 420/throttle for $Label; sleep_seconds=$retrySleep; cooldown ${ThrottleSleepSeconds}s (retry $throttleAttempts/$ThrottleRetryMax)" -Level "WARN"
             if (-not $WhatIf) { Start-Sleep -Seconds $ThrottleSleepSeconds }
         } else {
             break
@@ -321,6 +558,11 @@ function Invoke-ComicVineImport {
         [Parameter(Mandatory = $true)][string]$Label
     )
     Write-Log "START $Label"
+    if (-not $WhatIf) {
+        $sleepSeconds = Get-ComicVineImportSleepSeconds
+        Write-Log "ComicVine sleep seconds before import: $sleepSeconds"
+        $ImportArgs = Set-ImportSleepArgument -ImportArgs $ImportArgs -SleepSeconds $sleepSeconds
+    }
     Write-Log ("  > python " + ($ImportArgs -join " "))
     if ($WhatIf) {
         Write-Log "  (WhatIf: skipped)"
@@ -331,34 +573,55 @@ function Invoke-ComicVineImport {
             metrics = @{ final_offset = 0; total_candidates_seen = 0; issues_created = 0; cover_images_created = 0 }
         }
     }
-    $output = & python @ImportArgs 2>&1 | ForEach-Object { $_.ToString() }
-    foreach ($line in $output) {
-        Write-Host $line
-        Add-Content -Path $LogFile -Value $line -Encoding utf8
-    }
-    $exitCode = $LASTEXITCODE
-    if ($null -eq $exitCode) { $exitCode = 0 }
+    $run = Invoke-ExternalPython -ArgumentList $ImportArgs -Label $Label
+    $exitCode = $run.exit_code
+    $output = @($run.output)
     $blob = $output -join "`n"
+    $throttled = (Test-OutputThrottle420 -OutputBlob $blob)
+    if (-not $WhatIf) {
+        Update-ComicVineRateAfterImport -OutputBlob $blob -Throttled:$throttled
+    }
     return @{
         exit_code = $exitCode
         output = $output
-        throttled = (Test-OutputThrottle420 -OutputBlob $blob)
+        throttled = $throttled
         metrics = (Parse-ImportMetrics -Lines $output)
     }
+}
+
+function Set-ImportSleepArgument {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$ImportArgs,
+        [Parameter(Mandatory = $true)][double]$SleepSeconds
+    )
+    $sleepText = Format-ComicVineSleepSeconds -Seconds $SleepSeconds
+    $out = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $ImportArgs.Count; $i++) {
+        if ($ImportArgs[$i] -eq "--sleep-seconds" -and ($i + 1) -lt $ImportArgs.Count) {
+            [void]$out.Add("--sleep-seconds")
+            [void]$out.Add($sleepText)
+            $i++
+            continue
+        }
+        [void]$out.Add($ImportArgs[$i])
+    }
+    return @($out)
 }
 
 function Invoke-SeriesImport {
     param(
         [Parameter(Mandatory = $true)][string]$SeriesName,
-        [Parameter(Mandatory = $true)][int]$Offset
+        [Parameter(Mandatory = $true)][int]$Offset,
+        [int]$Limit = $PerSeriesLimit
     )
+    $sleepPlaceholder = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
     $importArgs = @(
         "scripts\p97_import_comicvine_catalog.py",
         "--series-name", $SeriesName,
-        "--limit", "$PerSeriesLimit",
+        "--limit", "$Limit",
         "--offset", "$Offset",
         "--import-issues",
-        "--sleep-seconds", "1",
+        "--sleep-seconds", $sleepPlaceholder,
         "--resume"
     )
     return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import series: $SeriesName (offset=$Offset)"
@@ -370,6 +633,7 @@ function Invoke-PublisherImport {
         [Parameter(Mandatory = $true)][int]$Offset
     )
     # Publisher volumes API filter + strict client match; English/US gate remains default (no --allow-international-editions).
+    $sleepPlaceholder = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
     $importArgs = @(
         "scripts\p97_import_comicvine_catalog.py",
         "--publisher", $PublisherName,
@@ -377,7 +641,7 @@ function Invoke-PublisherImport {
         "--limit", "$PerSeriesLimit",
         "--offset", "$Offset",
         "--import-issues",
-        "--sleep-seconds", "1",
+        "--sleep-seconds", $sleepPlaceholder,
         "--resume"
     )
     return Invoke-ComicVineImport -ImportArgs $importArgs -Label "import publisher: $PublisherName (offset=$Offset)"
@@ -423,6 +687,8 @@ function Write-SummaryJson {
     if ($null -ne $Progress -and $Progress.series_exhausted) {
         $seriesExhaustedFlag = [bool]$Progress.series_exhausted
     }
+    $rateState = Load-ComicVineRateState
+    Update-ComicVineRateThrottleWindows -State $rateState
     $summary = [ordered]@{
         start_time = $StartTime.ToString("yyyy-MM-dd HH:mm:ss")
         end_time = $EndTime.ToString("yyyy-MM-dd HH:mm:ss")
@@ -453,6 +719,10 @@ function Write-SummaryJson {
         per_series_limit = $PerSeriesLimit
         series_queue_count = $SeriesTargets.Count
         publisher_queue_count = $PublisherTargets.Count
+        comicvine_total_420_count = [int]$rateState.total_420_count
+        comicvine_final_sleep_seconds = [double]$rateState.current_sleep_seconds
+        comicvine_throttle_count_last_hour = [int]$rateState.throttle_count_last_hour
+        comicvine_rate_state_file = $RateStateFile
     }
     $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $SummaryFile -Encoding utf8
 }
@@ -467,15 +737,19 @@ function Show-WhatIfPlan {
     Write-Host "Series count=$($SeriesTargets.Count)"
     Write-Host "Publisher count=$($PublisherTargets.Count)"
     Write-Host "PostProcessingEveryHours=$PostProcessingEveryHours"
+    Write-Host "ComicVineBaseSleepSeconds=$ComicVineBaseSleepSeconds"
+    Write-Host "AdaptiveRateLimiter=enabled"
+    Write-Host "RateStatePath=data/p97/comicvine_rate_state.json"
     Write-Host "Progress file=$ProgressFile"
     Write-Host "Log file=$LogFile"
     Write-Host "Summary file=$SummaryFile"
     Write-Host "First 20 planned series:"
     $SeriesTargets | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
+    $exampleSleep = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
     Write-Host "Example series import command:"
-    Write-Host "  python scripts\p97_import_comicvine_catalog.py --series-name `"$($SeriesTargets[0])`" --limit $PerSeriesLimit --offset 0 --import-issues --sleep-seconds 1 --resume"
+    Write-Host "  python scripts\p97_import_comicvine_catalog.py --series-name `"$($SeriesTargets[0])`" --limit $PerSeriesLimit --offset 0 --import-issues --sleep-seconds $exampleSleep --resume"
     Write-Host "Example publisher import command (after series exhausted):"
-    Write-Host "  python scripts\p97_import_comicvine_catalog.py --publisher `"$($PublisherTargets[0])`" --strict-publisher --limit $PerSeriesLimit --offset 0 --import-issues --sleep-seconds 1 --resume"
+    Write-Host "  python scripts\p97_import_comicvine_catalog.py --publisher `"$($PublisherTargets[0])`" --strict-publisher --limit $PerSeriesLimit --offset 0 --import-issues --sleep-seconds $exampleSleep --resume"
     Write-Host "Phases: priority series for up to $SeriesPhaseMaxHours h (or zero-candidate pass), then publisher acquisition for remaining target runtime (up to $TargetRuntimeHours h total)."
 }
 
@@ -534,16 +808,12 @@ function Write-ComicVineKeyStatus {
 
 function Test-ComicVineApiAccess {
     Write-Log "ComicVine API validation (Spawn --limit 1 --dry-run)"
-    $validationArgs = @("scripts\p97_import_comicvine_catalog.py", "--series-name", "Spawn", "--limit", "1", "--dry-run", "--sleep-seconds", "1")
+    $validationSleep = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
+    $validationArgs = @("scripts\p97_import_comicvine_catalog.py", "--series-name", "Spawn", "--limit", "1", "--dry-run", "--sleep-seconds", $validationSleep)
     Write-Log ("  > python " + ($validationArgs -join " "))
-    $output = & python @validationArgs 2>&1 | ForEach-Object { $_.ToString() }
-    foreach ($line in $output) {
-        Write-Host $line
-        Add-Content -Path $LogFile -Value $line -Encoding utf8
-    }
-    $exitCode = $LASTEXITCODE
-    if ($null -eq $exitCode) { $exitCode = 0 }
-    $blob = $output -join "`n"
+    $run = Invoke-ExternalPython -ArgumentList $validationArgs -Label "ComicVine API validation" -StrictFailure
+    $exitCode = $run.exit_code
+    $blob = ($run.output -join "`n")
     if ($blob -match "401" -or $blob -match "(?i)Unauthorized") {
         throw "ComicVine API returned HTTP 401 Unauthorized. Fix COMICVINE_API_KEY and retry."
     }
@@ -604,6 +874,7 @@ try {
 
     if ($WhatIf) { Show-WhatIfPlan }
 
+    $Script:InSafetyBootstrap = $true
     Test-SafetyChecks
     Initialize-ComicVineApiKey
     Test-ComicVineApiKeyConfigured
@@ -612,6 +883,14 @@ try {
         Test-ComicVineApiAccess
     } else {
         Write-Log "(WhatIf: skipping ComicVine API validation call)"
+    }
+    $Script:InSafetyBootstrap = $false
+
+    if ($TestImportHelper) {
+        Write-Log "TestImportHelper: Batman limit 10 via Invoke-SeriesImport (adaptive sleep)"
+        $testResult = Invoke-SeriesImport -SeriesName "Batman" -Offset 0 -Limit 10
+        Write-Host "TestImportHelper exit_code=$($testResult.exit_code)"
+        exit [int]$testResult.exit_code
     }
 
     $Progress = Load-ProgressDocument
@@ -717,9 +996,13 @@ try {
     }
 
 } catch {
+    $interrupted = $true
     Write-Log $_.Exception.Message -Level "ERROR"
-    Write-Error $_.Exception.Message
-    exit 1
+    if ($Script:InSafetyBootstrap) {
+        Write-Error $_.Exception.Message
+        exit 1
+    }
+    Write-Log "Unexpected error during acquisition loop; progress JSON will be saved in finally." -Level "ERROR"
 } finally {
     if ($null -ne $Progress) {
         Save-ProgressDocument -Progress $Progress
@@ -747,9 +1030,9 @@ try {
             Write-Log "(WhatIf: would run p97_catalog_health.py)"
         } else {
             Write-Log "Running catalog health report"
-            & python $healthScript 2>&1 | ForEach-Object {
-                Write-Host $_
-                Add-Content -Path $LogFile -Value $_ -Encoding utf8
+            $healthRun = Invoke-ExternalPython -ArgumentList @($healthScript) -Label "catalog health"
+            if ($healthRun.exit_code -ne 0) {
+                Write-Log "catalog health exited $($healthRun.exit_code)" -Level "WARN"
             }
         }
     }

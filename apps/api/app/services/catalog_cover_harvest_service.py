@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import httpx
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.core.config import get_settings
@@ -195,6 +195,31 @@ def harvest_image(
 def _flush_batch(session: Session, *, dry_run: bool) -> None:
     if not dry_run:
         session.commit()
+
+
+def count_cover_harvest_remaining(
+    session: Session,
+    *,
+    source: str | None = None,
+    missing_only: bool = True,
+    failed_only: bool = False,
+    repair_missing_files: bool = False,
+    repair_missing_fingerprints_only: bool = False,
+) -> int:
+    if repair_missing_files:
+        if repair_missing_fingerprints_only:
+            probe = _ready_images_missing_fingerprint(session, after_image_id=0, source=source, limit=1)
+        else:
+            probe = _ready_images_missing_local_file(session, after_image_id=0, source=source, limit=1)
+        return len(probe)
+    statement = select(func.count()).select_from(CatalogImage)
+    if source:
+        statement = statement.where(CatalogImage.source == source)
+    if failed_only:
+        statement = statement.where(CatalogImage.download_status == "failed")
+    elif missing_only:
+        statement = statement.where(CatalogImage.download_status == "pending")
+    return int(session.exec(statement).one())
 
 
 def run_cover_harvest(

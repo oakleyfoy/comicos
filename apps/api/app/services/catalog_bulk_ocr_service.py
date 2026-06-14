@@ -5,11 +5,18 @@ import logging
 from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogImage, CatalogOcrMetadata
+from app.services.catalog_bulk_enrichment_selection import (
+    count_missing_ocr,
+    count_ocr_rows_on_ready_covers,
+    count_ready_covers,
+    select_ready_covers_needing_ocr,
+)
 from app.services.catalog_cover_ocr_service import (
     extract_ocr_from_image_path_result,
     log_ocr_skip,
     store_ocr_for_image,
 )
+from app.services.catalog_cover_harvest_service import resolve_catalog_image_local_path
 from app.services.catalog_import_job_service import (
     complete_job,
     record_failed,
@@ -25,17 +32,20 @@ LOGGER = logging.getLogger(__name__)
 
 
 def ocr_coverage(session: Session) -> dict:
-    images = session.exec(select(CatalogImage).where(CatalogImage.download_status == "ready")).all()
-    total = len(images)
+    total = count_ready_covers(session)
     if total == 0:
         return {"downloaded_covers": 0, "ocr_count": 0, "coverage_pct": 0.0}
-    with_ocr = len(session.exec(select(CatalogOcrMetadata).where(CatalogOcrMetadata.image_id.is_not(None))).all())
+    with_ocr = count_ocr_rows_on_ready_covers(session)
     return {"downloaded_covers": total, "ocr_count": with_ocr, "coverage_pct": round(100.0 * with_ocr / total, 2)}
 
 
 def _flush(session: Session, *, dry_run: bool) -> None:
     if not dry_run:
         session.commit()
+
+
+def count_ocr_remaining(session: Session) -> int:
+    return count_missing_ocr(session)
 
 
 def run_bulk_ocr(
@@ -56,20 +66,42 @@ def run_bulk_ocr(
             source="INTERNAL",
             job_type="ocr_batch",
             dry_run=dry_run,
-            cursor={"last_image_id": last_image_id},
+            cursor={"last_image_id": 0 if missing_only else last_image_id},
         )
+        if missing_only:
+            last_image_id = 0
         _flush(session, dry_run=dry_run)
     elif resume and job.status == "running":
         LOGGER.info("Resuming OCR job_id=%s cursor=%s", job.id, job.cursor)
+        if missing_only:
+            last_image_id = 0
+
+    ready_covers_available = count_ready_covers(session)
+    missing_ocr_available = count_missing_ocr(session)
+
+    if missing_only:
+        rows = select_ready_covers_needing_ocr(session, limit=limit)
+    else:
+        rows = list(
+            session.exec(
+                select(CatalogImage)
+                .where(CatalogImage.download_status == "ready")
+                .where(CatalogImage.image_type == "cover")
+                .where(CatalogImage.id > last_image_id)
+                .order_by(CatalogImage.id)
+                .limit(limit)
+            ).all()
+        )
+
+    selected_for_ocr_batch = len(rows)
+    LOGGER.info(
+        "ready_covers_available=%s missing_ocr_available=%s selected_for_ocr_batch=%s",
+        ready_covers_available,
+        missing_ocr_available,
+        selected_for_ocr_batch,
+    )
 
     existing = {int(r.image_id) for r in session.exec(select(CatalogOcrMetadata)).all() if r.image_id}
-    statement = (
-        select(CatalogImage)
-        .where(CatalogImage.download_status == "ready")
-        .where(CatalogImage.id > last_image_id)
-        .order_by(CatalogImage.id)
-    )
-    rows = session.exec(statement.limit(limit * 2)).all()
     processed = 0
     for idx, image in enumerate(rows):
         if processed >= limit:
@@ -80,13 +112,14 @@ def run_bulk_ocr(
             update_cursor(session, job, {"last_image_id": iid})
             LOGGER.info("ocr skip image_id=%s reason=EXISTING_OCR_METADATA", iid)
             continue
-        if not image.local_path:
-            log_ocr_skip(image_id=iid, reason="MISSING_LOCAL_IMAGE", detail="catalog_image.local_path is empty")
+        local_path = resolve_catalog_image_local_path(session, image)
+        if local_path is None:
+            log_ocr_skip(image_id=iid, reason="MISSING_LOCAL_IMAGE", detail="catalog_image local file not found")
             record_skipped(session, job)
             update_cursor(session, job, {"last_image_id": iid})
             continue
         try:
-            result = extract_ocr_from_image_path_result(image.local_path)
+            result = extract_ocr_from_image_path_result(str(local_path))
             if result.skip_reason:
                 log_ocr_skip(image_id=iid, reason=result.skip_reason, detail=result.detail)
                 if result.skip_reason == "OCR_EXCEPTION":

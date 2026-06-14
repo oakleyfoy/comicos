@@ -1,0 +1,13 @@
+﻿{
+    "current_sleep_seconds":  2,
+    "min_sleep_seconds":  1,
+    "max_sleep_seconds":  10,
+    "last_420_at":  null,
+    "throttle_count_last_hour":  0,
+    "total_420_count":  0,
+    "total_requests_observed":  1,
+    "throttle_420_timestamps":  [
+
+                                ],
+    "updated_at":  "2026-06-14T14:22:23.2226408Z"
+}

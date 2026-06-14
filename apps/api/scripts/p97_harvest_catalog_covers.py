@@ -12,7 +12,12 @@ from sqlmodel import Session  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import get_engine  # noqa: E402
-from app.services.catalog_cover_harvest_service import run_cover_harvest  # noqa: E402
+from app.services.catalog_cover_harvest_service import (  # noqa: E402
+    count_cover_harvest_remaining,
+    run_cover_harvest,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 
 def main() -> int:
@@ -34,6 +39,11 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Repeat batches of --limit until no pending (or failed/repair) work remains",
+    )
     parser.add_argument("--sleep-seconds", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     args = parser.parse_args()
@@ -45,21 +55,52 @@ def main() -> int:
     repair_fp_only = args.repair_missing_fingerprints
     if args.repair_missing_files and repair_fp_only is None:
         repair_fp_only = True
-    with Session(get_engine()) as session:
-        summary = run_cover_harvest(
-            session,
-            source=args.source,
-            missing_only=missing_only,
-            failed_only=args.failed_only,
-            repair_missing_files=args.repair_missing_files,
-            repair_missing_fingerprints_only=bool(repair_fp_only),
-            limit=args.limit,
-            dry_run=args.dry_run,
-            resume=args.resume,
-            sleep_seconds=sleep,
-            batch_size=batch,
+
+    engine = get_engine()
+    batch_resume = args.resume
+    batch_num = 0
+    last_summary: dict | None = None
+
+    while True:
+        batch_num += 1
+        with Session(engine) as session:
+            last_summary = run_cover_harvest(
+                session,
+                source=args.source,
+                missing_only=missing_only,
+                failed_only=args.failed_only,
+                repair_missing_files=args.repair_missing_files,
+                repair_missing_fingerprints_only=bool(repair_fp_only),
+                limit=args.limit,
+                dry_run=args.dry_run,
+                resume=batch_resume,
+                sleep_seconds=sleep,
+                batch_size=batch,
+            )
+        print(last_summary)
+        if not args.loop:
+            break
+        with Session(engine) as session:
+            remaining = count_cover_harvest_remaining(
+                session,
+                source=args.source,
+                missing_only=missing_only,
+                failed_only=args.failed_only,
+                repair_missing_files=args.repair_missing_files,
+                repair_missing_fingerprints_only=bool(repair_fp_only),
+            )
+        seen = int(last_summary.get("total_seen") or 0)
+        LOGGER.info(
+            "cover harvest loop batch=%s remaining=%s total_seen=%s",
+            batch_num,
+            remaining,
+            seen,
         )
-    print(summary)
+        if remaining <= 0 or seen <= 0:
+            LOGGER.info("cover harvest loop complete after %s batch(es)", batch_num)
+            break
+        batch_resume = True
+
     return 0
 
 

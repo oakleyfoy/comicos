@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import or_
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogImage, CatalogImageFingerprint
+from app.services.catalog_bulk_enrichment_selection import (
+    count_missing_fingerprints,
+    count_ready_covers,
+    count_valid_fingerprints_on_ready_covers,
+    select_ready_covers_needing_fingerprint,
+)
 from app.services.catalog_fingerprint_service import fingerprint_catalog_image
 from app.services.catalog_import_job_service import (
     complete_job,
@@ -21,16 +26,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 def fingerprint_coverage(session: Session) -> dict:
-    images = session.exec(select(CatalogImage).where(CatalogImage.download_status == "ready")).all()
-    total = len(images)
+    total = count_ready_covers(session)
     if total == 0:
         return {"downloaded_covers": 0, "fingerprint_count": 0, "coverage_pct": 0.0}
-    fp_ids = {
-        int(r.image_id)
-        for r in session.exec(select(CatalogImageFingerprint)).all()
-        if r.phash or r.dhash or r.ahash
-    }
-    covered = sum(1 for img in images if int(img.id or 0) in fp_ids)
+    covered = count_valid_fingerprints_on_ready_covers(session)
     return {
         "downloaded_covers": total,
         "fingerprint_count": covered,
@@ -43,28 +42,8 @@ def _flush(session: Session, *, dry_run: bool) -> None:
         session.commit()
 
 
-def _ready_images_needing_fingerprint(
-    session: Session,
-    *,
-    after_image_id: int,
-    limit: int,
-) -> list[CatalogImage]:
-    no_hash = or_(
-        CatalogImageFingerprint.id.is_(None),
-        (col(CatalogImageFingerprint.phash).is_(None))
-        & (col(CatalogImageFingerprint.dhash).is_(None))
-        & (col(CatalogImageFingerprint.ahash).is_(None)),
-    )
-    statement = (
-        select(CatalogImage)
-        .outerjoin(CatalogImageFingerprint, CatalogImageFingerprint.image_id == CatalogImage.id)
-        .where(CatalogImage.download_status == "ready")
-        .where(CatalogImage.id > after_image_id)
-        .where(no_hash)
-        .order_by(CatalogImage.id)
-        .limit(limit)
-    )
-    return list(session.exec(statement).all())
+def count_fingerprint_remaining(session: Session) -> int:
+    return count_missing_fingerprints(session)
 
 
 def run_bulk_fingerprints(
@@ -85,34 +64,48 @@ def run_bulk_fingerprints(
             source="INTERNAL",
             job_type="fingerprint_batch",
             dry_run=dry_run,
-            cursor={"last_image_id": 0 if missing_only and not resume else last_image_id},
+            cursor={"last_image_id": 0 if missing_only else last_image_id},
         )
-        if missing_only and not resume:
+        if missing_only:
             last_image_id = 0
         _flush(session, dry_run=dry_run)
     elif resume and job.status == "running":
         LOGGER.info("Resuming fingerprint job_id=%s cursor=%s", job.id, job.cursor)
+        if missing_only:
+            last_image_id = 0
+
+    ready_covers_available = count_ready_covers(session)
+    missing_fingerprints_available = count_missing_fingerprints(session)
+
+    selection_after_id = None if missing_only else last_image_id
+    if missing_only:
+        rows = select_ready_covers_needing_fingerprint(session, limit=limit)
+    else:
+        rows = select_ready_covers_needing_fingerprint(session, limit=limit, after_image_id=selection_after_id)
+        if not rows:
+            rows = list(
+                session.exec(
+                    select(CatalogImage)
+                    .where(CatalogImage.download_status == "ready")
+                    .where(CatalogImage.image_type == "cover")
+                    .where(CatalogImage.id > last_image_id)
+                    .order_by(CatalogImage.id)
+                    .limit(limit)
+                ).all()
+            )
+
+    selected_for_fingerprint_batch = len(rows)
+    LOGGER.info(
+        "ready_covers_available=%s missing_fingerprints_available=%s selected_for_fingerprint_batch=%s",
+        ready_covers_available,
+        missing_fingerprints_available,
+        selected_for_fingerprint_batch,
+    )
 
     fp_by_image = {int(r.image_id): r for r in session.exec(select(CatalogImageFingerprint)).all()}
-    if missing_only:
-        rows = _ready_images_needing_fingerprint(session, after_image_id=last_image_id, limit=limit)
-    else:
-        rows = list(
-            session.exec(
-                select(CatalogImage)
-                .where(CatalogImage.download_status == "ready")
-                .where(CatalogImage.id > last_image_id)
-                .order_by(CatalogImage.id)
-                .limit(limit)
-            ).all()
-        )
     processed = 0
     for idx, image in enumerate(rows):
         iid = int(image.id or 0)
-        if not image.local_path:
-            record_skipped(session, job)
-            update_cursor(session, job, {"last_image_id": iid})
-            continue
         try:
             row = fingerprint_catalog_image(session, iid, dry_run=dry_run)
             if row is None or not (row.phash or row.dhash or row.ahash):

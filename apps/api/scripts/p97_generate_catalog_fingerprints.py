@@ -12,7 +12,12 @@ from sqlmodel import Session  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import get_engine  # noqa: E402
-from app.services.catalog_bulk_fingerprint_service import run_bulk_fingerprints  # noqa: E402
+from app.services.catalog_bulk_fingerprint_service import (  # noqa: E402
+    count_fingerprint_remaining,
+    run_bulk_fingerprints,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 
 def main() -> int:
@@ -22,20 +27,49 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=5000)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Repeat batches of --limit until no ready covers lack fingerprints",
+    )
     parser.add_argument("--batch-size", type=int, default=None)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     batch = args.batch_size or get_settings().catalog_import_batch_size
-    with Session(get_engine()) as session:
-        summary = run_bulk_fingerprints(
-            session,
-            missing_only=not args.failed_only,
-            limit=args.limit,
-            dry_run=args.dry_run,
-            resume=args.resume,
-            batch_size=batch,
+
+    engine = get_engine()
+    batch_resume = args.resume
+    batch_num = 0
+    last_summary: dict | None = None
+
+    while True:
+        batch_num += 1
+        with Session(engine) as session:
+            last_summary = run_bulk_fingerprints(
+                session,
+                missing_only=not args.failed_only,
+                limit=args.limit,
+                dry_run=args.dry_run,
+                resume=batch_resume,
+                batch_size=batch,
+            )
+        print(last_summary)
+        if not args.loop:
+            break
+        with Session(engine) as session:
+            remaining = count_fingerprint_remaining(session)
+        seen = int(last_summary.get("total_seen") or 0)
+        LOGGER.info(
+            "fingerprint loop batch=%s remaining=%s total_seen=%s",
+            batch_num,
+            remaining,
+            seen,
         )
-    print(summary)
+        if remaining <= 0 or seen <= 0:
+            LOGGER.info("fingerprint loop complete after %s batch(es)", batch_num)
+            break
+        batch_resume = True
+
     return 0
 
 
