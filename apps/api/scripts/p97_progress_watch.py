@@ -133,6 +133,7 @@ def collect_progress(session: Session) -> dict:
 def json_export(report: dict) -> dict:
     return {
         "total_issues": report["total_issues"],
+        "total_images": report["total_images"],
         "ready_covers": report["ready_covers"],
         "pending_covers": report["pending_covers"],
         "failed_covers": report["failed_covers"],

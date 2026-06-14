@@ -2,12 +2,15 @@
 <#
 .SYNOPSIS
   P97 continuous overnight catalog acquisition (series queue, then publisher mode + post-processing).
+.PARAMETER Forever
+  Run publisher acquisition continuously until Ctrl+C (import-only; no enrichment post-processing).
 .PARAMETER WhatIf
   Print configuration and planned commands; run safety checks only.
 #>
 param(
     [switch]$WhatIf,
-    [switch]$TestImportHelper
+    [switch]$TestImportHelper,
+    [switch]$Forever
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +38,21 @@ $LogFile = Join-Path $LogDir "overnight_catalog_run.log"
 $ProgressFile = Join-Path $LogDir "overnight_series_progress.json"
 $SummaryFile = Join-Path $LogDir "overnight_catalog_run_summary.json"
 $RateStateFile = Join-Path $LogDir "comicvine_rate_state.json"
+$ForeverProgressFile = Join-Path $LogDir "forever_catalog_progress.json"
+$PublisherPauseStateFile = Join-Path $LogDir "comicvine_publisher_pause_state.json"
+$AcquisitionLockFile = Join-Path $LogDir "acquisition_runner.lock"
+$ForeverHeartbeatSeconds = 60
+$ForeverPublisherPauseMinutes = 60
+$GoalIssuesPrimary = 150000
+$GoalIssuesStretch = 200000
+
+$PublisherChunkLimits = @{
+    "Marvel"     = 100
+    "DC Comics"  = 100
+}
+
+$Script:ForeverStopRequested = $false
+$Script:ForeverHeartbeatTimer = $null
 
 $Script:ComicVineKeySource = $null
 $Script:InSafetyBootstrap = $false
@@ -184,6 +202,7 @@ function New-PublisherProgressEntry {
         success_count = 0
         failure_count = 0
         last_exit_code = 0
+        publisher_exhausted = $false
     }
 }
 
@@ -217,6 +236,9 @@ function Load-ProgressDocument {
                     $doc.publishers[$name].success_count = [int]$entry.success_count
                     $doc.publishers[$name].failure_count = [int]$entry.failure_count
                     $doc.publishers[$name].last_exit_code = [int]$entry.last_exit_code
+                    if ($null -ne $entry.publisher_exhausted) {
+                        $doc.publishers[$name].publisher_exhausted = [bool]$entry.publisher_exhausted
+                    }
                 }
             }
         } else {
@@ -413,13 +435,21 @@ function Parse-ImportMetrics {
         final_offset = $null
         total_candidates_seen = 0
         issues_created = 0
+        issues_updated = 0
         cover_images_created = 0
+        cover_images_skipped = 0
+        skipped_quality_gate = 0
+        failures = 0
     }
     foreach ($line in $Lines) {
         if ($line -match "^final_offset=(\d+)") { $metrics.final_offset = [int]$Matches[1] }
         if ($line -match "^total_candidates_seen=(\d+)") { $metrics.total_candidates_seen = [int]$Matches[1] }
         if ($line -match "^issues_created=(\d+)") { $metrics.issues_created = [int]$Matches[1] }
+        if ($line -match "^issues_updated=(\d+)") { $metrics.issues_updated = [int]$Matches[1] }
         if ($line -match "^cover_images_created=(\d+)") { $metrics.cover_images_created = [int]$Matches[1] }
+        if ($line -match "^cover_images_skipped=(\d+)") { $metrics.cover_images_skipped = [int]$Matches[1] }
+        if ($line -match "^skipped_quality_gate=(\d+)") { $metrics.skipped_quality_gate = [int]$Matches[1] }
+        if ($line -match "^failures=(\d+)") { $metrics.failures = [int]$Matches[1] }
     }
     return $metrics
 }
@@ -630,7 +660,8 @@ function Invoke-SeriesImport {
 function Invoke-PublisherImport {
     param(
         [Parameter(Mandatory = $true)][string]$PublisherName,
-        [Parameter(Mandatory = $true)][int]$Offset
+        [Parameter(Mandatory = $true)][int]$Offset,
+        [int]$Limit = $PerSeriesLimit
     )
     # Publisher volumes API filter + strict client match; English/US gate remains default (no --allow-international-editions).
     $sleepPlaceholder = Format-ComicVineSleepSeconds -Seconds $ComicVineBaseSleepSeconds
@@ -638,7 +669,7 @@ function Invoke-PublisherImport {
         "scripts\p97_import_comicvine_catalog.py",
         "--publisher", $PublisherName,
         "--strict-publisher",
-        "--limit", "$PerSeriesLimit",
+        "--limit", "$Limit",
         "--offset", "$Offset",
         "--import-issues",
         "--sleep-seconds", $sleepPlaceholder,
@@ -689,6 +720,19 @@ function Write-SummaryJson {
     }
     $rateState = Load-ComicVineRateState
     Update-ComicVineRateThrottleWindows -State $rateState
+    $publishersExhausted = @()
+    $publishersPaused = @()
+    if ($null -ne $Progress) {
+        foreach ($name in $PublisherTargets) {
+            if ($Progress.publishers[$name].publisher_exhausted) { $publishersExhausted += $name }
+        }
+    }
+    if ($Forever) {
+        $pauseState = Load-PublisherPauseState
+        foreach ($name in $PublisherTargets) {
+            if (Test-PublisherPaused -PauseState $pauseState -PublisherName $name) { $publishersPaused += $name }
+        }
+    }
     $summary = [ordered]@{
         start_time = $StartTime.ToString("yyyy-MM-dd HH:mm:ss")
         end_time = $EndTime.ToString("yyyy-MM-dd HH:mm:ss")
@@ -724,7 +768,675 @@ function Write-SummaryJson {
         comicvine_throttle_count_last_hour = [int]$rateState.throttle_count_last_hour
         comicvine_rate_state_file = $RateStateFile
     }
-    $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $SummaryFile -Encoding utf8
+    if ($Forever) {
+        $summary.mode = "forever"
+        $summary.current_publisher = $Script:RunStats.last_publisher
+        $summary.current_offset = $Script:RunStats.last_offset
+        $summary.current_chunk_limit = $(if ($Script:ForeverState) { $Script:ForeverState.current_chunk_limit } else { 0 })
+        $summary.publishers_exhausted = @($publishersExhausted)
+        $summary.publishers_paused = @($publishersPaused)
+        $summary.total_chunks_completed = $(if ($Script:ForeverState) { $Script:ForeverState.chunks_completed_this_run } else { 0 })
+        $summary.total_420_count = $(if ($Script:ForeverState) { $Script:ForeverState.total_420_count_this_run } else { 0 })
+        $summary.current_sleep_seconds = [double]$rateState.current_sleep_seconds
+        $summary.last_successful_chunk_at = $(if ($Script:ForeverState) { $Script:ForeverState.last_successful_chunk_at } else { $null })
+        if ($Script:ForeverState -and $Script:ForeverState.last_chunk_result) {
+            $summary.last_created_count = [int]$Script:ForeverState.last_chunk_result.created
+            $summary.last_updated_count = [int]$Script:ForeverState.last_chunk_result.updated
+        }
+        $summary.forever_progress_file = $ForeverProgressFile
+        $summary.acquisition_lock_file = $AcquisitionLockFile
+    }
+    $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $SummaryFile -Encoding utf8
+}
+
+function Get-PublisherChunkLimit {
+    param([Parameter(Mandatory = $true)][string]$PublisherName)
+    if ($PublisherChunkLimits.ContainsKey($PublisherName)) {
+        return [int]$PublisherChunkLimits[$PublisherName]
+    }
+    return 250
+}
+
+function Format-Count {
+    param([Parameter(Mandatory = $true)][int]$Value)
+    return $Value.ToString("N0", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Format-RuntimeHoursMinutes {
+    param([Parameter(Mandatory = $true)][double]$TotalHours)
+    $totalMinutes = [math]::Max(0, [int][math]::Floor($TotalHours * 60))
+    $hours = [math]::Floor($totalMinutes / 60)
+    $minutes = $totalMinutes % 60
+    return ("{0:D2}h {1:D2}m" -f $hours, $minutes)
+}
+
+function Get-CatalogProgressSnapshot {
+    if ($WhatIf) {
+        return @{
+            total_issues = 0
+            total_images = 0
+            ready_covers = 0
+            pending_covers = 0
+            fingerprints = 0
+            ocr_rows = 0
+        }
+    }
+    $run = Invoke-ExternalPython -ArgumentList @("scripts\p97_progress_watch.py", "--json") -Label "catalog progress snapshot"
+    if ($run.exit_code -ne 0 -or $run.stdout.Count -eq 0) {
+        throw "Failed to read catalog progress snapshot (exit $($run.exit_code))"
+    }
+    $jsonLine = ($run.stdout | Where-Object { $_ -match "^\s*\{" }) -join ""
+    if ([string]::IsNullOrWhiteSpace($jsonLine)) {
+        $jsonLine = $run.stdout[-1]
+    }
+    return ($jsonLine | ConvertFrom-Json)
+}
+
+function New-PublisherPauseState {
+    return @{ publishers = @{} }
+}
+
+function Load-PublisherPauseState {
+    if (-not (Test-Path -LiteralPath $PublisherPauseStateFile)) {
+        return New-PublisherPauseState
+    }
+    try {
+        $raw = Get-Content -LiteralPath $PublisherPauseStateFile -Raw -Encoding utf8 | ConvertFrom-Json
+        $doc = New-PublisherPauseState
+        if ($null -ne $raw.publishers) {
+            foreach ($prop in $raw.publishers.PSObject.Properties) {
+                $doc.publishers[$prop.Name] = @{
+                    paused_until = $prop.Value.paused_until
+                    last_reason = $prop.Value.last_reason
+                }
+            }
+        } else {
+            foreach ($prop in $raw.PSObject.Properties) {
+                if ($prop.Name -eq "publishers") { continue }
+                $doc.publishers[$prop.Name] = @{
+                    paused_until = $prop.Value.paused_until
+                    last_reason = $prop.Value.last_reason
+                }
+            }
+        }
+        return $doc
+    } catch {
+        Write-Log "Publisher pause state corrupt; resetting: $($_.Exception.Message)" -Level "WARN"
+        return New-PublisherPauseState
+    }
+}
+
+function Save-PublisherPauseState {
+    param([Parameter(Mandatory = $true)]$State)
+    $export = [ordered]@{}
+    foreach ($name in $State.publishers.Keys) {
+        $export[$name] = [ordered]@{
+            paused_until = $State.publishers[$name].paused_until
+            last_reason = $State.publishers[$name].last_reason
+        }
+    }
+    $export | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $PublisherPauseStateFile -Encoding utf8
+}
+
+function Test-PublisherPaused {
+    param(
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string]$PublisherName
+    )
+    if (-not $PauseState.publishers.ContainsKey($PublisherName)) { return $false }
+    $entry = $PauseState.publishers[$PublisherName]
+    $untilText = [string]$entry.paused_until
+    if ([string]::IsNullOrWhiteSpace($untilText)) { return $false }
+    try {
+        $until = [datetimeoffset]::Parse($untilText).UtcDateTime
+        return ((Get-Date).ToUniversalTime() -lt $until)
+    } catch {
+        return $false
+    }
+}
+
+function Set-PublisherPaused {
+    param(
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string]$PublisherName,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+    $until = (Get-Date).ToUniversalTime().AddMinutes($ForeverPublisherPauseMinutes)
+    $PauseState.publishers[$PublisherName] = @{
+        paused_until = $until.ToString("o")
+        last_reason = $Reason
+    }
+    Save-PublisherPauseState -State $PauseState
+    Write-Log "Publisher paused: $PublisherName until $($PauseState.publishers[$PublisherName].paused_until) reason=$Reason" -Level "WARN"
+}
+
+function Test-AcquisitionLockActive {
+    param([Parameter(Mandatory = $true)][string]$LockPath)
+    if (-not (Test-Path -LiteralPath $LockPath)) { return $false }
+    try {
+        $raw = Get-Content -LiteralPath $LockPath -Raw -Encoding utf8 | ConvertFrom-Json
+        $pidValue = [int]$raw.pid
+        if ($pidValue -le 0) { return $false }
+        $proc = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
+        return ($null -ne $proc)
+    } catch {
+        return $false
+    }
+}
+
+function Acquire-AcquisitionRunnerLock {
+    if ($WhatIf) { return }
+    if (Test-AcquisitionLockActive -LockPath $AcquisitionLockFile) {
+        $existing = Get-Content -LiteralPath $AcquisitionLockFile -Raw -Encoding utf8
+        throw "Another acquisition runner appears active. Lock file: $AcquisitionLockFile`n$existing"
+    }
+    if (Test-Path -LiteralPath $AcquisitionLockFile) {
+        Write-Log "Stale acquisition lock found; replacing." -Level "WARN"
+    }
+    $lockDoc = [ordered]@{
+        pid = $PID
+        started_at = (Get-Date).ToUniversalTime().ToString("o")
+        mode = $(if ($Forever) { "forever" } else { "overnight" })
+        host = $env:COMPUTERNAME
+    }
+    $lockDoc | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $AcquisitionLockFile -Encoding utf8
+    Write-Log "Acquisition lock acquired: $AcquisitionLockFile (pid=$PID)"
+}
+
+function Release-AcquisitionRunnerLock {
+    if ($WhatIf) { return }
+    if (-not (Test-Path -LiteralPath $AcquisitionLockFile)) { return }
+    try {
+        $raw = Get-Content -LiteralPath $AcquisitionLockFile -Raw -Encoding utf8 | ConvertFrom-Json
+        if ([int]$raw.pid -eq $PID) {
+            Remove-Item -LiteralPath $AcquisitionLockFile -Force
+            Write-Log "Acquisition lock released."
+        }
+    } catch {
+        Remove-Item -LiteralPath $AcquisitionLockFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Initialize-ForeverRunState {
+    param(
+        [Parameter(Mandatory = $true)][datetime]$StartTime,
+        [Parameter(Mandatory = $true)]$CatalogSnapshot
+    )
+    $Script:ForeverState = @{
+        started_at = $StartTime.ToUniversalTime().ToString("o")
+        issues_before_run = [int]$CatalogSnapshot.total_issues
+        images_before_run = [int]$CatalogSnapshot.total_images
+        issues_added_this_run = 0
+        images_added_this_run = 0
+        chunks_completed_this_run = 0
+        total_420_count_at_start = 0
+        total_420_count_this_run = 0
+        issue_samples = New-Object System.Collections.Generic.List[object]
+        publisher_progress = @{}
+        last_chunk_result = @{ created = 0; updated = 0; skipped = 0; failed = 0 }
+        last_successful_chunk_at = $null
+        current_publisher = ""
+        current_offset = 0
+        current_chunk_limit = 0
+        status = "RUNNING"
+    }
+    $rate = Load-ComicVineRateState
+    $Script:ForeverState.total_420_count_at_start = [int]$rate.total_420_count
+    foreach ($name in $PublisherTargets) {
+        $Script:ForeverState.publisher_progress[$name] = @{
+            offset = 0
+            chunks = 0
+            created = 0
+            updated = 0
+            "420s" = 0
+            status = "PENDING"
+        }
+    }
+}
+
+function Update-ForeverPublisherProgressFromProgressDoc {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    foreach ($name in $PublisherTargets) {
+        $entry = $ProgressDoc.publishers[$name]
+        $row = $Script:ForeverState.publisher_progress[$name]
+        $row.offset = [int]$entry.last_offset
+        if ($entry.publisher_exhausted) {
+            $row.status = "EXHAUSTED"
+        } elseif ($row.chunks -gt 0) {
+            $row.status = "ACTIVE"
+        }
+    }
+}
+
+function Get-IssuesAddedLastHour {
+    $now = (Get-Date).ToUniversalTime()
+    $cutoff = $now.AddHours(-1)
+    $samples = @($Script:ForeverState.issue_samples)
+    $baseline = $Script:ForeverState.issues_before_run
+    foreach ($sample in ($samples | Sort-Object { $_.at })) {
+        try {
+            $at = [datetimeoffset]::Parse([string]$sample.at).UtcDateTime
+            if ($at -le $cutoff) { $baseline = [int]$sample.issues }
+        } catch { continue }
+    }
+    $currentIssues = [int]$Script:ForeverState.issues_now
+    if ($currentIssues -lt $baseline) { $baseline = $Script:ForeverState.issues_before_run }
+    return [math]::Max(0, $currentIssues - $baseline)
+}
+
+function Get-EstimatedTimeTo150k {
+    $chunks = [int]$Script:ForeverState.chunks_completed_this_run
+    if ($chunks -lt 3) { return "UNKNOWN" }
+    $added = [math]::Max(0, [int]$Script:ForeverState.issues_added_this_run)
+    if ($added -le 0) { return "UNKNOWN" }
+    $avgPerChunk = $added / [double]$chunks
+    if ($avgPerChunk -le 0) { return "UNKNOWN" }
+    $remaining = [math]::Max(0, $GoalIssuesPrimary - [int]$Script:ForeverState.issues_now)
+    $chunksNeeded = $remaining / $avgPerChunk
+    $hoursPerChunk = ((Get-Date) - $Script:RunStats.start_time).TotalHours / [math]::Max(1, $chunks)
+    $hoursRemaining = $chunksNeeded * $hoursPerChunk
+    if ($hoursRemaining -gt 8760) { return "UNKNOWN" }
+    return ("{0:0.#}h" -f $hoursRemaining)
+}
+
+function Write-ForeverProgressArtifacts {
+    param(
+        [Parameter(Mandatory = $true)][datetime]$StartTime,
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)]$CatalogSnapshot
+    )
+    $rate = Load-ComicVineRateState
+    Update-ComicVineRateThrottleWindows -State $rate
+    $Script:ForeverState.issues_now = [int]$CatalogSnapshot.total_issues
+    $Script:ForeverState.images_now = [int]$CatalogSnapshot.total_images
+    $Script:ForeverState.ready_covers = [int]$CatalogSnapshot.ready_covers
+    $Script:ForeverState.pending_covers = [int]$CatalogSnapshot.pending_covers
+    $Script:ForeverState.fingerprints = [int]$CatalogSnapshot.fingerprints
+    $Script:ForeverState.ocr_rows = [int]$CatalogSnapshot.ocr_rows
+    $Script:ForeverState.issues_added_this_run = [math]::Max(0, $Script:ForeverState.issues_now - $Script:ForeverState.issues_before_run)
+    $Script:ForeverState.images_added_this_run = [math]::Max(0, $Script:ForeverState.images_now - $Script:ForeverState.images_before_run)
+    $Script:ForeverState.total_420_count_this_run = [math]::Max(0, [int]$rate.total_420_count - $Script:ForeverState.total_420_count_at_start)
+    $Script:ForeverState.current_sleep_seconds = [double]$rate.current_sleep_seconds
+    $runtimeSeconds = ((Get-Date) - $StartTime).TotalSeconds
+    $goal150 = if ($GoalIssuesPrimary -gt 0) { [math]::Round(100.0 * $Script:ForeverState.issues_now / $GoalIssuesPrimary, 1) } else { 0.0 }
+    $goal200 = if ($GoalIssuesStretch -gt 0) { [math]::Round(100.0 * $Script:ForeverState.issues_now / $GoalIssuesStretch, 1) } else { 0.0 }
+    $avgIssues = if ($Script:ForeverState.chunks_completed_this_run -gt 0) {
+        [math]::Round($Script:ForeverState.issues_added_this_run / [double]$Script:ForeverState.chunks_completed_this_run, 1)
+    } else { 0.0 }
+
+    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc
+
+    $publishersExhausted = @($PublisherTargets | Where-Object { $ProgressDoc.publishers[$_].publisher_exhausted })
+    $publishersPaused = @($PublisherTargets | Where-Object { Test-PublisherPaused -PauseState $PauseState -PublisherName $_ })
+
+    $doc = [ordered]@{
+        mode = "forever"
+        status = $Script:ForeverState.status
+        started_at = $Script:ForeverState.started_at
+        updated_at = (Get-Date).ToUniversalTime().ToString("o")
+        runtime_seconds = [math]::Round($runtimeSeconds, 0)
+        issues_before_run = $Script:ForeverState.issues_before_run
+        issues_now = $Script:ForeverState.issues_now
+        issues_added_this_run = $Script:ForeverState.issues_added_this_run
+        issues_added_last_hour = (Get-IssuesAddedLastHour)
+        images_now = $Script:ForeverState.images_now
+        images_added_this_run = $Script:ForeverState.images_added_this_run
+        ready_covers = $Script:ForeverState.ready_covers
+        pending_covers = $Script:ForeverState.pending_covers
+        fingerprints = $Script:ForeverState.fingerprints
+        ocr_rows = $Script:ForeverState.ocr_rows
+        current_publisher = $Script:ForeverState.current_publisher
+        current_offset = $Script:ForeverState.current_offset
+        current_chunk_limit = $Script:ForeverState.current_chunk_limit
+        chunks_completed_this_run = $Script:ForeverState.chunks_completed_this_run
+        publisher_progress = $Script:ForeverState.publisher_progress
+        total_420_count_this_run = $Script:ForeverState.total_420_count_this_run
+        current_sleep_seconds = $Script:ForeverState.current_sleep_seconds
+        last_successful_chunk_at = $Script:ForeverState.last_successful_chunk_at
+        last_chunk_result = $Script:ForeverState.last_chunk_result
+        goal_150k_progress_pct = $goal150
+        goal_200k_progress_pct = $goal200
+        goal_150k_remaining = [math]::Max(0, $GoalIssuesPrimary - $Script:ForeverState.issues_now)
+        goal_200k_remaining = [math]::Max(0, $GoalIssuesStretch - $Script:ForeverState.issues_now)
+        average_issues_per_chunk = $avgIssues
+        estimated_time_to_150k = (Get-EstimatedTimeTo150k)
+        publishers_exhausted = @($publishersExhausted)
+        publishers_paused = @($publishersPaused)
+        total_chunks_completed = $Script:ForeverState.chunks_completed_this_run
+    }
+    $doc | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ForeverProgressFile -Encoding utf8
+    return $doc
+}
+
+function Write-ForeverHeartbeat {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$CatalogSnapshot
+    )
+    $rate = Load-ComicVineRateState
+    $last = $Script:ForeverState.last_chunk_result
+    $elapsed = Get-ElapsedHours -Since $Script:RunStats.start_time
+    Write-Host ""
+    Write-Host "P97 FOREVER HEARTBEAT"
+    Write-Host "publisher=$($Script:ForeverState.current_publisher)"
+    Write-Host "offset=$($Script:ForeverState.current_offset)"
+    Write-Host "chunk_limit=$($Script:ForeverState.current_chunk_limit)"
+    Write-Host "issues_total=$($CatalogSnapshot.total_issues)"
+    Write-Host "images_total=$($CatalogSnapshot.total_images)"
+    Write-Host "ready_covers=$($CatalogSnapshot.ready_covers)"
+    Write-Host "pending_covers=$($CatalogSnapshot.pending_covers)"
+    Write-Host "fingerprints=$($CatalogSnapshot.fingerprints)"
+    Write-Host "ocr_rows=$($CatalogSnapshot.ocr_rows)"
+    Write-Host "current_sleep_seconds=$($rate.current_sleep_seconds)"
+    Write-Host "total_420_count=$($rate.total_420_count)"
+    Write-Host "elapsed_hours=$([math]::Round($elapsed, 2))"
+    Write-Host "created_this_chunk=$($last.created)"
+    Write-Host "updated_this_chunk=$($last.updated)"
+    Write-Host "skipped_this_chunk=$($last.skipped)"
+    Write-Host "failed_this_chunk=$($last.failed)"
+    Write-Host ""
+}
+
+function Write-ForeverProgressBlock {
+    param(
+        [Parameter(Mandatory = $true)][datetime]$StartTime,
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$CatalogSnapshot,
+        [Parameter(Mandatory = $true)]$ForeverDoc
+    )
+    $rate = Load-ComicVineRateState
+    $last = $Script:ForeverState.last_chunk_result
+    $runtimeText = Format-RuntimeHoursMinutes -TotalHours (Get-ElapsedHours -Since $StartTime)
+    Write-Host ""
+    Write-Host "P97 FOREVER PROGRESS"
+    Write-Host ("-" * 52)
+    Write-Host "Mode: FOREVER"
+    Write-Host "Runtime: $runtimeText"
+    Write-Host "Current Publisher: $($Script:ForeverState.current_publisher)"
+    Write-Host "Publisher Offset: $(Format-Count -Value ([int]$Script:ForeverState.current_offset))"
+    Write-Host "Chunk Limit: $(Format-Count -Value ([int]$Script:ForeverState.current_chunk_limit))"
+    Write-Host "Chunk: $($Script:ForeverState.chunks_completed_this_run) completed this run"
+    Write-Host "Issues Before Run: $(Format-Count -Value $Script:ForeverState.issues_before_run)"
+    Write-Host "Issues Now: $(Format-Count -Value ([int]$CatalogSnapshot.total_issues))"
+    Write-Host "Issues Added This Run: +$(Format-Count -Value $Script:ForeverState.issues_added_this_run)"
+    Write-Host "Images Added This Run: +$(Format-Count -Value $Script:ForeverState.images_added_this_run)"
+    Write-Host "Ready Covers: $(Format-Count -Value ([int]$CatalogSnapshot.ready_covers))"
+    Write-Host "Pending Covers: $(Format-Count -Value ([int]$CatalogSnapshot.pending_covers))"
+    Write-Host "Fingerprints: $(Format-Count -Value ([int]$CatalogSnapshot.fingerprints))"
+    Write-Host "OCR Rows: $(Format-Count -Value ([int]$CatalogSnapshot.ocr_rows))"
+    Write-Host "ComicVine Sleep: $($rate.current_sleep_seconds)s"
+    Write-Host "420 Count This Run: $($Script:ForeverState.total_420_count_this_run)"
+    Write-Host "Last Successful Chunk: $($Script:ForeverState.last_successful_chunk_at)"
+    Write-Host "Last Chunk Result: created=$($last.created) updated=$($last.updated) skipped=$($last.skipped) failed=$($last.failed)"
+    Write-Host "Status: $($Script:ForeverState.status)"
+    Write-Host ""
+    Write-Host "Publisher Progress"
+    Write-Host ("-" * 52)
+    foreach ($name in $PublisherTargets) {
+        $row = $Script:ForeverState.publisher_progress[$name]
+        Write-Host ("{0,-14} offset={1}  chunks={2}  created={3}  updated={4}  420s={5}  status={6}" -f `
+            $name, (Format-Count -Value ([int]$row.offset)), $row.chunks, $row.created, $row.updated, $row."420s", $row.status)
+    }
+    Write-Host ""
+    Write-Host "Catalog Goal Progress"
+    Write-Host ("-" * 52)
+    Write-Host "Current Issues: $(Format-Count -Value ([int]$CatalogSnapshot.total_issues))"
+    Write-Host "Goal: $(Format-Count -Value $GoalIssuesPrimary)"
+    Write-Host "Remaining: $(Format-Count -Value ([int]$ForeverDoc.goal_150k_remaining))"
+    Write-Host "Progress: $($ForeverDoc.goal_150k_progress_pct)%"
+    Write-Host ""
+    Write-Host "Stretch Goal: $(Format-Count -Value $GoalIssuesStretch)"
+    Write-Host "Remaining: $(Format-Count -Value ([int]$ForeverDoc.goal_200k_remaining))"
+    Write-Host "Progress: $($ForeverDoc.goal_200k_progress_pct)%"
+    Write-Host ""
+    Write-Host "Throughput"
+    Write-Host ("-" * 52)
+    Write-Host "Issues Added Last Hour: $(Format-Count -Value ([int]$ForeverDoc.issues_added_last_hour))"
+    Write-Host "Issues Added This Run: $(Format-Count -Value $Script:ForeverState.issues_added_this_run)"
+    Write-Host "Chunks Completed This Run: $($Script:ForeverState.chunks_completed_this_run)"
+    Write-Host "Average Issues Per Chunk: $($ForeverDoc.average_issues_per_chunk)"
+    Write-Host "Estimated Time To 150k: $($ForeverDoc.estimated_time_to_150k)"
+    Write-Host ""
+}
+
+function Start-ForeverHeartbeatTimer {
+    param(
+        [Parameter(Mandatory = $true)][datetime]$StartTime
+    )
+    if ($WhatIf) { return }
+    if ($null -ne $Script:ForeverHeartbeatTimer) { return }
+    $Script:ForeverHeartbeatTimer = New-Object System.Timers.Timer
+    $Script:ForeverHeartbeatTimer.Interval = ($ForeverHeartbeatSeconds * 1000)
+    $Script:ForeverHeartbeatTimer.AutoReset = $true
+    Register-ObjectEvent -InputObject $Script:ForeverHeartbeatTimer -EventName Elapsed -SourceIdentifier "P97ForeverHeartbeat" -Action {
+        if ($Event.MessageData.Stop) { return }
+        $path = $Event.MessageData.ProgressFile
+        if (-not (Test-Path -LiteralPath $path)) { return }
+        try {
+            $doc = Get-Content -LiteralPath $path -Raw -Encoding utf8 | ConvertFrom-Json
+            $last = $doc.last_chunk_result
+            Write-Host ""
+            Write-Host "P97 FOREVER HEARTBEAT"
+            Write-Host "publisher=$($doc.current_publisher)"
+            Write-Host "offset=$($doc.current_offset)"
+            Write-Host "chunk_limit=$($doc.current_chunk_limit)"
+            Write-Host "issues_total=$($doc.issues_now)"
+            Write-Host "images_total=$($doc.images_now)"
+            Write-Host "ready_covers=$($doc.ready_covers)"
+            Write-Host "pending_covers=$($doc.pending_covers)"
+            Write-Host "fingerprints=$($doc.fingerprints)"
+            Write-Host "ocr_rows=$($doc.ocr_rows)"
+            Write-Host "current_sleep_seconds=$($doc.current_sleep_seconds)"
+            Write-Host "total_420_count=$($doc.total_420_count_this_run)"
+            $elapsedHours = ([double]$doc.runtime_seconds) / 3600.0
+            Write-Host "elapsed_hours=$([math]::Round($elapsedHours, 2))"
+            Write-Host "created_this_chunk=$($last.created)"
+            Write-Host "updated_this_chunk=$($last.updated)"
+            Write-Host "skipped_this_chunk=$($last.skipped)"
+            Write-Host "failed_this_chunk=$($last.failed)"
+            Write-Host ""
+        } catch {
+            # ignore timer read errors
+        }
+    } -MessageData @{
+        ProgressFile = $ForeverProgressFile
+        Stop = $false
+    } | Out-Null
+    $Script:ForeverHeartbeatTimer.Start()
+}
+
+function Stop-ForeverHeartbeatTimer {
+    if ($null -ne $Script:ForeverHeartbeatTimer) {
+        $Script:ForeverHeartbeatTimer.Stop()
+        $Script:ForeverHeartbeatTimer.Dispose()
+        $Script:ForeverHeartbeatTimer = $null
+    }
+    Unregister-Event -SourceIdentifier "P97ForeverHeartbeat" -ErrorAction SilentlyContinue
+}
+
+function Register-ForeverCancelHandler {
+    $Script:ForeverCancelHandler = {
+        param($sender, $e)
+        $e.Cancel = $true
+        $script:ForeverStopRequested = $true
+        $script:interrupted = $true
+        if ($Script:ForeverState) { $Script:ForeverState.status = "STOPPING" }
+        Write-Log "Ctrl+C received; finishing current work and saving progress..." -Level "WARN"
+    }
+    [Console]::Add_CancelKeyPress($Script:ForeverCancelHandler)
+}
+
+function Invoke-ForeverPublisherChunk {
+    param(
+        [Parameter(Mandatory = $true)][string]$PublisherName,
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    $entry = $ProgressDoc.publishers[$PublisherName]
+    $offset = [int]$entry.last_offset
+    $chunkLimit = Get-PublisherChunkLimit -PublisherName $PublisherName
+    $Script:ForeverState.current_publisher = $PublisherName
+    $Script:ForeverState.current_offset = $offset
+    $Script:ForeverState.current_chunk_limit = $chunkLimit
+    $Script:RunStats.last_publisher = $PublisherName
+    $Script:RunStats.last_offset = $offset
+
+    $wrapped = Invoke-ImportWithThrottle -Label "forever publisher=$PublisherName" -ImportScript {
+        Invoke-PublisherImport -PublisherName $PublisherName -Offset $offset -Limit $chunkLimit
+    }
+    $importResult = $wrapped.result
+    $maxThrottle = ($importResult.throttled -and $wrapped.throttle_attempts -ge $ThrottleRetryMax)
+
+    $created = [int]$importResult.metrics.issues_created
+    $updated = [int]$importResult.metrics.issues_updated
+    $skipped = [int]$importResult.metrics.cover_images_skipped + [int]$importResult.metrics.skipped_quality_gate
+    $failed = [int]$importResult.metrics.failures
+    if ($importResult.exit_code -ne 0 -and -not $maxThrottle) { $failed = [math]::Max($failed, 1) }
+
+    $Script:ForeverState.last_chunk_result = @{
+        created = $created
+        updated = $updated
+        skipped = $skipped
+        failed = $failed
+    }
+
+    $pubRow = $Script:ForeverState.publisher_progress[$PublisherName]
+    $pubRow."420s" += [int]$wrapped.throttle_attempts
+
+    if ($maxThrottle) {
+        Set-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName -Reason "HTTP_420_RETRY_LIMIT"
+        $pubRow.status = "PAUSED"
+        $Script:RunStats.publishers_failed++
+        Write-Log "Forever chunk throttled out for $PublisherName; offset unchanged at $offset" -Level "WARN"
+        return
+    }
+
+    $entry.last_run_at = (Get-Date).ToUniversalTime().ToString("o")
+    $entry.last_exit_code = [int]$importResult.exit_code
+
+    if ($importResult.exit_code -eq 0) {
+        $entry.success_count++
+        if ($null -ne $importResult.metrics.final_offset) {
+            $entry.last_offset = [int]$importResult.metrics.final_offset
+            $pubRow.offset = $entry.last_offset
+        }
+        if ([int]$importResult.metrics.total_candidates_seen -eq 0) {
+            $entry.publisher_exhausted = $true
+            $pubRow.status = "EXHAUSTED"
+            Write-Log "Publisher exhausted (zero candidates): $PublisherName at offset $offset"
+        } else {
+            $pubRow.status = "ACTIVE"
+        }
+        $Script:ForeverState.last_successful_chunk_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        $Script:RunStats.publishers_successful++
+    } else {
+        $entry.failure_count++
+        $pubRow.status = "ERROR"
+        $Script:RunStats.publishers_failed++
+        Write-Log "Forever chunk failed for $PublisherName exit=$($importResult.exit_code)" -Level "WARN"
+    }
+
+    $pubRow.chunks++
+    $pubRow.created += $created
+    $pubRow.updated += $updated
+    $Script:ForeverState.chunks_completed_this_run++
+    $Script:RunStats.publishers_attempted++
+    $Script:RunStats.issues_created_total += $created
+    $Script:RunStats.cover_images_created_total += [int]$importResult.metrics.cover_images_created
+
+    Save-ProgressDocument -Progress $ProgressDoc
+}
+
+function Start-ForeverAcquisitionDaemon {
+    param(
+        [Parameter(Mandatory = $true)][datetime]$StartTime,
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    Register-ForeverCancelHandler
+    $ProgressDoc.series_exhausted = $true
+    $ProgressDoc.acquisition_phase = "publisher"
+    $Script:RunStats.acquisition_phase = "publisher"
+    Save-ProgressDocument -Progress $ProgressDoc
+
+    $catalog = Get-CatalogProgressSnapshot
+    Initialize-ForeverRunState -StartTime $StartTime -CatalogSnapshot $catalog
+    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc
+    Start-ForeverHeartbeatTimer -StartTime $StartTime
+
+    Write-Log "Forever acquisition daemon started (publisher-only, no enrichment)"
+    $foreverDoc = Write-ForeverProgressArtifacts -StartTime $StartTime -ProgressDoc $ProgressDoc -PauseState $PauseState -CatalogSnapshot $catalog
+    Write-ForeverProgressBlock -StartTime $StartTime -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog -ForeverDoc $foreverDoc
+    Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
+
+    while (-not $Script:ForeverStopRequested) {
+        $activePublishers = 0
+        foreach ($publisher in $PublisherTargets) {
+            if ($Script:ForeverStopRequested) { break }
+            if (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher) {
+                $Script:ForeverState.publisher_progress[$publisher].status = "PAUSED"
+                continue
+            }
+            $entry = $ProgressDoc.publishers[$publisher]
+            if ($entry.publisher_exhausted) {
+                continue
+            }
+            $activePublishers++
+            Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+            $catalog = Get-CatalogProgressSnapshot
+            [void]$Script:ForeverState.issue_samples.Add(@{
+                at = (Get-Date).ToUniversalTime().ToString("o")
+                issues = [int]$catalog.total_issues
+            })
+            $foreverDoc = Write-ForeverProgressArtifacts -StartTime $StartTime -ProgressDoc $ProgressDoc -PauseState $PauseState -CatalogSnapshot $catalog
+            Write-ForeverProgressBlock -StartTime $StartTime -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog -ForeverDoc $foreverDoc
+            Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
+        }
+
+        if ($activePublishers -eq 0) {
+            Write-Log "All publishers exhausted or paused; starting new forever pass without resetting offsets"
+            foreach ($name in $PublisherTargets) {
+                if (-not (Test-PublisherPaused -PauseState $PauseState -PublisherName $name)) {
+                    $ProgressDoc.publishers[$name].publisher_exhausted = $false
+                    $Script:ForeverState.publisher_progress[$name].status = "PENDING"
+                }
+            }
+            $Script:RunStats.publisher_passes++
+            Save-ProgressDocument -Progress $ProgressDoc
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    Stop-ForeverHeartbeatTimer
+    $Script:ForeverState.status = "STOPPED"
+    $catalog = Get-CatalogProgressSnapshot
+    $null = Write-ForeverProgressArtifacts -StartTime $StartTime -ProgressDoc $ProgressDoc -PauseState $PauseState -CatalogSnapshot $catalog
+}
+
+function Show-ForeverWhatIfPlan {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    $rate = Load-ComicVineRateState
+    Write-Host "Forever mode enabled"
+    Write-Host "TargetRuntimeHours=IGNORED MinimumRuntimeHours=IGNORED"
+    Write-Host "Enrichment=DISABLED (import only)"
+    Write-Host "Lock file=$AcquisitionLockFile"
+    Write-Host "Forever progress file=$ForeverProgressFile"
+    Write-Host "Publisher pause file=$PublisherPauseStateFile"
+    Write-Host "Rate limiter state file=$RateStateFile"
+    Write-Host "current_sleep_seconds=$($rate.current_sleep_seconds) total_420_count=$($rate.total_420_count)"
+    Write-Host "Publisher queue ($($PublisherTargets.Count)):"
+    foreach ($name in $PublisherTargets) {
+        $entry = $ProgressDoc.publishers[$name]
+        $limit = Get-PublisherChunkLimit -PublisherName $name
+        $paused = Test-PublisherPaused -PauseState $PauseState -PublisherName $name
+        $pauseText = if ($paused) { "PAUSED" } else { "active" }
+        Write-Host ("  {0,-14} chunk_limit={1} offset={2} exhausted={3} {4}" -f `
+            $name, $limit, $entry.last_offset, $entry.publisher_exhausted, $pauseText)
+    }
 }
 
 function Show-WhatIfPlan {
@@ -843,7 +1555,10 @@ function Test-SafetyChecks {
         throw "DATABASE_URL must target localhost:5433/comic_os. Got: $($env:DATABASE_URL)"
     }
     if (-not (Test-Path -LiteralPath $env:TESSERACT_CMD)) {
-        throw "TESSERACT_CMD not found on disk: $($env:TESSERACT_CMD)"
+        if (-not $Forever) {
+            throw "TESSERACT_CMD not found on disk: $($env:TESSERACT_CMD)"
+        }
+        Write-Log "  (Forever mode: TESSERACT_CMD not required for import-only acquisition)" -Level "INFO"
     }
     Write-Log "  All safety checks passed."
 }
@@ -872,7 +1587,7 @@ try {
     Write-Log "Log file: $LogFile"
     Write-Log "Progress file: $ProgressFile"
 
-    if ($WhatIf) { Show-WhatIfPlan }
+    if ($WhatIf -and -not $Forever) { Show-WhatIfPlan }
 
     $Script:InSafetyBootstrap = $true
     Test-SafetyChecks
@@ -894,6 +1609,23 @@ try {
     }
 
     $Progress = Load-ProgressDocument
+    $pauseState = Load-PublisherPauseState
+
+    if ($Forever) {
+        Write-Log "Forever catalog acquisition mode (WhatIf=$WhatIf)"
+        if ($WhatIf) {
+            Show-ForeverWhatIfPlan -ProgressDoc $Progress -PauseState $pauseState
+            Write-Log "WhatIf: forever mode plan shown; no imports executed."
+        } else {
+            Acquire-AcquisitionRunnerLock
+            try {
+                Start-ForeverAcquisitionDaemon -StartTime $StartTime -ProgressDoc $Progress -PauseState $pauseState
+            } finally {
+                Stop-ForeverHeartbeatTimer
+                Release-AcquisitionRunnerLock
+            }
+        }
+    } else {
     $Script:RunStats.acquisition_phase = [string]$Progress.acquisition_phase
     if ($Progress.series_exhausted) {
         $Script:RunStats.acquisition_phase = "publisher"
@@ -990,9 +1722,10 @@ try {
         }
     }
 
-    if (-not $WhatIf) {
+    if (-not $WhatIf -and -not $Forever) {
         Invoke-PostProcessing -Reason "final checkpoint at target runtime"
         $lastPostProcessingAt = Get-Date
+    }
     }
 
 } catch {
@@ -1004,6 +1737,10 @@ try {
     }
     Write-Log "Unexpected error during acquisition loop; progress JSON will be saved in finally." -Level "ERROR"
 } finally {
+    if ($Forever -and -not $WhatIf) {
+        Stop-ForeverHeartbeatTimer
+        Release-AcquisitionRunnerLock
+    }
     if ($null -ne $Progress) {
         Save-ProgressDocument -Progress $Progress
     }
@@ -1039,6 +1776,8 @@ try {
 
     if ($WhatIf) {
         Write-Log "WhatIf complete - no imports or post-processing were executed."
+    } elseif ($Forever) {
+        Write-Log "Forever acquisition stopped; progress and summary saved."
     }
 }
 
