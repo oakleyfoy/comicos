@@ -34,7 +34,7 @@ def test_forever_minor_publishers_deferred_list() -> None:
     text = _runner_text()
     for noisy in ("AWA", "Oni", "DSTLRY", "Aftershock", "Mad Cave"):
         assert noisy in text
-        assert f'$ForeverMinorPublishers' in text or "$ForeverMinorPublishers" in text
+        assert "$ForeverMinorPublishers" in text
     assert "Get-ForeverPublisherWorkQueue" in text
     assert "Test-AllForeverMajorPublishersComplete" in text
 
@@ -58,3 +58,13 @@ def test_progress_artifacts_export_major_publisher_fields() -> None:
     assert "current_major_publisher" in block
     assert "next_major_publisher" in block
     assert "forever_major_only" in block
+
+
+def test_forever_selector_reload_pause_and_idle_guards() -> None:
+    text = _runner_text()
+    daemon = text.split("function Start-ForeverAcquisitionDaemon", 1)[1].split("\nfunction ", 1)[0]
+    assert "Load-PublisherPauseState" in daemon
+    assert "Remove-ExpiredPublisherPauses" in daemon
+    assert "Test-ForeverWorkQueueAllNonExhaustedPaused" in daemon
+    assert "Get-ForeverProgressPublisherEntry" in text
+    assert "Test-ForeverPublisherExhausted" in text

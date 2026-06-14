@@ -1135,6 +1135,7 @@ function Test-PublisherPaused {
         [Parameter(Mandatory = $true)]$PauseState,
         [Parameter(Mandatory = $true)][string]$PublisherName
     )
+    if ($null -eq $PauseState -or $null -eq $PauseState.publishers) { return $false }
     if (-not $PauseState.publishers.ContainsKey($PublisherName)) { return $false }
     $entry = $PauseState.publishers[$PublisherName]
     $untilText = [string]$entry.paused_until
@@ -1144,6 +1145,75 @@ function Test-PublisherPaused {
         return ((Get-Date).ToUniversalTime() -lt $until)
     } catch {
         return $false
+    }
+}
+
+function Remove-ExpiredPublisherPauses {
+    param([Parameter(Mandatory = $true)]$PauseState)
+    if ($null -eq $PauseState -or $null -eq $PauseState.publishers) { return }
+    $toRemove = New-Object System.Collections.Generic.List[string]
+    foreach ($name in @($PauseState.publishers.Keys)) {
+        if (-not (Test-PublisherPaused -PauseState $PauseState -PublisherName $name)) {
+            [void]$toRemove.Add($name)
+        }
+    }
+    foreach ($name in $toRemove) {
+        if ($PauseState.publishers.ContainsKey($name)) {
+            $PauseState.publishers.Remove($name)
+        }
+    }
+    if ($toRemove.Count -gt 0) {
+        Save-PublisherPauseState -State $PauseState
+    }
+}
+
+function Get-ForeverProgressPublisherEntry {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)][string]$PublisherName
+    )
+    if ($null -eq $ProgressDoc -or $null -eq $ProgressDoc.publishers) { return $null }
+    $pubs = $ProgressDoc.publishers
+    if ($pubs -is [System.Collections.IDictionary]) {
+        if ($pubs.Contains($PublisherName)) { return $pubs[$PublisherName] }
+        return $null
+    }
+    if ($pubs.PSObject.Properties.Name -contains $PublisherName) {
+        return $pubs.$PublisherName
+    }
+    return $null
+}
+
+function Test-ForeverPublisherExhausted {
+    param([Parameter(Mandatory = $true)]$PublisherEntry)
+    if ($null -eq $PublisherEntry) { return $true }
+    $raw = $PublisherEntry.publisher_exhausted
+    if ($null -eq $raw) { return $false }
+    if ($raw -is [bool]) { return $raw }
+    $text = [string]$raw
+    if ([string]::IsNullOrWhiteSpace($text)) { return $false }
+    return ($text.Trim().ToLowerInvariant() -eq "true")
+}
+
+function Sync-ForeverPublisherRunStatuses {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState
+    )
+    if ($null -eq $Script:ForeverState) { return }
+    foreach ($name in $PublisherTargets) {
+        $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $name
+        $row = $Script:ForeverState.publisher_progress[$name]
+        if ($null -eq $row) { continue }
+        if (Test-ForeverPublisherExhausted -PublisherEntry $entry) {
+            $row.status = "EXHAUSTED"
+        } elseif (Test-PublisherPaused -PauseState $PauseState -PublisherName $name) {
+            $row.status = "PAUSED"
+        } elseif ([int]$row.chunks -gt 0) {
+            $row.status = "ACTIVE"
+        } else {
+            $row.status = "PENDING"
+        }
     }
 }
 
@@ -1168,17 +1238,58 @@ function Test-ForeverPublisherEligible {
         [Parameter(Mandatory = $true)]$PauseState,
         [Parameter(Mandatory = $true)][string]$PublisherName
     )
-    $entry = $ProgressDoc.publishers[$PublisherName]
+    $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $PublisherName
     if ($null -eq $entry) { return $false }
-    if ($entry.publisher_exhausted) { return $false }
+    if (Test-ForeverPublisherExhausted -PublisherEntry $entry) { return $false }
     if (Test-PublisherPaused -PauseState $PauseState -PublisherName $PublisherName) { return $false }
     return $true
+}
+
+function Get-ForeverPublisherSelectionOrder {
+    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    if ($Script:ForeverMajorOnly -and -not (Test-AllForeverMajorPublishersComplete -ProgressDoc $ProgressDoc)) {
+        return @($ForeverMajorPublishers)
+    }
+    return @(Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc)
+}
+
+function Test-ForeverWorkQueueHasEligiblePublisher {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string[]]$PublisherNames
+    )
+    foreach ($name in $PublisherNames) {
+        if (Test-ForeverPublisherEligible -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherName $name) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-ForeverWorkQueueAllNonExhaustedPaused {
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        [Parameter(Mandatory = $true)]$PauseState,
+        [Parameter(Mandatory = $true)][string[]]$PublisherNames
+    )
+    $foundNonExhausted = $false
+    foreach ($name in $PublisherNames) {
+        $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $name
+        if (Test-ForeverPublisherExhausted -PublisherEntry $entry) { continue }
+        $foundNonExhausted = $true
+        if (-not (Test-PublisherPaused -PauseState $PauseState -PublisherName $name)) {
+            return $false
+        }
+    }
+    return $foundNonExhausted
 }
 
 function Test-AllForeverMajorPublishersComplete {
     param([Parameter(Mandatory = $true)]$ProgressDoc)
     foreach ($name in $ForeverMajorPublishers) {
-        if (-not $ProgressDoc.publishers[$name].publisher_exhausted) {
+        $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $name
+        if (-not (Test-ForeverPublisherExhausted -PublisherEntry $entry)) {
             return $false
         }
     }
@@ -1201,7 +1312,7 @@ function Select-ForeverPublisherToRun {
         [Parameter(Mandatory = $true)]$ProgressDoc,
         [Parameter(Mandatory = $true)]$PauseState
     )
-    $queue = Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc
+    $queue = Get-ForeverPublisherSelectionOrder -ProgressDoc $ProgressDoc
     foreach ($name in $queue) {
         if (Test-ForeverPublisherEligible -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherName $name) {
             return $name
@@ -1351,14 +1462,29 @@ function Initialize-ForeverRunState {
 }
 
 function Update-ForeverPublisherProgressFromProgressDoc {
-    param([Parameter(Mandatory = $true)]$ProgressDoc)
+    param(
+        [Parameter(Mandatory = $true)]$ProgressDoc,
+        $PauseState = $null
+    )
     foreach ($name in $PublisherTargets) {
-        $entry = $ProgressDoc.publishers[$name]
+        $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $name
         $row = $Script:ForeverState.publisher_progress[$name]
+        if ($null -eq $row) { continue }
+        if ($null -eq $entry) { continue }
         $row.offset = [int]$entry.last_offset
-        if ($entry.publisher_exhausted) {
+        if ($null -ne $PauseState) {
+            if (Test-ForeverPublisherExhausted -PublisherEntry $entry) {
+                $row.status = "EXHAUSTED"
+            } elseif (Test-PublisherPaused -PauseState $PauseState -PublisherName $name) {
+                $row.status = "PAUSED"
+            } elseif ([int]$row.chunks -gt 0) {
+                $row.status = "ACTIVE"
+            } else {
+                $row.status = "PENDING"
+            }
+        } elseif (Test-ForeverPublisherExhausted -PublisherEntry $entry) {
             $row.status = "EXHAUSTED"
-        } elseif ($row.chunks -gt 0) {
+        } elseif ([int]$row.chunks -gt 0) {
             $row.status = "ACTIVE"
         }
     }
@@ -1461,7 +1587,8 @@ function Write-ForeverProgressArtifacts {
         [math]::Round($Script:ForeverState.issues_added_this_run / [double]$Script:ForeverState.chunks_completed_this_run, 1)
     } else { 0.0 }
 
-    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc
+    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc -PauseState $PauseState
+    Sync-ForeverPublisherRunStatuses -ProgressDoc $ProgressDoc -PauseState $PauseState
 
     $publishersExhausted = @($PublisherTargets | Where-Object { $ProgressDoc.publishers[$_].publisher_exhausted })
     $publishersPaused = @($PublisherTargets | Where-Object { Test-PublisherPaused -PauseState $PauseState -PublisherName $_ })
@@ -1861,7 +1988,8 @@ function Start-ForeverAcquisitionDaemon {
     $catalog = Get-CatalogProgressSnapshot
     $Script:ForeverLastCatalogSnapshot = $catalog
     Initialize-ForeverRunState -StartTime $StartTime -CatalogSnapshot $catalog
-    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc
+    Update-ForeverPublisherProgressFromProgressDoc -ProgressDoc $ProgressDoc -PauseState $PauseState
+    Sync-ForeverPublisherRunStatuses -ProgressDoc $ProgressDoc -PauseState $PauseState
     Start-ForeverHeartbeatTimer -StartTime $StartTime
 
     Write-Log "Forever acquisition daemon started (publisher-only, no enrichment)"
@@ -1870,17 +1998,30 @@ function Start-ForeverAcquisitionDaemon {
     Write-ForeverHeartbeat -ProgressDoc $ProgressDoc -CatalogSnapshot $catalog
 
     while (-not $Script:ForeverStopRequested) {
+        $PauseState = Load-PublisherPauseState
+        Remove-ExpiredPublisherPauses -PauseState $PauseState
+        Sync-ForeverPublisherRunStatuses -ProgressDoc $ProgressDoc -PauseState $PauseState
+
         $workQueue = Get-ForeverPublisherWorkQueue -ProgressDoc $ProgressDoc
+        $selectionOrder = Get-ForeverPublisherSelectionOrder -ProgressDoc $ProgressDoc
         $publisher = Select-ForeverPublisherToRun -ProgressDoc $ProgressDoc -PauseState $PauseState
         if (-not $publisher) {
-            $anyEligible = $false
+            $hasEligible = Test-ForeverWorkQueueHasEligiblePublisher -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherNames $selectionOrder
+            if ($hasEligible) {
+                Write-Log "Forever publisher selector recovered: eligible major exists; re-selecting" -Level "WARN"
+                $publisher = Select-ForeverPublisherToRun -ProgressDoc $ProgressDoc -PauseState $PauseState
+            }
+        }
+        if (-not $publisher) {
+            $anyNonExhausted = $false
             foreach ($name in $workQueue) {
-                if (-not $ProgressDoc.publishers[$name].publisher_exhausted) {
-                    $anyEligible = $true
+                $entry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $name
+                if (-not (Test-ForeverPublisherExhausted -PublisherEntry $entry)) {
+                    $anyNonExhausted = $true
                     break
                 }
             }
-            if (-not $anyEligible) {
+            if (-not $anyNonExhausted) {
                 Write-Log "Forever work queue exhausted; resetting exhausted flags for queue ($($workQueue.Count) publishers)"
                 Reset-ForeverPublisherExhaustedFlags -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherNames $workQueue
                 $Script:RunStats.publisher_passes++
@@ -1888,27 +2029,35 @@ function Start-ForeverAcquisitionDaemon {
                 Start-Sleep -Seconds 5
                 continue
             }
-            Write-Log "Forever: all eligible publishers paused; waiting 30s before retry" -Level "WARN"
-            Start-Sleep -Seconds 30
+            if (Test-ForeverWorkQueueAllNonExhaustedPaused -ProgressDoc $ProgressDoc -PauseState $PauseState -PublisherNames $selectionOrder) {
+                Write-Log "Forever: all non-exhausted publishers paused; waiting 30s before retry" -Level "WARN"
+                Start-Sleep -Seconds 30
+                continue
+            }
+            Write-Log "Forever: no publisher selected; retrying immediately" -Level "WARN"
             continue
         }
 
-        while (-not $Script:ForeverStopRequested -and -not $ProgressDoc.publishers[$publisher].publisher_exhausted) {
+        while (-not $Script:ForeverStopRequested) {
+            $pubEntry = Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $publisher
+            if (Test-ForeverPublisherExhausted -PublisherEntry $pubEntry) { break }
             if (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher) {
                 $Script:ForeverState.publisher_progress[$publisher].status = "PAUSED"
                 break
             }
             Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+            $PauseState = Load-PublisherPauseState
             if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
                 break
             }
             while (
                 -not $Script:ForeverStopRequested -and
                 $Script:ForeverState.last_chunk_result.outcome -eq "skipped_mismatch_only" -and
-                -not $ProgressDoc.publishers[$publisher].publisher_exhausted -and
+                -not (Test-ForeverPublisherExhausted -PublisherEntry (Get-ForeverProgressPublisherEntry -ProgressDoc $ProgressDoc -PublisherName $publisher)) -and
                 -not (Test-PublisherPaused -PauseState $PauseState -PublisherName $publisher)
             ) {
                 Invoke-ForeverPublisherChunk -PublisherName $publisher -ProgressDoc $ProgressDoc -PauseState $PauseState
+                $PauseState = Load-PublisherPauseState
                 if ($Script:ForeverState.publisher_progress[$publisher].status -eq "PAUSED") {
                     break
                 }
