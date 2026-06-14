@@ -261,6 +261,39 @@ class InventoryCopy(SQLModel, table=True):
     receiving_session_id: int | None = Field(default=None, foreign_key="receiving_session.id", nullable=True, index=True)
     received_via: str = Field(default="RECEIVING_STATION", max_length=40, nullable=False, index=True)
     source_image_url: str | None = Field(default=None, max_length=2048, nullable=True)
+    catalog_issue_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_issue.id",
+        nullable=True,
+        index=True,
+    )
+    catalog_variant_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_variant.id",
+        nullable=True,
+        index=True,
+    )
+    catalog_image_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_image.id",
+        nullable=True,
+        index=True,
+    )
+    inventory_scan_session_id: int | None = Field(
+        default=None,
+        foreign_key="inventory_scan_session.id",
+        nullable=True,
+        index=True,
+    )
+    inventory_scan_item_id: int | None = Field(
+        default=None,
+        foreign_key="inventory_scan_item.id",
+        nullable=True,
+        index=True,
+    )
+    acquisition_source_type: str | None = Field(default=None, max_length=40, nullable=True, index=True)
+    acquisition_source_name: str | None = Field(default=None, max_length=255, nullable=True)
+    acquisition_notes: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

@@ -14,6 +14,7 @@ def _sqlite_enable_foreign_keys(dbapi_connection: object, connection_record: obj
     if getattr(dialect, "name", None) == "sqlite":
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=120000")
         cursor.close()
 
 
@@ -21,7 +22,7 @@ def _sqlite_enable_foreign_keys(dbapi_connection: object, connection_record: obj
 def get_engine():
     settings = get_settings()
     connect_args = (
-        {"check_same_thread": False}
+        {"check_same_thread": False, "timeout": 120}
         if settings.database_url.startswith("sqlite")
         else {}
     )

@@ -111,6 +111,27 @@ class Settings(BaseSettings):
     operational_reports_storage_root_raw: str = Field(default="", alias="OPERATIONAL_REPORTS_STORAGE_ROOT")
     cover_images_max_bytes: int = Field(default=25 * 1024 * 1024, alias="COVER_IMAGES_MAX_BYTES")
 
+    catalog_storage_root: str = Field(default="data/catalog", alias="CATALOG_STORAGE_ROOT")
+    catalog_cover_storage_root: str = Field(default="", alias="CATALOG_COVER_STORAGE_ROOT")
+    catalog_import_batch_size: int = Field(default=50, alias="CATALOG_IMPORT_BATCH_SIZE")
+    catalog_import_sleep_seconds: float = Field(default=1.0, alias="CATALOG_IMPORT_SLEEP_SECONDS")
+    catalog_import_max_retries: int = Field(default=5, alias="CATALOG_IMPORT_MAX_RETRIES")
+    catalog_import_user_agent: str = Field(
+        default="ComicOS-CatalogImporter/1.0 (+https://comic-os.local; catalog-ingest)",
+        alias="CATALOG_IMPORT_USER_AGENT",
+    )
+    locg_import_enabled: bool = Field(default=True, alias="LOCG_IMPORT_ENABLED")
+    gcd_import_enabled: bool = Field(default=True, alias="GCD_IMPORT_ENABLED")
+    comicvine_api_key: str = Field(default="", alias="COMICVINE_API_KEY")
+    comicvine_api_base_url: str = Field(default="", alias="COMICVINE_API_BASE_URL")
+    comicvine_max_requests_per_resource_hour: int = Field(
+        default=200,
+        alias="COMICVINE_MAX_REQUESTS_PER_RESOURCE_HOUR",
+    )
+    comicvine_http_cache_enabled: bool = Field(default=True, alias="COMICVINE_HTTP_CACHE_ENABLED")
+    ocr_enabled: bool = Field(default=True, alias="OCR_ENABLED")
+    tesseract_cmd: str = Field(default="", alias="TESSERACT_CMD")
+
     lunar_username_raw: str = Field(default="", alias="LUNAR_USERNAME")
     lunar_password_raw: str = Field(default="", alias="LUNAR_PASSWORD")
 

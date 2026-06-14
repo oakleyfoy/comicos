@@ -79,6 +79,11 @@ class InventoryRow(BaseModel):
     cover_source: CoverSourceKind = "placeholder"
     source_image_url: str | None = None
     catalog_match_id: int | None = None
+    catalog_issue_id: int | None = None
+    catalog_variant_id: int | None = None
+    catalog_image_id: int | None = None
+    acquisition_source_type: str | None = None
+    acquisition_source_name: str | None = None
     enrichment_status: str | None = None
     needs_catalog_review: bool = False
     inventory_intelligence: InventoryCopyIntelligenceSignals | None = None

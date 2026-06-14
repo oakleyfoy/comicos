@@ -14,7 +14,9 @@ from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
 from app.services.receiving_live_capture_service import reset_live_capture_cache
-from app.models.p90_collector_alert import P90AutomationRun, P90CollectorAlert  # noqa: F401
+from app.models.catalog_master import CatalogCharacter, CatalogCreator, CatalogImage, CatalogIssue, CatalogPublisher, CatalogRelationship, CatalogSeries, CatalogUpc, CatalogVariant  # noqa: F401
+from app.models.inventory_scan_session import InventoryScanItem, InventoryScanSession  # noqa: F401
+from app.models.catalog_p97 import CatalogImportJob, CatalogUpcConflict, RecognitionGap  # noqa: F401
 from app.models.p90_fmv_snapshot import P90FmvSnapshot  # noqa: F401
 from app.models.p90_collector_advisor_snapshot import P90CollectorAdvisorSnapshot  # noqa: F401
 from app.models.p89_sell_candidate import P89SellCandidate  # noqa: F401
