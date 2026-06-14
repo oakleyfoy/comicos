@@ -75,17 +75,50 @@ From `apps/api`, set execution policy for the session if needed and run:
 powershell -ExecutionPolicy Bypass -File scripts\p97_overnight_catalog_run.ps1
 ```
 
-This script:
+### Continuous overnight mode (P97-16)
 
-- Sets `DATABASE_URL` and `TESSERACT_CMD` for local Postgres and Tesseract
-- Logs to `data/p97/overnight_catalog_run.log` (and echoes to the console)
-- Runs safety checks (paths, DB URL, Tesseract binary)
-- Imports a fixed list of flagship series (`--limit 250 --import-issues --sleep-seconds 1` each; continues on per-series failure)
-- Runs cover harvest, fingerprint, and OCR batches
-- Prints start/end/runtime and runs `p97_catalog_health.py` when present
+The overnight runner uses **continuous acquisition** (default **12 hour** target runtime, **9 hour** minimum intent). The first **3 hours** target high-value **series** imports; the **remaining time** runs **publisher-wide** acquisition to maximize catalog growth.
 
-Dry-run planned commands only (no imports):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\p97_overnight_catalog_run.ps1
+```
+
+What it does:
+
+- Runs continuously up to the target runtime (default 12h)
+- **Series phase (up to 3h):** 150+ high-value US collector series (`--limit 1000 --import-issues` per attempt)
+- **Publisher phase (remainder of run):** `--publisher` + `--strict-publisher` rotation across major US publishers
+- Ends series phase early if a full pass returns zero candidates, or when **SeriesPhaseMaxHours** (3) elapses—whichever comes first
+- Resumes each series using `data/p97/overnight_series_progress.json` (`last_offset` + `--resume` for scoped DB cursors)
+- Handles ComicVine **HTTP 420** with 15-minute cooldown (up to 6 retries per series)
+- Runs harvest / fingerprint / OCR post-processing every **3 hours** and once at shutdown
+- Writes `data/p97/overnight_catalog_run.log` and `data/p97/overnight_catalog_run_summary.json`
+- Does **not** pass `--allow-international-editions` (English/US-first gate remains on)
+
+Dry-run (config + safety checks only):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\p97_overnight_catalog_run.ps1 -WhatIf
 ```
+
+**Series-name imports:** ComicVine search pagination uses `--offset` stored in progress JSON; `--resume` keeps scoped volume jobs aligned in Postgres after restarts.
+
+### Publisher acquisition mode (after series phase)
+
+After the **series phase** ends, the runner switches to **publisher acquisition mode** for the rest of the target runtime. The series phase stops when either:
+
+- elapsed runtime reaches **SeriesPhaseMaxHours** (default **3**), or
+- a full priority-series pass returns **zero** new volume candidates
+
+Publisher mode then runs until **TargetRuntimeHours** (default **12**).
+
+- Uses `--publisher "<NAME>" --strict-publisher` (volumes API filter, not series search)
+- Does **not** pass `--allow-international-editions`
+- Resumes per-publisher `last_offset` in `data/p97/overnight_series_progress.json` (`publishers` section)
+- Rotates continuously through: Marvel, DC Comics, Image, Dark Horse, Boom, IDW, Dynamite, Valiant, Skybound, Titan, Oni, Aftershock, AWA, Mad Cave, DSTLRY
+
+Progress file fields: `acquisition_phase` (`series` | `publisher`), `series_exhausted`, `series`, `publishers`.
+
+### Legacy one-shot behavior
+
+The script previously ran a single pass over ~19 series then post-processed once. Continuous mode replaces that with a long-running loop and periodic checkpoints.
