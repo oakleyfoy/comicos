@@ -66,6 +66,15 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "https://comicvine.gamespot.com/api"
 VOLUME_JOB_TYPE = "volumes"
 ISSUE_JOB_TYPE = "volume_issues"
+COMICVINE_VOLUME_RESOURCE_PREFIX = "4050"
+COMICVINE_THROTTLE_STATUS = 420
+
+
+class ComicVineThrottleError(RuntimeError):
+    """Raised when ComicVine responds with HTTP 420 (rate limited). Never retried inline."""
+
+    def __init__(self, message: str = "ComicVine HTTP 420 throttle") -> None:
+        super().__init__(message)
 
 
 def publisher_name_matches(requested: str, actual: str, *, strict: bool) -> bool:
@@ -211,6 +220,11 @@ class ComicVineImportStats:
     duplicate_volumes_removed: int = 0
     issue_imports_started: int = 0
     issue_imports_completed: int = 0
+    volume_id: int | None = None
+    series_created: int = 0
+    series_updated: int = 0
+    api_requests_used: int = 0
+    throttled: bool = False
 
 
 class ComicVineCatalogImporter:
@@ -242,6 +256,7 @@ class ComicVineCatalogImporter:
         self.allow_international_editions = allow_international_editions
         self.strict_english = strict_english
         self._last_request_monotonic: float | None = None
+        self.api_requests_made = 0
         self._hourly_budget = ComicVineHourlyBudget(max_per_hour=settings.comicvine_max_requests_per_resource_hour)
         self._http_cache_enabled = settings.comicvine_http_cache_enabled
         cache_root = Path(settings.catalog_storage_root) / "comicvine_http_cache"
@@ -293,6 +308,10 @@ class ComicVineCatalogImporter:
                     timeout=30.0,
                 )
                 self._hourly_budget.record(resource)
+                self.api_requests_made += 1
+                if response.status_code == COMICVINE_THROTTLE_STATUS:
+                    LOGGER.warning("ComicVine HTTP 420 throttle on %s; aborting without retry", path)
+                    raise ComicVineThrottleError(f"ComicVine HTTP 420 on {path}")
                 if response.status_code == 429:
                     backoff = min(max(backoff * 2, COMICVINE_MIN_SECONDS_BETWEEN_REQUESTS * 5), 60.0)
                     self.rate_limit_seconds = max(self.rate_limit_seconds, backoff)
@@ -307,6 +326,8 @@ class ComicVineCatalogImporter:
                 if self._http_cache_enabled:
                     write_comicvine_cache(self._http_cache_dir, cache_key, payload)
                 return payload
+            except ComicVineThrottleError:
+                raise
             except ComicVineApiError:
                 raise
             except httpx.HTTPStatusError:
@@ -536,6 +557,8 @@ class ComicVineCatalogImporter:
         }
         try:
             payload = self._get("issues/", params=params)
+        except ComicVineThrottleError:
+            raise
         except Exception as exc:
             stats.failures.append(str(exc))
             if job is not None:
@@ -712,6 +735,149 @@ class ComicVineCatalogImporter:
             complete_job(session, issue_job)
         session.commit()
         return aggregate
+
+    def _fetch_volume_detail(self, volume_id: int) -> dict[str, Any] | None:
+        path = f"volume/{COMICVINE_VOLUME_RESOURCE_PREFIX}-{int(volume_id)}/"
+        payload = self._get(
+            path,
+            params={"field_list": "id,name,start_year,publisher,count_of_issues"},
+        )
+        results = payload.get("results")
+        if isinstance(results, dict):
+            return results
+        if isinstance(results, list):
+            for row in results:
+                if isinstance(row, dict):
+                    return row
+        return None
+
+    def import_single_volume(
+        self,
+        session: Session,
+        *,
+        comicvine_volume_id: int,
+        import_issues: bool = False,
+        issues_per_volume_limit: int = 100,
+    ) -> ComicVineImportStats:
+        """Exact-volume acquisition: look up one ComicVine volume by id and (optionally) import its issues.
+
+        This path never performs publisher offset search, series search, or adjacent-volume scanning.
+        """
+        missing = self.initialize_or_explain()
+        if missing:
+            raise RuntimeError(missing)
+
+        volume_id = int(comicvine_volume_id)
+        stats = ComicVineImportStats(volume_id=volume_id)
+        stats.publisher_quality_summary = _empty_publisher_quality_summary()
+        requests_before = self.api_requests_made
+
+        try:
+            detail = self._fetch_volume_detail(volume_id)
+        except ComicVineThrottleError as exc:
+            stats.throttled = True
+            stats.failures.append(str(exc))
+            stats.api_requests_used = self.api_requests_made - requests_before
+            return stats
+        except Exception as exc:  # noqa: BLE001
+            stats.failures.append(f"volume_lookup:{volume_id}: {exc}")
+            stats.api_requests_used = self.api_requests_made - requests_before
+            return stats
+
+        if not detail:
+            stats.failures.append(f"volume_not_found:{volume_id}")
+            stats.api_requests_used = self.api_requests_made - requests_before
+            return stats
+
+        publisher_obj = detail.get("publisher")
+        publisher_name = (
+            publisher_obj.get("name") if isinstance(publisher_obj, dict) else None
+        ) or "Unknown"
+        series_title = str(detail.get("name") or "Unknown")
+        stats.processed = 1
+        stats.total_candidates_seen = 1
+        stats.accepted_volumes = 1
+        stats.accepted_comicvine_volume_ids.append(str(volume_id))
+        count_of_issues = detail.get("count_of_issues")
+        if count_of_issues is not None:
+            try:
+                stats.estimated_issue_count = int(count_of_issues)  # type: ignore[attr-defined]
+            except (TypeError, ValueError):
+                pass
+
+        if self.dry_run:
+            stats.imported_series = 0
+            stats.api_requests_used = self.api_requests_made - requests_before
+            stats.issue_import_ran = bool(import_issues)
+            return stats
+
+        publisher = upsert_publisher(session, name=publisher_name, source="COMICVINE", external_id=None)
+        existing_series = session.exec(
+            select(CatalogSeries).where(CatalogSeries.normalized_name == normalize_series_name(series_title))
+        ).first()
+        series = upsert_series(
+            session,
+            name=series_title,
+            publisher_id=int(publisher.id or 0),
+            source="COMICVINE",
+            external_id=volume_id,
+            start_year=detail.get("start_year"),
+        )
+        if existing_series is None:
+            stats.series_created = 1
+        else:
+            stats.series_updated = 1
+        session.commit()
+        if series.id:
+            stats.imported_series_ids.append(int(series.id))
+        stats.imported_series = len(stats.imported_series_ids)
+
+        if import_issues and series.id:
+            issue_job = start_job(
+                session,
+                source="COMICVINE",
+                job_type=ISSUE_JOB_TYPE,
+                dry_run=self.dry_run,
+                config={"volume_id": volume_id, "mode": "exact_volume"},
+                cursor={"volume_id": volume_id, "catalog_series_id": int(series.id)},
+            )
+            session.commit()
+            stats.issue_job_id = int(issue_job.id or 0)
+            stats.issue_import_ran = True
+            stats.issue_imports_started += 1
+            stats.issue_import_volumes_attempted += 1
+            offset = 0
+            try:
+                while True:
+                    chunk = self.import_issues_for_volume(
+                        session,
+                        volume_id=str(volume_id),
+                        catalog_series_id=int(series.id),
+                        offset=offset,
+                        limit=issues_per_volume_limit,
+                        job=issue_job,
+                    )
+                    stats.processed += chunk.processed
+                    stats.created_issues += chunk.created_issues
+                    stats.updated_issues += chunk.updated_issues
+                    stats.cover_images_created += chunk.cover_images_created
+                    stats.cover_images_skipped += chunk.cover_images_skipped
+                    stats.cover_images_skipped_no_url += chunk.cover_images_skipped_no_url
+                    stats.failures.extend(chunk.failures)
+                    if chunk.processed < issues_per_volume_limit:
+                        break
+                    offset += chunk.processed
+                stats.issue_imports_completed += 1
+                complete_job(session, issue_job)
+            except ComicVineThrottleError as exc:
+                stats.throttled = True
+                stats.failures.append(str(exc))
+                fail_job(session, issue_job, str(exc))
+            session.commit()
+
+        stats.api_requests_used = self.api_requests_made - requests_before
+        stats.publisher_distribution = publisher_distribution_for_series(session, stats.imported_series_ids)
+        return stats
 
     def run_bulk_import(
         self,

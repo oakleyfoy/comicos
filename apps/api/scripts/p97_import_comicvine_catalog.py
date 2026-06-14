@@ -19,6 +19,7 @@ ISSUE_IMPORT_ERROR = "ERROR: --import-issues requested but no issue import phase
 
 def _print_run_config(args: argparse.Namespace) -> None:
     config = {
+        "volume_id": args.volume_id,
         "publisher": args.publisher,
         "series_name": args.series_name,
         "strict_publisher": args.strict_publisher,
@@ -31,6 +32,55 @@ def _print_run_config(args: argparse.Namespace) -> None:
     }
     print("run_config:")
     print(json.dumps(config, indent=2))
+
+
+def _run_exact_volume_import(args: argparse.Namespace) -> int:
+    importer = ComicVineCatalogImporter(
+        dry_run=args.dry_run,
+        rate_limit_seconds=args.sleep_seconds,
+        allow_international_editions=args.allow_international_editions,
+    )
+    msg = importer.initialize_or_explain()
+    if msg:
+        print(msg)
+        return 1
+    with Session(get_engine()) as session:
+        stats = importer.import_single_volume(
+            session,
+            comicvine_volume_id=args.volume_id,
+            import_issues=args.import_issues,
+        )
+    summary = {
+        "mode": "exact_volume",
+        "volume_id": stats.volume_id,
+        "series_created": stats.series_created,
+        "series_updated": stats.series_updated,
+        "issues_created": stats.created_issues,
+        "issues_updated": stats.updated_issues,
+        "cover_images_created": stats.cover_images_created,
+        "cover_images_skipped": stats.cover_images_skipped,
+        "estimated_issue_count": stats.estimated_issue_count,
+        "api_requests_used": stats.api_requests_used,
+        "failures": len(stats.failures),
+        "throttled": stats.throttled,
+    }
+    print("exact_volume_summary:")
+    print(json.dumps(summary, indent=2))
+    # Stable key=value lines for runner/log parsing.
+    print(f"volume_id={stats.volume_id}")
+    print(f"series_created={stats.series_created}")
+    print(f"series_updated={stats.series_updated}")
+    print(f"issues_created={stats.created_issues}")
+    print(f"issues_updated={stats.updated_issues}")
+    print(f"cover_images_created={stats.cover_images_created}")
+    print(f"cover_images_skipped={stats.cover_images_skipped}")
+    print(f"api_requests_used={stats.api_requests_used}")
+    print(f"failures={len(stats.failures)}")
+    print(f"throttled={stats.throttled}")
+    if stats.throttled:
+        print("ERROR: ComicVine HTTP 420 throttle detected during exact volume import.", file=sys.stderr)
+        return 4
+    return 0 if not stats.failures else 1
 
 
 def _issue_work_performed(stats) -> bool:
@@ -50,6 +100,12 @@ def main() -> int:
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--series-name", default=None)
+    parser.add_argument(
+        "--volume-id",
+        type=int,
+        default=None,
+        help="Import exactly this ComicVine volume id (no publisher/series search, no adjacent scanning)",
+    )
     parser.add_argument(
         "--publisher",
         default=None,
@@ -79,6 +135,11 @@ def main() -> int:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     _print_run_config(args)
+    if args.volume_id is not None:
+        if args.publisher or args.series_name:
+            print("--volume-id is exact-id only; do not combine with --publisher/--series-name", file=sys.stderr)
+            return 2
+        return _run_exact_volume_import(args)
     if args.strict_publisher and not args.publisher:
         print("--strict-publisher requires --publisher", file=sys.stderr)
         return 2

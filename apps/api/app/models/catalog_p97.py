@@ -3,12 +3,50 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import JSON, Column, DateTime, Numeric, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Numeric, Text
 from sqlmodel import Field, SQLModel
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class P97ComicVineVolumeQueue(SQLModel, table=True):
+    __tablename__ = "p97_comicvine_volume_queue"
+
+    id: int | None = Field(default=None, primary_key=True)
+    comicvine_volume_id: int = Field(nullable=False, index=True, unique=True)
+    publisher: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    series_name: str | None = Field(default=None, max_length=512, nullable=True, index=True)
+    source_query: str | None = Field(default=None, max_length=512, nullable=True)
+    source_type: str = Field(default="existing_catalog", max_length=32, nullable=False)
+    status: str = Field(default="pending", max_length=16, nullable=False, index=True)
+    priority: int = Field(default=100, nullable=False, index=True)
+    estimated_issue_count: int | None = Field(default=None, nullable=True)
+    issues_created: int = Field(default=0, nullable=False)
+    issues_updated: int = Field(default=0, nullable=False)
+    images_created: int = Field(default=0, nullable=False)
+    api_requests_used: int = Field(default=0, nullable=False)
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    first_seen_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_attempted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_imported_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class P97ComicVineRequestLedger(SQLModel, table=True):
+    __tablename__ = "p97_comicvine_request_ledger"
+
+    id: int | None = Field(default=None, primary_key=True)
+    request_type: str = Field(max_length=32, nullable=False)
+    endpoint: str | None = Field(default=None, max_length=255, nullable=True)
+    comicvine_volume_id: int | None = Field(default=None, nullable=True, index=True)
+    queue_id: int | None = Field(default=None, nullable=True)
+    status_code: int | None = Field(default=None, nullable=True)
+    was_420: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false", index=True))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
+    request_metadata: dict | None = Field(default=None, sa_column=Column("metadata", JSON, nullable=True))
 
 
 class CatalogImportJob(SQLModel, table=True):
