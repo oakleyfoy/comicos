@@ -40,6 +40,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "scanner",
+    title: "Scanner",
+    links: [
+      { label: "Webcam Receiving", to: "/receiving/live", prominent: true },
+      { label: "Mobile Receiving", to: "/receiving/mobile" },
+      { label: "Convention Scan", to: "/convention-scan" },
+    ],
+  },
+  {
     id: "buy",
     title: "Buy",
     links: [
@@ -171,7 +180,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 export const NAV_EXPANDED_STORAGE_KEY = "comic-os.nav.expanded-groups";
 
-export const DEFAULT_EXPANDED_GROUP_IDS = ["home", "acquire"];
+export const DEFAULT_EXPANDED_GROUP_IDS = ["home", "acquire", "scanner"];
 
 export function findGroupIdForPath(pathname: string): string | null {
   for (const group of NAV_GROUPS) {
@@ -221,8 +230,11 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname.startsWith("/collector-") || pathname === "/daily-actions") {
     return "home";
   }
-  if (pathname === "/receiving") {
-    return "home";
+  if (pathname === "/receiving" || pathname.startsWith("/receiving/")) {
+    return pathname === "/receiving" ? "home" : "scanner";
+  }
+  if (pathname === "/convention-scan") {
+    return "scanner";
   }
   if (pathname === "/marketplace-command-center" || pathname.startsWith("/marketplace-command-center/")) {
     return "buy";

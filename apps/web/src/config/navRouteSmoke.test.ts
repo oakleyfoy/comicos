@@ -75,6 +75,15 @@ describe("nav route smoke manifest", () => {
     }
   });
 
+  it("shows P95-04 live capture routes in the Scanner sidebar group", () => {
+    const scanner = visibleNavGroups(true).find((g) => g.id === "scanner");
+    expect(scanner?.title).toBe("Scanner");
+    const labels = scanner?.links.map((l) => l.label) ?? [];
+    expect(labels).toEqual(["Webcam Receiving", "Mobile Receiving", "Convention Scan"]);
+    const paths = scanner?.links.map((l) => l.to) ?? [];
+    expect(paths).toEqual(["/receiving/live", "/receiving/mobile", "/convention-scan"]);
+  });
+
   it("hides legacy phase pages from the sidebar", () => {
     const labels = visibleNavGroups(true).flatMap((g) => g.links.map((l) => l.label));
     const hidden = [
