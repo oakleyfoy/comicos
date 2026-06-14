@@ -11,11 +11,11 @@ bootstrap_api_path()
 from sqlmodel import Session  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
-from app.db.session import get_engine  # noqa: E402
 from app.services.catalog_cover_harvest_service import (  # noqa: E402
     count_cover_harvest_remaining,
     run_cover_harvest,
 )
+from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,11 @@ def main() -> int:
     )
     parser.add_argument("--sleep-seconds", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="SQLAlchemy database URL (default: apps/api/.env DATABASE_URL or comic_os on localhost:5433)",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     settings = get_settings()
@@ -56,7 +61,9 @@ def main() -> int:
     if args.repair_missing_files and repair_fp_only is None:
         repair_fp_only = True
 
-    engine = get_engine()
+    database_url = resolve_p97_database_url(args.database_url)
+    LOGGER.info("database=%s", database_url.split("@")[-1] if "@" in database_url else database_url)
+    engine = get_p97_engine(database_url)
     batch_resume = args.resume
     batch_num = 0
     last_summary: dict | None = None

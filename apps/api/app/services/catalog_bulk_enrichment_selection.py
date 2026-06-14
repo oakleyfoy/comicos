@@ -170,3 +170,93 @@ def count_ocr_rows_on_ready_covers(session: Session) -> int:
         .where(*_ready_cover_filters())
     )
     return int(session.exec(statement).one())
+
+
+def count_ready_by_download_status_only(session: Session) -> int:
+    statement = (
+        select(func.count())
+        .select_from(CatalogImage)
+        .where(CatalogImage.download_status == READY_DOWNLOAD_STATUS)
+    )
+    return int(session.exec(statement).one())
+
+
+def count_missing_fingerprints_before_path_filter(session: Session) -> int:
+    return count_missing_fingerprints(session)
+
+
+def count_ready_with_resolvable_path(session: Session, *, sample_limit: int = 5000) -> int:
+    statement = (
+        select(CatalogImage)
+        .where(*_ready_cover_filters())
+        .order_by(CatalogImage.id)
+        .limit(max(sample_limit, 1))
+    )
+    rows = list(session.exec(statement).all())
+    return sum(1 for row in rows if resolve_catalog_image_local_path(session, row) is not None)
+
+
+def distinct_image_types(session: Session, *, limit: int = 50) -> list[tuple[str | None, int]]:
+    statement = (
+        select(CatalogImage.image_type, func.count())
+        .group_by(CatalogImage.image_type)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    return [(name, int(count)) for name, count in session.exec(statement).all()]
+
+
+def distinct_download_statuses(session: Session, *, limit: int = 50) -> list[tuple[str | None, int]]:
+    statement = (
+        select(CatalogImage.download_status, func.count())
+        .group_by(CatalogImage.download_status)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    return [(name, int(count)) for name, count in session.exec(statement).all()]
+
+
+def sample_ready_cover_rows(session: Session, *, limit: int = 5) -> list[dict]:
+    statement = (
+        select(CatalogImage)
+        .where(CatalogImage.download_status == READY_DOWNLOAD_STATUS)
+        .order_by(CatalogImage.id)
+        .limit(limit)
+    )
+    rows = list(session.exec(statement).all())
+    samples: list[dict] = []
+    for row in rows:
+        resolved = resolve_catalog_image_local_path(session, row)
+        samples.append(
+            {
+                "id": int(row.id or 0),
+                "image_type": row.image_type,
+                "download_status": row.download_status,
+                "local_path": row.local_path,
+                "resolved_local_path": str(resolved) if resolved else None,
+                "path_resolvable": resolved is not None,
+            }
+        )
+    return samples
+
+
+def collect_enrichment_diagnostics(session: Session, *, batch_limit: int = 10) -> dict:
+    missing_fp = count_missing_fingerprints(session)
+    selected_fp = select_ready_covers_needing_fingerprint(session, limit=batch_limit)
+    missing_ocr = count_missing_ocr(session)
+    selected_ocr = select_ready_covers_needing_ocr(session, limit=batch_limit)
+    total_images = int(session.exec(select(func.count()).select_from(CatalogImage)).one())
+    return {
+        "total_catalog_images": total_images,
+        "ready_by_progress_watch_definition": count_ready_covers(session),
+        "ready_by_selector_definition_before_path_filter": count_ready_covers(session),
+        "ready_by_download_status_only": count_ready_by_download_status_only(session),
+        "missing_fingerprints_before_path_filter": missing_fp,
+        "missing_ocr_before_path_filter": missing_ocr,
+        "ready_with_resolvable_path_sampled": count_ready_with_resolvable_path(session),
+        "selected_for_fingerprint_batch": len(selected_fp),
+        "selected_for_ocr_batch": len(selected_ocr),
+        "distinct_image_type": distinct_image_types(session),
+        "distinct_download_status": distinct_download_statuses(session),
+        "sample_ready_cover_rows": sample_ready_cover_rows(session, limit=5),
+    }

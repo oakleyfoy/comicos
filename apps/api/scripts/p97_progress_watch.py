@@ -12,7 +12,7 @@ from p97_bootstrap import bootstrap_api_path
 bootstrap_api_path()
 
 from sqlalchemy import func  # noqa: E402
-from sqlmodel import Session, create_engine, select  # noqa: E402
+from sqlmodel import Session, select  # noqa: E402
 
 from app.models.catalog_master import (  # noqa: E402
     CatalogImage,
@@ -20,6 +20,7 @@ from app.models.catalog_master import (  # noqa: E402
     CatalogIssue,
     CatalogOcrMetadata,
 )
+from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
 
 DEFAULT_DATABASE_URL = "postgresql+pg8000://postgres:postgres@localhost:5433/comic_os"
 
@@ -192,7 +193,7 @@ def format_table(report: dict) -> str:
 
 
 def fetch_progress(database_url: str) -> dict:
-    engine = create_engine(database_url, pool_pre_ping=True)
+    engine = get_p97_engine(database_url)
     with Session(engine) as session:
         return collect_progress(session)
 
@@ -201,8 +202,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="P97 catalog progress watch (read-only)")
     parser.add_argument(
         "--database-url",
-        default=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
-        help="SQLAlchemy database URL (default: comic_os on localhost:5433)",
+        default=None,
+        help="SQLAlchemy database URL (default: apps/api/.env DATABASE_URL or comic_os on localhost:5433)",
     )
     parser.add_argument("--json", action="store_true", help="Print progress snapshot as JSON")
     parser.add_argument(
@@ -212,10 +213,11 @@ def main() -> int:
         help="Reprint progress every N seconds until Ctrl+C",
     )
     args = parser.parse_args()
+    database_url = resolve_p97_database_url(args.database_url)
 
     def run_once() -> dict:
         try:
-            return fetch_progress(args.database_url)
+            return fetch_progress(database_url)
         except Exception as exc:
             print(f"ERROR: database connection failed: {exc}", file=sys.stderr)
             raise SystemExit(1) from exc
