@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import re
 
+from sqlalchemy import and_, or_
 from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
-from app.services.catalog_ingestion_service import normalize_issue_number
+from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.import_catalog_resolution_service import normalize_import_title
 from app.services.recognition.recognition_models import RecognitionCatalogCandidateRead
 
@@ -90,6 +91,31 @@ def _resolve_publisher(session: Session, issue: CatalogIssue, series: CatalogSer
     if series is not None and series.publisher_id is not None:
         return session.get(CatalogPublisher, series.publisher_id)
     return None
+
+
+def _catalog_token_search_clause(token: str):
+    """Match a single query token against series, publisher, and issue title fields."""
+    like = f"%{token.lower()}%"
+    return or_(
+        func.lower(CatalogSeries.name).like(like),
+        func.lower(CatalogSeries.normalized_name).like(like),
+        func.lower(func.coalesce(CatalogPublisher.name, "")).like(like),
+        func.lower(func.coalesce(CatalogPublisher.normalized_name, "")).like(like),
+        func.lower(func.coalesce(CatalogIssue.title, "")).like(like),
+    )
+
+
+def _catalog_phrase_search_clause(phrase: str):
+    """Match the full query phrase against normalized/canonical series names."""
+    normalized = normalize_series_name(phrase)
+    if not normalized:
+        return None
+    like = f"%{normalized}%"
+    return or_(
+        func.lower(CatalogSeries.normalized_name).like(like),
+        func.lower(CatalogSeries.name).like(like),
+        func.lower(CatalogSeries.normalized_name).like(f"%{normalize_import_title(phrase).lower()}%"),
+    )
 
 
 def _search_match_score(
@@ -221,11 +247,18 @@ def search_catalog_candidates(
         )
     )
 
-    for token in alpha_tokens:
-        like = f"%{token.lower()}%"
-        statement = statement.where(
-            func.lower(CatalogSeries.name).like(like) | func.lower(func.coalesce(CatalogPublisher.name, "")).like(like)
-        )
+    text_query = (q or "").strip()
+    phrase_clause = _catalog_phrase_search_clause(text_query) if text_query else None
+
+    if alpha_tokens:
+        token_clause = and_(*[_catalog_token_search_clause(token) for token in alpha_tokens])
+        if phrase_clause is not None and len(alpha_tokens) >= 2:
+            statement = statement.where(or_(phrase_clause, token_clause))
+        else:
+            statement = statement.where(token_clause)
+    elif phrase_clause is not None:
+        statement = statement.where(phrase_clause)
+
     if (publisher or "").strip():
         statement = statement.where(func.lower(func.coalesce(CatalogPublisher.name, "")).like(f"%{publisher.strip().lower()}%"))
     if issue_token is not None:
