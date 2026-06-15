@@ -107,6 +107,10 @@ export function RecognitionReviewModal({
 
   useEffect(() => {
     setLocalItem(item);
+    setErrorMsg(null);
+  }, [item]);
+
+  useEffect(() => {
     setMode("summary");
     setPreviewCandidate(null);
     setNearbyCards([]);
@@ -371,6 +375,17 @@ export function RecognitionReviewModal({
               >
                 Confirm Selected Issue
               </button>
+              {mode === "candidates" ? (
+                <button
+                  type="button"
+                  data-testid="review-search-catalog"
+                  onClick={openSearch}
+                  disabled={busy}
+                  className="rounded-full border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 disabled:opacity-50"
+                >
+                  Search Catalog
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onClose("cancel")}

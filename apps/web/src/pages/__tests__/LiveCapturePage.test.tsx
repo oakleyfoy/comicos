@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode, RefObject } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -513,6 +513,74 @@ describe("WebcamLiveCapturePage", () => {
 
     expect(screen.queryByTestId("recognition-review-modal")).not.toBeInTheDocument();
     expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps catalog search stable while the correction modal is open", async () => {
+    mockCanvas();
+    const uploadSpy = vi.spyOn(apiClient, "uploadReceivingSessionImages").mockResolvedValue({
+      uploaded_count: 1,
+      session: {
+        id: 1,
+        status: "ACTIVE",
+        total_items: 1,
+        verified_items: 0,
+        review_items: 1,
+        unknown_items: 0,
+        confirmed_items: 0,
+        skipped_items: 0,
+        capture_source: "WEBCAM",
+        created_at: "2026-06-09T15:00:00Z",
+        updated_at: "2026-06-09T15:01:00Z",
+        started_at: "2026-06-09T15:00:00Z",
+        completed_at: null,
+        session_notes: null,
+        live_capture_stats_json: {},
+        items: [reviewItem()],
+      },
+    } as never);
+    vi.spyOn(apiClient, "listRecognitionCatalogCandidates").mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <WebcamLiveCapturePage />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    for (let index = 0; index < 4; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]();
+        await Promise.resolve();
+      });
+    }
+
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId("recognition-review-modal")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("review-choose-different"));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("review-search-catalog"));
+      await Promise.resolve();
+    });
+
+    const searchInput = screen.getByTestId("catalog-search-input");
+    fireEvent.change(searchInput, { target: { value: "venom" } });
+    fireEvent.keyDown(searchInput, { key: " ", code: "Space" });
+
+    for (let index = 0; index < 6; index += 1) {
+      await act(async () => {
+        intervalCallbacks[0]?.();
+        await Promise.resolve();
+      });
+    }
+
+    expect(searchInput).toHaveValue("venom");
+    expect(screen.getByTestId("recognition-review-modal")).toBeInTheDocument();
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
   });
 
   it("creates a mobile live session with the mobile capture source", async () => {

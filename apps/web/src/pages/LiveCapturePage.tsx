@@ -60,6 +60,17 @@ interface LiveCapturePageProps {
   keyboardShortcuts?: boolean;
 }
 
+function isLiveCaptureKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+  return target.isContentEditable;
+}
+
 function shouldAutoOpenReview(item: ReceivingSessionItemRead): boolean {
   const bucket = item.recognition_bucket;
   if (bucket === "REVIEW") {
@@ -127,6 +138,8 @@ function LiveCapturePageInner({
   const [framingGuideStatus, setFramingGuideStatus] = useState<FramingGuideStatus>("none");
   const [guideOverlayStyle, setGuideOverlayStyle] = useState<GuideOverlayStyle | null>(null);
   const [manualReviewItemId, setManualReviewItemId] = useState<number | null>(null);
+  const [pinnedReviewItemId, setPinnedReviewItemId] = useState<number | null>(null);
+  const pausedBeforeReviewRef = useRef(false);
   const [dismissedReviewIds, setDismissedReviewIds] = useState<number[]>([]);
   const [capturedFrameUrl, setCapturedFrameUrl] = useState<string | null>(null);
   const retryTimerRef = useRef<number | null>(null);
@@ -173,6 +186,24 @@ function LiveCapturePageInner({
   }, [currentItem, dismissedReviewIds, manualReviewItemId, session]);
 
   reviewModalOpenRef.current = reviewModalOpen;
+
+  const reviewItem = useMemo(() => {
+    if (!session || pinnedReviewItemId == null) {
+      return null;
+    }
+    return session.items.find((item) => item.id === pinnedReviewItemId) ?? null;
+  }, [pinnedReviewItemId, session]);
+
+  useEffect(() => {
+    if (reviewModalOpen) {
+      setPinnedReviewItemId((current) => current ?? currentItem?.id ?? null);
+      pausedBeforeReviewRef.current = paused;
+      armCaptureHoldAfterUserAction();
+      setPaused(true);
+      return;
+    }
+    setPinnedReviewItemId(null);
+  }, [armCaptureHoldAfterUserAction, currentItem?.id, reviewModalOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,7 +333,7 @@ function LiveCapturePageInner({
   }, [cameraReady, syncGuideOverlay]);
 
   useEffect(() => {
-    if (!session || paused) {
+    if (!session || paused || reviewModalOpen) {
       return;
     }
     const timer = window.setInterval(() => {
@@ -459,10 +490,10 @@ function LiveCapturePageInner({
       })();
     }, 250);
     return () => window.clearInterval(timer);
-  }, [captureSource, paused, resetStableFrameTracking, session]);
+  }, [captureSource, paused, resetStableFrameTracking, reviewModalOpen, session]);
 
   async function refreshSession(): Promise<void> {
-    if (!session) {
+    if (!session || reviewModalOpenRef.current) {
       return;
     }
     setSession(await apiClient.getReceivingSession(session.id));
@@ -554,8 +585,9 @@ function LiveCapturePageInner({
   }
 
   function handleReviewModalClose(action: RecognitionReviewCloseAction): void {
-    const itemId = currentItem?.id ?? null;
+    const itemId = pinnedReviewItemId ?? currentItem?.id ?? null;
     setManualReviewItemId(null);
+    setPaused(pausedBeforeReviewRef.current);
     if (action === "accept") {
       armCaptureHoldAfterUserAction();
       setStatusMessage("Accepted match.");
@@ -578,6 +610,9 @@ function LiveCapturePageInner({
       return;
     }
     const handler = (event: KeyboardEvent): void => {
+      if (reviewModalOpenRef.current || isLiveCaptureKeyboardTarget(event.target)) {
+        return;
+      }
       if (event.key === "Escape") {
         setPaused(true);
         setStatusMessage("Capture paused.");
@@ -820,11 +855,11 @@ function LiveCapturePageInner({
         </aside>
       </main>
 
-      {reviewModalOpen && session && currentItem ? (
+      {reviewModalOpen && session && reviewItem ? (
         <RecognitionReviewModal
           open={reviewModalOpen}
           sessionId={session.id}
-          item={currentItem}
+          item={reviewItem}
           capturedFrameUrl={capturedFrameUrl}
           onSessionUpdate={handleReviewSessionUpdate}
           onClose={handleReviewModalClose}
