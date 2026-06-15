@@ -35,6 +35,29 @@ class P97ComicVineVolumeQueue(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class ComicVineVolumeUniverse(SQLModel, table=True):
+    """ComicVine volume metadata discovered without issue import (P97-23A)."""
+
+    __tablename__ = "comicvine_volume_universe"
+
+    id: int | None = Field(default=None, primary_key=True)
+    volume_id: int = Field(nullable=False, index=True, unique=True)
+    name: str = Field(max_length=512, nullable=False)
+    publisher: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    start_year: int | None = Field(default=None, nullable=True)
+    count_of_issues: int | None = Field(default=None, nullable=True, index=True)
+    date_added: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    date_last_updated: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    first_discovered_at: datetime = Field(
+        default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    last_discovered_at: datetime = Field(
+        default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+
+
 class P97ComicVineRequestLedger(SQLModel, table=True):
     __tablename__ = "p97_comicvine_request_ledger"
 
