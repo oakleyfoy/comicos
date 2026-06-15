@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -37,22 +38,31 @@ class ComicVineHourlyBudget:
             bucket.popleft()
         return bucket
 
-    def wait_if_needed(self, resource: str) -> None:
+    def wait_if_needed(
+        self,
+        resource: str,
+        *,
+        log_fn: Callable[[str], None] | None = None,
+        max_sleep_seconds: float = 3600.0,
+    ) -> float:
         now = time.monotonic()
         bucket = self._prune(resource, now)
         if len(bucket) < self.max_per_hour:
-            return
+            return 0.0
         sleep_for = bucket[0] + HOUR_SECONDS - now
         if sleep_for > 0:
-            LOGGER.warning(
-                "ComicVine hourly cap (%s/%s) reached for resource %s; sleeping %.0fs",
-                self.max_per_hour,
-                "hour",
-                resource,
-                sleep_for,
+            sleep_for = min(sleep_for, max(0.0, max_sleep_seconds))
+            msg = (
+                f"ComicVine hourly cap ({self.max_per_hour}/hour) for resource {resource}; "
+                f"sleeping {sleep_for:.0f}s"
             )
+            if log_fn is not None:
+                log_fn(msg)
+            else:
+                LOGGER.warning(msg)
             time.sleep(sleep_for)
             self._prune(resource, time.monotonic())
+        return sleep_for
 
     def record(self, resource: str) -> None:
         self._prune(resource, time.monotonic()).append(time.monotonic())

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models.catalog_p97 import P97VolumeIssueImportQueue
 from app.services.comicvine_catalog_importer import ComicVineCatalogImporter, ComicVineImportStats
+from app.services.p97_comicvine_import_diagnostics import log_import_event
 from app.services.p97_comicvine_import_ledger import record_comicvine_import_requests
 from app.services.p97_comicvine_rate_budget import ComicVineRateBudget
 from app.services.p97_requested_volume_import_service import (
@@ -30,8 +33,10 @@ from app.services.p97_volume_issue_queue_priority import (
 )
 
 REQUEST_TYPE = "issue_queue_import"
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_EXCLUDED_TIERS: tuple[str, ...] = (TIER_0_MANUAL, TIER_4_DEPRIORITIZED)
+STALE_RUNNING_MINUTES = 180
 
 
 def _utc_now() -> datetime:
@@ -79,6 +84,76 @@ def select_pending_volume_issue_imports(
     elif excluded_tiers:
         query = query.where(P97VolumeIssueImportQueue.launch_priority_tier.notin_(excluded_tiers))
     return list(session.exec(query.limit(max(1, int(limit)))).all())
+
+
+def count_queue_rows_by_status(session: Session, *, status: str) -> int:
+    return int(
+        session.exec(
+            select(func.count())
+            .select_from(P97VolumeIssueImportQueue)
+            .where(P97VolumeIssueImportQueue.status == status)
+        ).one()
+    )
+
+
+def count_actionable_pending(
+    session: Session,
+    *,
+    tier: str | None = None,
+    excluded_tiers: tuple[str, ...] = DEFAULT_EXCLUDED_TIERS,
+) -> int:
+    query = select(func.count()).select_from(P97VolumeIssueImportQueue).where(
+        P97VolumeIssueImportQueue.status == STATUS_PENDING
+    )
+    if tier:
+        query = query.where(P97VolumeIssueImportQueue.launch_priority_tier == tier)
+    elif excluded_tiers:
+        query = query.where(P97VolumeIssueImportQueue.launch_priority_tier.notin_(excluded_tiers))
+    return int(session.exec(query).one())
+
+
+def recover_stale_running_rows(
+    session: Session,
+    *,
+    stale_minutes: int = STALE_RUNNING_MINUTES,
+    verbose: bool = True,
+) -> int:
+    """Reset queue rows stuck in running with no live worker heartbeat."""
+    cutoff = _utc_now() - timedelta(minutes=max(1, int(stale_minutes)))
+    rows = session.exec(
+        select(P97VolumeIssueImportQueue).where(P97VolumeIssueImportQueue.status == STATUS_RUNNING)
+    ).all()
+    recovered = 0
+    for row in rows:
+        started = row.started_at or row.updated_at
+        if started is not None and started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if started is not None and started >= cutoff:
+            continue
+        row.status = STATUS_PENDING
+        row.last_error = (row.last_error or "stale running row recovered")[:4000]
+        row.updated_at = _utc_now()
+        session.add(row)
+        recovered += 1
+        log_import_event(
+            f"recovered stale running row volume_id={row.comicvine_volume_id} name={row.name!r}",
+            enabled=verbose,
+        )
+    if recovered:
+        session.commit()
+    return recovered
+
+
+def queue_import_idle(
+    session: Session,
+    *,
+    tier: str | None = None,
+    excluded_tiers: tuple[str, ...] = DEFAULT_EXCLUDED_TIERS,
+) -> bool:
+    """True when there is no running work and no pending rows for this import scope."""
+    running = count_queue_rows_by_status(session, status=STATUS_RUNNING)
+    pending = count_actionable_pending(session, tier=tier, excluded_tiers=excluded_tiers)
+    return running == 0 and pending == 0
 
 
 def mark_queue_row_running(session: Session, row: P97VolumeIssueImportQueue) -> P97VolumeIssueImportQueue:
@@ -148,6 +223,8 @@ def import_one_queue_volume(
     issues_limit: int | None = None,
     dry_run: bool = False,
     sleep_fn: Callable[[float], None] = time.sleep,
+    verbose: bool = True,
+    http_timeout: float | None = None,
 ) -> VolumeQueueImportItemResult:
     volume_id = int(row.comicvine_volume_id)
     item = VolumeQueueImportItemResult(
@@ -157,18 +234,37 @@ def import_one_queue_volume(
         dry_run=dry_run,
     )
 
-    if not wait_for_comicvine_budget(budget, sleep_fn=sleep_fn):
+    if not wait_for_comicvine_budget(
+        budget,
+        sleep_fn=sleep_fn,
+        log_fn=lambda msg: log_import_event(msg, enabled=verbose),
+        context=f"volume_id={volume_id}",
+    ):
         item.throttled = True
-        item.failures.append("ComicVine budget paused for HTTP 420")
+        item.failures.append("ComicVine budget paused or timed out waiting for rate budget")
         return item
+
+    if http_timeout is not None:
+        importer.http_timeout = float(http_timeout)
+
+    def _trace(phase: str, path: str, meta: dict) -> None:
+        detail = " ".join(f"{key}={value}" for key, value in meta.items())
+        log_import_event(f"ComicVine {phase} {path} {detail}".strip(), enabled=verbose)
+
+    importer.request_trace = _trace
 
     queue_id: int | None = None
     if not dry_run:
+        log_import_event(f"mark running volume_id={volume_id}", enabled=verbose)
         running_row = mark_queue_row_running(session, row)
         queue_id = int(running_row.id) if running_row.id is not None else None
 
     per_volume_limit = 100 if issues_limit is None else max(1, int(issues_limit))
     stats: ComicVineImportStats
+    log_import_event(
+        f"import_single_volume start volume_id={volume_id} issues_per_chunk={per_volume_limit}",
+        enabled=verbose,
+    )
     try:
         stats = importer.import_single_volume(
             session,
@@ -181,6 +277,13 @@ def import_one_queue_volume(
         stats.failures.append(f"import_error:{exc}")
         if not is_transient_stop_error(exc):
             pass
+
+    log_import_event(
+        f"import_single_volume end volume_id={volume_id} "
+        f"created={stats.created_issues} updated={stats.updated_issues} "
+        f"api_requests={stats.api_requests_used} throttled={stats.throttled}",
+        enabled=verbose,
+    )
 
     item.api_requests_used = int(stats.api_requests_used or 0)
     item.created_issues = int(stats.created_issues or 0)
@@ -203,6 +306,7 @@ def import_one_queue_volume(
     transient_stop = is_transient_stop_error(failures=item.failures) and not item.throttled
 
     if stats.throttled:
+        log_import_event(f"apply queue result (throttle) volume_id={volume_id}", enabled=verbose)
         updated = apply_volume_issue_import_result(
             session,
             volume_id=volume_id,
@@ -234,6 +338,7 @@ def import_one_queue_volume(
         item.queue_status = STATUS_FAILED
         return item
 
+    log_import_event(f"apply queue result volume_id={volume_id}", enabled=verbose)
     updated = apply_volume_issue_import_result(
         session,
         volume_id=volume_id,
@@ -257,8 +362,26 @@ def run_volume_issue_queue_import(
     stop_on_throttle: bool = True,
     max_api_requests: int | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
+    verbose: bool = True,
+    http_timeout: float | None = None,
+    recover_stale_running: bool = True,
 ) -> VolumeQueueImportRunResult:
     excluded = () if tier else DEFAULT_EXCLUDED_TIERS
+    if recover_stale_running and not dry_run:
+        recovered = recover_stale_running_rows(session, verbose=verbose)
+        if recovered:
+            log_import_event(f"recovered {recovered} stale running queue row(s)", enabled=verbose)
+
+    if queue_import_idle(session, tier=tier, excluded_tiers=excluded):
+        log_import_event("queue idle: no running rows and no pending work in scope; exiting", enabled=verbose)
+        return VolumeQueueImportRunResult(
+            dry_run=dry_run,
+            tier_filter=tier,
+            limit_volumes=limit_volumes,
+            volumes_selected=0,
+            stopped_reason="queue_idle",
+        )
+
     rows = select_pending_volume_issue_imports(
         session,
         tier=tier,
@@ -271,6 +394,14 @@ def run_volume_issue_queue_import(
         limit_volumes=limit_volumes,
         volumes_selected=len(rows),
     )
+    log_import_event(
+        f"selected {len(rows)} pending volume(s) tier={tier!r} limit_volumes={limit_volumes}",
+        enabled=verbose,
+    )
+    if not rows:
+        result.stopped_reason = "no_pending_in_batch"
+        log_import_event("no pending volumes matched selection; exiting", enabled=verbose)
+        return result
 
     api_budget = max_api_requests if max_api_requests is None else max(0, int(max_api_requests))
     api_used_run = 0
@@ -288,6 +419,8 @@ def run_volume_issue_queue_import(
             issues_limit=issues_limit,
             dry_run=dry_run,
             sleep_fn=sleep_fn,
+            verbose=verbose,
+            http_timeout=http_timeout,
         )
         result.items.append(item)
         result.volumes_processed += 1
@@ -310,6 +443,17 @@ def run_volume_issue_queue_import(
         elif is_transient_stop_error(failures=item.failures):
             result.stopped_reason = "connection_reset"
             stop = stop_on_throttle
+
+        if stop:
             break
 
+    if queue_import_idle(session, tier=tier, excluded_tiers=excluded):
+        log_import_event(
+            "queue idle after batch: running=0 and no pending work in scope",
+            enabled=verbose,
+        )
+        if result.stopped_reason is None:
+            result.stopped_reason = "queue_idle"
+
+    log_import_event("run complete; ready for final summary", enabled=verbose)
     return result

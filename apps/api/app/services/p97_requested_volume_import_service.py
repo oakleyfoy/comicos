@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -27,6 +28,8 @@ from app.services.p97_volume_issue_import_queue_service import (
 
 REQUEST_TYPE = "manual_issue_import"
 
+LOGGER = logging.getLogger(__name__)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -37,15 +40,55 @@ def wait_for_comicvine_budget(
     *,
     sleep_fn: Callable[[float], None] = time.sleep,
     max_wait_seconds: float = 300.0,
+    max_total_wait_seconds: float = 3600.0,
+    log_fn: Callable[[str], None] | None = None,
+    context: str = "",
 ) -> bool:
+    """Wait until the P97 ledger allows a request, with bounded total sleep."""
+
+    def _log(msg: str) -> None:
+        if log_fn is not None:
+            log_fn(msg)
+        else:
+            LOGGER.info("%s", msg)
+
+    prefix = f"{context} " if context else ""
     if budget.should_pause_for_420():
+        _log(f"{prefix}budget wait skipped: paused for HTTP 420")
         return False
+
     decision = budget.evaluate()
     if decision.allowed:
+        _log(f"{prefix}budget wait: allowed immediately ({decision.reason})")
         return True
-    wait = min(decision.seconds_until_next_request, max_wait_seconds)
-    if wait > 0:
-        sleep_fn(wait)
+
+    _log(
+        f"{prefix}budget wait enter: reason={decision.reason} "
+        f"wait={decision.seconds_until_next_request:.1f}s "
+        f"requests_last_hour={decision.requests_last_hour}"
+    )
+    total_slept = 0.0
+    while total_slept < max_total_wait_seconds:
+        if budget.should_pause_for_420():
+            _log(f"{prefix}budget wait exit: paused for HTTP 420 after {total_slept:.1f}s")
+            return False
+        decision = budget.evaluate()
+        if decision.allowed:
+            _log(f"{prefix}budget wait exit: allowed after {total_slept:.1f}s ({decision.reason})")
+            return True
+        chunk = min(
+            decision.seconds_until_next_request,
+            max_wait_seconds,
+            max_total_wait_seconds - total_slept,
+        )
+        if chunk <= 0:
+            _log(f"{prefix}budget wait exit: not allowed ({decision.reason})")
+            return decision.allowed
+        _log(f"{prefix}budget wait sleeping {chunk:.1f}s ({decision.reason})")
+        sleep_fn(chunk)
+        total_slept += chunk
+
+    _log(f"{prefix}budget wait exit: timed out after {total_slept:.1f}s")
     return budget.evaluate().allowed
 
 

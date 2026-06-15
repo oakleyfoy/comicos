@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -69,6 +70,8 @@ VOLUME_JOB_TYPE = "volumes"
 ISSUE_JOB_TYPE = "volume_issues"
 COMICVINE_VOLUME_RESOURCE_PREFIX = "4050"
 COMICVINE_THROTTLE_STATUS = 420
+DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
+MAX_ISSUE_IMPORT_PAGES = 1000
 
 
 class ComicVineThrottleError(RuntimeError):
@@ -240,6 +243,7 @@ class ComicVineCatalogImporter:
         dry_run: bool = False,
         allow_international_editions: bool = False,
         strict_english: bool = True,
+        http_timeout: float | None = None,
     ) -> None:
         settings = get_settings()
         if api_key is not None:
@@ -262,6 +266,14 @@ class ComicVineCatalogImporter:
         self._http_cache_enabled = settings.comicvine_http_cache_enabled
         cache_root = Path(settings.catalog_storage_root) / "comicvine_http_cache"
         self._http_cache_dir = cache_root
+        self.http_timeout = float(
+            http_timeout if http_timeout is not None else DEFAULT_HTTP_TIMEOUT_SECONDS
+        )
+        self.request_trace: Callable[[str, str, dict[str, Any]], None] | None = None
+
+    def _trace_request(self, phase: str, path: str, **meta: Any) -> None:
+        if self.request_trace is not None:
+            self.request_trace(phase, path, meta)
 
     def _wait_before_request(self) -> None:
         gap = self.rate_limit_seconds
@@ -288,7 +300,13 @@ class ComicVineCatalogImporter:
                 return cached
 
         resource = comicvine_resource_name(path)
-        self._hourly_budget.wait_if_needed(resource)
+        hourly_log: Callable[[str], None] | None = None
+        if self.request_trace is not None:
+
+            def hourly_log(message: str) -> None:
+                self._trace_request("hourly_budget", path, message=message, resource=resource)
+
+        self._hourly_budget.wait_if_needed(resource, log_fn=hourly_log)
 
         query = {"api_key": self.api_key, "format": "json"}
         if params:
@@ -301,12 +319,19 @@ class ComicVineCatalogImporter:
         last_exc: Exception | None = None
         for attempt in range(max(1, self.max_retries)):
             self._wait_before_request()
+            self._trace_request("http_start", path, attempt=attempt + 1, params=query)
             try:
                 response = httpx.get(
                     f"{self.base_url}/{path.lstrip('/')}",
                     params=query,
                     headers=headers,
-                    timeout=30.0,
+                    timeout=self.http_timeout,
+                )
+                self._trace_request(
+                    "http_end",
+                    path,
+                    attempt=attempt + 1,
+                    status_code=response.status_code,
                 )
                 self._hourly_budget.record(resource)
                 self.api_requests_made += 1
@@ -328,12 +353,16 @@ class ComicVineCatalogImporter:
                     write_comicvine_cache(self._http_cache_dir, cache_key, payload)
                 return payload
             except ComicVineThrottleError:
+                self._trace_request("http_end", path, attempt=attempt + 1, error="throttle")
                 raise
             except ComicVineApiError:
+                self._trace_request("http_end", path, attempt=attempt + 1, error="api_error")
                 raise
             except httpx.HTTPStatusError:
+                self._trace_request("http_end", path, attempt=attempt + 1, error="http_status")
                 raise
             except Exception as exc:
+                self._trace_request("http_end", path, attempt=attempt + 1, error=str(exc))
                 last_exc = exc
                 backoff = min(backoff * 2, 30.0)
                 time.sleep(backoff)
@@ -852,8 +881,22 @@ class ComicVineCatalogImporter:
             stats.issue_imports_started += 1
             stats.issue_import_volumes_attempted += 1
             offset = 0
+            issue_page = 0
             try:
                 while True:
+                    issue_page += 1
+                    if issue_page > MAX_ISSUE_IMPORT_PAGES:
+                        stats.failures.append(
+                            f"issue_import_page_cap:{MAX_ISSUE_IMPORT_PAGES}:volume:{volume_id}"
+                        )
+                        break
+                    self._trace_request(
+                        "issue_page_start",
+                        f"issues/volume:{volume_id}",
+                        offset=offset,
+                        page=issue_page,
+                        limit=issues_per_volume_limit,
+                    )
                     chunk = self.import_issues_for_volume(
                         session,
                         volume_id=str(volume_id),
@@ -861,6 +904,13 @@ class ComicVineCatalogImporter:
                         offset=offset,
                         limit=issues_per_volume_limit,
                         job=issue_job,
+                    )
+                    self._trace_request(
+                        "issue_page_end",
+                        f"issues/volume:{volume_id}",
+                        offset=offset,
+                        page=issue_page,
+                        processed=chunk.processed,
                     )
                     stats.processed += chunk.processed
                     stats.created_issues += chunk.created_issues

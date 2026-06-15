@@ -25,6 +25,7 @@ from app.services.p97_comicvine_rate_budget import (  # noqa: E402
     DEFAULT_PAUSE_HOURS_ON_420,
     ComicVineRateBudget,
 )
+from app.services.p97_comicvine_import_diagnostics import log_import_event  # noqa: E402
 from app.services.p97_volume_issue_queue_import_service import (  # noqa: E402
     run_volume_issue_queue_import,
 )
@@ -83,6 +84,18 @@ def main() -> int:
         default=DEFAULT_MIN_SECONDS_BETWEEN_REQUESTS,
     )
     parser.add_argument("--pause-hours-on-420", type=float, default=DEFAULT_PAUSE_HOURS_ON_420)
+    parser.add_argument(
+        "--http-timeout",
+        type=float,
+        default=30.0,
+        help="ComicVine HTTP timeout in seconds (default 30)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Log budget waits and ComicVine requests to stderr (default: true)",
+    )
     args = parser.parse_args()
 
     database_url = resolve_p97_database_url(args.database_url)
@@ -95,13 +108,14 @@ def main() -> int:
             min_seconds_between_requests=args.min_seconds_between_requests,
             pause_hours_on_420=args.pause_hours_on_420,
         )
-        importer = ComicVineCatalogImporter(dry_run=bool(args.dry_run))
+        importer = ComicVineCatalogImporter(dry_run=bool(args.dry_run), http_timeout=float(args.http_timeout))
         if not args.dry_run:
             missing = importer.initialize_or_explain()
             if missing:
                 print(missing, file=sys.stderr)
                 return 1
 
+        log_import_event("starting volume issue queue import run", enabled=bool(args.verbose))
         result = run_volume_issue_queue_import(
             session,
             budget,
@@ -112,8 +126,11 @@ def main() -> int:
             dry_run=bool(args.dry_run),
             stop_on_throttle=bool(args.stop_on_throttle),
             max_api_requests=args.max_api_requests,
+            verbose=bool(args.verbose),
+            http_timeout=float(args.http_timeout),
         )
 
+    log_import_event("generating final summary output", enabled=bool(args.verbose))
     if args.json:
         print(
             json.dumps(
@@ -154,6 +171,8 @@ def main() -> int:
 
     if result.stopped_reason in ("throttle", "connection_reset"):
         return 2
+    if result.stopped_reason == "queue_idle":
+        return 0
     return 0
 
 

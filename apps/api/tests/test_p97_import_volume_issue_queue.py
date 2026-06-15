@@ -308,3 +308,20 @@ def test_idempotent_rerun_updates_not_duplicate(session: Session) -> None:
     assert second.items[0].created_issues == 0
     assert second.items[0].updated_issues == 5
     assert len(importer.calls) == 2
+
+
+def test_queue_idle_exits_without_import(session: Session) -> None:
+    budget = ComicVineRateBudget(session)
+    importer = FakeImporter()
+    result = run_volume_issue_queue_import(
+        session,
+        budget,
+        importer,  # type: ignore[arg-type]
+        tier=TIER_1_CORE,
+        limit_volumes=5,
+        verbose=False,
+        recover_stale_running=False,
+    )
+    assert result.stopped_reason == "queue_idle"
+    assert result.volumes_processed == 0
+    assert importer.calls == []
