@@ -4,7 +4,7 @@ This module is the single source of truth for "may the volume queue runner make 
 ComicVine API request right now?". It counts *real* recorded requests from
 ``p97_comicvine_request_ledger`` (never chunk counts) and enforces:
 
-- a conservative max requests per rolling hour (default 120),
+- a conservative max requests per rolling hour (default 150),
 - a minimum spacing between requests (default 30 seconds),
 - a long pause after any HTTP 420 (default 4 hours), with no immediate retry.
 """
@@ -20,7 +20,7 @@ from sqlmodel import Session, select
 
 from app.models.catalog_p97 import P97ComicVineRequestLedger
 
-DEFAULT_MAX_REQUESTS_PER_HOUR = 120
+DEFAULT_MAX_REQUESTS_PER_HOUR = 150
 DEFAULT_MIN_SECONDS_BETWEEN_REQUESTS = 30.0
 DEFAULT_PAUSE_HOURS_ON_420 = 4.0
 

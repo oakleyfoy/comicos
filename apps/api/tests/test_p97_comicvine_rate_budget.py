@@ -16,6 +16,7 @@ for _p in (str(API_ROOT), str(API_ROOT / "scripts")):
 import app.models  # noqa: F401,E402
 
 from app.services.p97_comicvine_rate_budget import (  # noqa: E402
+    DEFAULT_MAX_REQUESTS_PER_HOUR,
     ComicVineRateBudget,
 )
 
@@ -42,17 +43,35 @@ def test_records_count_in_last_hour_window(session: Session) -> None:
     assert budget.get_requests_last_24h(now=NOW) == 6
 
 
-def test_blocks_over_120_per_hour(session: Session) -> None:
-    budget = ComicVineRateBudget(session, max_requests_per_hour=120, min_seconds_between_requests=0)
-    for _ in range(119):
+def test_default_max_requests_per_hour_is_150() -> None:
+    assert DEFAULT_MAX_REQUESTS_PER_HOUR == 150
+
+
+def test_hourly_budget_exhausted_at_151_with_default_cap(session: Session) -> None:
+    budget = ComicVineRateBudget(session, min_seconds_between_requests=0)
+    assert budget.max_requests_per_hour == 150
+    for _ in range(149):
         budget.record_request(request_type="issue_import", now=NOW - timedelta(minutes=1))
     assert budget.can_make_request(now=NOW) is True
     budget.record_request(request_type="issue_import", now=NOW - timedelta(minutes=1))
-    assert budget.get_requests_last_hour(now=NOW) == 120
+    assert budget.get_requests_last_hour(now=NOW) == 150
     assert budget.can_make_request(now=NOW) is False
+    budget.record_request(request_type="issue_import", now=NOW - timedelta(minutes=1))
+    assert budget.get_requests_last_hour(now=NOW) == 151
     decision = budget.evaluate(now=NOW)
     assert decision.reason == "HOURLY_BUDGET_EXHAUSTED"
     assert decision.allowed is False
+
+
+def test_cli_max_requests_per_hour_override(session: Session) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-requests-per-hour", type=int, default=DEFAULT_MAX_REQUESTS_PER_HOUR)
+    assert parser.parse_args([]).max_requests_per_hour == 150
+    override = parser.parse_args(["--max-requests-per-hour", "200"]).max_requests_per_hour
+    budget = ComicVineRateBudget(session, max_requests_per_hour=override, min_seconds_between_requests=0)
+    assert budget.max_requests_per_hour == 200
 
 
 def test_420_triggers_four_hour_pause(session: Session) -> None:

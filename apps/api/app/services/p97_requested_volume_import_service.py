@@ -39,7 +39,7 @@ def wait_for_comicvine_budget(
     budget: ComicVineRateBudget,
     *,
     sleep_fn: Callable[[float], None] = time.sleep,
-    max_wait_seconds: float = 300.0,
+    max_wait_seconds: float = 120.0,
     max_total_wait_seconds: float = 3600.0,
     log_fn: Callable[[str], None] | None = None,
     context: str = "",
