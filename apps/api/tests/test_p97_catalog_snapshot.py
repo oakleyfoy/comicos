@@ -16,7 +16,13 @@ import app.models  # noqa: F401
 
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
-from app.services.p97_catalog_snapshot_service import export_catalog_snapshot, import_catalog_snapshot
+from app.services.p97_catalog_snapshot_service import (
+    SQL_POSTGRES_CATALOG_ISSUE_ID_BY_COMICVINE,
+    SQL_POSTGRES_CATALOG_PUBLISHER_ID_BY_COMICVINE,
+    SQL_POSTGRES_CATALOG_SERIES_ID_BY_COMICVINE_VOLUME,
+    export_catalog_snapshot,
+    import_catalog_snapshot,
+)
 from app.services.recognition.recognition_catalog_candidate_service import search_catalog_candidates
 
 
@@ -64,6 +70,18 @@ def _seed_absolute_batman(session: Session) -> None:
             )
         )
     session.commit()
+
+
+def test_postgres_scoped_comicvine_lookup_sql_casts_json_to_jsonb() -> None:
+    for sql in (
+        SQL_POSTGRES_CATALOG_ISSUE_ID_BY_COMICVINE,
+        SQL_POSTGRES_CATALOG_SERIES_ID_BY_COMICVINE_VOLUME,
+        SQL_POSTGRES_CATALOG_PUBLISHER_ID_BY_COMICVINE,
+    ):
+        assert "external_source_ids::jsonb" in sql
+        assert "-> 'COMICVINE'" in sql
+        assert "?" in sql
+        assert "external_source_ids->'COMICVINE'" not in sql.replace("external_source_ids::jsonb", "")
 
 
 def test_import_logs_index_phases(session) -> None:

@@ -31,6 +31,30 @@ from app.services.comicvine_catalog_importer import comicvine_volume_id_for_seri
 SCHEMA_VERSION = 1
 SOURCE = "COMICVINE"
 
+# Postgres stores external_source_ids as json (not jsonb); the ? key-exists operator requires jsonb.
+POSTGRES_COMICVINE_KEY_EXISTS = "(external_source_ids::jsonb -> 'COMICVINE') ? :comicvine_key"
+
+SQL_POSTGRES_CATALOG_ISSUE_ID_BY_COMICVINE = (
+    "SELECT id FROM catalog_issue "
+    "WHERE external_source_ids IS NOT NULL "
+    f"AND {POSTGRES_COMICVINE_KEY_EXISTS.replace(':comicvine_key', ':cv_id')} "
+    "LIMIT 1"
+)
+
+SQL_POSTGRES_CATALOG_SERIES_ID_BY_COMICVINE_VOLUME = (
+    "SELECT id FROM catalog_series "
+    "WHERE external_source_ids IS NOT NULL "
+    f"AND {POSTGRES_COMICVINE_KEY_EXISTS.replace(':comicvine_key', ':volume_id')} "
+    "LIMIT 1"
+)
+
+SQL_POSTGRES_CATALOG_PUBLISHER_ID_BY_COMICVINE = (
+    "SELECT id FROM catalog_publisher "
+    "WHERE external_source_ids IS NOT NULL "
+    f"AND {POSTGRES_COMICVINE_KEY_EXISTS.replace(':comicvine_key', ':cv_id')} "
+    "LIMIT 1"
+)
+
 
 def comicvine_external_ids(external_source_ids: dict | None) -> list[str]:
     bucket = (external_source_ids or {}).get("COMICVINE")
@@ -407,6 +431,12 @@ def _session_dialect_name(session: Session) -> str:
     return str(getattr(getattr(bind, "dialect", None), "name", "") or "")
 
 
+def _first_int_column(row: Any) -> int | None:
+    if row is None:
+        return None
+    return int(row[0])
+
+
 def _stream_catalog_rows(
     session: Session,
     model: type[Any],
@@ -428,32 +458,20 @@ def _stream_catalog_rows(
 
 def _select_issue_id_by_comicvine_postgres(session: Session, cv_id: str) -> int | None:
     row = session.exec(
-        text(
-            "SELECT id FROM catalog_issue "
-            "WHERE external_source_ids IS NOT NULL "
-            "AND external_source_ids->'COMICVINE' ? :cv_id "
-            "LIMIT 1"
-        ),
+        text(SQL_POSTGRES_CATALOG_ISSUE_ID_BY_COMICVINE),
         params={"cv_id": cv_id},
     ).first()
-    if row is None:
-        return None
-    return int(row[0] if isinstance(row, tuple) else row)
+    issue_id = _first_int_column(row)
+    return issue_id
 
 
 def _select_series_id_by_comicvine_postgres(session: Session, volume_id: str) -> int | None:
     row = session.exec(
-        text(
-            "SELECT id FROM catalog_series "
-            "WHERE external_source_ids IS NOT NULL "
-            "AND external_source_ids->'COMICVINE' ? :volume_id "
-            "LIMIT 1"
-        ),
+        text(SQL_POSTGRES_CATALOG_SERIES_ID_BY_COMICVINE_VOLUME),
         params={"volume_id": volume_id},
     ).first()
-    if row is None:
-        return None
-    return int(row[0] if isinstance(row, tuple) else row)
+    series_id = _first_int_column(row)
+    return series_id
 
 
 def _find_issue_by_comicvine_id(session: Session, cv_id: str) -> CatalogIssue | None:
@@ -519,7 +537,10 @@ def _build_series_index(
         and issue_row_count <= SMALL_SNAPSHOT_ISSUE_ROWS
     )
     if use_scoped:
-        query = "SELECT catalog_series WHERE external_source_ids->'COMICVINE' ? :volume_id (per snapshot volume)"
+        query = (
+            "SELECT catalog_series WHERE (external_source_ids::jsonb -> 'COMICVINE') ? :volume_id "
+            "(per snapshot volume)"
+        )
         progress.phase_start("_build_series_index", query, mode="scoped_comicvine_lookup")
         started = time.perf_counter()
         for volume_id in sorted(snapshot_volume_ids):
@@ -564,7 +585,7 @@ def _build_issue_index(
 
     if _should_use_scoped_issue_index(issue_row_count, len(snapshot_issue_cv_ids)):
         query = (
-            "SELECT catalog_issue WHERE external_source_ids->'COMICVINE' ? :cv_id "
+            "SELECT catalog_issue WHERE (external_source_ids::jsonb -> 'COMICVINE') ? :cv_id "
             "(per snapshot issue; avoids full-table read)"
         )
         progress.phase_start("_build_issue_index", query, mode="scoped_comicvine_lookup")
