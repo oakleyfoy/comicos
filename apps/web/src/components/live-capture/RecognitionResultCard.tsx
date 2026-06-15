@@ -39,9 +39,16 @@ export function RecognitionResultCard({
   const snapshot =
     item?.recognition_snapshot_json && typeof item.recognition_snapshot_json === "object"
       ? (item.recognition_snapshot_json as Record<string, unknown>)
-      : null;
+      : identification
+        ? ({
+            visual_match_strength: identification.visual_match_strength,
+            recognition_guidance: identification.recognition_guidance,
+          } as Record<string, unknown>)
+        : null;
   const catalogIssueId = snapshot?.catalog_issue_id ?? identification?.catalog_issue_id;
   const winningSource = snapshot?.winning_source ?? identification?.winning_source;
+  const guidance =
+    typeof snapshot?.recognition_guidance === "string" ? snapshot.recognition_guidance : identification?.recognition_guidance;
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-slate-100 shadow-lg">
@@ -52,6 +59,9 @@ export function RecognitionResultCard({
           <p className="mt-1 text-sm text-slate-400">
             Bucket {bucket} · Confidence {confidence}
           </p>
+          {guidance ? (
+            <p className="mt-1 text-sm text-amber-200/90">{guidance}</p>
+          ) : null}
           {catalogIssueId != null || winningSource ? (
             <p className="mt-1 text-xs text-slate-500">
               {catalogIssueId != null ? `Catalog issue ${String(catalogIssueId)}` : null}

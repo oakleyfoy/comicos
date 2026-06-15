@@ -5,6 +5,7 @@ from datetime import date
 from typing import Literal
 
 RecognitionBucket = Literal["VERIFIED", "REVIEW", "UNKNOWN"]
+VisualMatchStrength = Literal["exact", "possible", "weak", "none"]
 
 
 @dataclass(frozen=True)
@@ -65,4 +66,6 @@ class RecognitionResult:
     external_catalog_score: float = 0.0
     ocr_score: float = 0.0
     final_confidence: float = 0.0
+    visual_match_strength: VisualMatchStrength = "none"
+    recognition_guidance: str | None = None
 

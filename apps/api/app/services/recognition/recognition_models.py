@@ -60,6 +60,8 @@ class RecognitionIdentifyRead(BaseModel):
     external_catalog_score: float = 0.0
     ocr_score: float = 0.0
     final_confidence: float = 0.0
+    visual_match_strength: Literal["exact", "possible", "weak", "none"] = "none"
+    recognition_guidance: str | None = None
     candidate_count: int = 0
     candidates: list[RecognitionCandidateRead] = Field(default_factory=list)
     metrics: dict[str, Any] = Field(default_factory=dict)

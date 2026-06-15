@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { CandidateIssueCard } from "./CandidateIssueCard";
 import { CatalogCandidateSearch } from "./CatalogCandidateSearch";
+import { recognitionSourceSentence } from "./recognitionTrustCopy";
 
 export type RecognitionReviewCloseAction = "accept" | "cancel";
 
@@ -61,23 +62,13 @@ function friendlyBucket(bucket: string | undefined): string {
   }
 }
 
-function friendlySource(source: string | null): string | null {
-  if (!source || source === "none") {
-    return null;
-  }
-  switch (source) {
-    case "catalog_image_fingerprint":
-      return "Matched by cover image.";
-    case "ExternalCatalogIssue":
-    case "CatalogIssue":
-      return "Matched by catalog text.";
-    case "ocr":
-      return "Matched by reading the cover text.";
-    case "user_correction":
-      return "Corrected by you.";
-    default:
-      return null;
-  }
+function friendlySource(
+  source: string | null,
+  snapshot?: Record<string, unknown>,
+): string | null {
+  const visual = typeof snapshot?.visual_match_strength === "string" ? snapshot.visual_match_strength : null;
+  const guidance = typeof snapshot?.recognition_guidance === "string" ? snapshot.recognition_guidance : null;
+  return recognitionSourceSentence(source, visual, guidance);
 }
 
 function buildMatchedPreview(item: ReceivingSessionItemRead): MatchedPreview {
@@ -123,6 +114,10 @@ export function RecognitionReviewModal({
   }, [item.id]);
 
   const matched = useMemo(() => buildMatchedPreview(localItem), [localItem]);
+  const recognitionSnapshot = useMemo(
+    () => (localItem.recognition_snapshot_json ?? {}) as Record<string, unknown>,
+    [localItem],
+  );
   const hasMatch = Boolean(matched.series || matched.catalogIssueId);
   const confidence = localItem.recognition_confidence;
   const confidenceLabel = confidence != null ? `${Math.round(confidence * 100)}%` : "—";
@@ -253,8 +248,8 @@ export function RecognitionReviewModal({
                       ) : null}
                       <p className="text-sm text-slate-300">{friendlyBucket(localItem.recognition_bucket)}</p>
                       <p className="text-sm text-slate-400">Confidence {confidenceLabel}</p>
-                      {friendlySource(matched.winningSource) ? (
-                        <p className="text-sm text-slate-400">{friendlySource(matched.winningSource)}</p>
+                      {friendlySource(matched.winningSource, recognitionSnapshot) ? (
+                        <p className="text-sm text-slate-400">{friendlySource(matched.winningSource, recognitionSnapshot)}</p>
                       ) : null}
                       <p className="text-[11px] text-slate-600" data-testid="review-debug-row">
                         Source {matched.winningSource ?? "none"}

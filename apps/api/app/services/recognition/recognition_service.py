@@ -26,6 +26,7 @@ from app.services.recognition.cover_matcher import score_cover_image
 from app.services.recognition.ocr_matcher import extract_ocr_signal, is_valid_comic_image
 from app.services.recognition.recognition_models import RecognitionCandidateRead, RecognitionIdentifyRead
 from app.services.recognition.recognition_types import RecognitionCandidate, RecognitionImageSignal, RecognitionOCRSignal, RecognitionResult
+from app.services.recognition.trust_calibration import apply_trust_calibration
 
 LOGGER = logging.getLogger(__name__)
 
@@ -348,12 +349,13 @@ def identify_comic_cover(
             ocr_score=ocr_score,
             final_confidence=confidence,
         )
+        result = apply_trust_calibration(result, catalog_matches=catalog_matches, ocr=ocr_signal)
         if record_metrics:
-            _record_result(confidence, bucket)
+            _record_result(result.confidence, result.bucket)
         LOGGER.info(
             "recognition_attempt bucket=%s confidence=%.3f catalog_fp=%.3f winning=%s catalog_issue_id=%s",
-            bucket,
-            confidence,
+            result.bucket,
+            result.confidence,
             catalog_fingerprint_score,
             result.winning_source,
             top_match.issue_id,
@@ -444,12 +446,13 @@ def identify_comic_cover(
         ocr_score=ocr_score,
         final_confidence=confidence,
     )
+    result = apply_trust_calibration(result, catalog_matches=catalog_matches, ocr=ocr_signal)
     if record_metrics:
-        _record_result(confidence, bucket)
+        _record_result(result.confidence, result.bucket)
     LOGGER.info(
         "recognition_attempt bucket=%s confidence=%.3f candidates=%d image=%.3f ocr=%.3f title=%.3f issue=%.3f catalog_fp=%.3f external=%.3f winning=%s",
-        bucket,
-        confidence,
+        result.bucket,
+        result.confidence,
         len(candidates),
         image_signal.confidence,
         ocr_score,
@@ -484,6 +487,8 @@ def identify_comic_cover_read(
         external_catalog_score=result.external_catalog_score,
         ocr_score=result.ocr_score,
         final_confidence=result.final_confidence,
+        visual_match_strength=result.visual_match_strength,
+        recognition_guidance=result.recognition_guidance,
         candidate_count=result.candidate_count,
         candidates=[_catalog_candidate_to_read(candidate) for candidate in result.candidates],
         metrics=recognition_metrics_snapshot(),

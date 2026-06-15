@@ -1,24 +1,20 @@
 import type { RecognitionCatalogCandidateRead } from "../../api/client";
+import { recognitionSourceLabel } from "./recognitionTrustCopy";
 
 interface CandidateIssueCardProps {
   candidate: RecognitionCatalogCandidateRead;
   selected?: boolean;
   onSelect?: (candidate: RecognitionCatalogCandidateRead) => void;
+  visualMatchStrength?: string | null;
+  recognitionGuidance?: string | null;
 }
 
-function friendlySource(source: string | undefined): string | null {
-  switch (source) {
-    case "catalog_image_fingerprint":
-      return "Matched by cover image";
-    case "catalog_nearby":
-      return "Same series";
-    case "catalog_search":
-      return "Catalog search";
-    case "user_correction":
-      return "Your correction";
-    default:
-      return source ? source.replace(/_/g, " ") : null;
-  }
+function friendlySource(
+  source: string | undefined,
+  visualMatchStrength?: string | null,
+  recognitionGuidance?: string | null,
+): string | null {
+  return recognitionSourceLabel(source, visualMatchStrength, recognitionGuidance);
 }
 
 function formatYearLine(candidate: RecognitionCatalogCandidateRead): string | null {
@@ -36,9 +32,15 @@ function formatYearLine(candidate: RecognitionCatalogCandidateRead): string | nu
   return parts.length ? parts.join(" · ") : null;
 }
 
-export function CandidateIssueCard({ candidate, selected = false, onSelect }: CandidateIssueCardProps): JSX.Element {
+export function CandidateIssueCard({
+  candidate,
+  selected = false,
+  onSelect,
+  visualMatchStrength,
+  recognitionGuidance,
+}: CandidateIssueCardProps): JSX.Element {
   const confidenceLabel = candidate.confidence > 0 ? `${Math.round(candidate.confidence * 100)}%` : null;
-  const sourceLabel = friendlySource(candidate.source);
+  const sourceLabel = friendlySource(candidate.source, visualMatchStrength, recognitionGuidance);
   const yearLine = formatYearLine(candidate);
   const titleLine = candidate.issue_title?.trim() || null;
 

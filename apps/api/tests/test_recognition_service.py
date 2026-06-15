@@ -19,6 +19,7 @@ from app.models.catalog_master import (
 from app.models.external_catalog import ExternalCatalogIssue
 from app.services.catalog_fingerprint_service import fingerprint_image_path
 from app.services.cover_images import generate_perceptual_hash
+from app.services.recognition.catalog_matcher import CatalogFingerprintMatch
 from app.services.recognition.recognition_service import identify_comic_cover
 from test_inventory import auth_headers, register_and_login
 
@@ -173,6 +174,44 @@ def test_recognition_fingerprint_beats_wrong_ocr_issue_number(
     assert result.confidence >= 0.95
     assert result.winning_source == "catalog_image_fingerprint"
     assert result.issue_match_confidence == 1.0
+
+
+def test_recognition_weak_fingerprint_is_not_high_confidence(
+    session: Session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_bytes = _png_bytes(color=(120, 20, 40))
+    _seed_p97_catalog_issue(session, tmp_path, image_bytes, catalog_issue_id=6327)
+    _seed_p97_catalog_issue(
+        session,
+        tmp_path,
+        _png_bytes(color=(20, 120, 40)),
+        catalog_issue_id=6328,
+        issue_number="2",
+    )
+    _stub_ocr(monkeypatch, "Lov#166\nMARVEL")
+
+    monkeypatch.setattr(
+        "app.services.recognition.recognition_service.search_catalog_fingerprint_matches",
+        lambda _session, _body, limit=10: [
+            CatalogFingerprintMatch(
+                issue_id=6328,
+                image_id=6328,
+                confidence=0.8602,
+                min_hamming_distance=19,
+            )
+        ],
+    )
+
+    result = identify_comic_cover(session, image_bytes=image_bytes, record_metrics=False)
+    assert result.series == "Venom"
+    assert result.issue_number == "2"
+    assert result.bucket == "REVIEW"
+    assert result.confidence <= 0.70
+    assert result.confidence < 0.83
+    assert result.recognition_guidance == "Possible visual match — please review"
+    assert result.catalog_fingerprint_score == pytest.approx(0.8602)
 
 
 def test_recognition_identify_exact_match_and_candidate_endpoint(

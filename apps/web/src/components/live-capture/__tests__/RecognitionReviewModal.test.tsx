@@ -65,7 +65,7 @@ describe("RecognitionReviewModal", () => {
     );
     expect(screen.getByTestId("review-matched-title")).toHaveTextContent("Venom #7");
     expect(screen.getByText("ComicOS is not fully sure.")).toBeInTheDocument();
-    expect(screen.getByText("Matched by cover image.")).toBeInTheDocument();
+    expect(screen.getByText("Possible visual match — please review.")).toBeInTheDocument();
     expect(screen.getByTestId("review-debug-row")).toHaveTextContent("catalog_image_fingerprint");
   });
 

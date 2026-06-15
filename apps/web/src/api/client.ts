@@ -20750,6 +20750,8 @@ export interface RecognitionIdentifyRead {
   external_catalog_score?: number | null;
   ocr_score?: number | null;
   final_confidence?: number | null;
+  visual_match_strength?: "exact" | "possible" | "weak" | "none" | null;
+  recognition_guidance?: string | null;
   candidate_count: number;
   candidates: RecognitionCandidateRead[];
   metrics: Record<string, number>;
