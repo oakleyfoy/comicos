@@ -66,6 +66,20 @@ def _seed_absolute_batman(session: Session) -> None:
     session.commit()
 
 
+def test_import_logs_index_phases(session) -> None:
+    db_session, tmp_path = session
+    _seed_absolute_batman(db_session)
+    snapshot_path = tmp_path / "snapshot.jsonl"
+    export_catalog_snapshot(db_session, snapshot_path, volume_ids=[160294])
+
+    import_stats = import_catalog_snapshot(db_session, snapshot_path, dry_run=True, verbose=True)
+    phase_names = [p.phase for p in import_stats.index_phases]
+    assert "_build_publisher_index" in phase_names
+    assert "_build_series_index" in phase_names
+    assert "_build_issue_index" in phase_names
+    assert "_build_image_index" in phase_names
+
+
 def test_export_import_volume_snapshot_is_idempotent(session) -> None:
     db_session, tmp_path = session
     _seed_absolute_batman(db_session)

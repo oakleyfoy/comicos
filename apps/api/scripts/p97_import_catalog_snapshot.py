@@ -38,6 +38,11 @@ def main() -> int:
         help="Input JSONL path (default: apps/api/data/p97_catalog_snapshot.jsonl)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Count creates/updates without writing")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Log index-build progress (row counts and elapsed time per phase)",
+    )
     args = parser.parse_args()
 
     input_path = _resolve_input(args.input)
@@ -49,13 +54,28 @@ def main() -> int:
     print(f"Database: {describe_database_url(database_url)}")
     print(f"Input: {input_path}")
     print(f"Dry run: {bool(args.dry_run)}")
+    print(f"Verbose: {bool(args.verbose)}")
 
     engine = get_p97_engine(database_url)
     with Session(engine) as session:
-        stats = import_catalog_snapshot(session, input_path, dry_run=bool(args.dry_run))
+        stats = import_catalog_snapshot(
+            session,
+            input_path,
+            dry_run=bool(args.dry_run),
+            verbose=bool(args.verbose),
+        )
 
     print("P97 CATALOG SNAPSHOT IMPORT")
     print(f"  dry_run={stats.dry_run}")
+    if stats.index_phases:
+        print("  index phases:")
+        for phase in stats.index_phases:
+            print(
+                f"    - {phase.phase}: {phase.rows_loaded} rows in {phase.elapsed_seconds:.2f}s "
+                f"({phase.mode})"
+            )
+            if args.verbose:
+                print(f"      query: {phase.query}")
     print(f"  publishers created={stats.publishers_created} updated={stats.publishers_updated}")
     print(f"  series created={stats.series_created} updated={stats.series_updated}")
     print(f"  issues created={stats.issues_created} updated={stats.issues_updated}")
