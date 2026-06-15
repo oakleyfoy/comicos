@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 # List endpoints: limit defaults to 100 and cannot exceed 100. Search: max 10.
@@ -89,3 +90,31 @@ def payload_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(rows, list):
         return []
     return [row for row in rows if isinstance(row, dict)]
+
+
+def parse_comicvine_date(value: Any) -> date | None:
+    """Parse ComicVine date or datetime strings into a calendar date."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def comicvine_issue_dates_from_row(row: dict[str, Any]) -> tuple[date | None, date | None, date | None]:
+    cover_date = parse_comicvine_date(row.get("cover_date"))
+    store_date = parse_comicvine_date(row.get("store_date"))
+    release_date = parse_comicvine_date(row.get("release_date"))
+    if release_date is None:
+        release_date = parse_comicvine_date(row.get("date_added"))
+    return cover_date, store_date, release_date

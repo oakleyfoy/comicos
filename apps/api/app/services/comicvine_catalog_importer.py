@@ -25,6 +25,7 @@ from app.services.comicvine_api_response import (
     ComicVineApiError,
     clamp_page_limit,
     comicvine_best_cover_url,
+    comicvine_issue_dates_from_row,
     parse_comicvine_payload,
     payload_results,
 )
@@ -553,7 +554,7 @@ class ComicVineCatalogImporter:
             "offset": offset,
             "limit": page_limit,
             "filter": f"volume:{volume_id}",
-            "field_list": "id,issue_number,name,cover_date,store_date,description,image",
+            "field_list": "id,issue_number,name,cover_date,store_date,date_added,description,image",
         }
         try:
             payload = self._get("issues/", params=params)
@@ -589,6 +590,7 @@ class ComicVineCatalogImporter:
                     .where(CatalogIssue.series_id == int(series.id or 0))
                     .where(CatalogIssue.normalized_issue_number == normalized)
                 ).first()
+                cover_date, store_date, release_date = comicvine_issue_dates_from_row(row)
                 issue = upsert_issue(
                     session,
                     series_id=int(series.id or 0),
@@ -598,6 +600,9 @@ class ComicVineCatalogImporter:
                     external_id=row.get("id"),
                     title=row.get("name"),
                     description=row.get("description"),
+                    cover_date=cover_date,
+                    store_date=store_date,
+                    release_date=release_date,
                     source_confidence=Decimal("0.70"),
                 )
                 if existing_issue is None:
