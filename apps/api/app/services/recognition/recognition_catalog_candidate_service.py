@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
 from app.services.catalog_ingestion_service import normalize_issue_number
+from app.services.import_catalog_resolution_service import normalize_import_title
 from app.services.recognition.recognition_models import RecognitionCatalogCandidateRead
 
 DEFAULT_CANDIDATE_LIMIT = 24
@@ -70,9 +71,13 @@ def _to_card(
         catalog_issue_id=int(issue.id or 0),
         series=series.name if series is not None else "Unknown",
         issue_number=str(issue.issue_number),
+        issue_title=(issue.title.strip() if isinstance(issue.title, str) and issue.title.strip() else None),
+        series_start_year=series.start_year if series is not None else None,
+        volume_number=series.volume_number if series is not None else None,
         variant=None,
         publisher=publisher.name if publisher is not None else None,
         cover_image_url=_cover_url_for_issue(session, int(issue.id or 0)),
+        cover_date=issue.cover_date,
         release_date=issue.release_date or issue.cover_date,
         confidence=round(float(confidence), 4),
         source=source,
@@ -85,6 +90,50 @@ def _resolve_publisher(session: Session, issue: CatalogIssue, series: CatalogSer
     if series is not None and series.publisher_id is not None:
         return session.get(CatalogPublisher, series.publisher_id)
     return None
+
+
+def _search_match_score(
+    *,
+    issue: CatalogIssue,
+    series_row: CatalogSeries,
+    publisher_row: CatalogPublisher | None,
+    issue_token: str | None,
+    alpha_tokens: list[str],
+    publisher_filter: str | None,
+) -> float:
+    """Higher score = better match. Exact series + issue number rank first."""
+    score = 0.0
+    if issue_token and issue.normalized_issue_number == normalize_issue_number(issue_token):
+        score += 1000.0
+
+    series_name = (series_row.name or "").lower()
+    norm_series = (series_row.normalized_name or normalize_import_title(series_row.name)).lower()
+    if alpha_tokens:
+        joined = " ".join(token.lower() for token in alpha_tokens)
+        joined_norm = normalize_import_title(joined)
+        if joined_norm == norm_series or joined.lower() == series_name:
+            score += 500.0
+        elif all(token.lower() in series_name for token in alpha_tokens):
+            score += 320.0
+        else:
+            score += 80.0
+        if alpha_tokens and series_name.startswith(alpha_tokens[0].lower()):
+            score += 40.0
+        # Prefer the core series name "Venom" over "Venom: Lethal Protector" when the query is just "Venom".
+        if len(alpha_tokens) == 1 and series_name == alpha_tokens[0].lower():
+            score += 60.0
+
+    if (publisher_filter or "").strip() and publisher_row:
+        if publisher_filter.strip().lower() in (publisher_row.name or "").lower():
+            score += 100.0
+
+    year_tokens = [t for t in alpha_tokens if _looks_like_year(t)]
+    if year_tokens and series_row.start_year is not None:
+        for token in year_tokens:
+            if int(token) == int(series_row.start_year):
+                score += 200.0
+
+    return score
 
 
 def nearby_issues(
@@ -182,22 +231,37 @@ def search_catalog_candidates(
     if issue_token is not None:
         statement = statement.where(CatalogIssue.normalized_issue_number == normalize_issue_number(issue_token))
 
-    # Over-fetch then rank deterministically (numeric issue order) for stable galleries.
-    rows = session.exec(statement.limit(limit * 4)).all()
+    # Over-fetch then rank by match quality (exact series + issue first), then series year for disambiguation.
+    rows = session.exec(statement.limit(limit * 8)).all()
 
-    def _sort_key(row: tuple[CatalogIssue, CatalogSeries, CatalogPublisher | None]):
-        issue, series_row, _publisher = row
-        numeric = _issue_numeric_value(issue.issue_number)
-        return (series_row.name.lower(), numeric if numeric is not None else 10**9, str(issue.issue_number))
-
-    rows = sorted(rows, key=_sort_key)[:limit]
-
-    cards: list[RecognitionCatalogCandidateRead] = []
+    scored_rows: list[tuple[float, CatalogIssue, CatalogSeries, CatalogPublisher | None]] = []
     for issue, series_row, publisher_row in rows:
         if issue.id is None:
             continue
-        # Exact normalized-issue + series text match scores higher than a broad text hit.
-        confidence = 0.9 if issue_token and issue.normalized_issue_number == normalize_issue_number(issue_token) else 0.6
+        match_score = _search_match_score(
+            issue=issue,
+            series_row=series_row,
+            publisher_row=publisher_row,
+            issue_token=issue_token,
+            alpha_tokens=alpha_tokens,
+            publisher_filter=publisher,
+        )
+        scored_rows.append((match_score, issue, series_row, publisher_row))
+
+    scored_rows.sort(
+        key=lambda row: (
+            -row[0],
+            row[2].start_year if row[2].start_year is not None else 9999,
+            row[2].name.lower(),
+            _issue_numeric_value(row[1].issue_number) if _issue_numeric_value(row[1].issue_number) is not None else 10**9,
+            int(row[1].id or 0),
+        )
+    )
+    scored_rows = scored_rows[:limit]
+
+    cards: list[RecognitionCatalogCandidateRead] = []
+    for match_score, issue, series_row, publisher_row in scored_rows:
+        confidence = min(0.99, 0.55 + match_score / 2000.0)
         cards.append(
             _to_card(
                 session,

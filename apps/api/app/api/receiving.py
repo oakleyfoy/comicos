@@ -66,6 +66,8 @@ async def upload_session_images(
     frame_fingerprint: str | None = Form(default=None),
     stable_frame_count: int = Form(default=0),
     frame_sequence_index: int | None = Form(default=None),
+    diagnostic_image: UploadFile | None = File(default=None),
+    capture_metadata_json: str | None = Form(default=None),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ReceivingUploadResponse:
@@ -79,6 +81,8 @@ async def upload_session_images(
         frame_fingerprint=frame_fingerprint,
         stable_frame_count=stable_frame_count,
         frame_sequence_index=frame_sequence_index,
+        diagnostic_image=diagnostic_image,
+        capture_metadata_json=capture_metadata_json,
     )
 
 

@@ -38,6 +38,11 @@ beforeEach(() => {
   cleanup();
   intervalCallbacks.length = 0;
   vi.restoreAllMocks();
+  class ResizeObserverMock {
+    observe(): void {}
+    disconnect(): void {}
+  }
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   Object.defineProperty(navigator, "mediaDevices", {
     value: {
       enumerateDevices: vi.fn().mockResolvedValue([
@@ -157,25 +162,38 @@ beforeEach(() => {
 
 const intervalCallbacks: Array<() => void> = [];
 
+function mockLiveCaptureCanvas(): void {
+  const originalCreateElement = document.createElement.bind(document);
+  const fakeCanvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ({
+      drawImage: vi.fn(),
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        const len = w * h * 4;
+        const data = new Uint8ClampedArray(len);
+        for (let index = 0; index < len; index += 4) {
+          data[index] = 40 + (index % 80);
+          data[index + 1] = 60 + (index % 70);
+          data[index + 2] = 50 + (index % 90);
+          data[index + 3] = 255;
+        }
+        return { data };
+      },
+    }),
+    toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
+  };
+  vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+    if (tagName === "canvas") {
+      return fakeCanvas as never;
+    }
+    return originalCreateElement(tagName);
+  }) as typeof document.createElement);
+}
+
 describe("WebcamLiveCapturePage", () => {
   it("uploads a stable frame once and suppresses repeats", async () => {
-    const originalCreateElement = document.createElement.bind(document);
-    const fakeCanvas = {
-      width: 0,
-      height: 0,
-      getContext: () => ({
-        drawImage: vi.fn(),
-        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
-      }),
-      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
-    };
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
-      if (tagName === "canvas") {
-        return fakeCanvas as never;
-      }
-      return originalCreateElement(tagName);
-    }) as typeof document.createElement);
-
+    mockLiveCaptureCanvas();
     render(
       <MemoryRouter>
         <WebcamLiveCapturePage />
@@ -203,6 +221,10 @@ describe("WebcamLiveCapturePage", () => {
       expect.objectContaining({
         capture_source: "WEBCAM",
         stable_frame_count: 3,
+        diagnostic_image: expect.any(File),
+        capture_metadata_json: expect.objectContaining({
+          framing_guide: expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
+        }),
       }),
     );
     expect(screen.getByTestId("live-capture-active-camera")).toHaveTextContent("Back Camera");
@@ -212,22 +234,7 @@ describe("WebcamLiveCapturePage", () => {
   });
 
   it("does not upload again while a pending item awaits user action", async () => {
-    const originalCreateElement = document.createElement.bind(document);
-    const fakeCanvas = {
-      width: 0,
-      height: 0,
-      getContext: () => ({
-        drawImage: vi.fn(),
-        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
-      }),
-      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
-    };
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
-      if (tagName === "canvas") {
-        return fakeCanvas as never;
-      }
-      return originalCreateElement(tagName);
-    }) as typeof document.createElement);
+    mockLiveCaptureCanvas();
 
     render(
       <MemoryRouter>
@@ -260,22 +267,7 @@ describe("WebcamLiveCapturePage", () => {
   });
 
   it("does not start a second upload while the first upload is in flight", async () => {
-    const originalCreateElement = document.createElement.bind(document);
-    const fakeCanvas = {
-      width: 0,
-      height: 0,
-      getContext: () => ({
-        drawImage: vi.fn(),
-        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
-      }),
-      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
-    };
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
-      if (tagName === "canvas") {
-        return fakeCanvas as never;
-      }
-      return originalCreateElement(tagName);
-    }) as typeof document.createElement);
+    mockLiveCaptureCanvas();
 
     let resolveUpload: ((value: Awaited<ReturnType<typeof apiClient.uploadReceivingSessionImages>>) => void) | undefined;
     const uploadDeferred = new Promise<Awaited<ReturnType<typeof apiClient.uploadReceivingSessionImages>>>((resolve) => {
@@ -418,22 +410,7 @@ describe("WebcamLiveCapturePage", () => {
   }
 
   function mockCanvas() {
-    const originalCreateElement = document.createElement.bind(document);
-    const fakeCanvas = {
-      width: 0,
-      height: 0,
-      getContext: () => ({
-        drawImage: vi.fn(),
-        getImageData: () => ({ data: new Uint8ClampedArray(16 * 16 * 4).fill(1) }),
-      }),
-      toBlob: (callback: BlobCallback) => callback(new Blob(["frame"], { type: "image/jpeg" })),
-    };
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
-      if (tagName === "canvas") {
-        return fakeCanvas as never;
-      }
-      return originalCreateElement(tagName);
-    }) as typeof document.createElement);
+    mockLiveCaptureCanvas();
   }
 
   it("auto-opens the review modal for a REVIEW capture and pauses further uploads", async () => {

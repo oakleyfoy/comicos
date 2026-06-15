@@ -21,9 +21,27 @@ function friendlySource(source: string | undefined): string | null {
   }
 }
 
+function formatYearLine(candidate: RecognitionCatalogCandidateRead): string | null {
+  const parts: string[] = [];
+  if (candidate.series_start_year != null) {
+    parts.push(String(candidate.series_start_year));
+  }
+  if (candidate.volume_number != null) {
+    parts.push(`Vol ${candidate.volume_number}`);
+  }
+  const date = candidate.cover_date ?? candidate.release_date;
+  if (date) {
+    parts.push(date.slice(0, 10));
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export function CandidateIssueCard({ candidate, selected = false, onSelect }: CandidateIssueCardProps): JSX.Element {
   const confidenceLabel = candidate.confidence > 0 ? `${Math.round(candidate.confidence * 100)}%` : null;
   const sourceLabel = friendlySource(candidate.source);
+  const yearLine = formatYearLine(candidate);
+  const titleLine = candidate.issue_title?.trim() || null;
+
   return (
     <button
       type="button"
@@ -48,18 +66,31 @@ export function CandidateIssueCard({ candidate, selected = false, onSelect }: Ca
           <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">No cover</div>
         )}
       </div>
-      <div>
-        <p className="text-sm font-semibold text-white">
+      <div className="space-y-0.5">
+        <p className="text-sm font-semibold leading-snug text-white">
           {candidate.series} #{candidate.issue_number}
         </p>
+        {yearLine ? (
+          <p className="text-xs font-medium text-slate-300" data-testid={`candidate-year-${candidate.catalog_issue_id}`}>
+            {yearLine}
+          </p>
+        ) : null}
+        {titleLine ? (
+          <p className="line-clamp-2 text-xs text-slate-400" data-testid={`candidate-title-${candidate.catalog_issue_id}`}>
+            {titleLine}
+          </p>
+        ) : null}
         <p className="text-xs text-slate-400">{candidate.publisher ?? "Unknown publisher"}</p>
         {confidenceLabel || sourceLabel ? (
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500">
             {confidenceLabel ? `${confidenceLabel}` : null}
             {confidenceLabel && sourceLabel ? " · " : null}
             {sourceLabel}
           </p>
         ) : null}
+        <p className="text-[10px] text-slate-600" data-testid={`candidate-debug-${candidate.catalog_issue_id}`}>
+          Catalog issue {candidate.catalog_issue_id}
+        </p>
       </div>
     </button>
   );

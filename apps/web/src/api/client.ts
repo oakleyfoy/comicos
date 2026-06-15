@@ -20713,9 +20713,13 @@ export interface RecognitionCatalogCandidateRead {
   catalog_issue_id: number;
   series: string;
   issue_number: string;
+  issue_title?: string | null;
+  series_start_year?: number | null;
+  volume_number?: number | null;
   variant?: string | null;
   publisher?: string | null;
   cover_image_url?: string | null;
+  cover_date?: string | null;
   release_date?: string | null;
   confidence: number;
   source: string;
@@ -24460,6 +24464,8 @@ export const apiClient = {
       frame_fingerprint?: string | null;
       stable_frame_count?: number;
       frame_sequence_index?: number | null;
+      diagnostic_image?: File | null;
+      capture_metadata_json?: Record<string, unknown> | null;
     },
   ): Promise<ReceivingUploadResponse> {
     const form = new FormData();
@@ -24477,6 +24483,12 @@ export const apiClient = {
     }
     if (payload?.frame_sequence_index != null) {
       form.append("frame_sequence_index", String(payload.frame_sequence_index));
+    }
+    if (payload?.diagnostic_image) {
+      form.append("diagnostic_image", payload.diagnostic_image);
+    }
+    if (payload?.capture_metadata_json) {
+      form.append("capture_metadata_json", JSON.stringify(payload.capture_metadata_json));
     }
     return requestScanV1Flat<ReceivingUploadResponse>(`/receiving/session/${sessionId}/upload`, {
       method: "POST",

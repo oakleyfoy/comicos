@@ -1,3 +1,5 @@
+import type { GuideRect } from "./liveCaptureFraming";
+
 /** 8×8 average hash — tolerates minor webcam compression/exposure jitter between ticks. */
 export const FINGERPRINT_GRID = 8;
 
@@ -50,8 +52,11 @@ export function averageHashFromRgba(data: Uint8ClampedArray, width: number, heig
   return hex;
 }
 
-export function frameFingerprintFromVideo(video: HTMLVideoElement): string | null {
-  if (!video.videoWidth || !video.videoHeight) {
+export function frameFingerprintFromVideoRegion(
+  video: HTMLVideoElement,
+  rect: GuideRect,
+): string | null {
+  if (!video.videoWidth || !video.videoHeight || rect.width < 8 || rect.height < 8) {
     return null;
   }
   const size = FINGERPRINT_GRID;
@@ -62,13 +67,35 @@ export function frameFingerprintFromVideo(video: HTMLVideoElement): string | nul
   if (!ctx) {
     return null;
   }
-  ctx.drawImage(video, 0, 0, size, size);
+  ctx.drawImage(
+    video,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
+    0,
+    0,
+    size,
+    size,
+  );
   try {
     const { data } = ctx.getImageData(0, 0, size, size);
     return averageHashFromRgba(data, size, size);
   } catch {
     return null;
   }
+}
+
+export function frameFingerprintFromVideo(video: HTMLVideoElement): string | null {
+  if (!video.videoWidth || !video.videoHeight) {
+    return null;
+  }
+  return frameFingerprintFromVideoRegion(video, {
+    x: 0,
+    y: 0,
+    width: video.videoWidth,
+    height: video.videoHeight,
+  });
 }
 
 export function logLiveCaptureDebug(event: string, detail?: Record<string, unknown>): void {

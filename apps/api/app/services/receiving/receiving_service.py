@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from collections import Counter
@@ -699,6 +700,7 @@ def _persist_receiving_upload_item(
     stable_frame_count: int,
     frame_sequence_index: int | None,
     uploaded_at: Any,
+    extra_capture_metadata: dict[str, Any] | None = None,
 ) -> ReceivingSessionItem:
     last_error: IntegrityError | None = None
     for attempt in range(MAX_SEQUENCE_INDEX_RETRIES):
@@ -739,6 +741,7 @@ def _persist_receiving_upload_item(
                     "capture_source": normalized_capture_source,
                     "frame_fingerprint": prepared.frame_fingerprint,
                     "stable_frame_count": stable_frame_count,
+                    **(extra_capture_metadata or {}),
                 },
                 uploaded_at=uploaded_at,
                 recognized_at=uploaded_at,
@@ -783,10 +786,38 @@ async def upload_receiving_session_images(
     frame_fingerprint: str | None = None,
     stable_frame_count: int = 0,
     frame_sequence_index: int | None = None,
+    diagnostic_image: UploadFile | None = None,
+    capture_metadata_json: str | None = None,
 ) -> ReceivingUploadResponse:
     sess = _require_owner(session, owner_user_id=owner_user_id, receiving_session_id=receiving_session_id)
     if not images:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one image is required")
+
+    extra_capture_metadata: dict[str, Any] = {}
+    if capture_metadata_json:
+        try:
+            parsed = json.loads(capture_metadata_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="capture_metadata_json must be valid JSON",
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="capture_metadata_json must be a JSON object",
+            )
+        extra_capture_metadata.update(parsed)
+
+    if diagnostic_image is not None:
+        diagnostic_body = await _read_upload_bytes(diagnostic_image)
+        with Image.open(BytesIO(diagnostic_body)) as img:
+            diagnostic_width = int(img.width)
+            diagnostic_height = int(img.height)
+        extra_capture_metadata["diagnostic_frame_sha256"] = sha256_raw_bytes(diagnostic_body)
+        extra_capture_metadata["diagnostic_frame_width"] = diagnostic_width
+        extra_capture_metadata["diagnostic_frame_height"] = diagnostic_height
+        extra_capture_metadata["diagnostic_frame_filename"] = diagnostic_image.filename
 
     uploaded = 0
     duplicate_suppressed_count = 0
@@ -842,6 +873,7 @@ async def upload_receiving_session_images(
             stable_frame_count=stable_frame_count,
             frame_sequence_index=frame_sequence_index if frame_sequence_index is not None else None,
             uploaded_at=now,
+            extra_capture_metadata=extra_capture_metadata if uploaded == 0 else None,
         )
         uploaded += 1
         _increment_metrics(

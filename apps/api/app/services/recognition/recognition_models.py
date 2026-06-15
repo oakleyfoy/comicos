@@ -30,9 +30,13 @@ class RecognitionCatalogCandidateRead(BaseModel):
     catalog_issue_id: int
     series: str
     issue_number: str
+    issue_title: str | None = None
+    series_start_year: int | None = None
+    volume_number: int | None = None
     variant: str | None = None
     publisher: str | None = None
     cover_image_url: str | None = None
+    cover_date: date | None = None
     release_date: date | None = None
     confidence: float = 0.0
     source: str = "catalog_search"

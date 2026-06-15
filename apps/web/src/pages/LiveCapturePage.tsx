@@ -10,6 +10,7 @@ import {
 import { StatusBanner } from "../components/StatusBanner";
 import { CameraFeed } from "../components/live-capture/CameraFeed";
 import { RecognitionOverlay } from "../components/live-capture/RecognitionOverlay";
+import { ScannerFramingGuide } from "../components/live-capture/ScannerFramingGuide";
 import { RecognitionResultCard } from "../components/live-capture/RecognitionResultCard";
 import { RecognitionReviewModal, type RecognitionReviewCloseAction } from "../components/live-capture/RecognitionReviewModal";
 import {
@@ -25,10 +26,19 @@ import {
   shouldSuppressDuplicateFingerprint,
 } from "./liveCaptureState";
 import {
-  frameFingerprintFromVideo,
+  frameFingerprintFromVideoRegion,
   fingerprintsSimilar,
   logLiveCaptureDebug,
 } from "./liveCaptureFingerprint";
+import {
+  analyzeComicPresenceInGuide,
+  captureFramedVideoFrames,
+  computeGuideRect,
+  mapGuideRectToOverlayStyle,
+  resolveFramingGuideStatus,
+  type FramingGuideStatus,
+  type GuideOverlayStyle,
+} from "./liveCaptureFraming";
 import {
   formatCaptureMode,
   formatCaptureModeLabel,
@@ -39,6 +49,7 @@ import {
   resolveActiveCameraName,
   resolveLastFrameTimestamp,
   resolveLiveCapturePhase,
+  STABLE_FRAME_THRESHOLD,
 } from "./liveCaptureUi";
 
 interface LiveCapturePageProps {
@@ -47,24 +58,6 @@ interface LiveCapturePageProps {
   routeLabel: string;
   mirrored?: boolean;
   keyboardShortcuts?: boolean;
-}
-
-async function captureVideoFrame(video: HTMLVideoElement, captureSource: string, fingerprint: string): Promise<File | null> {
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return null;
-  }
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((value) => resolve(value), "image/jpeg", 0.92);
-  });
-  if (!blob) {
-    return null;
-  }
-  return new File([blob], `${captureSource.toLowerCase()}-${fingerprint}.jpg`, { type: "image/jpeg" });
 }
 
 function shouldAutoOpenReview(item: ReceivingSessionItemRead): boolean {
@@ -114,6 +107,7 @@ function LiveCapturePageInner({
   keyboardShortcuts = false,
 }: LiveCapturePageProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraViewportRef = useRef<HTMLDivElement>(null);
   const trackerRef = useRef(createStableFrameTracker());
   const recentFingerprintsRef = useRef<Set<string>>(new Set());
   const inFlightFingerprintRef = useRef<string | null>(null);
@@ -130,6 +124,8 @@ function LiveCapturePageInner({
   const [lastFrameCapturedAt, setLastFrameCapturedAt] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("Ready to capture.");
   const [stableState, setStableState] = useState(trackerRef.current);
+  const [framingGuideStatus, setFramingGuideStatus] = useState<FramingGuideStatus>("none");
+  const [guideOverlayStyle, setGuideOverlayStyle] = useState<GuideOverlayStyle | null>(null);
   const [manualReviewItemId, setManualReviewItemId] = useState<number | null>(null);
   const [dismissedReviewIds, setDismissedReviewIds] = useState<number[]>([]);
   const [capturedFrameUrl, setCapturedFrameUrl] = useState<string | null>(null);
@@ -263,16 +259,47 @@ function LiveCapturePageInner({
     setCameraError(null);
   }, [deviceId]);
 
+  const syncGuideOverlay = useCallback((): void => {
+    const video = videoRef.current;
+    const container = cameraViewportRef.current;
+    if (!video?.videoWidth || !video.videoHeight || !container) {
+      setGuideOverlayStyle(null);
+      return;
+    }
+    const rect = computeGuideRect(video.videoWidth, video.videoHeight);
+    const { width, height } = container.getBoundingClientRect();
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    setGuideOverlayStyle(
+      mapGuideRectToOverlayStyle(video.videoWidth, video.videoHeight, width, height, rect, mirrored),
+    );
+  }, [mirrored]);
+
   const handleStreamReady = useCallback((): void => {
     setCameraReady(true);
     setCameraError(null);
     void refreshDeviceList();
-  }, [refreshDeviceList]);
+    syncGuideOverlay();
+  }, [refreshDeviceList, syncGuideOverlay]);
 
   const handleCameraError = useCallback((message: string): void => {
     setCameraReady(false);
     setCameraError(message);
   }, []);
+
+  useEffect(() => {
+    syncGuideOverlay();
+    const container = cameraViewportRef.current;
+    if (!container) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      syncGuideOverlay();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [cameraReady, syncGuideOverlay]);
 
   useEffect(() => {
     if (!session || paused) {
@@ -308,15 +335,43 @@ function LiveCapturePageInner({
       if (!video) {
         return;
       }
-      const fingerprint = frameFingerprintFromVideo(video);
+      const guideRect = computeGuideRect(video.videoWidth, video.videoHeight);
+      const presence = analyzeComicPresenceInGuide(video, guideRect);
+      const comicDetected = presence?.detected ?? false;
+      setFramingGuideStatus(
+        resolveFramingGuideStatus(comicDetected, trackerRef.current.sameCount, STABLE_FRAME_THRESHOLD),
+      );
+
+      const fingerprint = frameFingerprintFromVideoRegion(video, guideRect);
       if (!fingerprint) {
         logLiveCaptureDebug("frame extracted", { ok: false, reason: "no fingerprint" });
+        setFramingGuideStatus("none");
         return;
       }
-      logLiveCaptureDebug("frame extracted", { ok: true, fingerprint });
-      const next = advanceStableFrameTracker(trackerRef.current, fingerprint, 3, fingerprintsSimilar);
+      logLiveCaptureDebug("frame extracted", { ok: true, fingerprint, comicDetected });
+
+      if (!comicDetected) {
+        trackerRef.current = {
+          ...trackerRef.current,
+          lastFingerprint: fingerprint,
+          sameCount: 0,
+        };
+        setStableState(trackerRef.current);
+        setFramingGuideStatus("none");
+        return;
+      }
+
+      const next = advanceStableFrameTracker(
+        trackerRef.current,
+        fingerprint,
+        STABLE_FRAME_THRESHOLD,
+        fingerprintsSimilar,
+      );
       trackerRef.current = next.tracker;
       setStableState(next.tracker);
+      setFramingGuideStatus(
+        resolveFramingGuideStatus(true, next.tracker.sameCount, STABLE_FRAME_THRESHOLD),
+      );
       logLiveCaptureDebug("frame compared", {
         sameCount: next.tracker.sameCount,
         stableIncremented: next.stableIncremented,
@@ -339,22 +394,30 @@ function LiveCapturePageInner({
       const actionEpochAtStart = userActionEpochRef.current;
       void (async () => {
         try {
-          const file = await captureVideoFrame(video, captureSource, fingerprint);
-          if (!file) {
+          const framed = await captureFramedVideoFrames(video, captureSource, fingerprint, guideRect);
+          if (!framed) {
             setStatusMessage("Could not encode camera frame for upload.");
             logLiveCaptureDebug("capture failed", { reason: "canvas encode returned null" });
             return;
           }
           logLiveCaptureDebug("uploading frame", { sessionId: session.id, fingerprint });
-          const uploaded = await apiClient.uploadReceivingSessionImages(session.id, [file], {
+          const uploaded = await apiClient.uploadReceivingSessionImages(session.id, [framed.recognition], {
             capture_source: captureSource,
             frame_fingerprint: fingerprint,
             stable_frame_count: next.tracker.sameCount,
             frame_sequence_index: session.items.length,
+            diagnostic_image: framed.diagnostic,
+            capture_metadata_json: {
+              framing_guide: framed.guideRect,
+              full_frame_width: video.videoWidth,
+              full_frame_height: video.videoHeight,
+              recognition_crop_width: framed.guideRect.width,
+              recognition_crop_height: framed.guideRect.height,
+            },
           });
           recentFingerprintsRef.current.add(fingerprint);
           try {
-            const nextFrameUrl = URL.createObjectURL(file);
+            const nextFrameUrl = URL.createObjectURL(framed.recognition);
             if (capturedFrameUrlRef.current) {
               URL.revokeObjectURL(capturedFrameUrlRef.current);
             }
@@ -649,7 +712,7 @@ function LiveCapturePageInner({
           </div>
 
           <div className="rounded-[2rem] border border-slate-800 bg-slate-900 p-3 shadow-2xl">
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[1.5rem] bg-slate-950">
+            <div ref={cameraViewportRef} className="relative aspect-[4/3] overflow-hidden rounded-[1.5rem] bg-slate-950">
               <CameraFeed
                 videoRef={videoRef}
                 deviceId={deviceId}
@@ -657,6 +720,11 @@ function LiveCapturePageInner({
                 className="h-full w-full"
                 onError={handleCameraError}
                 onStreamReady={handleStreamReady}
+              />
+              <ScannerFramingGuide
+                overlayStyle={guideOverlayStyle}
+                status={framingGuideStatus}
+                hidden={paused || Boolean(cameraError) || !cameraReady}
               />
               <RecognitionOverlay
                 title={paused ? "Capture paused" : "Point the camera at a comic"}
