@@ -19,11 +19,15 @@ import app.models  # noqa: F401,E402
 
 from app.models.catalog_p97 import ComicVineVolumeUniverse  # noqa: E402
 from app.services.p97_comicvine_universe_discovery_service import (  # noqa: E402
+    DISCOVERY_MODE_SEARCH,
+    ComicVineEndpointForbiddenError,
     UniverseDiscoveryProgress,
     discover_universe_batch,
+    filter_volume_search_rows,
     load_discovery_progress,
     parse_comicvine_datetime,
     save_discovery_progress,
+    search_discovery_buckets,
     upsert_universe_volume,
     volume_row_from_api,
 )
@@ -64,6 +68,14 @@ def test_volume_row_from_api_parses_id_and_counts() -> None:
     assert parsed["count_of_issues"] == 900
 
 
+def test_filter_volume_search_rows() -> None:
+    rows = [
+        {"id": "4050-1", "resource_type": "volume", "name": "A"},
+        {"id": "4020-2", "resource_type": "issue", "name": "B"},
+    ]
+    assert len(filter_volume_search_rows(rows)) == 1
+
+
 def test_upsert_universe_volume_insert_then_update(session: Session) -> None:
     payload = {
         "volume_id": 100,
@@ -86,34 +98,84 @@ def test_upsert_universe_volume_insert_then_update(session: Session) -> None:
 
 def test_discovery_progress_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "progress.json"
-    progress = UniverseDiscoveryProgress(offset=500, status="running", volumes_in_db=500)
+    progress = UniverseDiscoveryProgress(
+        offset=500,
+        status="running",
+        volumes_in_db=500,
+        discovery_mode=DISCOVERY_MODE_SEARCH,
+        list_endpoint_forbidden=True,
+        search_bucket_index=3,
+    )
     save_discovery_progress(path, progress)
     loaded = load_discovery_progress(path)
     assert loaded.offset == 500
-    assert loaded.status == "running"
-    assert loaded.volumes_in_db == 500
+    assert loaded.discovery_mode == DISCOVERY_MODE_SEARCH
+    assert loaded.list_endpoint_forbidden is True
+    assert loaded.search_bucket_index == 3
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["updated_at"]
 
 
-def test_discover_universe_batch_upserts_and_advances_offset(session: Session) -> None:
+def test_discover_universe_batch_list_mode(session: Session) -> None:
     client = SimpleNamespace()
+    progress = UniverseDiscoveryProgress()
 
     def fake_fetch(*, offset: int, limit: int = 100):
         if offset == 0:
             return {
                 "number_of_total_results": 150,
                 "results": [
-                    {"id": 1, "name": "A", "publisher": {"name": "Marvel"}, "count_of_issues": 10},
-                    {"id": 2, "name": "B", "publisher": {"name": "DC"}, "count_of_issues": 20},
+                    {"id": "4050-1", "name": "A", "publisher": {"name": "Marvel"}, "count_of_issues": 10},
+                    {"id": "4050-2", "name": "B", "publisher": {"name": "DC"}, "count_of_issues": 20},
                 ],
             }
         return {"results": []}
 
-    client.fetch_volume_page = MagicMock(side_effect=fake_fetch)
-    result = discover_universe_batch(session, client, offset=0, max_pages=2)
+    client.fetch_volume_list_page = MagicMock(side_effect=fake_fetch)
+    result = discover_universe_batch(session, client, progress, max_pages=2)
     assert result.pages_fetched == 1
     assert result.inserted == 2
-    assert result.offset_after == 2
-    assert result.number_of_total_results == 150
+    assert progress.offset == 2
     assert result.complete is True
+
+
+def test_list_403_switches_to_search(session: Session) -> None:
+    client = SimpleNamespace()
+    progress = UniverseDiscoveryProgress()
+
+    def fake_list(*, offset: int, limit: int = 100):
+        raise ComicVineEndpointForbiddenError("403 list")
+
+    def fake_search(*, query: str, offset: int, limit: int = 10):
+        assert query == search_discovery_buckets()[0]
+        return {
+            "results": [
+                {
+                    "id": "4050-9",
+                    "name": "Nine",
+                    "resource_type": "volume",
+                    "publisher": {"name": "Marvel"},
+                    "count_of_issues": 9,
+                }
+            ]
+        }
+
+    client.fetch_volume_list_page = MagicMock(side_effect=fake_list)
+    client.fetch_volume_search_page = MagicMock(side_effect=fake_search)
+    result = discover_universe_batch(session, client, progress, max_pages=1)
+    assert progress.discovery_mode == DISCOVERY_MODE_SEARCH
+    assert progress.list_endpoint_forbidden is True
+    assert result.inserted == 1
+    assert result.endpoint_forbidden is False
+
+
+def test_search_403_sets_endpoint_forbidden(session: Session) -> None:
+    client = SimpleNamespace()
+    progress = UniverseDiscoveryProgress(discovery_mode=DISCOVERY_MODE_SEARCH)
+
+    client.fetch_volume_search_page = MagicMock(
+        side_effect=ComicVineEndpointForbiddenError("403 search")
+    )
+    result = discover_universe_batch(session, client, progress, max_pages=1)
+    assert result.endpoint_forbidden is True
+    assert progress.status == "endpoint_forbidden"

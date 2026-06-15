@@ -33,6 +33,10 @@ def _leader(label: str, value: str, *, width: int = 52) -> str:
     return f"{label}{'.' * dots}{value}"
 
 
+def _fmt_pct(value: float) -> str:
+    return f"{value:.1f}%"
+
+
 def format_report(report, *, top_volumes: int = 25, top_publishers: int = 15) -> str:
     lines = [
         "P97 COMICVINE UNIVERSE ANALYTICS",
@@ -42,7 +46,12 @@ def format_report(report, *, top_volumes: int = 25, top_publishers: int = 15) ->
         "",
         f"Current ComicOS Catalog: {_fmt(report.current_catalog_issues)}",
         f"Projected Catalog Ceiling: {_fmt(report.projected_comicos_catalog_ceiling)}",
+        "",
+        f"Direct CV-Linked Existing Issues: {_fmt(report.direct_cv_linked_existing_issues)}",
+        f"Estimated Matched Existing Issues: {_fmt(report.estimated_matched_existing_issues)}",
         f"Issues Not Yet In Catalog: {_fmt(report.issues_not_yet_in_catalog)}",
+        f"Unmatched Discovered Issue Ceiling: {_fmt(report.unmatched_discovered_issue_ceiling)}",
+        f"Coverage Percent: {_fmt_pct(report.coverage_percent)}",
         "",
         f"LARGEST VOLUMES (top {top_volumes})",
         "",
@@ -71,8 +80,8 @@ def main() -> int:
         with Session(engine) as session:
             report = get_universe_analytics_report(
                 session,
-                top_volumes=max(1000, args.top_volumes),
-                top_publishers=max(args.top_publishers, 100),
+                top_volumes_limit=max(1000, args.top_volumes),
+                top_publishers_limit=max(args.top_publishers, 100),
             )
     except Exception as exc:  # noqa: BLE001
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -84,7 +93,11 @@ def main() -> int:
             "total_discoverable_issues": report.total_discoverable_issues,
             "current_catalog_issues": report.current_catalog_issues,
             "projected_comicos_catalog_ceiling": report.projected_comicos_catalog_ceiling,
+            "direct_cv_linked_existing_issues": report.direct_cv_linked_existing_issues,
+            "estimated_matched_existing_issues": report.estimated_matched_existing_issues,
             "issues_not_yet_in_catalog": report.issues_not_yet_in_catalog,
+            "unmatched_discovered_issue_ceiling": report.unmatched_discovered_issue_ceiling,
+            "coverage_percent": report.coverage_percent,
             "largest_volumes": [
                 {
                     "volume_id": row.volume_id,

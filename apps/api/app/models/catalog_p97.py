@@ -58,6 +58,33 @@ class ComicVineVolumeUniverse(SQLModel, table=True):
     )
 
 
+class P97VolumeIssueImportQueue(SQLModel, table=True):
+    """Prioritized queue of ComicVine volumes pending issue import into ComicOS."""
+
+    __tablename__ = "p97_volume_issue_import_queue"
+
+    id: int | None = Field(default=None, primary_key=True)
+    comicvine_volume_id: int = Field(nullable=False, index=True, unique=True)
+    name: str = Field(max_length=512, nullable=False)
+    publisher: str | None = Field(default=None, max_length=255, nullable=True, index=True)
+    count_of_issues: int = Field(default=0, nullable=False)
+    existing_issue_count: int = Field(default=0, nullable=False)
+    missing_issue_count: int = Field(default=0, nullable=False, index=True)
+    coverage_percent: float = Field(default=0.0, nullable=False)
+    priority_score: float = Field(default=0.0, nullable=False, index=True)
+    launch_priority_tier: str = Field(
+        default="tier_3_other_us", max_length=32, nullable=False, index=True
+    )
+    request_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    status: str = Field(default="pending", max_length=16, nullable=False, index=True)
+    attempts: int = Field(default=0, nullable=False)
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    started_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class P97ComicVineRequestLedger(SQLModel, table=True):
     __tablename__ = "p97_comicvine_request_ledger"
 

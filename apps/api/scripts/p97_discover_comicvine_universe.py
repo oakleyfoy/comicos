@@ -106,14 +106,17 @@ def run_discovery(
     offset: int | None,
     max_pages: int,
     until_complete: bool,
-    budget: ComicVineRateBudget,
     progress_path: Path,
     client: ComicVineUniverseDiscoveryClient,
 ) -> dict:
     progress = load_discovery_progress(progress_path)
-    start_offset = int(offset if offset is not None else progress.offset)
+    if offset is not None:
+        progress.offset = int(offset)
+    if progress.list_endpoint_forbidden and progress.discovery_mode == "list":
+        progress.discovery_mode = "search"
+    start_offset = progress.offset
+    start_mode = progress.discovery_mode
     progress.status = "running"
-    progress.offset = start_offset
     progress.api_requests_this_run = 0
     progress.pages_fetched_this_run = 0
     progress.last_error = None
@@ -123,25 +126,31 @@ def run_discovery(
     total_updated = 0
     total_pages = 0
     total_requests = 0
-    current_offset = start_offset
     complete = False
     throttled = False
+    endpoint_forbidden = False
     last_error: str | None = None
+    switched_to_search = False
 
     while True:
         batch = discover_universe_batch(
             session,
             client,
-            offset=current_offset,
+            progress,
             max_pages=1 if until_complete else max_pages,
         )
         total_inserted += batch.inserted
         total_updated += batch.updated
         total_pages += batch.pages_fetched
         total_requests += batch.api_requests
-        current_offset = batch.offset_after
         if batch.number_of_total_results is not None:
             progress.number_of_total_results = batch.number_of_total_results
+        if batch.switched_to_search:
+            switched_to_search = True
+        if batch.endpoint_forbidden:
+            endpoint_forbidden = True
+            last_error = batch.error
+            break
         if batch.throttled:
             throttled = True
             last_error = batch.error
@@ -155,12 +164,13 @@ def run_discovery(
         if not until_complete:
             break
 
-    progress.offset = current_offset
     progress.volumes_in_db = _count_universe_volumes(session)
     progress.api_requests_this_run = total_requests
     progress.pages_fetched_this_run = total_pages
     progress.last_error = last_error
-    if throttled:
+    if endpoint_forbidden:
+        progress.status = "endpoint_forbidden"
+    elif throttled:
         progress.status = "paused_420"
     elif complete:
         progress.status = "complete"
@@ -171,8 +181,14 @@ def run_discovery(
     save_discovery_progress(progress_path, progress)
 
     return {
+        "discovery_mode": progress.discovery_mode,
+        "discovery_mode_before": start_mode,
         "offset_before": start_offset,
-        "offset_after": current_offset,
+        "offset_after": progress.offset,
+        "search_bucket_index": progress.search_bucket_index,
+        "search_query": progress.current_search_query(),
+        "list_endpoint_forbidden": progress.list_endpoint_forbidden,
+        "switched_to_search": switched_to_search,
         "pages_fetched": total_pages,
         "api_requests": total_requests,
         "inserted": total_inserted,
@@ -181,6 +197,7 @@ def run_discovery(
         "number_of_total_results": progress.number_of_total_results,
         "complete": complete,
         "throttled": throttled,
+        "endpoint_forbidden": endpoint_forbidden,
         "error": last_error,
         "status": progress.status,
     }
@@ -191,6 +208,7 @@ def format_summary(result: dict) -> str:
         "P97 COMICVINE UNIVERSE DISCOVERY",
         "=" * 52,
         f"{'Status':<26}{result.get('status', '—')}",
+        f"{'Mode':<26}{result.get('discovery_mode', '—')}",
         f"{'Offset':<26}{result.get('offset_before')} → {result.get('offset_after')}",
         f"{'Pages this run':<26}{result.get('pages_fetched')}",
         f"{'API requests':<26}{result.get('api_requests')}",
@@ -198,6 +216,9 @@ def format_summary(result: dict) -> str:
         f"{'Updated':<26}{result.get('updated')}",
         f"{'Volumes in DB':<26}{result.get('volumes_in_db')}",
         f"{'CV total results':<26}{result.get('number_of_total_results') or '—'}",
+        f"{'Search bucket':<26}{result.get('search_bucket_index')}",
+        f"{'Search query':<26}{result.get('search_query') or '—'}",
+        f"{'List /volumes/ forbidden':<26}{result.get('list_endpoint_forbidden')}",
         f"{'Complete':<26}{result.get('complete')}",
     ]
     if result.get("error"):
@@ -247,7 +268,6 @@ def main() -> int:
                 offset=args.offset,
                 max_pages=max(1, int(args.pages)),
                 until_complete=bool(args.until_complete),
-                budget=budget,
                 progress_path=progress_path,
                 client=client,
             )
@@ -262,7 +282,7 @@ def main() -> int:
         print(json.dumps(result, separators=(",", ":")))
     else:
         print(format_summary(result))
-    return 0 if not result.get("error") else 1
+    return 0 if not result.get("error") and not result.get("endpoint_forbidden") else 1
 
 
 if __name__ == "__main__":
