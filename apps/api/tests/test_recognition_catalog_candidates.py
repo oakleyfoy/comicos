@@ -190,3 +190,16 @@ def test_search_absolute_batman_imported_series(client: TestClient, session: Ses
 def test_search_requires_authentication(client: TestClient) -> None:
     response = client.get("/api/v1/recognition/catalog-candidates", params={"q": "Venom"})
     assert response.status_code == 401
+
+
+def test_recognition_catalog_candidates_registered_in_openapi(client: TestClient) -> None:
+    """P97-12: deployed APIs must expose correction modal catalog search in OpenAPI."""
+    spec = client.get("/openapi.json")
+    assert spec.status_code == 200, spec.text
+    paths = spec.json().get("paths", {})
+    path = "/api/v1/recognition/catalog-candidates"
+    assert path in paths, f"missing OpenAPI path {path!r}; recognition layer may not be mounted"
+    get_op = paths[path].get("get")
+    assert get_op is not None
+    assert get_op.get("summary") or get_op.get("operationId")
+    assert "RecognitionCatalogCandidateRead" in str(spec.json().get("components", {}).get("schemas", {}))
