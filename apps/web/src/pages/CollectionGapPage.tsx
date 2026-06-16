@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import {
   ApiError,
   apiClient,
-  type AcquisitionRead,
+  type AcquisitionListItem,
   type CollectionGapBuilderIssueRow,
   type CollectionGapBuilderPublisherRow,
   type CollectionGapBuilderVolumeRow,
@@ -48,7 +48,7 @@ export function CollectionGapPage(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
 
   const [placeholderModal, setPlaceholderModal] = useState(false);
-  const [acquisitions, setAcquisitions] = useState<AcquisitionRead[]>([]);
+  const [acquisitions, setAcquisitions] = useState<AcquisitionListItem[]>([]);
   const [acquisitionId, setAcquisitionId] = useState<number | null>(null);
   const [placeholderIssue, setPlaceholderIssue] = useState<CollectionGapBuilderIssueRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -190,9 +190,9 @@ export function CollectionGapPage(): JSX.Element {
     setError(null);
     try {
       if (placeholderIssue.catalog_issue_id) {
-        await apiClient.addAcquisitionItems(acquisitionId, {
-          items: [{ catalog_issue_id: placeholderIssue.catalog_issue_id, quantity: 1 }],
-        });
+        await apiClient.addAcquisitionItems(acquisitionId, [
+          { catalog_issue_id: placeholderIssue.catalog_issue_id, quantity: 1 },
+        ]);
       } else {
         await apiClient.createTreePlaceholderIssue(acquisitionId, {
           publisher: selectedPublisher,

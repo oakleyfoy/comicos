@@ -8,6 +8,7 @@ import {
   type PlaceholderQueueItem,
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
+import { PageHeader } from "../components/PageHeader";
 
 const PAGE_SIZE = 50;
 
@@ -98,17 +99,18 @@ export function PlaceholderMatchQueuePage(): JSX.Element {
   const pageIndex = Math.floor(offset / PAGE_SIZE) + 1;
 
   return (
-    <AppShell title="Placeholder Match Queue">
+    <AppShell>
+      <PageHeader
+        eyebrow="Catalog"
+        title="Placeholder Match Queue"
+        description="Unresolved acquisition placeholders — local catalog matching only."
+      />
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold text-white">Placeholder Match Queue</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Unresolved acquisition placeholders — local catalog matching only.{" "}
-            <Link to="/catalog-universe" className="text-sky-400 hover:underline">
-              Universe Tree
-            </Link>
-          </p>
-        </header>
+        <p className="mb-4 text-sm text-slate-400">
+          <Link to="/catalog-universe" className="text-sky-400 hover:underline">
+            Universe Tree
+          </Link>
+        </p>
 
         <div className="mb-4 flex flex-wrap gap-3">
           <input
