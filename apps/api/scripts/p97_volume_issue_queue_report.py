@@ -18,7 +18,12 @@ bootstrap_api_path()
 from sqlmodel import Session  # noqa: E402
 
 from app.services.p97_volume_issue_import_queue_service import get_volume_issue_queue_report  # noqa: E402
-from p97_volume_issue_queue_format import append_top_volumes_by_tier, format_volume_row  # noqa: E402
+from app.services.p97_queue_priority_config import is_core_run  # noqa: E402
+from p97_volume_issue_queue_format import (  # noqa: E402
+    append_top_volumes_by_tier,
+    format_volume_row,
+    format_volume_row_header,
+)
 from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
 
 
@@ -44,6 +49,8 @@ def format_report(report) -> str:
         f"Total Missing Issues Queued: {_fmt(report.total_missing_issues_queued)}",
         "",
         "TOP QUEUED VOLUMES BY PRIORITY (OVERALL)",
+        "",
+        format_volume_row_header(),
         "",
     ]
     for row in report.top_volumes:
@@ -86,6 +93,8 @@ def main() -> int:
                         "name": row.name,
                         "publisher": row.publisher,
                         "missing_issue_count": row.missing_issue_count,
+                        "count_of_issues": row.count_of_issues,
+                        "is_core_run": is_core_run(row.name),
                         "priority_score": row.priority_score,
                         "launch_priority_tier": row.launch_priority_tier,
                         "status": row.status,
@@ -100,6 +109,8 @@ def main() -> int:
                     "name": row.name,
                     "publisher": row.publisher,
                     "missing_issue_count": row.missing_issue_count,
+                    "count_of_issues": row.count_of_issues,
+                    "is_core_run": is_core_run(row.name),
                     "priority_score": row.priority_score,
                     "launch_priority_tier": row.launch_priority_tier,
                     "status": row.status,

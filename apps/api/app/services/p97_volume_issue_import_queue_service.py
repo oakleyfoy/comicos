@@ -52,6 +52,17 @@ class BuildVolumeIssueQueueResult:
     total_missing_issues_queued: int = 0
 
 
+def _start_year_by_volume_id(session: Session, volume_ids: list[int]) -> dict[int, int | None]:
+    if not volume_ids:
+        return {}
+    pairs = session.exec(
+        select(ComicVineVolumeUniverse.volume_id, ComicVineVolumeUniverse.start_year).where(
+            ComicVineVolumeUniverse.volume_id.in_(volume_ids)
+        )
+    ).all()
+    return {int(vid): (int(sy) if sy is not None else None) for vid, sy in pairs}
+
+
 def refresh_pending_queue_priorities(session: Session) -> int:
     """Recompute tier/score for pending and failed rows (never manual tier_0)."""
     updated = 0
@@ -60,6 +71,9 @@ def refresh_pending_queue_priorities(session: Session) -> int:
             P97VolumeIssueImportQueue.status.in_((STATUS_PENDING, STATUS_FAILED))
         )
     ).all()
+    start_years = _start_year_by_volume_id(
+        session, [int(r.comicvine_volume_id) for r in rows]
+    )
     for row in rows:
         if row.launch_priority_tier == TIER_0_MANUAL:
             continue
@@ -69,6 +83,7 @@ def refresh_pending_queue_priorities(session: Session) -> int:
             coverage_percent=float(row.coverage_percent or 0.0),
             publisher=row.publisher,
             name=row.name,
+            start_year=start_years.get(int(row.comicvine_volume_id)),
         )
         if (
             row.priority_score != priority.priority_score
@@ -180,6 +195,7 @@ def build_volume_issue_import_queue(
             coverage_percent=coverage,
             publisher=universe.publisher,
             name=universe.name,
+            start_year=universe.start_year,
         )
         now = _utc_now()
         if existing_row is None:

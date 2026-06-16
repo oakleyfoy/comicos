@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from app.services.catalog_ingestion_service import normalize_series_name
+from app.services.p97_queue_priority_config import compute_collector_queue_score
 
 TIER_0_MANUAL = "tier_0_manual_request"
 TIER_1_CORE = "tier_1_core"
@@ -181,16 +182,19 @@ def compute_volume_import_priority(
     coverage_percent: float,
     publisher: str | None,
     name: str | None,
+    start_year: int | None = None,
 ) -> VolumeImportPriority:
+    del coverage_percent  # retained for API compatibility
     tier = classify_launch_priority_tier(publisher=publisher, name=name)
-    capped_missing = min(max(int(missing_issue_count), 0), MISSING_ISSUE_SCORE_CAP)
-    score = TIER_SCORE_BASE[tier] + float(capped_missing) * MISSING_ISSUE_SCORE_MULTIPLIER
-    if int(count_of_issues) >= 10:
-        score += 1_500.0
-    score += max(0.0, 100.0 - min(float(coverage_percent), 100.0)) * 20.0
-    if is_foreign_anthology_title(name):
-        score -= 15_000.0
-    return VolumeImportPriority(priority_score=round(score, 2), launch_priority_tier=tier)
+    score = compute_collector_queue_score(
+        publisher=publisher,
+        name=name,
+        missing_issue_count=missing_issue_count,
+        total_issue_count=count_of_issues,
+        start_year=start_year,
+        force_foreign_archive=is_foreign_anthology_title(name),
+    )
+    return VolumeImportPriority(priority_score=score, launch_priority_tier=tier)
 
 
 # Backward-compatible alias for tests/callers.
