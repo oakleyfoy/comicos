@@ -462,6 +462,7 @@ from app.models.final_platform_certification import FinalPlatformCertificationRu
 from app.models.daily_action_engine import DailyCollectorAction
 from app.models.want_list import WantList, WantListItem
 from app.models.collection_gap import CollectionGap
+from app.models.collection_gap_target import CollectionGapTarget
 from app.models.collected_run import CollectedRun
 from app.models.next_issue import NextIssue
 from app.models.future_release_match import FutureReleaseMatch
@@ -1485,6 +1486,7 @@ __all__ = [
     "WantList",
     "WantListItem",
     "CollectionGap",
+    "CollectionGapTarget",
     "CollectedRun",
     "NextIssue",
     "FutureReleaseMatch",

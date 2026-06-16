@@ -1,5 +1,5 @@
 import { normalizeInventoryQueryParams } from "../lib/inventoryQueryParams";
-import { handleApi401Response } from "../lib/auth401Policy";
+import { handleApi401Response, isCredentialExchangePath } from "../lib/auth401Policy";
 import { ApiError } from "./apiError";
 import type { MidtownExtensionCaptureDiagnostics } from "../lib/midtownExtensionBridge";
 
@@ -7189,6 +7189,18 @@ async function rejectUnauthorized(path: string, response: Response): Promise<nev
   });
 }
 
+async function handleHttp401(path: string, response: Response, token: string | null): Promise<never> {
+  if (isCredentialExchangePath(path)) {
+    return rejectUnauthorized(path, response);
+  }
+  clearStoredToken();
+  redirectToLoginIfNeeded();
+  throw new ApiError(
+    token ? "Your session expired. Sign in again." : "Sign in to continue.",
+    401,
+  );
+}
+
 function assertJsonApiResponse(path: string, response: Response): void {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("json")) {
@@ -7227,7 +7239,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 401) {
-    await rejectUnauthorized(path, response);
+    await handleHttp401(path, response, token);
   }
 
   if (!response.ok) {
@@ -7365,7 +7377,7 @@ async function requestEmpty(path: string, init?: RequestInit): Promise<void> {
   });
 
   if (response.status === 401) {
-    await rejectUnauthorized(path, response);
+    await handleHttp401(path, response, token);
   }
 
   if (!response.ok) {
@@ -7394,7 +7406,7 @@ async function fetchBinary(path: string): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers });
 
   if (response.status === 401) {
-    await rejectUnauthorized(path, response);
+    await handleHttp401(path, response, token);
   }
 
   if (!response.ok) {
@@ -7440,7 +7452,7 @@ async function downloadAuthenticatedReport(pathFromRoot: string, fallbackFilenam
   const response = await fetch(`${API_BASE_URL}${pathFromRoot}`, { headers });
 
   if (response.status === 401) {
-    await rejectUnauthorized(pathFromRoot, response);
+    await handleHttp401(pathFromRoot, response, token);
   }
 
   if (!response.ok) {
@@ -17580,6 +17592,98 @@ export interface CollectionGapListRead {
   offset: number;
 }
 
+export type CollectionGapBuilderStatus =
+  | "OWNED"
+  | "PLACEHOLDER_OWNED"
+  | "MISSING"
+  | "SOLD_HISTORY"
+  | "UNKNOWN";
+
+export interface CollectionGapYearRow {
+  year: number;
+  total_issues: number;
+  owned_issues: number;
+  missing_issues: number;
+  completion_percent: number;
+}
+
+export interface CollectionGapYearsResponse {
+  default_year: number;
+  items: CollectionGapYearRow[];
+}
+
+export interface CollectionGapBuilderPublisherRow {
+  publisher: string;
+  total_issues: number;
+  owned_issues: number;
+  missing_issues: number;
+  completion_percent: number;
+  priority_rank: number | null;
+}
+
+export interface CollectionGapBuilderPublishersResponse {
+  year: number;
+  items: CollectionGapBuilderPublisherRow[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CollectionGapBuilderVolumeRow {
+  volume_id: number;
+  title: string;
+  start_year: number | null;
+  issue_count_in_year: number;
+  owned_count: number;
+  missing_count: number;
+  completion_percent: number;
+}
+
+export interface CollectionGapBuilderVolumesResponse {
+  publisher: string;
+  year: number;
+  items: CollectionGapBuilderVolumeRow[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CollectionGapBuilderIssueRow {
+  issue_number: string;
+  issue_title: string | null;
+  release_date: string | null;
+  owned: boolean;
+  placeholder_owned: boolean;
+  catalog_issue_id: number | null;
+  placeholder_issue_id: number | null;
+  gap_status: CollectionGapBuilderStatus;
+}
+
+export interface CollectionGapBuilderIssuesResponse {
+  volume_id: number;
+  year: number;
+  volume_title: string | null;
+  items: CollectionGapBuilderIssueRow[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface WantListTargetItemPayload {
+  publisher: string;
+  series_title: string;
+  volume_id: number;
+  issue_number: string;
+  catalog_issue_id?: number | null;
+  placeholder_issue_id?: number | null;
+}
+
+export interface WantListTargetCreateResponse {
+  created_count: number;
+  skipped_duplicates: number;
+  target_ids: number[];
+}
+
 export type CollectedRunStatus = "ACTIVE" | "INACTIVE" | "COMPLETE" | "UNKNOWN";
 
 export interface CollectedRunRead {
@@ -21216,6 +21320,8 @@ export interface AcquisitionItemRead {
   cost_basis: string;
   copy_number: number;
   is_placeholder: boolean;
+  is_tree_linked: boolean;
+  needs_catalog_match: boolean;
   catalog_status: string | null;
   placeholder_issue_id: number | null;
 }
@@ -21226,6 +21332,124 @@ export interface AddPlaceholderIssuePayload {
   publisher?: string | null;
   quantity?: number;
   notes?: string | null;
+}
+
+export interface TreePlaceholderIssuePayload {
+  publisher: string;
+  volume_id: number;
+  issue_number: string;
+  quantity?: number;
+  issue_title?: string | null;
+  source_issue_id?: string | null;
+}
+
+export interface TreeUnknownIssuePayload {
+  publisher: string;
+  volume_id: number;
+  quantity?: number;
+}
+
+export interface TreePlaceholderRangePayload {
+  publisher: string;
+  volume_id: number;
+  start_issue: number;
+  end_issue: number;
+}
+
+export interface TreePlaceholderRangePreviewResponse {
+  will_create: number;
+  skipped_existing: number;
+  issue_numbers_to_create: string[];
+}
+
+export interface PlaceholderRangePreviewPayload {
+  publisher: string;
+  volume_id: number;
+  start_issue: number;
+  end_issue: number;
+  exclude_issues?: string[];
+  quantity_per_issue?: number;
+  notes?: string | null;
+  prefer_catalog?: boolean;
+  variant_label?: string | null;
+  cover_type?: string | null;
+  printing?: string | null;
+  ratio_variant?: string | null;
+  barcode?: string | null;
+  cover_artist?: string | null;
+  raw_variant_notes?: string | null;
+}
+
+export interface PlaceholderRangePreviewResponse {
+  total_issues_in_range: number;
+  excluded_count: number;
+  already_in_acquisition: number;
+  catalog_items_to_add: number;
+  placeholders_to_create: number;
+  skipped_duplicates: number;
+  catalog_issue_ids: number[];
+  placeholder_issue_numbers: string[];
+}
+
+export interface PlaceholderRangeCreateResponse {
+  catalog_created: number;
+  placeholder_created: number;
+  skipped_duplicates: number;
+  acquisition: AcquisitionRead;
+}
+
+export interface PlaceholderQueueItem {
+  placeholder_issue_id: number;
+  acquisition_id: number;
+  acquisition_type: string | null;
+  seller_name: string | null;
+  publisher: string | null;
+  title: string;
+  issue_number: string | null;
+  quantity: number;
+  catalog_status: string;
+  tree_linked: boolean;
+  variant_label: string | null;
+  raw_variant_notes: string | null;
+  created_at: string;
+  comicvine_volume_id: number | null;
+}
+
+export interface PlaceholderQueueResponse {
+  items: PlaceholderQueueItem[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PlaceholderMatchCandidate {
+  catalog_issue_id: number;
+  series: string;
+  issue_number: string;
+  publisher: string | null;
+  release_date: string | null;
+  catalog_status: string;
+  confidence: string;
+  score: number;
+}
+
+export interface PlaceholderMatchCandidatesResponse {
+  placeholder_issue_id: number;
+  placeholder_label: string;
+  candidates: PlaceholderMatchCandidate[];
+}
+
+export interface LinkPlaceholderResponse {
+  placeholder_issue_id: number;
+  catalog_issue_id: number;
+  catalog_status: string;
+  inventory_copies_updated: number;
+}
+
+export interface TreePlaceholderCreateResponse {
+  created_count: number;
+  skipped_count: number;
+  acquisition: AcquisitionRead;
 }
 
 export interface AcquisitionItemsResponse {
@@ -21354,6 +21578,88 @@ export interface VariantPickerResult {
   series_id: number;
   issue_number: string;
   options: VariantOption[];
+}
+
+export interface CatalogUniverseSummary {
+  total_publishers: number;
+  total_volumes: number;
+  total_issues: number;
+  cataloged_issues: number;
+  discovered_only_issues: number;
+}
+
+export interface CatalogUniversePublisherNode {
+  publisher: string;
+  volume_count: number;
+  issue_count: number;
+}
+
+export interface CatalogUniversePublisherListResponse {
+  summary: CatalogUniverseSummary;
+  items: CatalogUniversePublisherNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CatalogUniverseVolumeNode {
+  volume_id: number;
+  title: string;
+  volume_name: string | null;
+  start_year: number | null;
+  comicvine_volume_id: number | null;
+  issue_count: number;
+  catalog_issue_count: number;
+  min_issue_number: string | null;
+  max_issue_number: string | null;
+  missing_issue_count: number | null;
+  source: string;
+}
+
+export interface CatalogUniverseVolumeListResponse {
+  publisher: string;
+  items: CatalogUniverseVolumeNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CatalogUniverseIssueNode {
+  issue_number: string;
+  issue_title: string | null;
+  release_date: string | null;
+  comicvine_issue_id: number | null;
+  catalog_issue_id: number | null;
+  catalog_status: "CATALOGED" | "DISCOVERED" | "PLACEHOLDER_ELIGIBLE";
+}
+
+export interface CatalogUniverseIssueListResponse {
+  volume_id: number;
+  volume_title: string | null;
+  items: CatalogUniverseIssueNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+  catalog_issue_count: number;
+  discovered_issue_count: number;
+}
+
+export interface CatalogUniverseSearchHit {
+  hit_type: string;
+  publisher?: string | null;
+  volume_id?: number | null;
+  volume_title?: string | null;
+  catalog_issue_id?: number | null;
+  issue_number?: string | null;
+  issue_title?: string | null;
+}
+
+export interface CatalogUniverseSearchResponse {
+  query: string;
+  hits: CatalogUniverseSearchHit[];
+  total_count: number;
+  limit: number;
+  offset: number;
 }
 
 export interface AcquisitionDeleteResponse {
@@ -23221,7 +23527,7 @@ export const apiClient = {
         body,
       });
       if (response.status === 401) {
-        await rejectUnauthorized(uploadPath, response);
+        await handleHttp401(uploadPath, response, token);
       }
       if (!response.ok) {
         let message = "Request failed";
@@ -23263,7 +23569,7 @@ export const apiClient = {
         body,
       });
       if (response.status === 401) {
-        await rejectUnauthorized(uploadPath, response);
+        await handleHttp401(uploadPath, response, token);
       }
       if (!response.ok) {
         let message = "Request failed";
@@ -24896,6 +25202,102 @@ export const apiClient = {
     });
   },
 
+  createTreePlaceholderIssue(
+    acquisitionId: number,
+    payload: TreePlaceholderIssuePayload,
+  ): Promise<TreePlaceholderCreateResponse> {
+    return requestScanV1Flat<TreePlaceholderCreateResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/tree`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  createTreeUnknownPlaceholder(
+    acquisitionId: number,
+    payload: TreeUnknownIssuePayload,
+  ): Promise<TreePlaceholderCreateResponse> {
+    return requestScanV1Flat<TreePlaceholderCreateResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/tree/unknown`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  previewTreePlaceholderRange(
+    acquisitionId: number,
+    payload: TreePlaceholderRangePayload,
+  ): Promise<TreePlaceholderRangePreviewResponse> {
+    return requestScanV1Flat<TreePlaceholderRangePreviewResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/tree/range/preview`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  createTreePlaceholderRange(
+    acquisitionId: number,
+    payload: TreePlaceholderRangePayload,
+  ): Promise<TreePlaceholderCreateResponse> {
+    return requestScanV1Flat<TreePlaceholderCreateResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/tree/range`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  previewPlaceholderRange(
+    acquisitionId: number,
+    payload: PlaceholderRangePreviewPayload,
+  ): Promise<PlaceholderRangePreviewResponse> {
+    return requestScanV1Flat<PlaceholderRangePreviewResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/range-preview`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  createPlaceholderRange(
+    acquisitionId: number,
+    payload: PlaceholderRangePreviewPayload,
+  ): Promise<PlaceholderRangeCreateResponse> {
+    return requestScanV1Flat<PlaceholderRangeCreateResponse>(
+      `/acquisitions/${acquisitionId}/placeholder-items/range-create`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
+  listCatalogUniversePlaceholders(params?: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PlaceholderQueueResponse> {
+    const q = new URLSearchParams();
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return requestScanV1Flat<PlaceholderQueueResponse>(`/catalog-universe/placeholders${suffix}`);
+  },
+
+  listPlaceholderMatchCandidates(
+    placeholderId: number,
+    params?: { q?: string; limit?: number },
+  ): Promise<PlaceholderMatchCandidatesResponse> {
+    const q = new URLSearchParams();
+    if (params?.q) q.set("q", params.q);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return requestScanV1Flat<PlaceholderMatchCandidatesResponse>(
+      `/catalog-universe/placeholders/${placeholderId}/match-candidates${suffix}`,
+    );
+  },
+
+  linkCatalogPlaceholder(
+    placeholderId: number,
+    catalogIssueId: number,
+  ): Promise<LinkPlaceholderResponse> {
+    return requestScanV1Flat<LinkPlaceholderResponse>(
+      `/catalog-universe/placeholders/${placeholderId}/link`,
+      { method: "POST", body: JSON.stringify({ catalog_issue_id: catalogIssueId }) },
+    );
+  },
+
   addAcquisitionBulkRange(
     acquisitionId: number,
     payload: { series_id: number; start_issue: number; end_issue: number; variant_resolution?: string },
@@ -24957,6 +25359,61 @@ export const apiClient = {
     return requestScanV1Flat<VariantPickerResult>(
       `/acquisitions/catalog/series/${seriesId}/issue-number/${encodeURIComponent(normalizedIssueNumber)}/variants${q}`,
     );
+  },
+
+  listCatalogUniversePublishers(
+    search?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<CatalogUniversePublisherListResponse> {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set("search", search.trim());
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    const q = params.toString();
+    return requestScanV1Flat<CatalogUniversePublisherListResponse>(
+      `/catalog-universe/publishers${q ? `?${q}` : ""}`,
+    );
+  },
+
+  listCatalogUniverseVolumes(
+    publisher: string,
+    search?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<CatalogUniverseVolumeListResponse> {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set("search", search.trim());
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    const q = params.toString();
+    return requestScanV1Flat<CatalogUniverseVolumeListResponse>(
+      `/catalog-universe/publishers/${encodeURIComponent(publisher)}/volumes${q ? `?${q}` : ""}`,
+    );
+  },
+
+  listCatalogUniverseIssues(
+    volumeId: number,
+    issueNumber?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<CatalogUniverseIssueListResponse> {
+    const params = new URLSearchParams();
+    if (issueNumber?.trim()) params.set("issue_number", issueNumber.trim());
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    return requestScanV1Flat<CatalogUniverseIssueListResponse>(
+      `/catalog-universe/volumes/${volumeId}/issues?${params.toString()}`,
+    );
+  },
+
+  searchCatalogUniverse(
+    query: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<CatalogUniverseSearchResponse> {
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    return requestScanV1Flat<CatalogUniverseSearchResponse>(`/catalog-universe/search?${params.toString()}`);
   },
 
   runScanReconciliation(payload: ScanReconciliationRunCreate): Promise<ScanReconciliationRunDetail> {
@@ -31827,6 +32284,62 @@ export const apiClient = {
 
   getCollectionGapSummary(): Promise<CollectionGapSummaryRead> {
     return requestScanV1<CollectionGapSummaryRead>("/collection-gaps/summary");
+  },
+
+  getCollectionGapYears(): Promise<CollectionGapYearsResponse> {
+    return requestScanV1Flat<CollectionGapYearsResponse>("/collection-gaps/years");
+  },
+
+  getCollectionGapPublishers(
+    year: number,
+    params?: { priority_only?: boolean; limit?: number; offset?: number },
+  ): Promise<CollectionGapBuilderPublishersResponse> {
+    const q = new URLSearchParams();
+    if (params?.priority_only) q.set("priority_only", "true");
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return requestScanV1Flat<CollectionGapBuilderPublishersResponse>(
+      `/collection-gaps/years/${year}/publishers${suffix}`,
+    );
+  },
+
+  getCollectionGapVolumes(
+    publisher: string,
+    year: number,
+    params?: { incomplete_only?: boolean; limit?: number; offset?: number },
+  ): Promise<CollectionGapBuilderVolumesResponse> {
+    const q = new URLSearchParams({ year: String(year) });
+    if (params?.incomplete_only) q.set("incomplete_only", "true");
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    return requestScanV1Flat<CollectionGapBuilderVolumesResponse>(
+      `/collection-gaps/publishers/${encodeURIComponent(publisher)}/volumes?${q.toString()}`,
+    );
+  },
+
+  getCollectionGapIssues(
+    volumeId: number,
+    year: number,
+    params?: { gap_status?: string; limit?: number; offset?: number },
+  ): Promise<CollectionGapBuilderIssuesResponse> {
+    const q = new URLSearchParams({ year: String(year) });
+    if (params?.gap_status) q.set("gap_status", params.gap_status);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    return requestScanV1Flat<CollectionGapBuilderIssuesResponse>(
+      `/collection-gaps/volumes/${volumeId}/issues?${q.toString()}`,
+    );
+  },
+
+  createCollectionGapWantListTargets(body: {
+    targets: WantListTargetItemPayload[];
+    priority?: WantListPriority;
+  }): Promise<WantListTargetCreateResponse> {
+    return requestScanV1Flat<WantListTargetCreateResponse>("/collection-gaps/wantlist-targets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   },
 
   getCollectedRuns(params?: {

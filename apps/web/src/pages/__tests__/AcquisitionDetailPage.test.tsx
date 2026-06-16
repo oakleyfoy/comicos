@@ -64,6 +64,7 @@ function makeItem(overrides: Partial<AcquisitionItemRead> = {}): AcquisitionItem
     cost_basis: "60.00",
     copy_number: 1,
     is_placeholder: false,
+    is_tree_linked: false,
     catalog_status: null,
     placeholder_issue_id: null,
     ...overrides,
@@ -273,6 +274,7 @@ describe("AcquisitionDetailPage", () => {
           catalog_issue_id: null,
           variant_status: "PLACEHOLDER",
           is_placeholder: true,
+          is_tree_linked: true,
           catalog_status: "PLACEHOLDER",
           placeholder_issue_id: 9,
         }),
@@ -282,7 +284,7 @@ describe("AcquisitionDetailPage", () => {
     renderPage();
 
     expect(await screen.findByText("Placeholder")).toBeInTheDocument();
-    expect(screen.getByText("Needs Catalog Match")).toBeInTheDocument();
+    expect(screen.getByText("Tree Linked")).toBeInTheDocument();
   });
 
   it("adds a bulk range of issues", async () => {

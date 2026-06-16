@@ -29,6 +29,7 @@
     { "path": "/orders/new", "apis": [] },
     { "path": "/acquisitions", "apis": ["/api/v1/acquisitions"] },
     { "path": "/acquisitions/new", "apis": [] },
+    { "path": "/catalog-universe", "apis": ["/api/v1/catalog-universe/publishers"] },
     { "path": "/imports", "apis": ["/imports"] },
     { "path": "/imports/email", "apis": ["/gmail/status", "/gmail/imports"] },
     { "path": "/imports/guided", "apis": ["/imports"] },

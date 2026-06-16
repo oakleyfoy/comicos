@@ -66,7 +66,8 @@ LEGACY_ACQUISITION_SELLER_NAME = "Legacy / Unknown Source"
 # Placeholder catalog status (P98 placeholder issues phase).
 CATALOG_STATUS_PLACEHOLDER = "PLACEHOLDER"
 CATALOG_STATUS_MATCHED = "MATCHED"
-CATALOG_STATUSES = (CATALOG_STATUS_PLACEHOLDER, CATALOG_STATUS_MATCHED)
+CATALOG_STATUS_LINKED = "LINKED"
+CATALOG_STATUSES = (CATALOG_STATUS_PLACEHOLDER, CATALOG_STATUS_MATCHED, CATALOG_STATUS_LINKED)
 
 
 class Acquisition(SQLModel, table=True):
@@ -143,6 +144,17 @@ class AcquisitionPlaceholderIssue(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+    comicvine_volume_id: int | None = Field(default=None, nullable=True, index=True)
+    source_volume_id: int | None = Field(default=None, nullable=True, index=True)
+    source_issue_id: str | None = Field(default=None, max_length=64, nullable=True)
+    tree_linked: bool = Field(default=False, nullable=False)
+    variant_label: str | None = Field(default=None, max_length=128, nullable=True)
+    cover_type: str | None = Field(default=None, max_length=64, nullable=True)
+    printing: str | None = Field(default=None, max_length=64, nullable=True)
+    ratio_variant: str | None = Field(default=None, max_length=64, nullable=True)
+    barcode: str | None = Field(default=None, max_length=64, nullable=True)
+    cover_artist: str | None = Field(default=None, max_length=255, nullable=True)
+    raw_variant_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

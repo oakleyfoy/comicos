@@ -139,6 +139,76 @@ class AddPlaceholderIssuePayload(BaseModel):
     notes: str | None = None
 
 
+class TreePlaceholderIssuePayload(BaseModel):
+    publisher: str
+    volume_id: int
+    issue_number: str
+    quantity: int = Field(default=1, ge=1, le=100)
+    issue_title: str | None = None
+    source_issue_id: str | None = None
+
+
+class TreeUnknownIssuePayload(BaseModel):
+    publisher: str
+    volume_id: int
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
+class TreePlaceholderRangePayload(BaseModel):
+    publisher: str
+    volume_id: int
+    start_issue: int = Field(ge=1)
+    end_issue: int = Field(ge=1)
+
+
+class TreePlaceholderRangePreviewResponse(BaseModel):
+    will_create: int
+    skipped_existing: int
+    issue_numbers_to_create: list[str]
+
+
+class PlaceholderRangePreviewPayload(BaseModel):
+    publisher: str
+    volume_id: int
+    start_issue: int = Field(ge=1)
+    end_issue: int = Field(ge=1)
+    exclude_issues: list[str] = Field(default_factory=list)
+    quantity_per_issue: int = Field(default=1, ge=1, le=100)
+    notes: str | None = None
+    prefer_catalog: bool = True
+    variant_label: str | None = None
+    cover_type: str | None = None
+    printing: str | None = None
+    ratio_variant: str | None = None
+    barcode: str | None = None
+    cover_artist: str | None = None
+    raw_variant_notes: str | None = None
+
+
+class PlaceholderRangePreviewResponse(BaseModel):
+    total_issues_in_range: int
+    excluded_count: int
+    already_in_acquisition: int
+    catalog_items_to_add: int
+    placeholders_to_create: int
+    skipped_duplicates: int
+    catalog_issue_ids: list[int]
+    placeholder_issue_numbers: list[str]
+
+
+class PlaceholderRangeCreateResponse(BaseModel):
+    catalog_created: int
+    placeholder_created: int
+    skipped_duplicates: int
+    acquisition: AcquisitionRead
+
+
+class TreePlaceholderCreateResponse(BaseModel):
+    created_count: int
+    skipped_count: int
+    acquisition: AcquisitionRead
+
+
 class BulkRangePayload(BaseModel):
     series_id: int
     start_issue: int
@@ -171,6 +241,8 @@ class AcquisitionItemRead(BaseModel):
     cost_basis: Decimal
     copy_number: int
     is_placeholder: bool = False
+    is_tree_linked: bool = False
+    needs_catalog_match: bool = False
     catalog_status: str | None = None
     placeholder_issue_id: int | None = None
 

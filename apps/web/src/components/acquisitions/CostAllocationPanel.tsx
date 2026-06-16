@@ -19,6 +19,7 @@ export function CostAllocationPanel({ acquisition, onAllocated }: Props): JSX.El
       await apiClient.allocateAcquisition(acquisition.id, mode);
       onAllocated();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return;
       setError(err instanceof ApiError ? err.message : "Could not allocate costs.");
     } finally {
       setBusy(false);
@@ -60,7 +61,12 @@ export function CostAllocationPanel({ acquisition, onAllocated }: Props): JSX.El
         <button
           type="button"
           onClick={() => allocate("EVEN")}
-          disabled={busy || acquisition.status !== "OPEN"}
+          disabled={
+            busy ||
+            acquisition.status !== "OPEN" ||
+            acquisition.item_count === 0 ||
+            summary.fully_allocated
+          }
           className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
         >
           Allocate Evenly

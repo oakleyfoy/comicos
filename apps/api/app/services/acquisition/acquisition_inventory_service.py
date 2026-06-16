@@ -428,12 +428,17 @@ def _item_read(session: Session, copy: InventoryCopy) -> AcquisitionItemRead:
                 issue_number=placeholder.issue_number or None,
                 publisher=placeholder.publisher,
                 cover_image_url=None,
-                variant_label=None,
                 variant_status=copy.variant_status,
                 cost_basis=quantize_money(copy.acquisition_cost),
                 copy_number=copy.copy_number,
                 is_placeholder=True,
+                is_tree_linked=bool(placeholder.tree_linked),
+                variant_label=placeholder.variant_label,
                 catalog_status=placeholder.catalog_status,
+                needs_catalog_match=(
+                    placeholder.catalog_issue_id is None
+                    and placeholder.catalog_status == CATALOG_STATUS_PLACEHOLDER
+                ),
                 placeholder_issue_id=int(placeholder.id or 0),
             )
 

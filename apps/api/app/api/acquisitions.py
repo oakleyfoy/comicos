@@ -22,6 +22,14 @@ from app.schemas.acquisition import (
     AddBooksResponse,
     AddGenericIssuePayload,
     AddPlaceholderIssuePayload,
+    PlaceholderRangeCreateResponse,
+    PlaceholderRangePreviewPayload,
+    PlaceholderRangePreviewResponse,
+    TreePlaceholderCreateResponse,
+    TreePlaceholderIssuePayload,
+    TreePlaceholderRangePayload,
+    TreePlaceholderRangePreviewResponse,
+    TreeUnknownIssuePayload,
     AllocatePayload,
     AllocateResponse,
     BulkRangePayload,
@@ -49,6 +57,15 @@ from app.services.acquisition.acquisition_service import (
     get_acquisition,
     list_acquisitions,
     update_acquisition,
+)
+from app.services.acquisition.acquisition_placeholder_range_service import (
+    create_placeholder_range,
+    legacy_preview_tree_range,
+    preview_placeholder_range,
+)
+from app.services.acquisition.acquisition_tree_placeholder_service import (
+    create_tree_placeholder_issue,
+    create_tree_unknown_issue,
 )
 from app.services.acquisition.catalog_browse_service import (
     list_issue_variants,
@@ -234,6 +251,130 @@ def add_placeholder_endpoint(
     )
 
 
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/tree",
+    response_model=TreePlaceholderCreateResponse,
+)
+def add_tree_placeholder_endpoint(
+    acquisition_id: int,
+    payload: TreePlaceholderIssuePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> TreePlaceholderCreateResponse:
+    assert current_user.id is not None
+    return create_tree_placeholder_issue(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/tree/unknown",
+    response_model=TreePlaceholderCreateResponse,
+)
+def add_tree_unknown_placeholder_endpoint(
+    acquisition_id: int,
+    payload: TreeUnknownIssuePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> TreePlaceholderCreateResponse:
+    assert current_user.id is not None
+    return create_tree_unknown_issue(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/tree/range/preview",
+    response_model=TreePlaceholderRangePreviewResponse,
+)
+def preview_tree_placeholder_range_endpoint(
+    acquisition_id: int,
+    payload: TreePlaceholderRangePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> TreePlaceholderRangePreviewResponse:
+    assert current_user.id is not None
+    return legacy_preview_tree_range(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/range-preview",
+    response_model=PlaceholderRangePreviewResponse,
+)
+def preview_placeholder_range_endpoint(
+    acquisition_id: int,
+    payload: PlaceholderRangePreviewPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PlaceholderRangePreviewResponse:
+    assert current_user.id is not None
+    return preview_placeholder_range(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/range-create",
+    response_model=PlaceholderRangeCreateResponse,
+)
+def create_placeholder_range_endpoint(
+    acquisition_id: int,
+    payload: PlaceholderRangePreviewPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PlaceholderRangeCreateResponse:
+    assert current_user.id is not None
+    return create_placeholder_range(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items/tree/range",
+    response_model=TreePlaceholderCreateResponse,
+)
+def create_tree_placeholder_range_endpoint(
+    acquisition_id: int,
+    payload: TreePlaceholderRangePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> TreePlaceholderCreateResponse:
+    assert current_user.id is not None
+    rich = create_placeholder_range(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=PlaceholderRangePreviewPayload(
+            publisher=payload.publisher,
+            volume_id=payload.volume_id,
+            start_issue=payload.start_issue,
+            end_issue=payload.end_issue,
+        ),
+    )
+    return TreePlaceholderCreateResponse(
+        created_count=rich.catalog_created + rich.placeholder_created,
+        skipped_count=rich.skipped_duplicates,
+        acquisition=rich.acquisition,
+    )
+
+
 @acquisitions_v1_router.post("/acquisitions/{acquisition_id}/items/bulk-range", response_model=BulkRangeResponse)
 def bulk_range_endpoint(
     acquisition_id: int,
@@ -266,9 +407,6 @@ def delete_item_endpoint(
         acquisition_id=acquisition_id,
         inventory_copy_id=inventory_copy_id,
     )
-
-
-# ----- Cost allocation -----
 
 
 @acquisitions_v1_router.post("/acquisitions/{acquisition_id}/allocate", response_model=AllocateResponse)

@@ -10,6 +10,7 @@ import {
   type SeriesListResponse,
   type VariantOption,
 } from "../../api/client";
+import { AcquisitionTreePickerModal } from "./AcquisitionTreePickerModal";
 
 type FlowStep = "hub" | "publisher" | "series" | "grid" | "variant" | "bulk" | "placeholder";
 
@@ -18,6 +19,13 @@ type Props = {
   onBooksAdded: () => void;
   onClose: () => void;
 };
+
+function flowErrorMessage(err: unknown, fallback: string): string | null {
+  if (err instanceof ApiError && err.status === 401) {
+    return null;
+  }
+  return err instanceof ApiError ? err.message : fallback;
+}
 
 export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): JSX.Element {
   const [step, setStep] = useState<FlowStep>("hub");
@@ -48,6 +56,7 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
   const [phQuantity, setPhQuantity] = useState("1");
   const [phNotes, setPhNotes] = useState("");
   const [phStatus, setPhStatus] = useState<string | null>(null);
+  const [showTreePicker, setShowTreePicker] = useState(false);
 
   const openPlaceholder = useCallback(
     (prefill?: { title?: string; publisher?: string }) => {
@@ -87,7 +96,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
       setPhQuantity("1");
       setPhNotes("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not add placeholder book.");
+      const message = flowErrorMessage(err, "Could not add placeholder book.");
+      if (message) setError(message);
     } finally {
       setBusy(false);
     }
@@ -100,7 +110,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
       const resp = await apiClient.listCatalogPublishers(search);
       setPublishers(resp.publishers);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load publishers.");
+      const message = flowErrorMessage(err, "Could not load publishers.");
+      if (message) setError(message);
     } finally {
       setBusy(false);
     }
@@ -120,7 +131,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
       const resp = await apiClient.listCatalogSeries(publisher.id);
       setSeries(resp);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load series.");
+      const message = flowErrorMessage(err, "Could not load series.");
+      if (message) setError(message);
     } finally {
       setBusy(false);
     }
@@ -134,7 +146,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
         const resp = await apiClient.listCatalogIssueGrid(seriesCard.id, acquisitionId);
         setGrid(resp);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load issues.");
+        const message = flowErrorMessage(err, "Could not load issues.");
+        if (message) setError(message);
       } finally {
         setBusy(false);
       }
@@ -169,7 +182,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
           setVariantOptions(resp.options);
           setStep("variant");
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : "Could not load variants.");
+          const message = flowErrorMessage(err, "Could not load variants.");
+          if (message) setError(message);
         } finally {
           setBusy(false);
         }
@@ -206,7 +220,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
           await loadGrid(selectedSeries);
         }
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not add books.");
+        const message = flowErrorMessage(err, "Could not add books.");
+        if (message) setError(message);
       } finally {
         setBusy(false);
       }
@@ -242,7 +257,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
       setStep("grid");
       await loadGrid(selectedSeries);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not add generic issue.");
+      const message = flowErrorMessage(err, "Could not add generic issue.");
+      if (message) setError(message);
     } finally {
       setBusy(false);
     }
@@ -266,7 +282,8 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
       setStatusMessage(`Added ${resp.added_count} book(s).${needsNote}`);
       onBooksAdded();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not run bulk range.");
+      const message = flowErrorMessage(err, "Could not run bulk range.");
+      if (message) setError(message);
     } finally {
       setBusy(false);
     }
@@ -320,6 +337,14 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
           >
             <span className="block text-base font-semibold text-white">Bulk Entry</span>
             <span className="text-sm text-slate-400">Add an issue-number range for a series</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTreePicker(true)}
+            className="rounded-xl border border-slate-600 bg-slate-800 p-4 text-left hover:border-emerald-400"
+          >
+            <span className="block text-base font-semibold text-white">Universe Tree Picker</span>
+            <span className="text-sm text-slate-400">Publisher → volume → issue placeholders</span>
           </button>
           <button
             type="button"
@@ -621,6 +646,13 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
           <p className="mb-3 text-xs text-slate-400">
             Add a book that isn’t in the catalog yet. You can match it to a catalog issue later.
           </p>
+          <button
+            type="button"
+            onClick={() => setShowTreePicker(true)}
+            className="mb-3 rounded-lg border border-emerald-700 px-3 py-2 text-sm text-emerald-200 hover:border-emerald-400"
+          >
+            Pick from Universe Tree
+          </button>
           {phStatus ? (
             <p className="mb-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">{phStatus}</p>
           ) : null}
@@ -686,6 +718,16 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
           </button>
         </div>
       ) : null}
+
+      <AcquisitionTreePickerModal
+        acquisitionId={acquisitionId}
+        open={showTreePicker}
+        onClose={() => setShowTreePicker(false)}
+        onCreated={() => {
+          onBooksAdded();
+          setStatusMessage("Placeholder(s) added from universe tree.");
+        }}
+      />
     </section>
   );
 }

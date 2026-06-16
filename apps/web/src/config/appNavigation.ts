@@ -168,6 +168,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "catalog",
+    title: "Catalog",
+    links: [
+      { label: "Universe Tree", to: "/catalog-universe", prominent: true },
+      { label: "Placeholder Match Queue", to: "/catalog-universe/placeholders" },
+    ],
+  },
+  {
     id: "legacy",
     title: "Legacy / Deprecated",
     links: [
@@ -210,8 +218,10 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname === "/purchase-budget") {
     return "settings";
   }
-  if (
-    pathname.startsWith("/imports") ||
+  if (pathname === "/catalog-universe" || pathname.startsWith("/catalog-universe/")) {
+    return "catalog";
+  }
+  if (pathname.startsWith("/imports") ||
     pathname === "/orders/import" ||
     pathname === "/settings/integrations"
   ) {

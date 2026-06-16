@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { AddBooksFlow } from "../components/acquisitions/AddBooksFlow";
+import { AcquisitionTreePickerModal } from "../components/acquisitions/AcquisitionTreePickerModal";
 import { CostAllocationPanel } from "../components/acquisitions/CostAllocationPanel";
 import { acquisitionSourceLabel } from "../config/acquisitionSources";
 
@@ -22,6 +23,7 @@ export function AcquisitionDetailPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddBooks, setShowAddBooks] = useState(false);
+  const [showTreePicker, setShowTreePicker] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -151,6 +153,14 @@ export function AcquisitionDetailPage(): JSX.Element {
               </button>
               <button
                 type="button"
+                onClick={() => setShowTreePicker(true)}
+                disabled={!isOpen}
+                className="rounded-lg border border-emerald-700 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400 disabled:opacity-50"
+              >
+                Universe Tree Picker
+              </button>
+              <button
+                type="button"
                 onClick={markComplete}
                 disabled={!isOpen}
                 className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400 disabled:opacity-50"
@@ -208,15 +218,23 @@ export function AcquisitionDetailPage(): JSX.Element {
                         className="block truncate font-semibold text-white hover:text-sky-300"
                       >
                         {item.series || "Unknown series"} #{item.issue_number || "?"}
+                        {item.variant_label ? (
+                          <span className="ml-1 text-slate-400">({item.variant_label})</span>
+                        ) : null}
                       </Link>
                       <span className="text-xs text-slate-400">
                         {item.publisher || "Unknown publisher"} · ${item.cost_basis}
                         {item.is_placeholder ? (
                           <>
                             <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Placeholder</span>
-                            <span className="ml-1 rounded bg-rose-500/20 px-1 text-rose-300">
-                              Needs Catalog Match
-                            </span>
+                            {item.is_tree_linked ? (
+                              <span className="ml-1 rounded bg-emerald-500/20 px-1 text-emerald-300">Tree Linked</span>
+                            ) : null}
+                            {item.needs_catalog_match ? (
+                              <span className="ml-1 rounded bg-rose-500/20 px-1 text-rose-300">
+                                Needs Catalog Match
+                              </span>
+                            ) : null}
                           </>
                         ) : item.variant_status === "UNKNOWN" ? (
                           <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Needs review</span>
@@ -239,6 +257,13 @@ export function AcquisitionDetailPage(): JSX.Element {
           </section>
         </div>
       </div>
+
+      <AcquisitionTreePickerModal
+        acquisitionId={acquisitionId}
+        open={showTreePicker}
+        onClose={() => setShowTreePicker(false)}
+        onCreated={() => void refresh()}
+      />
     </AppShell>
   );
 }
