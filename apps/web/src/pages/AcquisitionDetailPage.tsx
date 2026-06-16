@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   ApiError,
@@ -14,6 +14,7 @@ import { acquisitionSourceLabel } from "../config/acquisitionSources";
 
 export function AcquisitionDetailPage(): JSX.Element {
   const { acquisitionId: idParam } = useParams();
+  const navigate = useNavigate();
   const acquisitionId = Number(idParam);
 
   const [acquisition, setAcquisition] = useState<AcquisitionRead | null>(null);
@@ -50,6 +51,22 @@ export function AcquisitionDetailPage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : "Could not complete acquisition.");
     }
   }, [acquisitionId, refresh]);
+
+  const deleteAcquisition = useCallback(async () => {
+    if (!acquisition) return;
+    const bookCount = acquisition.item_count;
+    const message =
+      bookCount > 0
+        ? `Delete this acquisition and its ${bookCount} book(s)? This cannot be undone.`
+        : "Delete this acquisition? This cannot be undone.";
+    if (!window.confirm(message)) return;
+    try {
+      await apiClient.deleteAcquisition(acquisitionId, bookCount > 0);
+      navigate("/acquisitions");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete acquisition.");
+    }
+  }, [acquisition, acquisitionId, navigate]);
 
   const removeItem = useCallback(
     async (inventoryCopyId: number) => {
@@ -140,6 +157,13 @@ export function AcquisitionDetailPage(): JSX.Element {
               >
                 Mark Complete
               </button>
+              <button
+                type="button"
+                onClick={deleteAcquisition}
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-rose-400 hover:text-rose-300"
+              >
+                Delete
+              </button>
             </div>
           </header>
 
@@ -187,7 +211,14 @@ export function AcquisitionDetailPage(): JSX.Element {
                       </Link>
                       <span className="text-xs text-slate-400">
                         {item.publisher || "Unknown publisher"} · ${item.cost_basis}
-                        {item.variant_status === "UNKNOWN" ? (
+                        {item.is_placeholder ? (
+                          <>
+                            <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Placeholder</span>
+                            <span className="ml-1 rounded bg-rose-500/20 px-1 text-rose-300">
+                              Needs Catalog Match
+                            </span>
+                          </>
+                        ) : item.variant_status === "UNKNOWN" ? (
                           <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Needs review</span>
                         ) : null}
                       </span>

@@ -232,6 +232,12 @@ class InventoryCopy(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+    placeholder_issue_id: int | None = Field(
+        default=None,
+        foreign_key="acquisition_placeholder_issue.id",
+        nullable=True,
+        index=True,
+    )
     variant_status: str = Field(default="RESOLVED", max_length=20, nullable=False, index=True)
     metadata_identity_key: str | None = Field(
         default=None,

@@ -63,6 +63,11 @@ ALLOCATION_MODES = (
 
 LEGACY_ACQUISITION_SELLER_NAME = "Legacy / Unknown Source"
 
+# Placeholder catalog status (P98 placeholder issues phase).
+CATALOG_STATUS_PLACEHOLDER = "PLACEHOLDER"
+CATALOG_STATUS_MATCHED = "MATCHED"
+CATALOG_STATUSES = (CATALOG_STATUS_PLACEHOLDER, CATALOG_STATUS_MATCHED)
+
 
 class Acquisition(SQLModel, table=True):
     __tablename__ = "acquisitions"
@@ -104,3 +109,45 @@ class Acquisition(SQLModel, table=True):
             + (self.shipping_paid or Decimal("0.00"))
             + (self.tax_paid or Decimal("0.00"))
         )
+
+
+class AcquisitionPlaceholderIssue(SQLModel, table=True):
+    """A book added to an acquisition that does not yet exist in the catalog.
+
+    Each placeholder row holds the freetext identity the collector typed in.
+    One placeholder spawns ``quantity`` child ``InventoryCopy`` rows (via
+    ``InventoryCopy.placeholder_issue_id``) so cost allocation works the same as
+    catalog-backed copies. ``catalog_issue_id`` stays null until a future merge
+    links it to a real catalog issue.
+    """
+
+    __tablename__ = "acquisition_placeholder_issue"
+    __table_args__ = (
+        SAIndex("ix_acq_placeholder_acquisition_id", "acquisition_id"),
+        SAIndex("ix_acq_placeholder_user_id", "user_id"),
+        SAIndex("ix_acq_placeholder_catalog_status", "catalog_status"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    acquisition_id: int = Field(foreign_key="acquisitions.id", nullable=False)
+    user_id: int = Field(foreign_key="user.id", nullable=False)
+    title: str = Field(max_length=500, nullable=False)
+    issue_number: str = Field(default="", max_length=64, nullable=False)
+    publisher: str | None = Field(default=None, max_length=255, nullable=True)
+    quantity: int = Field(default=1, nullable=False)
+    notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    catalog_status: str = Field(default=CATALOG_STATUS_PLACEHOLDER, max_length=20, nullable=False)
+    catalog_issue_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_issue.id",
+        nullable=True,
+        index=True,
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )

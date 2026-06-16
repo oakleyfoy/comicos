@@ -14,8 +14,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models import Acquisition, CatalogIssue, CatalogSeries, InventoryCopy
-from app.models.acquisition import ACQUISITION_TYPE_UNKNOWN
+from app.models import (
+    Acquisition,
+    AcquisitionPlaceholderIssue,
+    CatalogIssue,
+    CatalogSeries,
+    InventoryCopy,
+)
+from app.models.acquisition import ACQUISITION_TYPE_UNKNOWN, CATALOG_STATUS_PLACEHOLDER
 from app.schemas.acquisition import (
     AcquisitionItemRead,
     AcquisitionItemsResponse,
@@ -24,6 +30,7 @@ from app.schemas.acquisition import (
     AddBooksResponse,
     AddBooksResultItem,
     AddGenericIssuePayload,
+    AddPlaceholderIssuePayload,
     BulkRangeNeedsVariant,
     BulkRangePayload,
     BulkRangeResponse,
@@ -43,6 +50,7 @@ from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 
 VARIANT_STATUS_RESOLVED = "RESOLVED"
 VARIANT_STATUS_UNKNOWN = "UNKNOWN"
+VARIANT_STATUS_PLACEHOLDER = "PLACEHOLDER"
 RECEIVED_VIA_ACQUISITION = "ACQUISITION_MANUAL"
 
 
@@ -78,14 +86,21 @@ def _create_copy(
     series_id: int | None,
     issue_number: str | None,
     variant_status: str,
+    placeholder_issue_id: int | None = None,
+    copy_number: int | None = None,
 ) -> InventoryCopy:
     identity_key = _identity_key(session, catalog_issue_id) if catalog_issue_id else None
     copy = InventoryCopy(
         user_id=acquisition.user_id,
         acquisition_id=acquisition.id,
         catalog_issue_id=catalog_issue_id,
+        placeholder_issue_id=placeholder_issue_id,
         canonical_series_id=None,
-        copy_number=_next_copy_number(session, int(acquisition.id or 0), catalog_issue_id),
+        copy_number=(
+            copy_number
+            if copy_number is not None
+            else _next_copy_number(session, int(acquisition.id or 0), catalog_issue_id)
+        ),
         acquisition_cost=Decimal("0.00"),
         variant_status=variant_status,
         metadata_identity_key=identity_key,
@@ -227,6 +242,77 @@ def add_generic_issue(
     )
 
 
+def add_placeholder_issue(
+    session: Session,
+    *,
+    owner_user_id: int,
+    acquisition_id: int,
+    payload: AddPlaceholderIssuePayload,
+) -> AddBooksResponse:
+    """Add a book that is not yet in the ComicOS catalog.
+
+    Creates one ``AcquisitionPlaceholderIssue`` plus ``quantity`` inventory
+    copies linked to it. No catalog issue is required; the copies participate in
+    cost allocation exactly like catalog-backed copies.
+    """
+    acquisition = get_acquisition_or_404(session, owner_user_id=owner_user_id, acquisition_id=acquisition_id)
+    require_open(acquisition)
+
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title is required")
+
+    qty = max(1, int(payload.quantity or 1))
+    placeholder = AcquisitionPlaceholderIssue(
+        acquisition_id=acquisition_id,
+        user_id=owner_user_id,
+        title=title,
+        issue_number=(payload.issue_number or "").strip(),
+        publisher=(payload.publisher or None),
+        quantity=qty,
+        notes=(payload.notes or None),
+        catalog_status=CATALOG_STATUS_PLACEHOLDER,
+    )
+    session.add(placeholder)
+    session.flush()
+
+    created_ids: list[int] = []
+    for index in range(qty):
+        copy = _create_copy(
+            session,
+            acquisition=acquisition,
+            catalog_issue_id=None,
+            series_id=None,
+            issue_number=placeholder.issue_number or None,
+            variant_status=VARIANT_STATUS_PLACEHOLDER,
+            placeholder_issue_id=int(placeholder.id or 0),
+            copy_number=index + 1,
+        )
+        copy.acquisition_notes = f"Placeholder: {title} #{placeholder.issue_number}".strip()
+        session.flush()
+        created_ids.append(int(copy.id or 0))
+
+    recompute_actual_book_count(session, acquisition)
+    recalc_if_even(session, acquisition)
+    session.add(acquisition)
+    session.commit()
+    session.refresh(acquisition)
+
+    return AddBooksResponse(
+        created_count=qty,
+        results=[
+            AddBooksResultItem(
+                catalog_issue_id=0,
+                created_count=qty,
+                already_added=False,
+                inventory_copy_ids=created_ids,
+            )
+        ],
+        duplicate_catalog_issue_ids=[],
+        acquisition=build_acquisition_read(session, acquisition),
+    )
+
+
 def add_bulk_range(
     session: Session,
     *,
@@ -330,6 +416,27 @@ def _item_read(session: Session, copy: InventoryCopy) -> AcquisitionItemRead:
     publisher: str | None = None
     cover_url: str | None = None
     variant_label: str | None = None
+
+    if copy.placeholder_issue_id is not None:
+        placeholder = session.get(AcquisitionPlaceholderIssue, int(copy.placeholder_issue_id))
+        if placeholder is not None:
+            return AcquisitionItemRead(
+                inventory_copy_id=int(copy.id or 0),
+                acquisition_id=int(copy.acquisition_id or 0),
+                catalog_issue_id=placeholder.catalog_issue_id,
+                series=placeholder.title,
+                issue_number=placeholder.issue_number or None,
+                publisher=placeholder.publisher,
+                cover_image_url=None,
+                variant_label=None,
+                variant_status=copy.variant_status,
+                cost_basis=quantize_money(copy.acquisition_cost),
+                copy_number=copy.copy_number,
+                is_placeholder=True,
+                catalog_status=placeholder.catalog_status,
+                placeholder_issue_id=int(placeholder.id or 0),
+            )
+
     if copy.catalog_issue_id is not None:
         identity = load_catalog_issue_identity(session, int(copy.catalog_issue_id))
         if identity is not None:
@@ -389,8 +496,21 @@ def delete_acquisition_item(
     copy = session.get(InventoryCopy, inventory_copy_id)
     if copy is None or copy.acquisition_id != acquisition_id or copy.user_id != owner_user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory copy not found")
+    placeholder_id = copy.placeholder_issue_id
     session.delete(copy)
     session.flush()
+    # Remove the placeholder issue once its last copy is gone.
+    if placeholder_id is not None:
+        remaining = session.exec(
+            select(func.count(InventoryCopy.id)).where(
+                InventoryCopy.placeholder_issue_id == placeholder_id
+            )
+        ).one()
+        if int(remaining or 0) == 0:
+            placeholder = session.get(AcquisitionPlaceholderIssue, int(placeholder_id))
+            if placeholder is not None:
+                session.delete(placeholder)
+                session.flush()
     recompute_actual_book_count(session, acquisition)
     recalc_if_even(session, acquisition)
     session.add(acquisition)

@@ -33,6 +33,24 @@ export function AcquisitionsPage(): JSX.Element {
     void load(filters);
   }, [filters, load]);
 
+  const handleDelete = useCallback(
+    async (item: AcquisitionListItem) => {
+      const message =
+        item.item_count > 0
+          ? `Delete "${item.seller_name || "this acquisition"}" and its ${item.item_count} book(s)? This cannot be undone.`
+          : `Delete "${item.seller_name || "this acquisition"}"? This cannot be undone.`;
+      if (!window.confirm(message)) return;
+      setError(null);
+      try {
+        await apiClient.deleteAcquisition(item.id, item.item_count > 0);
+        setItems((prev) => prev.filter((row) => row.id !== item.id));
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Could not delete acquisition.");
+      }
+    },
+    [],
+  );
+
   return (
     <AppShell>
       <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -98,40 +116,50 @@ export function AcquisitionsPage(): JSX.Element {
           ) : (
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((item) => (
-                <Link
+                <div
                   key={item.id}
-                  to={`/acquisitions/${item.id}`}
-                  className="rounded-2xl border border-slate-700 bg-slate-900 p-4 transition hover:border-sky-400"
+                  className="relative rounded-2xl border border-slate-700 bg-slate-900 transition hover:border-sky-400"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-sky-300">
-                      {acquisitionSourceLabel(item.acquisition_type)}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold ${
-                        item.status === "OPEN" ? "text-emerald-300" : "text-slate-400"
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-300">{item.seller_name || "Unknown seller"}</p>
-                  <p className="text-xs text-slate-500">{item.purchase_date || "No date"}</p>
-                  <dl className="mt-3 grid grid-cols-3 gap-1 text-center text-xs">
-                    <div>
-                      <dt className="text-slate-500">Paid</dt>
-                      <dd className="font-semibold text-white">${item.total_paid}</dd>
+                  <button
+                    type="button"
+                    aria-label={`Delete acquisition ${item.seller_name || item.id}`}
+                    title="Delete acquisition"
+                    onClick={() => handleDelete(item)}
+                    className="absolute right-2 top-2 z-10 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1 text-xs text-slate-400 hover:border-rose-400 hover:text-rose-300"
+                  >
+                    Delete
+                  </button>
+                  <Link to={`/acquisitions/${item.id}`} className="block p-4">
+                    <div className="flex items-center justify-between pr-16">
+                      <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                        {acquisitionSourceLabel(item.acquisition_type)}
+                      </span>
+                      <span
+                        className={`text-xs font-semibold ${
+                          item.status === "OPEN" ? "text-emerald-300" : "text-slate-400"
+                        }`}
+                      >
+                        {item.status}
+                      </span>
                     </div>
-                    <div>
-                      <dt className="text-slate-500">Books</dt>
-                      <dd className="font-semibold text-white">{item.item_count}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">Avg/book</dt>
-                      <dd className="font-semibold text-white">${item.cost_per_book}</dd>
-                    </div>
-                  </dl>
-                </Link>
+                    <p className="mt-2 text-sm text-slate-300">{item.seller_name || "Unknown seller"}</p>
+                    <p className="text-xs text-slate-500">{item.purchase_date || "No date"}</p>
+                    <dl className="mt-3 grid grid-cols-3 gap-1 text-center text-xs">
+                      <div>
+                        <dt className="text-slate-500">Paid</dt>
+                        <dd className="font-semibold text-white">${item.total_paid}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Books</dt>
+                        <dd className="font-semibold text-white">{item.item_count}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Avg/book</dt>
+                        <dd className="font-semibold text-white">${item.cost_per_book}</dd>
+                      </div>
+                    </dl>
+                  </Link>
+                </div>
               ))}
             </div>
           )}

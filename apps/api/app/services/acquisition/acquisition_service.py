@@ -280,6 +280,69 @@ def list_acquisitions(
     return AcquisitionListResponse(items=items, total=len(items))
 
 
+def delete_acquisition(
+    session: Session,
+    *,
+    owner_user_id: int,
+    acquisition_id: int,
+    delete_inventory: bool = False,
+):
+    """Delete an acquisition (owner-scoped).
+
+    If the acquisition has inventory copies, ``delete_inventory`` must be true;
+    those copies are removed first. Downstream FK references (listings, grading,
+    etc.) surface as a 409 rather than a 500.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.schemas.acquisition import AcquisitionDeleteResponse
+
+    acquisition = get_acquisition_or_404(session, owner_user_id=owner_user_id, acquisition_id=acquisition_id)
+
+    copies = list(
+        session.exec(select(InventoryCopy).where(InventoryCopy.acquisition_id == acquisition_id)).all()
+    )
+    if copies and not delete_inventory:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This acquisition has {len(copies)} book(s). "
+                "Confirm deletion to remove them as well."
+            ),
+        )
+
+    deleted_inventory = len(copies)
+    try:
+        for copy in copies:
+            session.delete(copy)
+        session.flush()
+        from app.models import AcquisitionPlaceholderIssue
+
+        for placeholder in session.exec(
+            select(AcquisitionPlaceholderIssue).where(
+                AcquisitionPlaceholderIssue.acquisition_id == acquisition_id
+            )
+        ).all():
+            session.delete(placeholder)
+        session.flush()
+        session.delete(acquisition)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Some books in this acquisition are referenced elsewhere "
+                "(listings, grading, or sell workflows). Remove those references first."
+            ),
+        )
+
+    return AcquisitionDeleteResponse(
+        deleted_id=acquisition_id,
+        deleted_inventory_count=deleted_inventory,
+    )
+
+
 def backfill_legacy_inventory(session: Session, *, owner_user_id: int) -> Acquisition | None:
     """Attach a user's un-acquisitioned inventory to one Legacy/Unknown acquisition.
 

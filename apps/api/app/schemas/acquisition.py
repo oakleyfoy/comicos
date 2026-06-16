@@ -91,6 +91,11 @@ class AcquisitionListResponse(BaseModel):
     total: int
 
 
+class AcquisitionDeleteResponse(BaseModel):
+    deleted_id: int
+    deleted_inventory_count: int
+
+
 # ----- Items / add books -----
 
 
@@ -124,6 +129,16 @@ class AddGenericIssuePayload(BaseModel):
     quantity: int = 1
 
 
+class AddPlaceholderIssuePayload(BaseModel):
+    """A book not yet in the ComicOS catalog, added to an acquisition."""
+
+    title: str
+    issue_number: str = ""
+    publisher: str | None = None
+    quantity: int = 1
+    notes: str | None = None
+
+
 class BulkRangePayload(BaseModel):
     series_id: int
     start_issue: int
@@ -155,6 +170,9 @@ class AcquisitionItemRead(BaseModel):
     variant_status: str
     cost_basis: Decimal
     copy_number: int
+    is_placeholder: bool = False
+    catalog_status: str | None = None
+    placeholder_issue_id: int | None = None
 
 
 class AcquisitionItemsResponse(BaseModel):

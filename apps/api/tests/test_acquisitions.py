@@ -337,3 +337,146 @@ def test_needs_review_queue(client: TestClient, session: Session) -> None:
     resp = client.get("/api/v1/acquisitions/needs-review", headers=auth_headers(token))
     assert resp.status_code == 200, resp.text
     assert resp.json()["total"] == 1
+
+
+def test_create_placeholder_item(client: TestClient) -> None:
+    token = register_and_login(client, "acq-ph-create@example.com")
+    body = _create_acq(client, token)
+    resp = client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={
+            "title": "Uncanny X-Men",
+            "issue_number": "221",
+            "publisher": "Marvel",
+            "quantity": 1,
+            "notes": "no match in catalog",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created_count"] == 1
+
+    items = client.get(f"/api/v1/acquisitions/{body['id']}/items", headers=auth_headers(token)).json()
+    assert items["total"] == 1
+    item = items["items"][0]
+    assert item["is_placeholder"] is True
+    assert item["catalog_status"] == "PLACEHOLDER"
+    assert item["catalog_issue_id"] is None
+    assert item["series"] == "Uncanny X-Men"
+    assert item["issue_number"] == "221"
+    assert item["publisher"] == "Marvel"
+
+
+def test_placeholder_requires_title(client: TestClient) -> None:
+    token = register_and_login(client, "acq-ph-title@example.com")
+    body = _create_acq(client, token)
+    resp = client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={"title": "   ", "quantity": 1},
+    )
+    assert resp.status_code == 400
+
+
+def test_placeholder_participates_in_cost_allocation(client: TestClient) -> None:
+    token = register_and_login(client, "acq-ph-alloc@example.com")
+    body = _create_acq(client, token, total_paid="350.22")
+    client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={"title": "Uncanny X-Men", "issue_number": "221", "publisher": "Marvel", "quantity": 1},
+    )
+    alloc = client.post(
+        f"/api/v1/acquisitions/{body['id']}/allocate",
+        headers=auth_headers(token),
+        json={"mode": "EVEN"},
+    )
+    assert alloc.status_code == 200, alloc.text
+    data = alloc.json()
+    assert Decimal(data["allocated_total"]) == Decimal("350.22")
+    assert data["fully_allocated"] is True
+
+    items = client.get(f"/api/v1/acquisitions/{body['id']}/items", headers=auth_headers(token)).json()
+    assert Decimal(items["items"][0]["cost_basis"]) == Decimal("350.22")
+
+
+def test_placeholder_and_catalog_mix_allocates(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "acq-ph-mix@example.com")
+    ids = _seed_catalog(session)
+    body = _create_acq(client, token, total_paid="100.00")
+    client.post(
+        f"/api/v1/acquisitions/{body['id']}/items",
+        headers=auth_headers(token),
+        json={"items": [{"catalog_issue_id": ids["issue1"], "quantity": 1}]},
+    )
+    client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={"title": "Missing Book", "issue_number": "1", "quantity": 1},
+    )
+    alloc = client.post(
+        f"/api/v1/acquisitions/{body['id']}/allocate",
+        headers=auth_headers(token),
+        json={"mode": "EVEN"},
+    )
+    assert alloc.status_code == 200, alloc.text
+    data = alloc.json()
+    assert Decimal(data["allocated_total"]) == Decimal("100.00")
+    assert data["fully_allocated"] is True
+    items = client.get(f"/api/v1/acquisitions/{body['id']}/items", headers=auth_headers(token)).json()
+    assert items["total"] == 2
+    bases = sorted(Decimal(i["cost_basis"]) for i in items["items"])
+    assert bases == [Decimal("50.00"), Decimal("50.00")]
+
+
+def test_complete_acquisition_with_placeholder(client: TestClient) -> None:
+    token = register_and_login(client, "acq-ph-complete@example.com")
+    body = _create_acq(client, token)
+    client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={"title": "Placeholder Only", "issue_number": "1", "quantity": 2},
+    )
+    resp = client.post(f"/api/v1/acquisitions/{body['id']}/complete", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "COMPLETE"
+    assert resp.json()["item_count"] == 2
+
+
+def test_delete_empty_acquisition(client: TestClient) -> None:
+    token = register_and_login(client, "acq-del-empty@example.com")
+    body = _create_acq(client, token)
+    resp = client.delete(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted_inventory_count"] == 0
+    assert client.get(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token)).status_code == 404
+
+
+def test_delete_acquisition_with_books_requires_confirm(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "acq-del-books@example.com")
+    ids = _seed_catalog(session)
+    body = _create_acq(client, token)
+    add = client.post(
+        f"/api/v1/acquisitions/{body['id']}/items",
+        headers=auth_headers(token),
+        json={"items": [{"catalog_issue_id": ids["issue1"], "quantity": 1}]},
+    )
+    copy_id = add.json()["results"][0]["inventory_copy_ids"][0]
+
+    blocked = client.delete(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token))
+    assert blocked.status_code == 409
+
+    ok = client.delete(
+        f"/api/v1/acquisitions/{body['id']}?delete_inventory=true", headers=auth_headers(token)
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["deleted_inventory_count"] == 1
+    assert session.get(InventoryCopy, copy_id) is None
+
+
+def test_cannot_delete_other_users_acquisition(client: TestClient) -> None:
+    token_a = register_and_login(client, "acq-del-a@example.com")
+    token_b = register_and_login(client, "acq-del-b@example.com")
+    body = _create_acq(client, token_a)
+    resp = client.delete(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token_b))
+    assert resp.status_code == 404

@@ -63,6 +63,9 @@ function makeItem(overrides: Partial<AcquisitionItemRead> = {}): AcquisitionItem
     variant_status: "RESOLVED",
     cost_basis: "60.00",
     copy_number: 1,
+    is_placeholder: false,
+    catalog_status: null,
+    placeholder_issue_id: null,
     ...overrides,
   };
 }
@@ -225,6 +228,61 @@ describe("AcquisitionDetailPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Issue 2" }));
     expect(await screen.findByText("Choose a cover for #2")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Use Cover A" })).toBeInTheDocument();
+  });
+
+  it("creates a placeholder book for a non-catalog issue", async () => {
+    const placeholderSpy = vi
+      .spyOn(apiClient, "addAcquisitionPlaceholderItem")
+      .mockResolvedValue({
+        created_count: 1,
+        results: [{ catalog_issue_id: 0, created_count: 1, already_added: false, inventory_copy_ids: [300] }],
+        duplicate_catalog_issue_ids: [],
+        acquisition: makeAcquisition(),
+      });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add Books" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Book Not in Catalog/i }));
+
+    fireEvent.change(await screen.findByLabelText("Series or title"), {
+      target: { value: "Uncanny X-Men" },
+    });
+    fireEvent.change(screen.getByLabelText("Issue number"), { target: { value: "221" } });
+    fireEvent.change(screen.getByLabelText("Publisher"), { target: { value: "Marvel" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Placeholder Book" }));
+
+    await waitFor(() =>
+      expect(placeholderSpy).toHaveBeenCalledWith(5, {
+        title: "Uncanny X-Men",
+        issue_number: "221",
+        publisher: "Marvel",
+        quantity: 1,
+        notes: null,
+      }),
+    );
+  });
+
+  it("shows placeholder badges on placeholder books", async () => {
+    vi.spyOn(apiClient, "listAcquisitionItems").mockResolvedValue({
+      items: [
+        makeItem({
+          inventory_copy_id: 400,
+          series: "Uncanny X-Men",
+          issue_number: "221",
+          publisher: "Marvel",
+          catalog_issue_id: null,
+          variant_status: "PLACEHOLDER",
+          is_placeholder: true,
+          catalog_status: "PLACEHOLDER",
+          placeholder_issue_id: 9,
+        }),
+      ],
+      total: 1,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Placeholder")).toBeInTheDocument();
+    expect(screen.getByText("Needs Catalog Match")).toBeInTheDocument();
   });
 
   it("adds a bulk range of issues", async () => {

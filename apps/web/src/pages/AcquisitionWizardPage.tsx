@@ -106,31 +106,13 @@ export function AcquisitionWizardPage(): JSX.Element {
                   />
                 </Field>
                 <Field label="Total Paid">
-                  <input
-                    inputMode="decimal"
-                    value={totalPaid}
-                    onChange={(e) => setTotalPaid(e.target.value)}
-                    placeholder="120.00"
-                    className="input"
-                  />
+                  <MoneyInput value={totalPaid} onChange={setTotalPaid} placeholder="120.00" />
                 </Field>
                 <Field label="Shipping">
-                  <input
-                    inputMode="decimal"
-                    value={shippingPaid}
-                    onChange={(e) => setShippingPaid(e.target.value)}
-                    placeholder="0.00"
-                    className="input"
-                  />
+                  <MoneyInput value={shippingPaid} onChange={setShippingPaid} placeholder="0.00" />
                 </Field>
                 <Field label="Tax">
-                  <input
-                    inputMode="decimal"
-                    value={taxPaid}
-                    onChange={(e) => setTaxPaid(e.target.value)}
-                    placeholder="0.00"
-                    className="input"
-                  />
+                  <MoneyInput value={taxPaid} onChange={setTaxPaid} placeholder="0.00" />
                 </Field>
                 <Field label="Seller Name">
                   <input value={sellerName} onChange={(e) => setSellerName(e.target.value)} className="input" />
@@ -173,6 +155,32 @@ export function AcquisitionWizardPage(): JSX.Element {
       </div>
       <style>{`.input{margin-top:0.25rem;display:block;width:100%;border-radius:0.5rem;border:1px solid rgb(51 65 85);background:rgb(15 23 42);padding:0.5rem 0.75rem;color:white;font-size:0.875rem}`}</style>
     </AppShell>
+  );
+}
+
+function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}): JSX.Element {
+  return (
+    <div className="relative mt-1">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+      <input
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="block w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-7 pr-12 text-sm text-white"
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500">
+        USD
+      </span>
+    </div>
   );
 }
 

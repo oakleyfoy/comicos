@@ -21215,6 +21215,17 @@ export interface AcquisitionItemRead {
   variant_status: string;
   cost_basis: string;
   copy_number: number;
+  is_placeholder: boolean;
+  catalog_status: string | null;
+  placeholder_issue_id: number | null;
+}
+
+export interface AddPlaceholderIssuePayload {
+  title: string;
+  issue_number?: string;
+  publisher?: string | null;
+  quantity?: number;
+  notes?: string | null;
 }
 
 export interface AcquisitionItemsResponse {
@@ -21343,6 +21354,11 @@ export interface VariantPickerResult {
   series_id: number;
   issue_number: string;
   options: VariantOption[];
+}
+
+export interface AcquisitionDeleteResponse {
+  deleted_id: number;
+  deleted_inventory_count: number;
 }
 
 export interface AcquisitionListFilters {
@@ -24835,6 +24851,16 @@ export const apiClient = {
     });
   },
 
+  deleteAcquisition(
+    acquisitionId: number,
+    deleteInventory = false,
+  ): Promise<AcquisitionDeleteResponse> {
+    const q = deleteInventory ? "?delete_inventory=true" : "";
+    return requestScanV1Flat<AcquisitionDeleteResponse>(`/acquisitions/${acquisitionId}${q}`, {
+      method: "DELETE",
+    });
+  },
+
   listAcquisitionItems(acquisitionId: number): Promise<AcquisitionItemsResponse> {
     return requestScanV1Flat<AcquisitionItemsResponse>(`/acquisitions/${acquisitionId}/items`);
   },
@@ -24855,6 +24881,16 @@ export const apiClient = {
     payload: { series_id: number; issue_number: string; quantity?: number },
   ): Promise<AddBooksResponse> {
     return requestScanV1Flat<AddBooksResponse>(`/acquisitions/${acquisitionId}/items/generic`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  addAcquisitionPlaceholderItem(
+    acquisitionId: number,
+    payload: AddPlaceholderIssuePayload,
+  ): Promise<AddBooksResponse> {
+    return requestScanV1Flat<AddBooksResponse>(`/acquisitions/${acquisitionId}/placeholder-items`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

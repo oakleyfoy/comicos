@@ -11,7 +11,7 @@ import {
   type VariantOption,
 } from "../../api/client";
 
-type FlowStep = "hub" | "publisher" | "series" | "grid" | "variant" | "bulk";
+type FlowStep = "hub" | "publisher" | "series" | "grid" | "variant" | "bulk" | "placeholder";
 
 type Props = {
   acquisitionId: number;
@@ -41,6 +41,57 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
   const [bulkEnd, setBulkEnd] = useState("25");
   const [bulkResolution, setBulkResolution] = useState<"cover_a" | "review" | "generic">("review");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const [phTitle, setPhTitle] = useState("");
+  const [phIssue, setPhIssue] = useState("");
+  const [phPublisher, setPhPublisher] = useState("");
+  const [phQuantity, setPhQuantity] = useState("1");
+  const [phNotes, setPhNotes] = useState("");
+  const [phStatus, setPhStatus] = useState<string | null>(null);
+
+  const openPlaceholder = useCallback(
+    (prefill?: { title?: string; publisher?: string }) => {
+      setError(null);
+      setPhStatus(null);
+      setPhTitle(prefill?.title ?? "");
+      setPhIssue("");
+      setPhPublisher(prefill?.publisher ?? "");
+      setPhQuantity("1");
+      setPhNotes("");
+      setStep("placeholder");
+    },
+    [],
+  );
+
+  const submitPlaceholder = useCallback(async () => {
+    const title = phTitle.trim();
+    if (!title) {
+      setError("Series / Title is required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const resp = await apiClient.addAcquisitionPlaceholderItem(acquisitionId, {
+        title,
+        issue_number: phIssue.trim(),
+        publisher: phPublisher.trim() || null,
+        quantity: Math.max(1, Number(phQuantity) || 1),
+        notes: phNotes.trim() || null,
+      });
+      onBooksAdded();
+      setPhStatus(`Added ${resp.created_count} placeholder book(s). Needs catalog match.`);
+      setPhTitle("");
+      setPhIssue("");
+      setPhPublisher("");
+      setPhQuantity("1");
+      setPhNotes("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add placeholder book.");
+    } finally {
+      setBusy(false);
+    }
+  }, [acquisitionId, onBooksAdded, phIssue, phNotes, phPublisher, phQuantity, phTitle]);
 
   const loadPublishers = useCallback(async (search?: string) => {
     setBusy(true);
@@ -270,6 +321,14 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
             <span className="block text-base font-semibold text-white">Bulk Entry</span>
             <span className="text-sm text-slate-400">Add an issue-number range for a series</span>
           </button>
+          <button
+            type="button"
+            onClick={() => openPlaceholder()}
+            className="rounded-xl border border-slate-600 bg-slate-800 p-4 text-left hover:border-amber-400"
+          >
+            <span className="block text-base font-semibold text-white">Book Not in Catalog</span>
+            <span className="text-sm text-slate-400">Create a placeholder issue to add now</span>
+          </button>
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-800/40 p-4 text-slate-500">
             <span className="block text-base font-semibold">Photo Intake</span>
             <span className="text-sm">Coming soon</span>
@@ -300,6 +359,18 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
             </button>
           </div>
           {busy ? <p className="text-sm text-slate-400">Loading…</p> : null}
+          {!busy && publishers.length === 0 ? (
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 text-sm text-slate-300">
+              <p>No catalog match found.</p>
+              <button
+                type="button"
+                onClick={() => openPlaceholder({ publisher: publisherSearch.trim() || undefined })}
+                className="mt-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-500"
+              >
+                Create Placeholder Issue
+              </button>
+            </div>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {publishers.map((publisher) => (
               <button
@@ -345,6 +416,18 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
                 className="rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:border-slate-400"
               >
                 Bulk Range
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  openPlaceholder({
+                    title: selectedSeries?.name,
+                    publisher: selectedPublisher?.name,
+                  })
+                }
+                className="rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:border-amber-400"
+              >
+                Not in Catalog
               </button>
               {selectedIssueIds.length > 0 ? (
                 <>
@@ -526,6 +609,81 @@ export function AddBooksFlow({ acquisitionId, onBooksAdded, onClose }: Props): J
               Add Range
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {step === "placeholder" ? (
+        <div>
+          <button type="button" onClick={() => setStep("hub")} className="mb-3 text-sm text-sky-300 hover:underline">
+            ← Add books options
+          </button>
+          <p className="mb-1 text-sm font-semibold text-white">Create Placeholder Issue</p>
+          <p className="mb-3 text-xs text-slate-400">
+            Add a book that isn’t in the catalog yet. You can match it to a catalog issue later.
+          </p>
+          {phStatus ? (
+            <p className="mb-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">{phStatus}</p>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm text-slate-300 sm:col-span-2">
+              Series / Title
+              <input
+                aria-label="Series or title"
+                value={phTitle}
+                onChange={(e) => setPhTitle(e.target.value)}
+                placeholder="Uncanny X-Men"
+                className="mt-1 block w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <label className="text-sm text-slate-300">
+              Issue #
+              <input
+                aria-label="Issue number"
+                value={phIssue}
+                onChange={(e) => setPhIssue(e.target.value)}
+                placeholder="221"
+                className="mt-1 block w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <label className="text-sm text-slate-300">
+              Publisher
+              <input
+                aria-label="Publisher"
+                value={phPublisher}
+                onChange={(e) => setPhPublisher(e.target.value)}
+                placeholder="Marvel"
+                className="mt-1 block w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <label className="text-sm text-slate-300">
+              Quantity
+              <input
+                aria-label="Quantity"
+                value={phQuantity}
+                onChange={(e) => setPhQuantity(e.target.value)}
+                inputMode="numeric"
+                className="mt-1 block w-24 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <label className="text-sm text-slate-300 sm:col-span-2">
+              Notes
+              <textarea
+                aria-label="Notes"
+                value={phNotes}
+                onChange={(e) => setPhNotes(e.target.value)}
+                rows={2}
+                className="mt-1 block w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={submitPlaceholder}
+            disabled={busy}
+            className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+          >
+            Add Placeholder Book
+          </button>
         </div>
       ) : null}
     </section>

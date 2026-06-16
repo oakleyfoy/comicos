@@ -12,6 +12,7 @@ from app.db.session import get_session
 from app.models import User
 from app.schemas.acquisition import (
     AcquisitionCreatePayload,
+    AcquisitionDeleteResponse,
     AcquisitionItemsResponse,
     AcquisitionListResponse,
     AcquisitionRead,
@@ -20,6 +21,7 @@ from app.schemas.acquisition import (
     AddBooksPayload,
     AddBooksResponse,
     AddGenericIssuePayload,
+    AddPlaceholderIssuePayload,
     AllocatePayload,
     AllocateResponse,
     BulkRangePayload,
@@ -33,6 +35,7 @@ from app.services.acquisition.acquisition_inventory_service import (
     add_bulk_range,
     add_catalog_issues,
     add_generic_issue,
+    add_placeholder_issue,
     delete_acquisition_item,
     list_acquisition_items,
     list_needs_review,
@@ -42,6 +45,7 @@ from app.services.acquisition.acquisition_service import (
     allocate_acquisition,
     complete_acquisition,
     create_acquisition,
+    delete_acquisition,
     get_acquisition,
     list_acquisitions,
     update_acquisition,
@@ -141,6 +145,22 @@ def update_acquisition_endpoint(
     )
 
 
+@acquisitions_v1_router.delete("/acquisitions/{acquisition_id}", response_model=AcquisitionDeleteResponse)
+def delete_acquisition_endpoint(
+    acquisition_id: int,
+    delete_inventory: bool = Query(default=False),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AcquisitionDeleteResponse:
+    assert current_user.id is not None
+    return delete_acquisition(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        delete_inventory=delete_inventory,
+    )
+
+
 @acquisitions_v1_router.post("/acquisitions/{acquisition_id}/complete", response_model=AcquisitionRead)
 def complete_acquisition_endpoint(
     acquisition_id: int,
@@ -189,6 +209,24 @@ def add_generic_endpoint(
 ) -> AddBooksResponse:
     assert current_user.id is not None
     return add_generic_issue(
+        session,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
+        payload=payload,
+    )
+
+
+@acquisitions_v1_router.post(
+    "/acquisitions/{acquisition_id}/placeholder-items", response_model=AddBooksResponse
+)
+def add_placeholder_endpoint(
+    acquisition_id: int,
+    payload: AddPlaceholderIssuePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AddBooksResponse:
+    assert current_user.id is not None
+    return add_placeholder_issue(
         session,
         owner_user_id=int(current_user.id),
         acquisition_id=acquisition_id,
