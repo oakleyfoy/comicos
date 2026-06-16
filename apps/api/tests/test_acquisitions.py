@@ -480,3 +480,20 @@ def test_cannot_delete_other_users_acquisition(client: TestClient) -> None:
     body = _create_acq(client, token_a)
     resp = client.delete(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token_b))
     assert resp.status_code == 404
+
+
+def test_delete_acquisition_with_placeholders(client: TestClient) -> None:
+    token = register_and_login(client, "acq-del-ph@example.com")
+    body = _create_acq(client, token)
+    add = client.post(
+        f"/api/v1/acquisitions/{body['id']}/placeholder-items",
+        headers=auth_headers(token),
+        json={"title": "Placeholder Only", "issue_number": "1", "quantity": 2},
+    )
+    assert add.status_code == 200, add.text
+    resp = client.delete(
+        f"/api/v1/acquisitions/{body['id']}?delete_inventory=true",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted_inventory_count"] == 2

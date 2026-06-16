@@ -463,6 +463,13 @@ from app.models.daily_action_engine import DailyCollectorAction
 from app.models.want_list import WantList, WantListItem
 from app.models.collection_gap import CollectionGap
 from app.models.collection_gap_target import CollectionGapTarget
+from app.models.universe import (
+    AcquisitionUniverseLink,
+    UniverseIssue,
+    UniversePublisher,
+    UniverseVariant,
+    UniverseVolume,
+)
 from app.models.collected_run import CollectedRun
 from app.models.next_issue import NextIssue
 from app.models.future_release_match import FutureReleaseMatch
@@ -1487,6 +1494,11 @@ __all__ = [
     "WantListItem",
     "CollectionGap",
     "CollectionGapTarget",
+    "UniversePublisher",
+    "UniverseVolume",
+    "UniverseIssue",
+    "UniverseVariant",
+    "AcquisitionUniverseLink",
     "CollectedRun",
     "NextIssue",
     "FutureReleaseMatch",

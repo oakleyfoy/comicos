@@ -7,6 +7,7 @@ import {
   type CatalogUniversePublisherNode,
   type CatalogUniverseVolumeNode,
   type PlaceholderRangePreviewResponse,
+  type VariantOption,
 } from "../../api/client";
 
 const VARIANT_PRESETS = [
@@ -56,6 +57,8 @@ export function AcquisitionTreePickerModal({
   const [issueFilter, setIssueFilter] = useState("");
   const [issues, setIssues] = useState<CatalogUniverseIssueNode[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<CatalogUniverseIssueNode | null>(null);
+  const [variantOptions, setVariantOptions] = useState<VariantOption[]>([]);
+  const [selectedVariant, setSelectedVariant] = useState<VariantOption | null>(null);
   const [quantity, setQuantity] = useState("1");
 
   const [bulkStart, setBulkStart] = useState("186");
@@ -72,7 +75,36 @@ export function AcquisitionTreePickerModal({
     setError(null);
     setPreview(null);
     setSelectedIssue(null);
+    setVariantOptions([]);
+    setSelectedVariant(null);
   }, [open]);
+
+  const selectIssue = useCallback(
+    async (row: CatalogUniverseIssueNode) => {
+      setSelectedIssue(row);
+      setSelectedVariant(null);
+      setVariantOptions([]);
+      if (!row.has_variants || !selectedVolume) {
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        const resp = await apiClient.listCatalogUniverseIssueVariants(
+          selectedVolume.volume_id,
+          row.issue_number,
+          acquisitionId,
+        );
+        setVariantOptions(resp.options);
+      } catch (err) {
+        const message = flowErrorMessage(err, "Could not load covers for this issue.");
+        if (message) setError(message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [acquisitionId, selectedVolume],
+  );
 
   const loadPublishers = useCallback(async () => {
     if (!open) return;
@@ -142,6 +174,9 @@ export function AcquisitionTreePickerModal({
 
   const createSingle = async () => {
     if (!selectedPublisher || !selectedVolume || !selectedIssue) return;
+    const catalogIssueId =
+      selectedVariant?.catalog_issue_id ?? selectedIssue.catalog_issue_id ?? null;
+    const issueTitle = selectedVariant?.variant_label ?? selectedVariant?.title ?? selectedIssue.issue_title;
     setBusy(true);
     setError(null);
     try {
@@ -150,12 +185,12 @@ export function AcquisitionTreePickerModal({
         volume_id: selectedVolume.volume_id,
         issue_number: selectedIssue.issue_number,
         quantity: Math.min(100, Math.max(1, Number(quantity) || 1)),
-        issue_title: selectedIssue.issue_title,
+        issue_title: issueTitle,
         source_issue_id:
           selectedIssue.comicvine_issue_id != null
             ? String(selectedIssue.comicvine_issue_id)
-            : selectedIssue.catalog_issue_id != null
-              ? String(selectedIssue.catalog_issue_id)
+            : catalogIssueId != null
+              ? String(catalogIssueId)
               : null,
       });
       onCreated();
@@ -287,7 +322,7 @@ export function AcquisitionTreePickerModal({
           </p>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-4 lg:grid-cols-3">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-4 lg:grid-cols-3 xl:grid-cols-4">
           <section className="flex min-h-[280px] flex-col rounded-xl border border-slate-800">
             <div className="border-b border-slate-800 p-2">
               <input
@@ -307,6 +342,8 @@ export function AcquisitionTreePickerModal({
                       setSelectedPublisher(row.publisher);
                       setSelectedVolume(null);
                       setSelectedIssue(null);
+                      setVariantOptions([]);
+                      setSelectedVariant(null);
                       setPreview(null);
                     }}
                     className={`mb-1 w-full rounded-lg px-2 py-2 text-left text-sm ${
@@ -339,6 +376,8 @@ export function AcquisitionTreePickerModal({
                     onClick={() => {
                       setSelectedVolume(row);
                       setSelectedIssue(null);
+                      setVariantOptions([]);
+                      setSelectedVariant(null);
                       setPreview(null);
                     }}
                     className={`mb-1 w-full rounded-lg px-2 py-2 text-left text-sm ${
@@ -368,22 +407,38 @@ export function AcquisitionTreePickerModal({
                   />
                 </div>
                 <ul className="flex-1 overflow-y-auto p-2">
-                  {issues.map((row) => (
-                    <li key={`${row.issue_number}-${row.catalog_issue_id ?? "d"}`}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedIssue(row)}
-                        className={`mb-1 w-full rounded-lg px-2 py-2 text-left text-sm ${
-                          selectedIssue?.issue_number === row.issue_number
-                            ? "bg-sky-900/50 text-white"
-                            : "text-slate-200 hover:bg-slate-800"
-                        }`}
-                      >
-                        #{row.issue_number}
-                        {row.issue_title ? ` — ${row.issue_title}` : ""}
-                      </button>
-                    </li>
-                  ))}
+                  {issues.map((row) => {
+                    const selected =
+                      selectedIssue?.normalized_issue_number === row.normalized_issue_number;
+                    return (
+                      <li key={row.normalized_issue_number}>
+                        <button
+                          type="button"
+                          onClick={() => void selectIssue(row)}
+                          className={`mb-1 flex w-full gap-2 rounded-lg px-2 py-2 text-left text-sm ${
+                            selected ? "bg-sky-900/50 text-white" : "text-slate-200 hover:bg-slate-800"
+                          }`}
+                        >
+                          {!row.has_variants && row.cover_image_url ? (
+                            <img
+                              src={row.cover_image_url}
+                              alt=""
+                              className="h-14 w-10 shrink-0 rounded object-cover"
+                            />
+                          ) : null}
+                          <span className="min-w-0 flex-1">
+                            <span className="font-medium">#{row.issue_number}</span>
+                            {row.issue_title ? ` — ${row.issue_title}` : ""}
+                            {row.has_variants ? (
+                              <span className="mt-0.5 block text-xs text-indigo-300">
+                                {row.cover_count} cover{row.cover_count === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             ) : (
@@ -501,6 +556,52 @@ export function AcquisitionTreePickerModal({
               </div>
             )}
           </section>
+
+          {mode === "single" && selectedIssue?.has_variants ? (
+            <section className="flex min-h-[280px] flex-col rounded-xl border border-slate-800 xl:col-span-1">
+              <div className="border-b border-slate-800 px-3 py-2">
+                <p className="text-sm font-semibold text-white">Covers for #{selectedIssue.issue_number}</p>
+                <p className="text-xs text-slate-400">Pick a variant</p>
+              </div>
+              <ul className="grid flex-1 grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3">
+                {variantOptions.map((option, index) => {
+                  const picked =
+                    selectedVariant?.catalog_issue_id === option.catalog_issue_id &&
+                    selectedVariant?.variant_label === option.variant_label &&
+                    selectedVariant?.cover_image_url === option.cover_image_url;
+                  return (
+                    <li key={`${option.catalog_issue_id}-${option.variant_label ?? "main"}-${index}`}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVariant(option)}
+                        className={`relative flex aspect-[2/3] w-full flex-col overflow-hidden rounded-lg border text-left ${
+                          picked ? "border-sky-400 ring-2 ring-sky-400" : "border-slate-700 hover:border-sky-500"
+                        }`}
+                      >
+                        {option.cover_image_url ? (
+                          <img
+                            src={option.cover_image_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full items-center justify-center bg-slate-800 px-1 text-center text-xs text-slate-300">
+                            {option.variant_label ?? "Cover"}
+                          </span>
+                        )}
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-950/80 px-1 py-0.5 text-[10px] text-white">
+                          {option.variant_label ?? option.title ?? "Cover"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {variantOptions.length === 0 && !busy ? (
+                <p className="p-3 text-sm text-slate-400">No cover art in catalog for this issue yet.</p>
+              ) : null}
+            </section>
+          ) : null}
         </div>
 
         <footer className="flex flex-wrap items-center gap-3 border-t border-slate-800 px-4 py-3">
@@ -517,7 +618,11 @@ export function AcquisitionTreePickerModal({
               </label>
               <button
                 type="button"
-                disabled={busy || !selectedIssue}
+                disabled={
+                  busy ||
+                  !selectedIssue ||
+                  (selectedIssue.has_variants ? selectedVariant == null : false)
+                }
                 onClick={() => void createSingle()}
                 className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-50"
               >

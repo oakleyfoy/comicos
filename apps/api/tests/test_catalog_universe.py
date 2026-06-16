@@ -95,8 +95,24 @@ def test_volume_issues_endpoint_returns_issues(client: TestClient, session: Sess
     body = resp.json()
     assert body["total_count"] == 1
     assert body["items"][0]["issue_number"] == "221"
+    assert body["items"][0]["normalized_issue_number"] == "221"
     assert body["items"][0]["catalog_status"] == "CATALOGED"
     assert body["items"][0]["catalog_issue_id"] is not None
+    assert body["items"][0]["has_variants"] is False
+    assert body["items"][0]["cover_count"] == 1
+
+
+def test_volume_issue_variants_endpoint(client: TestClient, session: Session) -> None:
+    token = _seed(client, session)
+    resp = client.get(
+        "/api/v1/catalog-universe/volumes/12345/issues/221/variants",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["issue_number"] == "221"
+    assert len(body["options"]) >= 1
+    assert body["options"][0]["catalog_issue_id"] is not None
 
 
 def test_search_endpoint_finds_series_by_title(client: TestClient, session: Session) -> None:

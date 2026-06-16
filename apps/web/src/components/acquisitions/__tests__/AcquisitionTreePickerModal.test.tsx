@@ -57,11 +57,16 @@ const issueResp: CatalogUniverseIssueListResponse = {
   items: [
     {
       issue_number: "221",
+      normalized_issue_number: "221",
       issue_title: "Fall of the Mutants",
       release_date: null,
       comicvine_issue_id: 999221,
-      catalog_issue_id: null,
-      catalog_status: "PLACEHOLDER_ELIGIBLE",
+      catalog_issue_id: 42,
+      series_id: 1,
+      cover_image_url: "https://example.com/221.jpg",
+      has_variants: false,
+      cover_count: 1,
+      catalog_status: "CATALOGED",
     },
   ],
   total_count: 1,

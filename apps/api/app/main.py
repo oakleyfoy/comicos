@@ -1135,6 +1135,7 @@ from app.api.recognition import attach_recognition_layer
 from app.api.receiving import attach_receiving_layer
 from app.api.acquisitions import attach_acquisition_layer
 from app.api.catalog_universe import attach_catalog_universe_layer
+from app.api.master_universe import attach_master_universe_layer
 from app.api.scan_reconciliation import attach_scan_reconciliation_layer
 from app.api.scan_defects import attach_scan_defects_layer
 from app.api.scan_spine_ticks import attach_scan_spine_ticks_layer
@@ -1358,6 +1359,7 @@ attach_recognition_layer(app)
 attach_receiving_layer(app)
 attach_acquisition_layer(app)
 attach_catalog_universe_layer(app)
+attach_master_universe_layer(app)
 attach_scan_reconciliation_layer(app)
 attach_scan_defects_layer(app)
 attach_scan_spine_ticks_layer(app)

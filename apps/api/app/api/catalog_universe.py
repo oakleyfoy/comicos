@@ -8,6 +8,7 @@ from sqlmodel import Session
 from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models import User
+from app.schemas.acquisition import VariantPickerResult
 from app.schemas.catalog_universe import (
     CatalogUniverseIssueListResponse,
     CatalogUniversePublisherListResponse,
@@ -28,6 +29,7 @@ from app.services.catalog_universe.catalog_universe_placeholder_service import (
 from app.services.catalog_universe.catalog_universe_service import (
     list_issues_for_volume,
     list_universe_publishers,
+    list_variants_for_volume_issue,
     list_volumes_for_publisher,
     search_universe,
 )
@@ -92,6 +94,27 @@ def list_volume_issues_endpoint(
         issue_number=issue_number,
         limit=limit,
         offset=offset,
+    )
+
+
+@catalog_universe_v1_router.get(
+    "/volumes/{volume_id}/issues/{issue_number}/variants",
+    response_model=VariantPickerResult,
+)
+def list_volume_issue_variants_endpoint(
+    volume_id: int,
+    issue_number: str,
+    acquisition_id: int | None = Query(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> VariantPickerResult:
+    assert current_user.id is not None
+    return list_variants_for_volume_issue(
+        session,
+        volume_id=volume_id,
+        issue_number=issue_number,
+        owner_user_id=int(current_user.id),
+        acquisition_id=acquisition_id,
     )
 
 

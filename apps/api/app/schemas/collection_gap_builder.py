@@ -66,6 +66,8 @@ class CollectionGapIssueRow(BaseModel):
     placeholder_owned: bool
     catalog_issue_id: int | None = None
     placeholder_issue_id: int | None = None
+    universe_issue_id: int | None = None
+    universe_status: str | None = None
     gap_status: GapStatus
 
 
@@ -86,6 +88,7 @@ class WantListTargetItemPayload(BaseModel):
     issue_number: str
     catalog_issue_id: int | None = None
     placeholder_issue_id: int | None = None
+    universe_variant_id: int | None = None
 
 
 class WantListTargetCreatePayload(BaseModel):

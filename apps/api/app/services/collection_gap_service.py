@@ -19,6 +19,7 @@ from app.models.collection_gap_target import (
     CollectionGapTarget,
 )
 from app.models.want_list import DEFAULT_PRIORITY, DEFAULT_STATUS, WantListItem
+from app.models.universe import UniverseIssue, UniverseVolume
 from app.schemas.collection_gap_builder import (
     CollectionGapIssueRow,
     CollectionGapIssuesResponse,
@@ -455,6 +456,47 @@ def list_gap_issues_for_volume_year(
             )
         )
 
+    catalog_norms = {normalize_issue_number(r.issue_number) for r in rows}
+    universe_volume = session.exec(
+        select(UniverseVolume).where(UniverseVolume.comicvine_volume_id == volume_id)
+    ).first()
+    if universe_volume is not None:
+        for shell in session.exec(
+            select(UniverseIssue).where(UniverseIssue.volume_id == int(universe_volume.id or 0))
+        ).all():
+            norm = shell.normalized_issue_number
+            if norm in catalog_norms:
+                continue
+            shell_year = shell.cover_date.year if shell.cover_date else None
+            if shell_year is not None and shell_year != year:
+                continue
+            ph_id = ownership.placeholder_ids.get((volume_id, norm))
+            owned_flag = ph_id is not None
+            gap_status = "PLACEHOLDER_OWNED" if owned_flag else "MISSING"
+            if gap_status_filter:
+                want = gap_status_filter.strip().upper()
+                if want == "MISSING" and gap_status != "MISSING":
+                    continue
+                if want == "OWNED":
+                    continue
+                if want == "PLACEHOLDER_OWNED" and not owned_flag:
+                    continue
+            rows.append(
+                CollectionGapIssueRow(
+                    issue_number=shell.issue_number,
+                    issue_title=shell.issue_title,
+                    release_date=shell.cover_date,
+                    owned=False,
+                    placeholder_owned=owned_flag,
+                    catalog_issue_id=None,
+                    placeholder_issue_id=ph_id,
+                    universe_issue_id=int(shell.id or 0),
+                    universe_status=shell.status,
+                    gap_status=gap_status,  # type: ignore[arg-type]
+                )
+            )
+
+    rows.sort(key=lambda r: (normalize_issue_number(r.issue_number), r.issue_number))
     total_count = len(rows)
     page = rows[offset : offset + limit]
     return CollectionGapIssuesResponse(
@@ -503,10 +545,17 @@ def create_wantlist_targets(
             normalized_issue_number=norm,
             catalog_issue_id=item.catalog_issue_id,
             placeholder_issue_id=item.placeholder_issue_id,
+            universe_issue_id=None,
             target_status=DEFAULT_GAP_TARGET_STATUS,
             source=DEFAULT_GAP_TARGET_SOURCE,
             priority=payload.priority or DEFAULT_GAP_TARGET_PRIORITY,
         )
+        if item.universe_variant_id:
+            from app.models.universe import UniverseVariant
+
+            variant = session.get(UniverseVariant, item.universe_variant_id)
+            if variant is not None:
+                row.universe_issue_id = variant.issue_id
         session.add(row)
         session.flush()
         created_ids.append(int(row.id or 0))
@@ -521,6 +570,7 @@ def create_wantlist_targets(
                 priority=payload.priority or DEFAULT_GAP_TARGET_PRIORITY or DEFAULT_PRIORITY,
                 status=DEFAULT_STATUS,
                 notes="Added from Collection Gap Builder",
+                universe_variant_id=item.universe_variant_id,
             )
         )
 

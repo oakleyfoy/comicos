@@ -7,7 +7,7 @@ from urllib.parse import unquote
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
-from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogVariant
 from app.models.catalog_p97 import ComicVineVolumeUniverse
 from app.schemas.catalog_universe import (
     CatalogUniverseIssueListResponse,
@@ -20,7 +20,12 @@ from app.schemas.catalog_universe import (
     CatalogUniverseVolumeListResponse,
     CatalogUniverseVolumeNode,
 )
-from app.services.catalog_ingestion_service import normalize_series_name
+from app.schemas.acquisition import VariantPickerResult
+from app.services.acquisition.catalog_browse_service import (
+    _covers_for_issue_ids,
+    list_issue_variants,
+)
+from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.comicvine_catalog_importer import comicvine_volume_id_for_series
 
 CATALOG_STATUS_CATALOGED = "CATALOGED"
@@ -361,21 +366,53 @@ def list_issues_for_volume(
     stmt = stmt.order_by(CatalogIssue.normalized_issue_number.asc(), CatalogIssue.id.asc())
 
     all_rows = list(session.exec(stmt).all()) if series_ids else []
-    total_count = len(all_rows)
-    page_rows = all_rows[offset : offset + limit]
+    issue_ids = [int(i.id) for i in all_rows if i.id is not None]
 
-    items: list[CatalogUniverseIssueNode] = []
-    for issue in page_rows:
-        items.append(
+    variant_counts: dict[int, int] = {}
+    if issue_ids:
+        vrows = session.exec(
+            select(CatalogVariant.issue_id, func.count(CatalogVariant.id))
+            .where(CatalogVariant.issue_id.in_(issue_ids))
+            .group_by(CatalogVariant.issue_id)
+        ).all()
+        variant_counts = {int(iid): int(cnt) for iid, cnt in vrows}
+
+    covers = _covers_for_issue_ids(session, issue_ids)
+
+    groups: dict[str, list[CatalogIssue]] = {}
+    for issue in all_rows:
+        groups.setdefault(issue.normalized_issue_number, []).append(issue)
+
+    grouped_nodes: list[CatalogUniverseIssueNode] = []
+    for normalized, group in groups.items():
+        group.sort(key=lambda i: int(i.id or 0))
+        representative = group[0]
+        rep_id = int(representative.id or 0)
+        total_variants = sum(variant_counts.get(int(i.id or 0), 0) for i in group)
+        has_variants = len(group) > 1 or total_variants > 0
+        cover_count = len(group) + total_variants
+        grouped_nodes.append(
             CatalogUniverseIssueNode(
-                issue_number=issue.issue_number,
-                issue_title=issue.title,
-                release_date=issue.release_date or issue.store_date or issue.cover_date,
-                comicvine_issue_id=_comicvine_id_from_external(issue.external_source_ids),
-                catalog_issue_id=int(issue.id) if issue.id is not None else None,
+                issue_number=representative.issue_number,
+                normalized_issue_number=normalized,
+                issue_title=representative.title,
+                release_date=representative.release_date
+                or representative.store_date
+                or representative.cover_date,
+                comicvine_issue_id=_comicvine_id_from_external(representative.external_source_ids),
+                catalog_issue_id=None if has_variants else rep_id,
+                series_id=int(representative.series_id),
+                cover_image_url=None if has_variants else covers.get(rep_id),
+                has_variants=has_variants,
+                cover_count=cover_count,
                 catalog_status=CATALOG_STATUS_CATALOGED,
             )
         )
+
+    grouped_nodes.sort(key=lambda n: (n.normalized_issue_number,))
+    total_count = len(grouped_nodes)
+    page_rows = grouped_nodes[offset : offset + limit]
+    items = page_rows
 
     expected = 0
     if volume_id > 0:
@@ -384,7 +421,7 @@ def list_issues_for_volume(
         ).first()
         if universe is not None:
             expected = int(universe.count_of_issues or 0)
-    catalog_count = total_count
+    catalog_count = len(all_rows)
     discovered_count = max(expected - catalog_count, 0) if expected > 0 else 0
 
     return CatalogUniverseIssueListResponse(
@@ -396,6 +433,47 @@ def list_issues_for_volume(
         offset=offset,
         catalog_issue_count=catalog_count,
         discovered_issue_count=discovered_count,
+    )
+
+
+def list_variants_for_volume_issue(
+    session: Session,
+    *,
+    volume_id: int,
+    issue_number: str,
+    owner_user_id: int,
+    acquisition_id: int | None = None,
+) -> VariantPickerResult:
+    from fastapi import HTTPException, status
+
+    series_ids, _ = _resolve_series_ids_for_volume(session, volume_id)
+    if not series_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Volume not found")
+    normalized = normalize_issue_number(issue_number)
+    if not normalized:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+
+    series_id_row = session.exec(
+        select(CatalogIssue.series_id)
+        .where(
+            CatalogIssue.series_id.in_(series_ids),
+            CatalogIssue.normalized_issue_number == normalized,
+        )
+        .order_by(CatalogIssue.id.asc())
+        .limit(1)
+    ).first()
+    if series_id_row is None:
+        return VariantPickerResult(
+            series_id=int(series_ids[0]),
+            issue_number=issue_number.strip(),
+            options=[],
+        )
+    return list_issue_variants(
+        session,
+        owner_user_id=owner_user_id,
+        series_id=int(series_id_row),
+        normalized_issue_number=normalized,
+        acquisition_id=acquisition_id,
     )
 
 

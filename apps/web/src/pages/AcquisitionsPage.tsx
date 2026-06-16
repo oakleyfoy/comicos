@@ -33,24 +33,6 @@ export function AcquisitionsPage(): JSX.Element {
     void load(filters);
   }, [filters, load]);
 
-  const handleDelete = useCallback(
-    async (item: AcquisitionListItem) => {
-      const message =
-        item.item_count > 0
-          ? `Delete "${item.seller_name || "this acquisition"}" and its ${item.item_count} book(s)? This cannot be undone.`
-          : `Delete "${item.seller_name || "this acquisition"}"? This cannot be undone.`;
-      if (!window.confirm(message)) return;
-      setError(null);
-      try {
-        await apiClient.deleteAcquisition(item.id, item.item_count > 0);
-        setItems((prev) => prev.filter((row) => row.id !== item.id));
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not delete acquisition.");
-      }
-    },
-    [],
-  );
-
   return (
     <AppShell>
       <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -118,19 +100,10 @@ export function AcquisitionsPage(): JSX.Element {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="relative rounded-2xl border border-slate-700 bg-slate-900 transition hover:border-sky-400"
+                  className="rounded-2xl border border-slate-700 bg-slate-900 transition hover:border-sky-400"
                 >
-                  <button
-                    type="button"
-                    aria-label={`Delete acquisition ${item.seller_name || item.id}`}
-                    title="Delete acquisition"
-                    onClick={() => handleDelete(item)}
-                    className="absolute right-2 top-2 z-10 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1 text-xs text-slate-400 hover:border-rose-400 hover:text-rose-300"
-                  >
-                    Delete
-                  </button>
                   <Link to={`/acquisitions/${item.id}`} className="block p-4">
-                    <div className="flex items-center justify-between pr-16">
+                    <div className="flex items-center justify-between">
                       <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-sky-300">
                         {acquisitionSourceLabel(item.acquisition_type)}
                       </span>

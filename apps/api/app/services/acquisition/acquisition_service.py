@@ -17,6 +17,7 @@ from app.models.acquisition import (
     ACQUISITION_TYPE_UNKNOWN,
     ACQUISITION_TYPES,
     ALLOCATION_MODES,
+    AcquisitionPlaceholderIssue,
     utc_now,
 )
 from app.schemas.acquisition import (
@@ -280,6 +281,21 @@ def list_acquisitions(
     return AcquisitionListResponse(items=items, total=len(items))
 
 
+def _clear_inventory_copy_dependencies(session: Session, copy_ids: list[int]) -> None:
+    """Remove rows that block ``inventory_copy`` deletion (storage placement, etc.)."""
+    if not copy_ids:
+        return
+    from app.models.storage_location import P79InventoryLocationAssignment
+
+    for row in session.exec(
+        select(P79InventoryLocationAssignment).where(
+            P79InventoryLocationAssignment.inventory_copy_id.in_(copy_ids)
+        )
+    ).all():
+        session.delete(row)
+    session.flush()
+
+
 def delete_acquisition(
     session: Session,
     *,
@@ -312,12 +328,12 @@ def delete_acquisition(
         )
 
     deleted_inventory = len(copies)
+    copy_ids = [int(c.id) for c in copies if c.id is not None]
     try:
+        _clear_inventory_copy_dependencies(session, copy_ids)
         for copy in copies:
             session.delete(copy)
         session.flush()
-        from app.models import AcquisitionPlaceholderIssue
-
         for placeholder in session.exec(
             select(AcquisitionPlaceholderIssue).where(
                 AcquisitionPlaceholderIssue.acquisition_id == acquisition_id

@@ -21626,10 +21626,15 @@ export interface CatalogUniverseVolumeListResponse {
 
 export interface CatalogUniverseIssueNode {
   issue_number: string;
+  normalized_issue_number: string;
   issue_title: string | null;
   release_date: string | null;
   comicvine_issue_id: number | null;
   catalog_issue_id: number | null;
+  series_id: number | null;
+  cover_image_url: string | null;
+  has_variants: boolean;
+  cover_count: number;
   catalog_status: "CATALOGED" | "DISCOVERED" | "PLACEHOLDER_ELIGIBLE";
 }
 
@@ -21657,6 +21662,109 @@ export interface CatalogUniverseSearchHit {
 export interface CatalogUniverseSearchResponse {
   query: string;
   hits: CatalogUniverseSearchHit[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MasterUniverseSummary {
+  publisher_count: number;
+  volume_count: number;
+  issue_count: number;
+  variant_count: number;
+}
+
+export interface MasterUniversePublisherNode {
+  id: number;
+  name: string;
+  comicvine_publisher_id: number | null;
+  volume_count: number;
+  issue_count: number;
+}
+
+export interface MasterUniversePublisherListResponse {
+  summary: MasterUniverseSummary;
+  items: MasterUniversePublisherNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MasterUniverseVolumeNode {
+  id: number;
+  comicvine_volume_id: number;
+  publisher_id: number;
+  name: string;
+  start_year: number | null;
+  count_of_issues: number | null;
+  issue_shell_count: number;
+  volume_status: string;
+}
+
+export interface MasterUniverseVolumeListResponse {
+  publisher_id: number;
+  publisher_name: string;
+  items: MasterUniverseVolumeNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MasterUniverseIssueNode {
+  id: number;
+  issue_number: string;
+  normalized_issue_number: string;
+  issue_title: string | null;
+  cover_date: string | null;
+  comicvine_issue_id: number | null;
+  status: string;
+  variant_count: number;
+}
+
+export interface MasterUniverseIssueListResponse {
+  volume_id: number;
+  volume_name: string;
+  items: MasterUniverseIssueNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MasterUniverseVariantNode {
+  id: number;
+  variant_type: string;
+  variant_name: string;
+  status: string;
+  catalog_issue_id: number | null;
+  comicvine_variant_id: number | null;
+  is_unknown_shell: boolean;
+}
+
+export interface MasterUniverseVariantListResponse {
+  issue_id: number;
+  issue_number: string;
+  items: MasterUniverseVariantNode[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MasterUniverseSearchHit {
+  hit_type: string;
+  publisher_id?: number | null;
+  publisher_name?: string | null;
+  volume_id?: number | null;
+  volume_name?: string | null;
+  issue_id?: number | null;
+  issue_number?: string | null;
+  variant_id?: number | null;
+  variant_label?: string | null;
+  status?: string | null;
+}
+
+export interface MasterUniverseSearchResponse {
+  query: string;
+  hits: MasterUniverseSearchHit[];
   total_count: number;
   limit: number;
   offset: number;
@@ -25407,6 +25515,19 @@ export const apiClient = {
     );
   },
 
+  listCatalogUniverseIssueVariants(
+    volumeId: number,
+    issueNumber: string,
+    acquisitionId?: number,
+  ): Promise<VariantPickerResult> {
+    const params = new URLSearchParams();
+    if (acquisitionId != null) params.set("acquisition_id", String(acquisitionId));
+    const q = params.toString();
+    return requestScanV1Flat<VariantPickerResult>(
+      `/catalog-universe/volumes/${volumeId}/issues/${encodeURIComponent(issueNumber)}/variants${q ? `?${q}` : ""}`,
+    );
+  },
+
   searchCatalogUniverse(
     query: string,
     limit = 50,
@@ -25414,6 +25535,68 @@ export const apiClient = {
   ): Promise<CatalogUniverseSearchResponse> {
     const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
     return requestScanV1Flat<CatalogUniverseSearchResponse>(`/catalog-universe/search?${params.toString()}`);
+  },
+
+  listMasterUniversePublishers(
+    search?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<MasterUniversePublisherListResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search?.trim()) params.set("search", search.trim());
+    return requestScanV1Flat<MasterUniversePublisherListResponse>(`/universe/publishers?${params.toString()}`);
+  },
+
+  listMasterUniverseVolumes(
+    publisherId: number,
+    search?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<MasterUniverseVolumeListResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search?.trim()) params.set("search", search.trim());
+    return requestScanV1Flat<MasterUniverseVolumeListResponse>(
+      `/universe/publishers/${publisherId}/volumes?${params.toString()}`,
+    );
+  },
+
+  listMasterUniverseIssues(
+    volumeId: number,
+    issueNumber?: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<MasterUniverseIssueListResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (issueNumber?.trim()) params.set("issue_number", issueNumber.trim());
+    return requestScanV1Flat<MasterUniverseIssueListResponse>(
+      `/universe/volumes/${volumeId}/issues?${params.toString()}`,
+    );
+  },
+
+  listMasterUniverseVariants(
+    issueId: number,
+    limit = 50,
+    offset = 0,
+  ): Promise<MasterUniverseVariantListResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return requestScanV1Flat<MasterUniverseVariantListResponse>(
+      `/universe/issues/${issueId}/variants?${params.toString()}`,
+    );
+  },
+
+  searchMasterUniverse(query: string, limit = 50, offset = 0): Promise<MasterUniverseSearchResponse> {
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    return requestScanV1Flat<MasterUniverseSearchResponse>(`/universe/search?${params.toString()}`);
+  },
+
+  createUniverseAcquisitionPlaceholder(
+    acquisitionId: number,
+    payload: { universe_variant_id: number; quantity?: number },
+  ): Promise<TreePlaceholderCreateResponse> {
+    return requestScanV1Flat<TreePlaceholderCreateResponse>(
+      `/universe/acquisitions/${acquisitionId}/placeholders`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
   },
 
   runScanReconciliation(payload: ScanReconciliationRunCreate): Promise<ScanReconciliationRunDetail> {

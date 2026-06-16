@@ -53,10 +53,15 @@ class CatalogUniverseVolumeListResponse(BaseModel):
 
 class CatalogUniverseIssueNode(BaseModel):
     issue_number: str
+    normalized_issue_number: str
     issue_title: str | None = None
     release_date: date | None = None
     comicvine_issue_id: int | None = None
     catalog_issue_id: int | None = None
+    series_id: int | None = None
+    cover_image_url: str | None = None
+    has_variants: bool = False
+    cover_count: int = 0
     catalog_status: str
 
 

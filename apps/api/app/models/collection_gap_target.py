@@ -40,6 +40,12 @@ class CollectionGapTarget(SQLModel, table=True):
     issue_number: str = Field(max_length=32, nullable=False)
     normalized_issue_number: str = Field(max_length=32, nullable=False)
     catalog_issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
+    universe_issue_id: int | None = Field(
+        default=None,
+        foreign_key="universe_issue.id",
+        nullable=True,
+        index=True,
+    )
     placeholder_issue_id: int | None = Field(
         default=None,
         foreign_key="acquisition_placeholder_issue.id",

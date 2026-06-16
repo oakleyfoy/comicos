@@ -10,14 +10,8 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models import (
-    CatalogImage,
-    CatalogIssue,
-    CatalogPublisher,
-    CatalogSeries,
-    CatalogVariant,
-    InventoryCopy,
-)
+from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries, CatalogVariant
+from app.models import InventoryCopy
 from app.schemas.acquisition import (
     IssueGridResponse,
     IssueGridTile,
@@ -41,6 +35,24 @@ def _cover_url(image: CatalogImage | None) -> str | None:
     if image.local_path and str(image.local_path).strip():
         return str(image.local_path).strip()
     return None
+
+
+def _covers_for_variant_ids(session: Session, variant_ids: list[int]) -> dict[int, str]:
+    if not variant_ids:
+        return {}
+    rows = session.exec(
+        select(CatalogImage)
+        .where(CatalogImage.variant_id.in_(variant_ids), CatalogImage.image_type == "cover")
+        .order_by(CatalogImage.variant_id.asc(), CatalogImage.id.asc())
+    ).all()
+    out: dict[int, str] = {}
+    for image in rows:
+        if image.variant_id is None or image.variant_id in out:
+            continue
+        url = _cover_url(image)
+        if url:
+            out[int(image.variant_id)] = url
+    return out
 
 
 def _covers_for_issue_ids(session: Session, issue_ids: list[int]) -> dict[int, str]:
@@ -374,6 +386,38 @@ def list_issue_variants(
                 added=iid in added_issue_ids,
             )
         )
+
+    if issue_ids:
+        variant_rows = list(
+            session.exec(select(CatalogVariant).where(CatalogVariant.issue_id.in_(issue_ids)).order_by(CatalogVariant.id.asc())).all()
+        )
+        variant_ids = [int(v.id) for v in variant_rows if v.id is not None]
+        variant_covers = _covers_for_variant_ids(session, variant_ids)
+        issue_by_id = {int(i.id or 0): i for i in issues if i.id is not None}
+        for variant in variant_rows:
+            vid = int(variant.id or 0)
+            iid = int(variant.issue_id)
+            parent = issue_by_id.get(iid)
+            if parent is None:
+                continue
+            label = (variant.variant_name or variant.ratio or variant.printing or "Variant").strip()
+            options.append(
+                VariantOption(
+                    catalog_issue_id=iid,
+                    series=series.name if series else "Unknown",
+                    issue_number=parent.issue_number,
+                    title=parent.title,
+                    variant_label=label,
+                    cover_date=parent.cover_date,
+                    publisher=publisher.name if publisher else None,
+                    cover_image_url=variant_covers.get(vid) or covers.get(iid),
+                    variant_type=variant.ratio,
+                    sort_rank=_variant_sort_rank(parent) + 1,
+                    owned=iid in owned_issue_ids,
+                    added=iid in added_issue_ids,
+                )
+            )
+
     options.sort(key=lambda o: (o.sort_rank, o.catalog_issue_id))
     return VariantPickerResult(
         series_id=series_id,

@@ -48,6 +48,12 @@ class WantListItem(SQLModel, table=True):
     series_name: str = Field(max_length=200, nullable=False)
     issue_number: str = Field(max_length=32, nullable=False)
     variant_description: str = Field(default="", max_length=200, nullable=False)
+    universe_variant_id: int | None = Field(
+        default=None,
+        foreign_key="universe_variant.id",
+        nullable=True,
+        index=True,
+    )
     priority: str = Field(default=DEFAULT_PRIORITY, max_length=16, nullable=False, index=True)
     status: str = Field(default=DEFAULT_STATUS, max_length=16, nullable=False, index=True)
     notes: str = Field(default="", sa_column=Column(Text, nullable=False))

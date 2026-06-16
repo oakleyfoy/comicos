@@ -14,6 +14,7 @@ import { AcquisitionDetailPage } from "./pages/AcquisitionDetailPage";
 import { AcquisitionsNeedsReviewPage } from "./pages/AcquisitionsNeedsReviewPage";
 import { PlaceholderMatchQueuePage } from "./pages/PlaceholderMatchQueuePage";
 import { CatalogUniversePage } from "./pages/CatalogUniversePage";
+import { MasterUniversePage } from "./pages/MasterUniversePage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
@@ -473,6 +474,7 @@ export default function App() {
         <Route path="/acquisitions/needs-review" element={<AcquisitionsNeedsReviewPage />} />
         <Route path="/acquisitions/:acquisitionId" element={<AcquisitionDetailPage />} />
         <Route path="/catalog-universe" element={<CatalogUniversePage />} />
+        <Route path="/universe" element={<MasterUniversePage />} />
         <Route path="/catalog-universe/placeholders" element={<PlaceholderMatchQueuePage />} />
         <Route path="/imports" element={<ImportsPage />} />
         <Route path="/imports/guided" element={<GuidedImportWizardPage />} />
