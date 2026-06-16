@@ -6,6 +6,10 @@ from sqlalchemy import case, func, or_
 from sqlmodel import Session, select
 
 from app.models import (
+    Acquisition,
+    CatalogIssue,
+    CatalogPublisher,
+    CatalogSeries,
     ComicIssue,
     ComicTitle,
     InventoryCopy,
@@ -188,23 +192,25 @@ def build_inventory_detail_query(current_user: User):
     gain_loss_expr = gain_loss_expression().label("gain_loss")
     asset_state_expr = _asset_state_case_expression().label("asset_state")
 
+    # Outer joins so manually-added (P98) copies with no Order/Variant graph
+    # still resolve; catalog_master + acquisition provide the fallback identity.
     return (
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.copy_number.label("copy_number"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
+            func.coalesce(ComicTitle.name, CatalogSeries.name, "Unknown").label("title"),
+            func.coalesce(Publisher.name, CatalogPublisher.name, "Unknown").label("publisher"),
+            func.coalesce(ComicIssue.issue_number, CatalogIssue.issue_number, "").label("issue_number"),
             ComicIssue.id.label("canonical_issue_id"),
             Variant.cover_name.label("cover_name"),
             Variant.printing.label("printing"),
             Variant.ratio.label("ratio"),
             Variant.variant_type.label("variant_type"),
             Variant.cover_artist.label("cover_artist"),
-            Order.retailer.label("retailer"),
-            Order.order_date.label("order_date"),
-            Order.source_type.label("source_type"),
+            func.coalesce(Order.retailer, Acquisition.seller_name, "Manual Acquisition").label("retailer"),
+            func.coalesce(Order.order_date, Acquisition.purchase_date).label("order_date"),
+            func.coalesce(Order.source_type, Acquisition.acquisition_type).label("source_type"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
@@ -217,7 +223,7 @@ def build_inventory_detail_query(current_user: User):
             Order.id.label("order_id"),
             OrderItem.id.label("order_item_id"),
             Variant.id.label("variant_id"),
-            Order.order_date.label("purchase_date"),
+            func.coalesce(Order.order_date, Acquisition.purchase_date).label("purchase_date"),
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_year.label("release_year"),
             InventoryCopy.release_status.label("release_status"),
@@ -232,6 +238,17 @@ def build_inventory_detail_query(current_user: User):
             InventoryCopy.catalog_image_id.label("catalog_image_id"),
             InventoryCopy.acquisition_source_type.label("acquisition_source_type"),
             InventoryCopy.acquisition_source_name.label("acquisition_source_name"),
+            InventoryCopy.acquisition_id.label("acquisition_id"),
+            Acquisition.acquisition_type.label("acquisition_type"),
+            Acquisition.seller_name.label("acquisition_seller_name"),
+            Acquisition.seller_username.label("acquisition_seller_username"),
+            Acquisition.purchase_date.label("acquisition_purchase_date"),
+            Acquisition.status.label("acquisition_status"),
+            (
+                func.coalesce(Acquisition.total_paid, 0)
+                + func.coalesce(Acquisition.shipping_paid, 0)
+                + func.coalesce(Acquisition.tax_paid, 0)
+            ).label("acquisition_total"),
             OrderItem.enrichment_status.label("enrichment_status"),
             OrderItem.enrichment_confidence.label("enrichment_confidence"),
             OrderItem.enrichment_notes.label("enrichment_notes"),
@@ -240,12 +257,16 @@ def build_inventory_detail_query(current_user: User):
             case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
             InventoryCopy.created_at.label("created_at"),
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id, isouter=True)
+        .join(Order, OrderItem.order_id == Order.id, isouter=True)
+        .join(Variant, InventoryCopy.variant_id == Variant.id, isouter=True)
+        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id, isouter=True)
+        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id, isouter=True)
+        .join(Publisher, ComicTitle.publisher_id == Publisher.id, isouter=True)
+        .join(CatalogIssue, InventoryCopy.catalog_issue_id == CatalogIssue.id, isouter=True)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id, isouter=True)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+        .join(Acquisition, InventoryCopy.acquisition_id == Acquisition.id, isouter=True)
         .where(InventoryCopy.user_id == current_user.id)
     )
 

@@ -8,6 +8,10 @@ import { DealerProfileSettingsPage } from "./pages/DealerProfileSettingsPage";
 import { DealerStorefrontPage } from "./pages/DealerStorefrontPage";
 import { EmailImportsPage } from "./pages/EmailImportsPage";
 import { InventoryDetailPage } from "./pages/InventoryDetailPage";
+import { AcquisitionsPage } from "./pages/AcquisitionsPage";
+import { AcquisitionWizardPage } from "./pages/AcquisitionWizardPage";
+import { AcquisitionDetailPage } from "./pages/AcquisitionDetailPage";
+import { AcquisitionsNeedsReviewPage } from "./pages/AcquisitionsNeedsReviewPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
@@ -462,6 +466,10 @@ export default function App() {
         <Route path="/organizations/:organizationId/storefront" element={<DealerProfileSettingsPage />} />
         <Route path="/scan-sessions" element={<ScanSessionsPage />} />
         <Route path="/inventory/:inventoryCopyId" element={<InventoryDetailPage />} />
+        <Route path="/acquisitions" element={<AcquisitionsPage />} />
+        <Route path="/acquisitions/new" element={<AcquisitionWizardPage />} />
+        <Route path="/acquisitions/needs-review" element={<AcquisitionsNeedsReviewPage />} />
+        <Route path="/acquisitions/:acquisitionId" element={<AcquisitionDetailPage />} />
         <Route path="/imports" element={<ImportsPage />} />
         <Route path="/imports/guided" element={<GuidedImportWizardPage />} />
         <Route path="/imports/guided/:importId" element={<GuidedImportWizardPage />} />

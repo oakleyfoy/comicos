@@ -6569,9 +6569,16 @@ export interface InventoryDetail extends InventoryItem {
   copy_number: number;
   metadata_identity_key?: string | null;
   source_type: string | null;
-  order_id: number;
-  order_item_id: number;
-  variant_id: number;
+  order_id: number | null;
+  order_item_id: number | null;
+  variant_id: number | null;
+  acquisition_id?: number | null;
+  acquisition_type?: string | null;
+  acquisition_seller_name?: string | null;
+  acquisition_seller_username?: string | null;
+  acquisition_purchase_date?: string | null;
+  acquisition_status?: string | null;
+  acquisition_total?: string | null;
   created_at: string;
   inventory_fmv: InventoryFmvAttachmentRead | null;
   cover_images: InventoryCoverImage[];
@@ -21106,6 +21113,247 @@ export interface CatalogHealthRead {
   };
 }
 
+// ----- P98 Acquisitions -----
+
+export type AcquisitionType =
+  | "FACEBOOK"
+  | "EBAY"
+  | "WHATNOT"
+  | "LCS"
+  | "CONVENTION"
+  | "FRIEND"
+  | "GIFT"
+  | "INHERITED"
+  | "UNKNOWN"
+  | "OTHER";
+
+export interface AcquisitionInventorySummary {
+  allocated_total: string;
+  acquisition_total: string;
+  unallocated: string;
+  fully_allocated: boolean;
+  needs_review_count: number;
+}
+
+export interface AcquisitionRead {
+  id: number;
+  user_id: number;
+  acquisition_type: AcquisitionType;
+  purchase_date: string | null;
+  seller_name: string | null;
+  seller_username: string | null;
+  total_paid: string;
+  shipping_paid: string;
+  tax_paid: string;
+  total_cost: string;
+  notes: string | null;
+  expected_book_count: number | null;
+  actual_book_count: number;
+  item_count: number;
+  cost_per_book: string;
+  status: "OPEN" | "COMPLETE";
+  allocation_mode: "EVEN" | "MANUAL" | "FMV_WEIGHTED";
+  created_at: string;
+  updated_at: string;
+  inventory_summary: AcquisitionInventorySummary;
+}
+
+export interface AcquisitionListItem {
+  id: number;
+  acquisition_type: AcquisitionType;
+  purchase_date: string | null;
+  seller_name: string | null;
+  seller_username: string | null;
+  total_paid: string;
+  total_cost: string;
+  item_count: number;
+  cost_per_book: string;
+  status: "OPEN" | "COMPLETE";
+  created_at: string;
+}
+
+export interface AcquisitionListResponse {
+  items: AcquisitionListItem[];
+  total: number;
+}
+
+export interface AcquisitionCreatePayload {
+  acquisition_type: AcquisitionType;
+  purchase_date?: string | null;
+  seller_name?: string | null;
+  seller_username?: string | null;
+  total_paid?: string;
+  shipping_paid?: string;
+  tax_paid?: string;
+  notes?: string | null;
+  expected_book_count?: number | null;
+}
+
+export interface AcquisitionUpdatePayload {
+  acquisition_type?: AcquisitionType;
+  purchase_date?: string | null;
+  seller_name?: string | null;
+  seller_username?: string | null;
+  total_paid?: string;
+  shipping_paid?: string;
+  tax_paid?: string;
+  notes?: string | null;
+  expected_book_count?: number | null;
+  allocation_mode?: "EVEN" | "MANUAL";
+  status?: "OPEN" | "COMPLETE";
+}
+
+export interface AcquisitionItemRead {
+  inventory_copy_id: number;
+  acquisition_id: number;
+  catalog_issue_id: number | null;
+  series: string | null;
+  issue_number: string | null;
+  publisher: string | null;
+  cover_image_url: string | null;
+  variant_label: string | null;
+  variant_status: string;
+  cost_basis: string;
+  copy_number: number;
+}
+
+export interface AcquisitionItemsResponse {
+  items: AcquisitionItemRead[];
+  total: number;
+}
+
+export interface AddBooksResultItem {
+  catalog_issue_id: number;
+  created_count: number;
+  already_added: boolean;
+  inventory_copy_ids: number[];
+}
+
+export interface AddBooksResponse {
+  created_count: number;
+  results: AddBooksResultItem[];
+  duplicate_catalog_issue_ids: number[];
+  acquisition: AcquisitionRead;
+}
+
+export interface BulkRangeNeedsVariant {
+  issue_number: string;
+  cover_count: number;
+}
+
+export interface BulkRangeResponse {
+  added_count: number;
+  needs_variant: BulkRangeNeedsVariant[];
+  acquisition: AcquisitionRead;
+}
+
+export interface AllocateItem {
+  inventory_copy_id: number;
+  cost_basis: string;
+}
+
+export interface AllocateResponse {
+  mode: string;
+  allocated_total: string;
+  acquisition_total: string;
+  fully_allocated: boolean;
+  items: AllocateItem[];
+  acquisition: AcquisitionRead;
+}
+
+export interface AcquisitionSourceAnalyticsRow {
+  acquisition_type: string;
+  acquisition_count: number;
+  total_spend: string;
+  book_count: number;
+  avg_cost_per_book: string;
+}
+
+export interface AcquisitionSourceAnalyticsResponse {
+  rows: AcquisitionSourceAnalyticsRow[];
+  total_spend: string;
+  total_books: number;
+}
+
+export interface PublisherCard {
+  id: number;
+  name: string;
+  series_count: number;
+  owned: boolean;
+  recently_used: boolean;
+}
+
+export interface PublisherListResponse {
+  publishers: PublisherCard[];
+}
+
+export interface SeriesCard {
+  id: number;
+  name: string;
+  start_year: number | null;
+  issue_count: number;
+  publisher_id: number | null;
+  publisher_name: string | null;
+  sample_cover_url: string | null;
+  owned: boolean;
+  recently_used: boolean;
+}
+
+export interface SeriesListResponse {
+  popular: SeriesCard[];
+  recently_used: SeriesCard[];
+  user_owned: SeriesCard[];
+  alphabetical: SeriesCard[];
+}
+
+export interface IssueGridTile {
+  issue_number: string;
+  normalized_issue_number: string;
+  catalog_issue_id: number | null;
+  cover_image_url: string | null;
+  cover_count: number;
+  has_variants: boolean;
+  owned: boolean;
+  added: boolean;
+}
+
+export interface IssueGridResponse {
+  series_id: number;
+  series_name: string;
+  publisher_name: string | null;
+  tiles: IssueGridTile[];
+}
+
+export interface VariantOption {
+  catalog_issue_id: number;
+  series: string;
+  issue_number: string;
+  title: string | null;
+  variant_label: string | null;
+  cover_date: string | null;
+  publisher: string | null;
+  cover_image_url: string | null;
+  variant_type: string | null;
+  sort_rank: number;
+  owned: boolean;
+  added: boolean;
+}
+
+export interface VariantPickerResult {
+  series_id: number;
+  issue_number: string;
+  options: VariantOption[];
+}
+
+export interface AcquisitionListFilters {
+  acquisition_type?: string;
+  status?: string;
+  seller?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
 export const apiClient = {
   register(payload: RegisterPayload): Promise<User> {
     return request<User>("/auth/register", {
@@ -24547,6 +24795,132 @@ export const apiClient = {
     return requestScanV1Flat<ReceivingCompletionSummaryRead>(`/receiving/session/${sessionId}/complete`, {
       method: "POST",
     });
+  },
+
+  // ----- P98 Acquisitions -----
+
+  createAcquisition(payload: AcquisitionCreatePayload): Promise<AcquisitionRead> {
+    return requestScanV1Flat<AcquisitionRead>("/acquisitions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listAcquisitions(filters?: AcquisitionListFilters): Promise<AcquisitionListResponse> {
+    const params = new URLSearchParams();
+    if (filters?.acquisition_type) params.set("acquisition_type", filters.acquisition_type);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.seller) params.set("seller", filters.seller);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.date_from) params.set("date_from", filters.date_from);
+    if (filters?.date_to) params.set("date_to", filters.date_to);
+    const q = params.toString() ? `?${params.toString()}` : "";
+    return requestScanV1Flat<AcquisitionListResponse>(`/acquisitions${q}`);
+  },
+
+  getAcquisition(acquisitionId: number): Promise<AcquisitionRead> {
+    return requestScanV1Flat<AcquisitionRead>(`/acquisitions/${acquisitionId}`);
+  },
+
+  updateAcquisition(acquisitionId: number, payload: AcquisitionUpdatePayload): Promise<AcquisitionRead> {
+    return requestScanV1Flat<AcquisitionRead>(`/acquisitions/${acquisitionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  completeAcquisition(acquisitionId: number): Promise<AcquisitionRead> {
+    return requestScanV1Flat<AcquisitionRead>(`/acquisitions/${acquisitionId}/complete`, {
+      method: "POST",
+    });
+  },
+
+  listAcquisitionItems(acquisitionId: number): Promise<AcquisitionItemsResponse> {
+    return requestScanV1Flat<AcquisitionItemsResponse>(`/acquisitions/${acquisitionId}/items`);
+  },
+
+  addAcquisitionItems(
+    acquisitionId: number,
+    items: { catalog_issue_id: number; quantity?: number }[],
+    forceDuplicate = false,
+  ): Promise<AddBooksResponse> {
+    return requestScanV1Flat<AddBooksResponse>(`/acquisitions/${acquisitionId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ items, force_duplicate: forceDuplicate }),
+    });
+  },
+
+  addAcquisitionGenericIssue(
+    acquisitionId: number,
+    payload: { series_id: number; issue_number: string; quantity?: number },
+  ): Promise<AddBooksResponse> {
+    return requestScanV1Flat<AddBooksResponse>(`/acquisitions/${acquisitionId}/items/generic`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  addAcquisitionBulkRange(
+    acquisitionId: number,
+    payload: { series_id: number; start_issue: number; end_issue: number; variant_resolution?: string },
+  ): Promise<BulkRangeResponse> {
+    return requestScanV1Flat<BulkRangeResponse>(`/acquisitions/${acquisitionId}/items/bulk-range`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteAcquisitionItem(acquisitionId: number, inventoryCopyId: number): Promise<AddBooksResponse> {
+    return requestScanV1Flat<AddBooksResponse>(
+      `/acquisitions/${acquisitionId}/items/${inventoryCopyId}`,
+      { method: "DELETE" },
+    );
+  },
+
+  allocateAcquisition(
+    acquisitionId: number,
+    mode: "EVEN" | "MANUAL",
+    manual?: Record<number, string>,
+  ): Promise<AllocateResponse> {
+    return requestScanV1Flat<AllocateResponse>(`/acquisitions/${acquisitionId}/allocate`, {
+      method: "POST",
+      body: JSON.stringify({ mode, manual: manual ?? null }),
+    });
+  },
+
+  acquisitionAnalyticsBySource(): Promise<AcquisitionSourceAnalyticsResponse> {
+    return requestScanV1Flat<AcquisitionSourceAnalyticsResponse>("/acquisitions/analytics/by-source");
+  },
+
+  acquisitionNeedsReview(): Promise<AcquisitionItemsResponse> {
+    return requestScanV1Flat<AcquisitionItemsResponse>("/acquisitions/needs-review");
+  },
+
+  listCatalogPublishers(search?: string): Promise<PublisherListResponse> {
+    const q = search ? `?search=${encodeURIComponent(search)}` : "";
+    return requestScanV1Flat<PublisherListResponse>(`/acquisitions/catalog/publishers${q}`);
+  },
+
+  listCatalogSeries(publisherId: number): Promise<SeriesListResponse> {
+    return requestScanV1Flat<SeriesListResponse>(
+      `/acquisitions/catalog/publishers/${publisherId}/series`,
+    );
+  },
+
+  listCatalogIssueGrid(seriesId: number, acquisitionId?: number): Promise<IssueGridResponse> {
+    const q = acquisitionId != null ? `?acquisition_id=${acquisitionId}` : "";
+    return requestScanV1Flat<IssueGridResponse>(`/acquisitions/catalog/series/${seriesId}/issues${q}`);
+  },
+
+  listCatalogIssueVariants(
+    seriesId: number,
+    normalizedIssueNumber: string,
+    acquisitionId?: number,
+  ): Promise<VariantPickerResult> {
+    const q = acquisitionId != null ? `?acquisition_id=${acquisitionId}` : "";
+    return requestScanV1Flat<VariantPickerResult>(
+      `/acquisitions/catalog/series/${seriesId}/issue-number/${encodeURIComponent(normalizedIssueNumber)}/variants${q}`,
+    );
   },
 
   runScanReconciliation(payload: ScanReconciliationRunCreate): Promise<ScanReconciliationRunDetail> {

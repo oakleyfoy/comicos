@@ -222,10 +222,17 @@ class InventoryCopy(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
-    order_item_id: int = Field(foreign_key="order_item.id", nullable=False, index=True)
-    variant_id: int = Field(foreign_key="variant.id", nullable=False, index=True)
+    order_item_id: int | None = Field(default=None, foreign_key="order_item.id", nullable=True, index=True)
+    variant_id: int | None = Field(default=None, foreign_key="variant.id", nullable=True, index=True)
     copy_number: int = Field(nullable=False)
     acquisition_cost: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    acquisition_id: int | None = Field(
+        default=None,
+        foreign_key="acquisitions.id",
+        nullable=True,
+        index=True,
+    )
+    variant_status: str = Field(default="RESOLVED", max_length=20, nullable=False, index=True)
     metadata_identity_key: str | None = Field(
         default=None,
         sa_column=Column(String(length=1024), nullable=True),

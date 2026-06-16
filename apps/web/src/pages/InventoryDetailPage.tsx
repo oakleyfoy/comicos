@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from
 import { Link, useParams } from "react-router-dom";
 
 import { formatCurrencyAmount as formatCurrencyWithCode, formatUsdCurrency as formatCurrency } from "../lib/currencyFormat";
+import { acquisitionSourceLabel } from "../config/acquisitionSources";
 import {
   ApiError,
   apiClient,
@@ -6029,13 +6030,35 @@ export function InventoryDetailPage() {
                     Expected Ship: {detail.expected_ship_date ? formatDate(detail.expected_ship_date) : "Unknown"}
                   </p>
                   <p>Received: {detail.received_at ? formatTimestamp(detail.received_at) : "Not received"}</p>
-                  <p>Order ID: #{detail.order_id}</p>
-                  <p>Order Item ID: #{detail.order_item_id}</p>
-                  <p>Variant ID: #{detail.variant_id}</p>
+                  <p>Order ID: {detail.order_id != null ? `#${detail.order_id}` : "—"}</p>
+                  <p>Order Item ID: {detail.order_item_id != null ? `#${detail.order_item_id}` : "—"}</p>
+                  <p>Variant ID: {detail.variant_id != null ? `#${detail.variant_id}` : "—"}</p>
                   <p>Created: {formatTimestamp(detail.created_at)}</p>
                 </div>
               </div>
             </div>
+
+            {detail.acquisition_id != null ? (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Acquired From</p>
+                <div className="mt-3 space-y-2 text-sm text-slate-300">
+                  <p>Source: {acquisitionSourceLabel(detail.acquisition_type)}</p>
+                  <p>Seller: {detail.acquisition_seller_name ?? "Unknown"}</p>
+                  <p>
+                    Purchase Date:{" "}
+                    {detail.acquisition_purchase_date ? formatDate(detail.acquisition_purchase_date) : "Unknown"}
+                  </p>
+                  <p>Acquisition Total: {detail.acquisition_total != null ? `$${detail.acquisition_total}` : "—"}</p>
+                  <p>Allocated Cost Basis: ${detail.acquisition_cost}</p>
+                  <Link
+                    to={`/acquisitions/${detail.acquisition_id}`}
+                    className="inline-block text-sky-300 hover:underline"
+                  >
+                    View acquisition →
+                  </Link>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Condition Notes</p>

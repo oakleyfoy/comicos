@@ -138,7 +138,7 @@ class InventoryDetailResponse(BaseModel):
     variant_type: str | None
     cover_artist: str | None
     retailer: str
-    order_date: date
+    order_date: date | None = None
     source_type: str | None
     acquisition_cost: Decimal
     current_fmv: Decimal | None
@@ -157,9 +157,16 @@ class InventoryDetailResponse(BaseModel):
     hold_status: str
     star_rating: int | None
     condition_notes: str | None
-    order_id: int
-    order_item_id: int
-    variant_id: int
+    order_id: int | None = None
+    order_item_id: int | None = None
+    variant_id: int | None = None
+    acquisition_id: int | None = None
+    acquisition_type: str | None = None
+    acquisition_seller_name: str | None = None
+    acquisition_seller_username: str | None = None
+    acquisition_purchase_date: date | None = None
+    acquisition_status: str | None = None
+    acquisition_total: Decimal | None = None
     purchase_date: date | None = None
     release_date: date | None = None
     release_year: int | None = None
