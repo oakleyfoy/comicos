@@ -18,77 +18,31 @@ bootstrap_api_path()
 from sqlmodel import Session, select  # noqa: E402
 
 from app.models.catalog_p97 import ComicVineVolumeUniverse, P97VolumeIssueImportQueue  # noqa: E402
-from app.services.catalog_ingestion_service import normalize_series_name  # noqa: E402
+from app.services.p97_core_run_registry import (  # noqa: E402
+    CORE_RUN_REPORT_LABELS,
+    expected_publisher_for_report_label,
+    pick_best_universe_match,
+)
 from app.services.p97_comicvine_universe_analytics_service import (  # noqa: E402
     build_catalog_coverage_indexes,
     existing_issue_count_for_volume,
 )
-from app.services.p97_queue_priority_config import is_core_run  # noqa: E402
+from app.services.p97_targeted_core_discovery import find_universe_matches_for_label  # noqa: E402
 from app.services.p97_queue_rebalance_service import REBALANCE_STATUSES  # noqa: E402
 from app.services.p97_volume_issue_import_queue_service import STATUS_COMPLETE  # noqa: E402
 from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
 
-AUDIT_CORE_TITLES: tuple[str, ...] = (
-    "Batman",
-    "Detective Comics",
-    "Action Comics",
-    "Superman",
-    "Amazing Spider-Man",
-    "Uncanny X-Men",
-    "X-Men",
-    "Fantastic Four",
-    "Avengers",
-    "Venom",
-    "Spawn",
-    "Invincible",
-    "Teenage Mutant Ninja Turtles",
-    "The Walking Dead",
-    "Flash",
-)
-
-# Labels in AUDIT_CORE_TITLES -> normalized core names accepted for that audit row.
-_AUDIT_TITLE_ALIASES: dict[str, frozenset[str]] = {
-    "Amazing Spider-Man": frozenset(
-        {
-            normalize_series_name("Amazing Spider-Man"),
-            normalize_series_name("The Amazing Spider-Man"),
-        }
-    ),
-    "Teenage Mutant Ninja Turtles": frozenset(
-        {
-            normalize_series_name("Teenage Mutant Ninja Turtles"),
-            normalize_series_name("TMNT"),
-        }
-    ),
-}
-
-
-def _norm(name: str) -> str:
-    return normalize_series_name(name)
-
-
-def _title_matches_audit_core(volume_name: str, audit_title: str) -> bool:
-    if not is_core_run(volume_name, None):
-        return False
-    title_norm = _norm(volume_name)
-    targets = _AUDIT_TITLE_ALIASES.get(audit_title, frozenset({_norm(audit_title)}))
-    for target in targets:
-        if title_norm == target:
-            return True
-        prefix = f"{target} "
-        if title_norm.startswith(prefix):
-            suffix = title_norm[len(prefix) :].strip()
-            if suffix.isdigit() and len(suffix) == 4:
-                return True
-    return False
+AUDIT_CORE_TITLES = CORE_RUN_REPORT_LABELS
 
 
 @dataclass(frozen=True)
 class CoreRunAuditRow:
     audit_title: str
+    expected_publisher: str
     volume_id: int | None
     volume_name: str | None
     publisher: str | None
+    publisher_match: bool
     cv_issues: int
     catalog_issues: int
     missing_issues: int
@@ -99,24 +53,6 @@ class CoreRunAuditRow:
     queued_label: str
     not_queued_reason: str
     alternate_volume_count: int
-
-
-def _pick_primary_volumes(
-    universes: list[ComicVineVolumeUniverse],
-) -> dict[str, list[ComicVineVolumeUniverse]]:
-    grouped: dict[str, list[ComicVineVolumeUniverse]] = {t: [] for t in AUDIT_CORE_TITLES}
-    for universe in universes:
-        for audit_title in AUDIT_CORE_TITLES:
-            if _title_matches_audit_core(universe.name, audit_title):
-                grouped[audit_title].append(universe)
-    return grouped
-
-
-def _select_primary(candidates: list[ComicVineVolumeUniverse]) -> ComicVineVolumeUniverse | None:
-    if not candidates:
-        return None
-
-    return max(candidates, key=lambda u: (int(u.count_of_issues or 0), int(u.volume_id)))
 
 
 def _explain_not_queued(
@@ -161,21 +97,30 @@ def build_core_run_audit(session: Session) -> list[CoreRunAuditRow]:
         for row in session.exec(select(P97VolumeIssueImportQueue)).all()
     }
     indexes = build_catalog_coverage_indexes(session)
-    grouped = _pick_primary_volumes(universes)
 
     rows: list[CoreRunAuditRow] = []
     for audit_title in AUDIT_CORE_TITLES:
-        candidates = grouped[audit_title]
-        primary = _select_primary(candidates)
+        expected_pub = expected_publisher_for_report_label(audit_title)
+        candidates = find_universe_matches_for_label(universes, audit_title)
+        primary, pub_ok = pick_best_universe_match(
+            candidates,
+            audit_title,
+            name_getter=lambda u: u.name,
+            publisher_getter=lambda u: u.publisher,
+            issue_count_getter=lambda u: u.count_of_issues,
+            start_year_getter=lambda u: u.start_year,
+        )
         alternates = max(0, len(candidates) - (1 if primary else 0))
 
         if primary is None:
             rows.append(
                 CoreRunAuditRow(
                     audit_title=audit_title,
+                    expected_publisher=expected_pub,
                     volume_id=None,
                     volume_name=None,
                     publisher=None,
+                    publisher_match=False,
                     cv_issues=0,
                     catalog_issues=0,
                     missing_issues=0,
@@ -195,6 +140,14 @@ def build_core_run_audit(session: Session) -> list[CoreRunAuditRow]:
             )
             continue
 
+        if not pub_ok:
+            reason_prefix = (
+                f"No {expected_pub} volume in universe; best title match is "
+                f"{primary.publisher!r}. "
+            )
+        else:
+            reason_prefix = ""
+
         volume_id = int(primary.volume_id)
         cv_issues = int(primary.count_of_issues or 0)
         catalog = existing_issue_count_for_volume(
@@ -212,7 +165,7 @@ def build_core_run_audit(session: Session) -> list[CoreRunAuditRow]:
             and queue_status in REBALANCE_STATUSES
             and missing > 0
         )
-        reason = _explain_not_queued(
+        reason = reason_prefix + _explain_not_queued(
             in_universe=True,
             cv_issues=cv_issues,
             missing=missing,
@@ -222,9 +175,11 @@ def build_core_run_audit(session: Session) -> list[CoreRunAuditRow]:
         rows.append(
             CoreRunAuditRow(
                 audit_title=audit_title,
+                expected_publisher=expected_pub,
                 volume_id=volume_id,
                 volume_name=primary.name,
                 publisher=primary.publisher,
+                publisher_match=pub_ok,
                 cv_issues=cv_issues,
                 catalog_issues=catalog,
                 missing_issues=missing,
@@ -248,6 +203,8 @@ def format_audit_report(rows: list[CoreRunAuditRow]) -> str:
 
     for row in rows:
         lines.append(row.audit_title)
+        lines.append(f"  Expected publisher: {row.expected_publisher}")
+        lines.append(f"  Publisher match: {'YES' if row.publisher_match else 'NO'}")
         if row.volume_name and row.volume_name != row.audit_title:
             lines.append(f"  Matched volume: {row.volume_name}")
         if row.volume_id is not None:
