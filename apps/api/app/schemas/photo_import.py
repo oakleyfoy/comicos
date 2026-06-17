@@ -74,6 +74,7 @@ class PhotoImportDetectedBookRead(BaseModel):
     ai_reason: str | None
     can_confirm: bool = False
     needs_match: bool = False
+    review_status: str = "needs_match"
     best_candidate: "PhotoImportCandidateRead | None" = None
 
 

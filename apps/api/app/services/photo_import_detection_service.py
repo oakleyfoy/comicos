@@ -77,7 +77,16 @@ def _selected_candidate(session: Session, det: PhotoImportDetectedBook) -> Photo
 
 def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoImportDetectedBookRead:
     best = _best_candidate(session, int(row.id or 0))
-    needs_match = int(row.candidate_count) == 0 or row.selected_catalog_issue_id is None
+    can_confirm = can_confirm_detection(row, best_candidate=best)
+    has_candidates = int(row.candidate_count) > 0
+    # needs_match: catalog genuinely has nothing to offer. needs_selection: candidates exist, user must pick.
+    needs_match = not has_candidates
+    if can_confirm:
+        review_status = "ready"
+    elif has_candidates:
+        review_status = "needs_selection"
+    else:
+        review_status = "needs_match"
     return PhotoImportDetectedBookRead(
         id=int(row.id or 0),
         session_id=int(row.session_id),
@@ -108,8 +117,9 @@ def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoIm
         ai_alternate_titles=row.ai_alternate_titles,
         ai_confidence=row.ai_confidence,
         ai_reason=row.ai_reason,
-        can_confirm=can_confirm_detection(row, best_candidate=best),
+        can_confirm=can_confirm,
         needs_match=needs_match,
+        review_status=review_status,
         best_candidate=candidate_to_read(best) if best else None,
     )
 

@@ -215,10 +215,15 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>
                   {best ? (
-                    <p className="mt-1 text-slate-800">
-                      {best.publisher} · {best.series} #{best.issue_number}{" "}
-                      <span className="text-slate-500">({Math.round(best.match_score)} score)</span>
-                    </p>
+                    <>
+                      <p className="mt-1 text-slate-800">
+                        {best.publisher} · {best.series} #{best.issue_number}{" "}
+                        <span className="text-slate-500">({Math.round(best.match_score)} score)</span>
+                      </p>
+                      {det.review_status === "needs_selection" ? (
+                        <p className="mt-1 font-medium text-amber-800">Needs selection — choose the correct issue</p>
+                      ) : null}
+                    </>
                   ) : (
                     <p className="mt-1 font-medium text-amber-800">Needs match</p>
                   )}

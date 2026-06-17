@@ -96,6 +96,7 @@ export type PhotoImportDetectedBook = {
   ai_reason: string | null;
   can_confirm: boolean;
   needs_match: boolean;
+  review_status: string;
   best_candidate: PhotoImportCandidate | null;
 };
 

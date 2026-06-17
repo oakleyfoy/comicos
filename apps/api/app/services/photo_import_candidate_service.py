@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 
@@ -20,8 +21,70 @@ from app.services.photo_import_candidate_cover_service import cover_urls_for_pho
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
 
+logger = logging.getLogger(__name__)
+
 NO_ISSUE_SCORE_CAP = 65.0
 _LAUNCH_HINTS = ("introducing", "initiative", "premiere", "special", "first issue", "launch")
+
+# Conservative series-name corrections for common AI pluralization / noise.
+# Keep this list tiny and unambiguous; never add risky guesses (e.g. Lightning Star -> Lightning Strikes).
+_SERIES_ALIASES: dict[str, str] = {
+    "babes": "Babe",
+}
+
+# matched_on strategies that must never drive bulk auto-confirm (manual selection required).
+NON_AUTO_CONFIRM_MATCHED_ON: frozenset[str] = frozenset(
+    {
+        "fuzzy_series",
+        "fuzzy_series_no_issue",
+        "fuzzy_series_publisher_no_issue",
+        "series_no_issue",
+        "series_publisher_no_issue",
+        "visible_text_no_issue",
+        "character_title_fallback",
+    }
+)
+
+# Words too weak/common to single out one catalog issue from a subtitle alone.
+_WEAK_SUBTITLE_WORDS: frozenset[str] = frozenset(
+    {
+        "evil",
+        "initiative",
+        "special",
+        "blood",
+        "war",
+        "origin",
+        "origins",
+        "begins",
+        "returns",
+        "rising",
+        "rises",
+        "reborn",
+        "legacy",
+        "first",
+        "new",
+        "dark",
+        "death",
+        "rebirth",
+        "forever",
+    }
+)
+_SUBTITLE_STOPWORDS: frozenset[str] = frozenset({"the", "a", "an", "of", "and", "to", "in", "part"})
+_DISTINCTIVE_SUBTITLE_MIN_WORDS = 4
+
+
+def _meaningful_subtitle_words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if w not in _SUBTITLE_STOPWORDS]
+
+
+def _subtitle_is_distinctive(subtitle: str) -> bool:
+    """A subtitle is distinctive only when it is a multi-word phrase, not a single weak word."""
+    words = _meaningful_subtitle_words(subtitle)
+    if not words:
+        return False
+    if len(words) >= _DISTINCTIVE_SUBTITLE_MIN_WORDS:
+        return True
+    return False
 
 
 @dataclass
@@ -84,6 +147,13 @@ def build_match_input_from_detection(det: PhotoImportDetectedBook) -> PhotoImpor
     )
 
 
+def _series_alias(token: str) -> str | None:
+    """Return a conservative corrected series name for a token, else None."""
+    if not token:
+        return None
+    return _SERIES_ALIASES.get(_norm_series(token))
+
+
 def _series_tokens(inp: PhotoImportMatchInput) -> list[str]:
     tokens: list[str] = []
     for raw in (
@@ -96,6 +166,9 @@ def _series_tokens(inp: PhotoImportMatchInput) -> list[str]:
         text = (raw or "").strip()
         if text and text not in tokens:
             tokens.append(text)
+        alias = _series_alias(text)
+        if alias and alias not in tokens:
+            tokens.append(alias)
     return tokens
 
 
@@ -209,14 +282,31 @@ def _subtitle_identifies_issue(
     issue: CatalogIssue,
     series: CatalogSeries,
 ) -> bool:
-    sub = (inp.subtitle_guess or "").strip().lower()
-    if not sub or len(sub) < 6:
+    """A subtitle may pin one specific issue only when it is distinctive or matches catalog text exactly.
+
+    Single weak words (Evil, Initiative, Special, War, ...) must never single out an issue.
+    """
+    sub = (inp.subtitle_guess or inp.visible_title_text or "").strip().lower()
+    if not sub:
         return False
-    series_name = (series.name or "").lower()
-    issue_title = (issue.title or "").lower()
-    if sub in series_name and len(sub.split()) >= 2:
+
+    issue_title = (issue.title or "").strip().lower()
+    series_name = (series.name or "").strip().lower()
+
+    # Exact catalog title/series text match is always a strong signal.
+    if issue_title and sub == issue_title:
         return True
-    return sub in issue_title and len(sub.split()) >= 2
+    if series_name and sub == series_name and len(_meaningful_subtitle_words(sub)) >= 2:
+        return True
+
+    # Otherwise require a distinctive multi-word phrase that actually appears in catalog text.
+    if not _subtitle_is_distinctive(sub):
+        return False
+    if issue_title and sub in issue_title:
+        return True
+    if series_name and sub in series_name:
+        return True
+    return False
 
 
 def _score_no_issue_row(
@@ -239,27 +329,35 @@ def _score_no_issue_row(
     exact_series = _exact_series(series, inp.series_guess or series_token)
     pub_match = _publisher_matches(publisher, inp.publisher_guess)
 
-    matched_on = "fuzzy_series_no_issue"
-    score = 48.0
-    reason = f"Series match without issue number: {series.name} #{issue.issue_number}"
-
+    # Series-level baseline tiers (no issue number): exact+publisher > exact > fuzzy+publisher > fuzzy.
     if exact_series and pub_match:
         matched_on = "series_publisher_no_issue"
         score = 58.0
         reason = f"Series + publisher match (no issue on cover): {series.name} #{issue.issue_number}"
-    if subtitle and (uniquely_identified or inp.subtitle_guess):
-        matched_on = "visible_text_no_issue"
-        score = 62.0
-        reason = f"Series + visible subtitle match: {series.name} #{issue.issue_number}"
-
-    if subtitle and any(hint in subtitle for hint in _LAUNCH_HINTS):
-        if str(issue.issue_number) in {"0", "1", "0.1"}:
-            score += 4.0
-
-    if not uniquely_identified:
-        score = min(score, NO_ISSUE_SCORE_CAP)
+    elif exact_series:
+        matched_on = "series_no_issue"
+        score = 52.0
+        reason = f"Series match (no issue on cover): {series.name} #{issue.issue_number}"
+    elif pub_match:
+        matched_on = "fuzzy_series_publisher_no_issue"
+        score = 50.0
+        reason = f"Fuzzy series + publisher (no issue on cover): {series.name} #{issue.issue_number}"
     else:
+        matched_on = "fuzzy_series_no_issue"
+        score = 45.0
+        reason = f"Fuzzy series match (no issue on cover): {series.name} #{issue.issue_number}"
+
+    # A subtitle/visible-text signal may boost a SPECIFIC issue only when distinctive or an exact catalog match.
+    # Weak single words (Evil, Initiative, ...) never boost a particular issue.
+    if uniquely_identified:
+        matched_on = "visible_text_no_issue"
         score = min(max(score, 68.0), 72.0)
+        reason = f"Series + distinctive subtitle match: {series.name} #{issue.issue_number}"
+    else:
+        # Launch hint nudges #0/#1 slightly for series-level ordering, but stays below auto-confirm.
+        if subtitle and any(hint in subtitle for hint in _LAUNCH_HINTS) and str(issue.issue_number) in {"0", "1", "0.1"}:
+            score += 4.0
+        score = min(score, NO_ISSUE_SCORE_CAP)
 
     return ScoredCatalogRow(issue, series, publisher, score, reason, matched_on)
 
@@ -397,7 +495,12 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
                     ranked.append(scored)
                     search_terms.append(f"broad:{token}")
 
-    ranked.sort(key=lambda row: row.match_score, reverse=True)
+    def _issue_order(row: ScoredCatalogRow) -> float:
+        num = re.match(r"\d+", str(row.issue.issue_number or "").strip().lstrip("#"))
+        return float(num.group(0)) if num else 1e9
+
+    # Primary: score desc. Tie-break: lower issue number first (so #1/#2 lead a series list), then issue id.
+    ranked.sort(key=lambda row: (-row.match_score, _issue_order(row), int(row.issue.id or 0)))
     return ranked[:10], search_terms
 
 
@@ -461,6 +564,27 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
             det.recognition_status = RECOGNITION_STATUS_AMBIGUOUS
     else:
         det.recognition_status = RECOGNITION_STATUS_UNKNOWN
+
+    top = scored[0] if scored else None
+    logger.info(
+        "photo_import.candidates detection_id=%s raw_publisher=%r raw_series=%r normalized_series=%r "
+        "issue_number=%r subtitle=%r candidate_count=%d strategy=%s top=%s recognition_status=%s no_candidate_reason=%s",
+        detected_book_id,
+        inp.publisher_guess,
+        inp.series_guess,
+        _norm_series(inp.series_guess) if inp.series_guess else "",
+        inp.issue_number_guess or None,
+        inp.subtitle_guess or None,
+        len(scored),
+        top.matched_on if top else None,
+        (
+            f"id={top.issue.id} {top.series.name} #{top.issue.issue_number} score={top.match_score:.0f}"
+            if top
+            else None
+        ),
+        det.recognition_status,
+        None if scored else ("no_text" if not has_text else "no_catalog_match"),
+    )
 
     session.add(det)
     session.commit()

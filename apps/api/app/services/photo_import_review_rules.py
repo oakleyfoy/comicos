@@ -40,4 +40,9 @@ def qualifies_for_bulk_high_confidence_confirm(
         return False
     if det.recognition_status == RECOGNITION_STATUS_AMBIGUOUS:
         return False
+    # Unknown-issue, fuzzy-only, and weak-subtitle series matches always require manual selection.
+    from app.services.photo_import_candidate_service import NON_AUTO_CONFIRM_MATCHED_ON
+
+    if (best_candidate.matched_on or "") in NON_AUTO_CONFIRM_MATCHED_ON:
+        return False
     return True
