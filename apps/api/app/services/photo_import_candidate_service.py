@@ -16,7 +16,7 @@ from app.models.photo_import import (
     PhotoImportCandidate,
     PhotoImportDetectedBook,
 )
-from app.services.acquisition.catalog_browse_service import _covers_for_issue_ids
+from app.services.photo_import_candidate_cover_service import cover_urls_for_photo_import_candidates
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
 
@@ -418,12 +418,24 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
     scored, _search_terms = generate_scored_candidates(session, inp) if has_text else ([], [])
 
     issue_ids = [int(row.issue.id or 0) for row in scored]
-    covers = _covers_for_issue_ids(session, issue_ids)
-
-    for rank, row in enumerate(scored, start=1):
+    variant_by_issue: dict[int, CatalogVariant | None] = {}
+    variant_id_by_issue: dict[int, int | None] = {}
+    for row in scored:
+        iid = int(row.issue.id or 0)
         variant = session.exec(
             select(CatalogVariant).where(CatalogVariant.issue_id == row.issue.id).order_by(CatalogVariant.id.asc())
         ).first()
+        variant_by_issue[iid] = variant
+        variant_id_by_issue[iid] = int(variant.id) if variant and variant.id else None
+    covers = cover_urls_for_photo_import_candidates(
+        session,
+        issue_ids=issue_ids,
+        variant_id_by_issue=variant_id_by_issue,
+    )
+
+    for rank, row in enumerate(scored, start=1):
+        iid = int(row.issue.id or 0)
+        variant = variant_by_issue.get(iid)
         session.add(
             PhotoImportCandidate(
                 detected_book_id=detected_book_id,
@@ -433,7 +445,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
                 series=row.series.name,
                 issue_number=str(row.issue.issue_number),
                 variant_name=variant.variant_name if variant else None,
-                cover_url=covers.get(int(row.issue.id or 0)),
+                cover_url=covers.get(iid),
                 release_date=str(getattr(row.issue, "cover_date", "") or "") or None,
                 match_score=row.match_score,
                 match_reason=row.match_reason,

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import time
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 from sqlmodel import Session, delete
 
+from app.core.config import get_settings
 from app.services.photo_import_issue_number import apply_photo_issue_sanitization, normalize_photo_issue_number
 from app.models.photo_import import (
     DETECTION_STATUS_DETECTED,
@@ -18,6 +21,8 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportImage,
 )
+
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -103,16 +108,28 @@ def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
     return apply_photo_issue_sanitization(normalized)  # type: ignore[return-value]
 
 
-def _call_openai_vision(image_bytes: bytes) -> dict[str, Any]:
+class RecognitionConfigError(RuntimeError):
+    """Raised when the AI provider is not configured (distinct from runtime failures)."""
+
+
+def _call_openai_vision(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
     import urllib.request
 
     settings = get_settings()
     if not settings.openai_api_key:
-        raise RuntimeError("OpenAI not configured")
+        raise RecognitionConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
 
+    model = settings.openai_order_parser_model
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    logger.info(
+        "photo_import.recognition.request image_id=%s model=%s image_bytes=%d b64_len=%d",
+        image_id,
+        model,
+        len(image_bytes),
+        len(b64),
+    )
     body = {
-        "model": settings.openai_order_parser_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": AI_SYSTEM},
             {
@@ -141,12 +158,28 @@ def _call_openai_vision(image_bytes: bytes) -> dict[str, Any]:
         },
         method="POST",
     )
+    started = time.monotonic()
     with urllib.request.urlopen(req, timeout=90) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+        raw_text = resp.read().decode("utf-8")
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    payload = json.loads(raw_text)
     content = payload["choices"][0]["message"]["content"]
+    logger.info(
+        "photo_import.recognition.response image_id=%s elapsed_ms=%d content_len=%d preview=%s",
+        image_id,
+        elapsed_ms,
+        len(content or ""),
+        (content or "")[:500].replace("\n", " "),
+    )
     parsed = json.loads(content)
     if "books" not in parsed:
         parsed = {"books": parsed.get("book", []) if isinstance(parsed.get("book"), list) else []}
+    book_count = len(parsed.get("books") or [])
+    logger.info(
+        "photo_import.recognition.parsed image_id=%s book_count=%d",
+        image_id,
+        book_count,
+    )
     return parsed
 
 
@@ -172,18 +205,38 @@ def _fallback_books() -> dict[str, Any]:
 def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     image = session.get(PhotoImportImage, image_id)
     if image is None:
+        logger.warning("photo_import.recognition.image_missing image_id=%s", image_id)
         return
     path = _abs_path(image.storage_path)
+    logger.info(
+        "photo_import.recognition.image_received image_id=%s session_id=%s storage_path=%s exists=%s",
+        image_id,
+        image.session_id,
+        image.storage_path,
+        path.is_file(),
+    )
     raw = path.read_bytes()
+    raw_response: dict[str, Any]
     try:
-        ai_payload = _call_openai_vision(raw)
-        raw_response: dict[str, Any] = ai_payload
-    except Exception:
+        ai_payload = _call_openai_vision(raw, image_id=image_id)
+        raw_response = ai_payload
+    except RecognitionConfigError as exc:
+        logger.error("photo_import.recognition.not_configured image_id=%s detail=%s", image_id, exc)
         ai_payload = _fallback_books()
-        raw_response = {"fallback": True, **ai_payload}
+        raw_response = {"fallback": True, "failure_kind": "not_configured", "failure_detail": str(exc), **ai_payload}
+    except Exception as exc:  # noqa: BLE001 - we record the real cause instead of hiding it
+        logger.exception("photo_import.recognition.failed image_id=%s error=%s", image_id, exc)
+        ai_payload = _fallback_books()
+        raw_response = {
+            "fallback": True,
+            "failure_kind": exc.__class__.__name__,
+            "failure_detail": str(exc),
+            **ai_payload,
+        }
 
     books: list[dict[str, Any]] = list(ai_payload.get("books") or [])
     if not books:
+        logger.warning("photo_import.recognition.empty_books image_id=%s using_fallback", image_id)
         ai_payload = _fallback_books()
         books = list(ai_payload.get("books") or [])
 
@@ -234,3 +287,9 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
         )
         session.add(row)
     session.commit()
+    logger.info(
+        "photo_import.recognition.persisted image_id=%s detections=%d fallback=%s",
+        image_id,
+        min(len(books), 10),
+        bool(raw_response.get("fallback")),
+    )
