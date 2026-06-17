@@ -3,50 +3,300 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 
 from sqlalchemy import func, or_
 from sqlmodel import Session, delete, select
 
 from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogVariant
-from app.models.photo_import import PhotoImportCandidate, PhotoImportDetectedBook
+from app.models.photo_import import (
+    RECOGNITION_STATUS_AMBIGUOUS,
+    RECOGNITION_STATUS_MATCHED,
+    RECOGNITION_STATUS_UNKNOWN,
+    PhotoImportCandidate,
+    PhotoImportDetectedBook,
+)
 from app.services.acquisition.catalog_browse_service import _covers_for_issue_ids
+from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 
 
-def _norm_issue(value: str | None) -> str:
+@dataclass
+class PhotoImportMatchInput:
+    series_guess: str = ""
+    issue_number_guess: str = ""
+    publisher_guess: str = ""
+    subtitle_guess: str = ""
+    variant_guess: str = ""
+    cover_year_guess: str = ""
+    visible_title_text: str = ""
+    visible_issue_text: str = ""
+    visible_publisher_text: str = ""
+    visible_character_text: str = ""
+    alternate_titles: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ScoredCatalogRow:
+    issue: CatalogIssue
+    series: CatalogSeries
+    publisher: CatalogPublisher | None
+    match_score: float
+    match_reason: str
+    matched_on: str
+
+
+def _strip_issue(value: str | None) -> str:
     if not value:
         return ""
-    return re.sub(r"^#+", "", str(value).strip()).lower()
+    return re.sub(r"^#+\s*", "", str(value).strip())
 
 
-def _score_issue(
+def _issue_from_detection(det: PhotoImportDetectedBook) -> str:
+    explicit = _strip_issue(det.ai_issue_number)
+    if explicit:
+        return normalize_issue_number(explicit)
+    visible = _strip_issue(det.ai_visible_issue_text)
+    if visible:
+        return normalize_issue_number(visible)
+    return ""
+
+
+def build_match_input_from_detection(det: PhotoImportDetectedBook) -> PhotoImportMatchInput:
+    alternates: list[str] = []
+    if det.ai_alternate_titles:
+        alternates = [str(t).strip() for t in det.ai_alternate_titles if str(t).strip()]
+    return PhotoImportMatchInput(
+        series_guess=(det.ai_series or "").strip(),
+        issue_number_guess=_issue_from_detection(det),
+        publisher_guess=(det.ai_publisher or det.ai_visible_publisher_text or "").strip(),
+        subtitle_guess=(det.ai_subtitle_guess or "").strip(),
+        variant_guess=(det.ai_variant_guess or det.ai_variant_hint or "").strip(),
+        cover_year_guess=(det.ai_cover_year or "").strip(),
+        visible_title_text=(det.ai_visible_title_text or "").strip(),
+        visible_issue_text=_strip_issue(det.ai_visible_issue_text),
+        visible_publisher_text=(det.ai_visible_publisher_text or "").strip(),
+        visible_character_text=(det.ai_visible_character_text or "").strip(),
+        alternate_titles=alternates,
+    )
+
+
+def _series_tokens(inp: PhotoImportMatchInput) -> list[str]:
+    tokens: list[str] = []
+    for raw in (
+        inp.series_guess,
+        inp.visible_title_text,
+        inp.subtitle_guess,
+        inp.visible_character_text,
+        *inp.alternate_titles,
+    ):
+        text = (raw or "").strip()
+        if text and text not in tokens:
+            tokens.append(text)
+    return tokens
+
+
+def _norm_series(value: str) -> str:
+    return normalize_series_name(value)
+
+
+def _publisher_matches(publisher: CatalogPublisher | None, guess: str) -> bool:
+    if not guess or publisher is None:
+        return False
+    g = guess.lower()
+    name = (publisher.name or "").lower()
+    norm = (publisher.normalized_name or "").lower()
+    return g in name or name in g or g in norm
+
+
+def _exact_series(series: CatalogSeries, token: str) -> bool:
+    if not token:
+        return False
+    return _norm_series(series.name) == _norm_series(token)
+
+
+def _fuzzy_series(series: CatalogSeries, token: str) -> bool:
+    if not token:
+        return False
+    norm_token = _norm_series(token)
+    norm_name = _norm_series(series.name)
+    if norm_token == norm_name:
+        return True
+    if norm_token in norm_name or norm_name in norm_token:
+        return True
+    return norm_token.split()[0] in norm_name if norm_token.split() else False
+
+
+def _exact_issue(issue: CatalogIssue, issue_num: str) -> bool:
+    if not issue_num:
+        return False
+    norm = normalize_issue_number(issue_num)
+    return issue.normalized_issue_number == norm or normalize_issue_number(str(issue.issue_number)) == norm
+
+
+def _score_row(
     *,
-    series_name: str,
-    issue_number: str,
-    publisher_name: str | None,
-    cover_year: str | None,
-    ai_series: str | None,
-    ai_issue: str | None,
-    ai_publisher: str | None,
-    ai_year: str | None,
-) -> tuple[float, str]:
-    score = 0.0
-    reasons: list[str] = []
-    if ai_series and series_name.lower() in ai_series.lower():
-        score += 40
-        reasons.append("series")
-    elif ai_series and ai_series.lower() in series_name.lower():
-        score += 35
-        reasons.append("series_partial")
-    if ai_issue and _norm_issue(issue_number) == _norm_issue(ai_issue):
-        score += 35
-        reasons.append("issue_number")
-    if ai_publisher and publisher_name and ai_publisher.lower() in publisher_name.lower():
-        score += 15
-        reasons.append("publisher")
-    if ai_year and cover_year and ai_year in str(cover_year):
-        score += 10
-        reasons.append("year")
-    return score, "+".join(reasons) if reasons else "catalog_search"
+    inp: PhotoImportMatchInput,
+    series_token: str,
+    issue: CatalogIssue,
+    series: CatalogSeries,
+    publisher: CatalogPublisher | None,
+    matched_on: str,
+) -> ScoredCatalogRow | None:
+    issue_num = inp.issue_number_guess
+    pub = publisher
+    if matched_on == "exact_series_issue_publisher":
+        if not (_exact_series(series, series_token) and _exact_issue(issue, issue_num)):
+            return None
+        if not _publisher_matches(pub, inp.publisher_guess):
+            return None
+        reason = f"Exact series and issue number match: {series.name} #{issue.issue_number} / {pub.name if pub else 'unknown publisher'}"
+        return ScoredCatalogRow(issue, series, pub, 98.0, reason, matched_on)
+    if matched_on == "exact_series_issue":
+        if not (_exact_series(series, series_token) and _exact_issue(issue, issue_num)):
+            return None
+        reason = f"Exact series and issue number match: {series.name} #{issue.issue_number}"
+        return ScoredCatalogRow(issue, series, pub, 92.0, reason, matched_on)
+    if matched_on == "alternate_title_issue":
+        if not (_exact_issue(issue, issue_num) and _fuzzy_series(series, series_token)):
+            return None
+        reason = f"Alternate title match: {series_token} #{issue.issue_number}"
+        return ScoredCatalogRow(issue, series, pub, 85.0, reason, matched_on)
+    if matched_on == "visible_text_issue":
+        if not (_exact_issue(issue, issue_num) and _fuzzy_series(series, series_token)):
+            return None
+        reason = f"Visible title text match: {series_token} #{issue.issue_number}"
+        return ScoredCatalogRow(issue, series, pub, 82.0, reason, matched_on)
+    if matched_on == "fuzzy_series_publisher":
+        if not (_fuzzy_series(series, series_token) and _publisher_matches(pub, inp.publisher_guess)):
+            return None
+        if issue_num and not _exact_issue(issue, issue_num):
+            return None
+        reason = f"Fuzzy series with publisher: {series.name} #{issue.issue_number}"
+        score = 75.0 if issue_num else 55.0
+        return ScoredCatalogRow(issue, series, pub, score, reason, matched_on)
+    if matched_on == "fuzzy_series":
+        if not _fuzzy_series(series, series_token):
+            return None
+        if issue_num and not _exact_issue(issue, issue_num):
+            return None
+        reason = f"Fuzzy series match: {series.name} #{issue.issue_number}"
+        score = 68.0 if issue_num else 45.0
+        return ScoredCatalogRow(issue, series, pub, score, reason, matched_on)
+    if matched_on == "character_title_fallback":
+        token = inp.visible_character_text or inp.visible_title_text
+        if not token or not _fuzzy_series(series, token):
+            return None
+        reason = f"Character/title fallback: {series.name} #{issue.issue_number}"
+        return ScoredCatalogRow(issue, series, pub, 40.0, reason, matched_on)
+    return None
+
+
+def _fetch_catalog_rows(session: Session, *, series_fragment: str, issue_num: str, limit: int = 80) -> list[tuple[CatalogIssue, CatalogSeries, CatalogPublisher | None]]:
+    if not series_fragment and not issue_num:
+        return []
+    stmt = (
+        select(CatalogIssue, CatalogSeries, CatalogPublisher)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+    )
+    frag = series_fragment[:80] if series_fragment else ""
+    if frag:
+        norm = _norm_series(frag)
+        like = f"%{frag}%"
+        stmt = stmt.where(
+            or_(
+                CatalogSeries.name.ilike(like),
+                CatalogSeries.normalized_name.ilike(f"%{norm}%"),
+                func.lower(CatalogSeries.name).contains(frag.lower()),
+            )
+        )
+    if issue_num:
+        norm_issue = normalize_issue_number(issue_num)
+        stmt = stmt.where(
+            or_(
+                CatalogIssue.normalized_issue_number == norm_issue,
+                CatalogIssue.issue_number.ilike(f"%{issue_num}%"),
+            )
+        )
+    stmt = stmt.order_by(CatalogIssue.id.desc()).limit(limit)
+    return list(session.exec(stmt).all())
+
+
+def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> tuple[list[ScoredCatalogRow], list[str]]:
+    """Return ranked unique candidates and search terms used."""
+    search_terms: list[str] = []
+    strategies = [
+        "exact_series_issue_publisher",
+        "exact_series_issue",
+        "alternate_title_issue",
+        "visible_text_issue",
+        "fuzzy_series_publisher",
+        "fuzzy_series",
+        "character_title_fallback",
+    ]
+    tokens = _series_tokens(inp)
+    if inp.series_guess:
+        search_terms.append(f"series:{inp.series_guess}")
+    if inp.issue_number_guess:
+        search_terms.append(f"issue:{inp.issue_number_guess}")
+    if inp.visible_issue_text:
+        search_terms.append(f"visible_issue:{inp.visible_issue_text}")
+    for alt in inp.alternate_titles:
+        search_terms.append(f"alt:{alt}")
+
+    seen_issue_ids: set[int] = set()
+    ranked: list[ScoredCatalogRow] = []
+
+    query_tokens = list(tokens)
+    if inp.series_guess and inp.series_guess not in query_tokens:
+        query_tokens.insert(0, inp.series_guess)
+
+    for token in query_tokens:
+        if token:
+            search_terms.append(f"query:{token}")
+        rows = _fetch_catalog_rows(session, series_fragment=token, issue_num=inp.issue_number_guess)
+        if not rows and inp.issue_number_guess:
+            rows = _fetch_catalog_rows(session, series_fragment=token, issue_num="")
+        for matched_on in strategies:
+            for issue, series, publisher in rows:
+                iid = int(issue.id or 0)
+                if iid in seen_issue_ids:
+                    continue
+                scored = _score_row(
+                    inp=inp,
+                    series_token=token,
+                    issue=issue,
+                    series=series,
+                    publisher=publisher,
+                    matched_on=matched_on,
+                )
+                if scored is None:
+                    continue
+                seen_issue_ids.add(iid)
+                ranked.append(scored)
+
+    if not ranked and query_tokens:
+        for token in query_tokens[:3]:
+            rows = _fetch_catalog_rows(session, series_fragment=token, issue_num="", limit=30)
+            for issue, series, publisher in rows:
+                iid = int(issue.id or 0)
+                if iid in seen_issue_ids:
+                    continue
+                scored = _score_row(
+                    inp=inp,
+                    series_token=token,
+                    issue=issue,
+                    series=series,
+                    publisher=publisher,
+                    matched_on="fuzzy_series",
+                )
+                if scored:
+                    seen_issue_ids.add(iid)
+                    ranked.append(scored)
+                    search_terms.append(f"broad:{token}")
+
+    ranked.sort(key=lambda row: row.match_score, reverse=True)
+    return ranked[:10], search_terms
 
 
 def refresh_candidates_for_detection(session: Session, *, detected_book_id: int) -> None:
@@ -55,79 +305,70 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         return
     session.exec(delete(PhotoImportCandidate).where(PhotoImportCandidate.detected_book_id == detected_book_id))
 
-    ai_series = (det.ai_series or "").strip()
-    ai_issue = det.ai_issue_number
-    ai_pub = det.ai_publisher
-    ai_year = det.ai_cover_year
-
-    stmt = (
-        select(CatalogIssue, CatalogSeries, CatalogPublisher)
-        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
-        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+    inp = build_match_input_from_detection(det)
+    has_text = bool(
+        inp.series_guess
+        or inp.visible_title_text
+        or inp.alternate_titles
+        or inp.visible_character_text
+        or inp.subtitle_guess
     )
-    if ai_series:
-        stmt = stmt.where(
-            or_(
-                CatalogSeries.name.ilike(f"%{ai_series[:80]}%"),
-                func.lower(CatalogSeries.name).contains(ai_series[:80].lower()),
-            )
-        )
-    if ai_issue:
-        stmt = stmt.where(CatalogIssue.issue_number.ilike(f"%{_norm_issue(ai_issue)}%"))
-    stmt = stmt.order_by(CatalogIssue.id.desc()).limit(40)
-    rows = list(session.exec(stmt).all())
+    scored, _search_terms = generate_scored_candidates(session, inp) if has_text else ([], [])
 
-    scored: list[tuple[float, str, CatalogIssue, CatalogSeries, CatalogPublisher | None]] = []
-    for issue, series, publisher in rows:
-        s, reason = _score_issue(
-            series_name=series.name,
-            issue_number=str(issue.issue_number),
-            publisher_name=publisher.name if publisher else None,
-            cover_year=str(issue.cover_date or "") if hasattr(issue, "cover_date") else None,
-            ai_series=ai_series,
-            ai_issue=ai_issue,
-            ai_publisher=ai_pub,
-            ai_year=ai_year,
-        )
-        if s <= 0 and ai_series:
-            s = 5.0
-            reason = "broad_match"
-        scored.append((s, reason, issue, series, publisher))
-
-    scored.sort(key=lambda row: row[0], reverse=True)
-    top = scored[:10]
-    issue_ids = [int(issue.id or 0) for _, _, issue, _, _ in top]
+    issue_ids = [int(row.issue.id or 0) for row in scored]
     covers = _covers_for_issue_ids(session, issue_ids)
 
-    for rank, (match_score, reason, issue, series, publisher) in enumerate(top, start=1):
+    for rank, row in enumerate(scored, start=1):
         variant = session.exec(
-            select(CatalogVariant).where(CatalogVariant.issue_id == issue.id).order_by(CatalogVariant.id.asc())
+            select(CatalogVariant).where(CatalogVariant.issue_id == row.issue.id).order_by(CatalogVariant.id.asc())
         ).first()
         session.add(
             PhotoImportCandidate(
                 detected_book_id=detected_book_id,
-                catalog_issue_id=int(issue.id or 0),
+                catalog_issue_id=int(row.issue.id or 0),
                 variant_id=int(variant.id) if variant and variant.id else None,
-                publisher=publisher.name if publisher else None,
-                series=series.name,
-                issue_number=str(issue.issue_number),
+                publisher=row.publisher.name if row.publisher else None,
+                series=row.series.name,
+                issue_number=str(row.issue.issue_number),
                 variant_name=variant.variant_name if variant else None,
-                cover_url=covers.get(int(issue.id or 0)),
-                release_date=str(getattr(issue, "cover_date", "") or "") or None,
-                match_score=match_score,
-                match_reason=reason,
+                cover_url=covers.get(int(row.issue.id or 0)),
+                release_date=str(getattr(row.issue, "cover_date", "") or "") or None,
+                match_score=row.match_score,
+                match_reason=row.match_reason,
+                matched_on=row.matched_on,
                 rank=rank,
             )
         )
-    det.candidate_count = len(top)
-    if top:
-        best_score = top[0][0]
-        best_issue = top[0][2]
-        best_variant = session.exec(
-            select(CatalogVariant).where(CatalogVariant.issue_id == best_issue.id).order_by(CatalogVariant.id.asc())
-        ).first()
-        det.selected_catalog_issue_id = int(best_issue.id or 0)
-        det.selected_variant_id = int(best_variant.id) if best_variant and best_variant.id else None
-        det.confidence = max(float(det.ai_confidence or 0), best_score / 100.0)
+
+    det.candidate_count = len(scored)
+    if scored:
+        det.recognition_status = RECOGNITION_STATUS_MATCHED if scored[0].match_score >= 70 else RECOGNITION_STATUS_UNKNOWN
+        if len(scored) > 1 and scored[0].match_score - scored[1].match_score < 8:
+            det.recognition_status = RECOGNITION_STATUS_AMBIGUOUS
+    else:
+        det.recognition_status = RECOGNITION_STATUS_UNKNOWN
+
     session.add(det)
     session.commit()
+
+
+def candidate_debug_info(session: Session, *, detected_book_id: int) -> dict[str, object]:
+    det = session.get(PhotoImportDetectedBook, detected_book_id)
+    if det is None:
+        return {}
+    inp = build_match_input_from_detection(det)
+    scored, search_terms = generate_scored_candidates(session, inp)
+    best_score = scored[0].match_score if scored else 0.0
+    return {
+        "search_terms_used": search_terms,
+        "candidate_count": len(scored),
+        "best_match_score": best_score,
+        "match_input": {
+            "series_guess": inp.series_guess,
+            "issue_number_guess": inp.issue_number_guess,
+            "publisher_guess": inp.publisher_guess,
+            "alternate_titles": inp.alternate_titles,
+            "visible_title_text": inp.visible_title_text,
+            "visible_issue_text": inp.visible_issue_text,
+        },
+    }

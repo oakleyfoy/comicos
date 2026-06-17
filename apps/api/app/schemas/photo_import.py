@@ -60,10 +60,20 @@ class PhotoImportDetectedBookRead(BaseModel):
     ai_series: str | None
     ai_issue_number: str | None
     ai_publisher: str | None
+    ai_subtitle_guess: str | None = None
     ai_variant_hint: str | None
+    ai_variant_guess: str | None = None
     ai_cover_year: str | None
+    ai_visible_title_text: str | None = None
+    ai_visible_issue_text: str | None = None
+    ai_visible_publisher_text: str | None = None
+    ai_visible_character_text: str | None = None
+    ai_uncertainty_reason: str | None = None
+    ai_alternate_titles: list[str] | None = None
     ai_confidence: float | None
     ai_reason: str | None
+    can_confirm: bool = False
+    needs_match: bool = False
     best_candidate: "PhotoImportCandidateRead | None" = None
 
 
@@ -80,7 +90,22 @@ class PhotoImportCandidateRead(BaseModel):
     release_date: str | None
     match_score: float
     match_reason: str | None
+    matched_on: str | None = None
     rank: int
+
+
+class PhotoImportCandidateDebugInfo(BaseModel):
+    search_terms_used: list[str]
+    candidate_count: int
+    best_match_score: float
+    match_input: dict[str, object]
+
+
+class PhotoImportDetectionCandidatesResponse(BaseModel):
+    detection: PhotoImportDetectedBookRead
+    candidates: list[PhotoImportCandidateRead]
+    selected_candidate: PhotoImportCandidateRead | None
+    debug: PhotoImportCandidateDebugInfo
 
 
 class PhotoImportSelectCandidatePayload(BaseModel):
@@ -112,3 +137,4 @@ class PhotoImportBulkIdsPayload(BaseModel):
 
 
 PhotoImportDetectedBookRead.model_rebuild()
+PhotoImportDetectionCandidatesResponse.model_rebuild()

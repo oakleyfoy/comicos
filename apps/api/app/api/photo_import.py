@@ -15,6 +15,7 @@ from app.schemas.photo_import import (
     PhotoImportHeartbeatPayload,
     PhotoImportImageRead,
     PhotoImportCandidateRead,
+    PhotoImportDetectionCandidatesResponse,
     PhotoImportSelectCandidatePayload,
     PhotoImportSessionCreatePayload,
     PhotoImportSessionRead,
@@ -22,7 +23,7 @@ from app.schemas.photo_import import (
 from app.services.photo_import_detection_service import (
     confirm_detection,
     confirm_session_books,
-    list_detection_candidates,
+    list_detection_candidates_debug,
     list_session_detections,
     reject_detection,
     select_candidate,
@@ -105,14 +106,14 @@ def list_detections_endpoint(
     return list_session_detections(session, token=token, owner_user_id=int(current_user.id))
 
 
-@photo_import_router.get("/detections/{detection_id}/candidates", response_model=list[PhotoImportCandidateRead])
+@photo_import_router.get("/detections/{detection_id}/candidates", response_model=PhotoImportDetectionCandidatesResponse)
 def list_candidates_endpoint(
     detection_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-) -> list[PhotoImportCandidateRead]:
+) -> PhotoImportDetectionCandidatesResponse:
     assert current_user.id is not None
-    return list_detection_candidates(session, owner_user_id=int(current_user.id), detection_id=detection_id)
+    return list_detection_candidates_debug(session, owner_user_id=int(current_user.id), detection_id=detection_id)
 
 
 @photo_import_router.post("/detections/{detection_id}/select-candidate", response_model=PhotoImportDetectedBookRead)

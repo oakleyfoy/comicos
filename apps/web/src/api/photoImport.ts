@@ -65,6 +65,7 @@ export type PhotoImportCandidate = {
   release_date: string | null;
   match_score: number;
   match_reason: string | null;
+  matched_on: string | null;
   rank: number;
 };
 
@@ -81,11 +82,33 @@ export type PhotoImportDetectedBook = {
   ai_series: string | null;
   ai_issue_number: string | null;
   ai_publisher: string | null;
+  ai_subtitle_guess: string | null;
   ai_variant_hint: string | null;
+  ai_variant_guess: string | null;
   ai_cover_year: string | null;
+  ai_visible_title_text: string | null;
+  ai_visible_issue_text: string | null;
+  ai_visible_publisher_text: string | null;
+  ai_visible_character_text: string | null;
+  ai_uncertainty_reason: string | null;
+  ai_alternate_titles: string[] | null;
   ai_confidence: number | null;
   ai_reason: string | null;
+  can_confirm: boolean;
+  needs_match: boolean;
   best_candidate: PhotoImportCandidate | null;
+};
+
+export type PhotoImportCandidatesDebugResponse = {
+  detection: PhotoImportDetectedBook;
+  candidates: PhotoImportCandidate[];
+  selected_candidate: PhotoImportCandidate | null;
+  debug: {
+    search_terms_used: string[];
+    candidate_count: number;
+    best_match_score: number;
+    match_input: Record<string, unknown>;
+  };
 };
 
 export function createPhotoImportSession(sourceDevice?: string): Promise<PhotoImportSession> {
@@ -128,6 +151,22 @@ export function confirmPhotoImportSession(
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}/confirm`, {
     method: "POST",
     body: JSON.stringify({ items }),
+  });
+}
+
+export function getPhotoImportDetectionCandidates(
+  detectionId: number,
+): Promise<PhotoImportCandidatesDebugResponse> {
+  return requestPhotoImport(`/api/v1/photo-import/detections/${detectionId}/candidates`);
+}
+
+export function selectPhotoImportCandidate(
+  detectionId: number,
+  candidateId: number,
+): Promise<PhotoImportDetectedBook> {
+  return requestPhotoImport(`/api/v1/photo-import/detections/${detectionId}/select-candidate`, {
+    method: "POST",
+    body: JSON.stringify({ candidate_id: candidateId }),
   });
 }
 

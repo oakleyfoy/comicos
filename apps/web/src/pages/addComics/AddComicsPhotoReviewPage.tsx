@@ -3,13 +3,22 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   confirmPhotoImportSession,
+  getPhotoImportDetectionCandidates,
   listPhotoImportDetections,
   rejectPhotoImportDetection,
+  selectPhotoImportCandidate,
+  type PhotoImportCandidate,
   type PhotoImportDetectedBook,
 } from "../../api/photoImport";
 import { AppShell } from "../../components/AppShell";
 
-const HIGH_CONFIDENCE = 0.85;
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+function cropUrl(cropPath: string | null): string | null {
+  if (!cropPath) return null;
+  if (cropPath.startsWith("http")) return cropPath;
+  return `${API_BASE}/${cropPath.replace(/^\/+/, "")}`;
+}
 
 export function AddComicsPhotoReviewPage(): JSX.Element {
   const { token = "" } = useParams();
@@ -17,6 +26,8 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [candidateMap, setCandidateMap] = useState<Record<number, PhotoImportCandidate[]>>({});
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -32,6 +43,16 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
     const id = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(id);
   }, [load]);
+
+  const loadCandidates = async (detectionId: number) => {
+    try {
+      const res = await getPhotoImportDetectionCandidates(detectionId);
+      setCandidateMap((prev) => ({ ...prev, [detectionId]: res.candidates }));
+      setExpanded(detectionId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load candidates");
+    }
+  };
 
   const active = detections.filter((d) => d.status !== "rejected" && d.status !== "confirmed");
 
@@ -52,10 +73,14 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
       const items = ids
         .map((id) => {
           const det = detections.find((d) => d.id === id);
-          if (!det?.selected_catalog_issue_id) return null;
+          if (!det?.can_confirm || !det.selected_catalog_issue_id) return null;
           return { detected_book_id: id, catalog_issue_id: det.selected_catalog_issue_id, quantity: 1 };
         })
         .filter(Boolean) as { detected_book_id: number; catalog_issue_id: number; quantity: number }[];
+      if (items.length === 0) {
+        setError("Select a catalog match for each book before confirming.");
+        return;
+      }
       await confirmPhotoImportSession(token, items);
       await load();
       setSelected(new Set());
@@ -67,15 +92,20 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   };
 
   const confirmHighConfidence = () => {
-    const ids = active
-      .filter(
-        (d) =>
-          (d.confidence >= HIGH_CONFIDENCE || (d.ai_confidence ?? 0) >= HIGH_CONFIDENCE) &&
-          d.selected_catalog_issue_id &&
-          d.candidate_count === 1,
-      )
-      .map((d) => d.id);
+    const ids = active.filter((d) => d.can_confirm).map((d) => d.id);
     void confirmIds(ids);
+  };
+
+  const onSelectCandidate = async (detectionId: number, candidateId: number) => {
+    setBusy(true);
+    try {
+      await selectPhotoImportCandidate(detectionId, candidateId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Select failed");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -93,7 +123,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !active.some((d) => d.can_confirm)}
             onClick={() => void confirmHighConfidence()}
             className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
@@ -111,45 +141,140 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
         <ul className="mt-6 space-y-4">
           {active.map((det) => {
             const best = det.best_candidate;
+            const thumb = cropUrl(det.crop_path);
+            const candidates = candidateMap[det.id] ?? [];
+            const showPicker = expanded === det.id;
             return (
               <li key={det.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap gap-4">
-                  <label className="flex items-start gap-2">
+                  {thumb ? (
+                    <img src={thumb} alt="" className="h-24 w-16 rounded object-cover ring-1 ring-slate-200" />
+                  ) : null}
+                  <label className="flex min-w-[12rem] flex-1 items-start gap-2">
                     <input type="checkbox" checked={selected.has(det.id)} onChange={() => toggle(det.id)} />
-                    <span className="text-sm font-medium text-slate-800">
-                      {det.ai_series || "Unknown series"} #{det.ai_issue_number || "?"}
-                    </span>
+                    <span className="text-sm font-medium text-slate-800">AI guess</span>
                   </label>
-                  <div className="flex-1 text-sm text-slate-600">
-                    {best ? (
-                      <p>
-                        Best match: {best.publisher} · {best.series} #{best.issue_number}{" "}
-                        <span className="text-slate-400">({Math.round(best.match_score)}%)</span>
-                      </p>
-                    ) : (
-                      <p>No catalog candidates yet.</p>
-                    )}
-                    <p className="text-xs text-slate-500">Confidence: {Math.round(det.confidence * 100)}%</p>
+                </div>
+                <dl className="mt-3 grid gap-1 text-sm text-slate-700 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase text-slate-400">Publisher</dt>
+                    <dd>{det.ai_publisher || det.ai_visible_publisher_text || "—"}</dd>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busy || !det.selected_catalog_issue_id}
-                      onClick={() => void confirmIds([det.id])}
-                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
-                    >
-                      Confirm
-                    </button>
+                  <div>
+                    <dt className="text-xs uppercase text-slate-400">Series</dt>
+                    <dd>{det.ai_series || det.ai_visible_title_text || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase text-slate-400">Issue #</dt>
+                    <dd>{det.ai_issue_number || det.ai_visible_issue_text || "?"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase text-slate-400">AI confidence</dt>
+                    <dd>{Math.round((det.ai_confidence ?? 0) * 100)}%</dd>
+                  </div>
+                  {det.ai_visible_title_text ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase text-slate-400">Visible title text</dt>
+                      <dd>{det.ai_visible_title_text}</dd>
+                    </div>
+                  ) : null}
+                  {det.ai_visible_issue_text ? (
+                    <div>
+                      <dt className="text-xs uppercase text-slate-400">Visible issue text</dt>
+                      <dd>{det.ai_visible_issue_text}</dd>
+                    </div>
+                  ) : null}
+                  {det.ai_uncertainty_reason ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase text-slate-400">Uncertainty</dt>
+                      <dd className="text-amber-800">{det.ai_uncertainty_reason}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested match</p>
+                  {best ? (
+                    <p className="mt-1 text-slate-800">
+                      {best.publisher} · {best.series} #{best.issue_number}{" "}
+                      <span className="text-slate-500">({Math.round(best.match_score)} score)</span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 font-medium text-amber-800">Needs match</p>
+                  )}
+                  {best?.match_reason ? <p className="mt-1 text-xs text-slate-500">{best.match_reason}</p> : null}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {det.can_confirm ? (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void rejectPhotoImportDetection(det.id).then(() => load())}
-                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium"
+                      onClick={() => void confirmIds([det.id])}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                     >
-                      Reject
+                      Confirm
                     </button>
-                  </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void loadCandidates(det.id)}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white"
+                    >
+                      {det.candidate_count > 0 ? "Select match" : "Find match"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void rejectPhotoImportDetection(det.id).then(() => load())}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium"
+                  >
+                    Reject
+                  </button>
+                  {det.candidate_count > 1 ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => (showPicker ? setExpanded(null) : void loadCandidates(det.id))}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium"
+                    >
+                      {showPicker ? "Hide alternatives" : "Show alternatives"}
+                    </button>
+                  ) : null}
                 </div>
+                {showPicker && candidates.length > 0 ? (
+                  <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                    {candidates.slice(0, 10).map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-3 text-sm">
+                          {c.cover_url ? (
+                            <img src={c.cover_url} alt="" className="h-14 w-10 rounded object-cover" />
+                          ) : null}
+                          <div>
+                            <p className="font-medium text-slate-800">
+                              {c.publisher} · {c.series} #{c.issue_number}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Score {Math.round(c.match_score)} · {c.match_reason}
+                              {c.release_date ? ` · ${c.release_date}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onSelectCandidate(det.id, c.id)}
+                          className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white"
+                        >
+                          Select
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             );
           })}

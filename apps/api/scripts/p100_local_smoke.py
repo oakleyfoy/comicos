@@ -62,7 +62,18 @@ def main() -> int:
         det = dets.json()[0]
         print("detection", det.get("id"), "candidates", det.get("candidate_count"), "best", det.get("best_candidate"))
 
-        if det.get("selected_catalog_issue_id"):
+        catalog_issue_id = det.get("selected_catalog_issue_id")
+        if not catalog_issue_id and det.get("best_candidate"):
+            best = det["best_candidate"]
+            sel = client.post(
+                f"/api/v1/photo-import/detections/{det['id']}/select-candidate",
+                headers=headers,
+                json={"candidate_id": best["id"]},
+            )
+            if sel.status_code == 200:
+                catalog_issue_id = sel.json().get("selected_catalog_issue_id")
+
+        if catalog_issue_id:
             confirm = client.post(
                 f"/api/v1/photo-import/sessions/{tok}/confirm",
                 headers=headers,
@@ -70,7 +81,7 @@ def main() -> int:
                     "items": [
                         {
                             "detected_book_id": det["id"],
-                            "catalog_issue_id": det["selected_catalog_issue_id"],
+                            "catalog_issue_id": catalog_issue_id,
                             "quantity": 1,
                         }
                     ]
