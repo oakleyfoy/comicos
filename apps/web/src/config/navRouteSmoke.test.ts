@@ -75,13 +75,38 @@ describe("nav route smoke manifest", () => {
     }
   });
 
-  it("shows P95-04 live capture routes in the Scanner sidebar group", () => {
-    const scanner = visibleNavGroups(true).find((g) => g.id === "scanner");
-    expect(scanner?.title).toBe("Scanner");
-    const labels = scanner?.links.map((l) => l.label) ?? [];
-    expect(labels).toEqual(["Webcam Receiving", "Mobile Receiving", "Convention Scan"]);
-    const paths = scanner?.links.map((l) => l.to) ?? [];
-    expect(paths).toEqual(["/receiving/live", "/receiving/mobile", "/convention-scan"]);
+  it("shows Add Comics with simplified user intake routes", () => {
+    const addComics = visibleNavGroups(false).find((g) => g.id === "acquire");
+    expect(addComics?.title).toBe("Add Comics");
+    const labels = addComics?.links.map((l) => l.label) ?? [];
+    expect(labels).toEqual(["Online Retail", "Phone Photo", "Manual Entry"]);
+    const paths = addComics?.links.map((l) => l.to) ?? [];
+    expect(paths).toEqual(["/connected-retailers/import", "/mobile-scan", "/orders/new"]);
+  });
+
+  it("hides scanner, acquisition, and internal tools from non-admin navigation", () => {
+    const groups = visibleNavGroups(false);
+    expect(groups.find((g) => g.id === "scanner")).toBeUndefined();
+    expect(groups.find((g) => g.id === "internal-tools")).toBeUndefined();
+    const labels = groups.flatMap((g) => g.links.map((l) => l.label));
+    expect(labels).not.toContain("Acquisitions");
+    expect(labels).not.toContain("+ New Acquisition");
+    expect(labels).not.toContain("Webcam Receiving");
+  });
+
+  it("shows P95-04 live capture and intake tools in Admin / Internal Tools for ops admins", () => {
+    const internal = visibleNavGroups(true).find((g) => g.id === "internal-tools");
+    expect(internal?.title).toBe("Admin / Internal Tools");
+    const labels = internal?.links.map((l) => l.label) ?? [];
+    expect(labels).toContain("Webcam Receiving");
+    expect(labels).toContain("Mobile Receiving");
+    expect(labels).toContain("Convention Scan");
+    expect(labels).toContain("Scan Intake");
+    expect(labels).toContain("Acquisitions");
+    const paths = internal?.links.map((l) => l.to) ?? [];
+    expect(paths).toEqual(
+      expect.arrayContaining(["/receiving/live", "/receiving/mobile", "/convention-scan"]),
+    );
   });
 
   it("hides legacy phase pages from the sidebar", () => {

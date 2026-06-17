@@ -34,20 +34,28 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "acquire",
     title: "Add Comics",
     links: [
-      { label: "+ New Acquisition", to: "/acquisitions/new", prominent: true },
-      { label: "Acquisitions", to: "/acquisitions" },
-      { label: "Retailer Import", to: "/connected-retailers/import" },
-      { label: "Scan Intake", to: "/mobile-scan" },
+      { label: "Online Retail", to: "/connected-retailers/import", prominent: true },
+      { label: "Phone Photo", to: "/mobile-scan" },
       { label: "Manual Entry", to: "/orders/new" },
     ],
   },
   {
-    id: "scanner",
-    title: "Scanner",
+    id: "internal-tools",
+    title: "Admin / Internal Tools",
     links: [
-      { label: "Webcam Receiving", to: "/receiving/live", prominent: true },
-      { label: "Mobile Receiving", to: "/receiving/mobile" },
-      { label: "Convention Scan", to: "/convention-scan" },
+      { label: "Webcam Receiving", to: "/receiving/live", prominent: true, requiresOpsAdmin: true },
+      { label: "Mobile Receiving", to: "/receiving/mobile", requiresOpsAdmin: true },
+      { label: "Convention Scan", to: "/convention-scan", requiresOpsAdmin: true },
+      { label: "Scan Intake", to: "/mobile-scan", requiresOpsAdmin: true },
+      { label: "Mobile Intake", to: "/mobile-intake", requiresOpsAdmin: true },
+      { label: "Scan Sessions", to: "/scan-sessions", requiresOpsAdmin: true },
+      { label: "Scan Ingestion", to: "/scan-ingestion", requiresOpsAdmin: true },
+      { label: "Scan OCR", to: "/scan-ocr", requiresOpsAdmin: true },
+      { label: "Recognition Test", to: "/recognition-test", requiresOpsAdmin: true },
+      { label: "Acquisitions", to: "/acquisitions", requiresOpsAdmin: true },
+      { label: "+ New Acquisition", to: "/acquisitions/new", requiresOpsAdmin: true },
+      { label: "Scanner Profiles", to: "/settings/scanner-profiles", requiresOpsAdmin: true },
+      { label: "Operations Console", to: "/ops", requiresOpsAdmin: true },
     ],
   },
   {
@@ -134,8 +142,7 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "mobile",
     title: "Mobile",
     links: [
-      { label: "Mobile Scanning", to: "/mobile-scan", prominent: true },
-      { label: "Mobile Operations", to: "/mobile-operations" },
+      { label: "Mobile Operations", to: "/mobile-operations", prominent: true },
       { label: "Collector Assistant", to: "/collector-assistant" },
       { label: "Convention Mode", to: "/convention-mode", hiddenFromNav: true },
       { label: "Quick Sales", to: "/quick-sales", hiddenFromNav: true },
@@ -163,7 +170,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Account & data", to: "/settings/account" },
       { label: "Connected Retailers", to: "/connected-retailers" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
-      { label: "Operations", to: "/ops", requiresOpsAdmin: true },
       { label: "Workflow Health", to: "/workflow-health" },
     ],
   },
@@ -191,7 +197,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 export const NAV_EXPANDED_STORAGE_KEY = "comic-os.nav.expanded-groups";
 
-export const DEFAULT_EXPANDED_GROUP_IDS = ["home", "acquire", "scanner"];
+export const DEFAULT_EXPANDED_GROUP_IDS = ["home", "acquire"];
 
 export function findGroupIdForPath(pathname: string): string | null {
   for (const group of NAV_GROUPS) {
@@ -235,8 +241,11 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname === "/orders/new" || pathname === "/connected-retailers/import") {
     return "acquire";
   }
-  if (pathname === "/acquisitions" || pathname.startsWith("/acquisitions/")) {
+  if (pathname === "/mobile-scan" || pathname.startsWith("/mobile-scan/")) {
     return "acquire";
+  }
+  if (pathname === "/acquisitions" || pathname.startsWith("/acquisitions/")) {
+    return "internal-tools";
   }
   if (pathname.startsWith("/orders") || pathname.startsWith("/settings")) {
     return "settings";
@@ -251,10 +260,23 @@ export function findGroupIdForPath(pathname: string): string | null {
     return "home";
   }
   if (pathname === "/receiving" || pathname.startsWith("/receiving/")) {
-    return pathname === "/receiving" ? "home" : "scanner";
+    return pathname === "/receiving" ? "home" : "internal-tools";
   }
-  if (pathname === "/convention-scan") {
-    return "scanner";
+  if (pathname === "/convention-scan" || pathname === "/mobile-intake") {
+    return "internal-tools";
+  }
+  if (
+    pathname === "/scan-sessions" ||
+    pathname === "/scan-ingestion" ||
+    pathname === "/scan-ocr" ||
+    pathname === "/recognition-test" ||
+    pathname.startsWith("/scan-") ||
+    pathname === "/settings/scanner-profiles"
+  ) {
+    return "internal-tools";
+  }
+  if (pathname === "/ops" || pathname.startsWith("/ops/")) {
+    return "internal-tools";
   }
   if (pathname === "/marketplace-command-center" || pathname.startsWith("/marketplace-command-center/")) {
     return "buy";
