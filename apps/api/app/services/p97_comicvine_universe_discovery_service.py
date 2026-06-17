@@ -372,6 +372,32 @@ class ComicVineUniverseDiscoveryClient:
             metadata={"offset": offset, "limit": page_limit, "mode": DISCOVERY_MODE_LIST},
         )
 
+    def fetch_publisher_volumes_page(
+        self,
+        *,
+        publisher_filter: str,
+        offset: int,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """List ComicVine volumes filtered by publisher name (targeted discovery)."""
+        page_limit = clamp_page_limit(limit, path=VOLUMES_ENDPOINT)
+        return self._get_json(
+            VOLUMES_ENDPOINT,
+            params={
+                "offset": int(offset),
+                "limit": page_limit,
+                "field_list": VOLUME_FIELD_LIST,
+                "filter": f"publisher:{publisher_filter}",
+            },
+            endpoint_label=VOLUMES_ENDPOINT,
+            metadata={
+                "offset": offset,
+                "limit": page_limit,
+                "mode": "publisher_filter",
+                "publisher_filter": publisher_filter,
+            },
+        )
+
     def fetch_volume_search_page(
         self,
         *,
