@@ -79,18 +79,11 @@ describe("nav route smoke manifest", () => {
     const addComics = visibleNavGroups(false).find((g) => g.id === "acquire");
     expect(addComics?.title).toBe("Add Comics");
     const labels = addComics?.links.map((l) => l.label) ?? [];
-    expect(labels).toEqual([
-      "Online Retail",
-      "+ New Acquisition",
-      "Acquisitions",
-      "Phone Photo",
-      "Manual Entry",
-    ]);
+    expect(labels).toEqual(["Acquisitions", "Online Retail", "Phone Photo", "Manual Entry"]);
     const paths = addComics?.links.map((l) => l.to) ?? [];
     expect(paths).toEqual([
-      "/connected-retailers/import",
-      "/acquisitions/new",
       "/acquisitions",
+      "/connected-retailers/import",
       "/mobile-scan",
       "/orders/new",
     ]);
@@ -101,8 +94,8 @@ describe("nav route smoke manifest", () => {
     expect(groups.find((g) => g.id === "scanner")).toBeUndefined();
     expect(groups.find((g) => g.id === "internal-tools")).toBeUndefined();
     const labels = groups.flatMap((g) => g.links.map((l) => l.label));
-    expect(labels).toContain("+ New Acquisition");
     expect(labels).toContain("Acquisitions");
+    expect(labels).not.toContain("+ New Acquisition");
     expect(labels).not.toContain("Webcam Receiving");
   });
 

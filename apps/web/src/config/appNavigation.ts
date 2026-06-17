@@ -48,9 +48,8 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "acquire",
     title: "Add Comics",
     links: [
-      { label: "Online Retail", to: "/connected-retailers/import", prominent: true },
-      { label: "+ New Acquisition", to: "/acquisitions/new" },
-      { label: "Acquisitions", to: "/acquisitions" },
+      { label: "Acquisitions", to: "/acquisitions", prominent: true },
+      { label: "Online Retail", to: "/connected-retailers/import" },
       { label: "Phone Photo", to: "/mobile-scan" },
       { label: "Manual Entry", to: "/orders/new" },
     ],
@@ -105,16 +104,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Listings", to: "/listings", hiddenFromNav: true },
       { label: "Selling Analytics", to: "/selling-analytics", hiddenFromNav: true },
       { label: "Exit Dashboard", to: "/exit-dashboard", hiddenFromNav: true },
-    ],
-  },
-  {
-    id: "mobile",
-    title: "Mobile",
-    links: [
-      { label: "Mobile Operations", to: "/mobile-operations", prominent: true },
-      { label: "Collector Assistant", to: "/collector-assistant" },
-      { label: "Convention Mode", to: "/convention-mode", hiddenFromNav: true },
-      { label: "Quick Sales", to: "/quick-sales", hiddenFromNav: true },
     ],
   },
   {

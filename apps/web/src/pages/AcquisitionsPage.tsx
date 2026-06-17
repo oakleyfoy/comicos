@@ -93,7 +93,11 @@ export function AcquisitionsPage(): JSX.Element {
             <p className="mt-6 text-sm text-slate-400">Loading…</p>
           ) : items.length === 0 ? (
             <p className="mt-6 text-sm text-slate-400">
-              No acquisitions yet. Create one to start adding books.
+              No acquisitions yet.{" "}
+              <Link to="/acquisitions/new" className="font-semibold text-emerald-400 hover:text-emerald-300">
+                Create your first acquisition
+              </Link>
+              .
             </p>
           ) : (
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
