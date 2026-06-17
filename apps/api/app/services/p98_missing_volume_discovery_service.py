@@ -26,6 +26,7 @@ from app.services.p97_comicvine_universe_discovery_service import (
     upsert_universe_volume,
     volume_row_from_api,
 )
+from app.services.p98_discovery_integrity_service import comicvine_universe_volume_ids
 from app.services.p98_gap_priority_service import score_volume
 from app.services.p98_major_publisher_registry import (
     MajorPublisherConfig,
@@ -75,6 +76,8 @@ class MissingVolumeCandidate:
     priority_score: int
     reason: str
     recommended_action: str = ACTION_INSERT_VOLUME_ONLY
+    in_comicvine_volume_universe: bool = False
+    in_universe_volume: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -86,6 +89,8 @@ class MissingVolumeCandidate:
             "priority_score": self.priority_score,
             "reason": self.reason,
             "recommended_action": self.recommended_action,
+            "in_comicvine_volume_universe": self.in_comicvine_volume_universe,
+            "in_universe_volume": self.in_universe_volume,
         }
 
 
@@ -194,6 +199,8 @@ def _candidate_from_payload(
     parsed: dict[str, Any],
     *,
     reason: str,
+    in_comicvine_volume_universe: bool = False,
+    in_universe_volume: bool = False,
 ) -> MissingVolumeCandidate | None:
     cv_pub = parsed.get("publisher")
     matched = config_for_comicvine_publisher_name(str(cv_pub) if cv_pub else None)
@@ -214,6 +221,8 @@ def _candidate_from_payload(
         ),
         reason=reason,
         recommended_action=ACTION_INSERT_VOLUME_ONLY,
+        in_comicvine_volume_universe=in_comicvine_volume_universe,
+        in_universe_volume=in_universe_volume,
     )
 
 
@@ -235,7 +244,13 @@ def get_volume_expansion_candidates_from_local_db(session: Session) -> list[Miss
             "start_year": row.start_year,
             "count_of_issues": row.count_of_issues,
         }
-        cand = _candidate_from_payload(config, parsed, reason="LOCAL_CV_UNIVERSE_NOT_IN_P98")
+        cand = _candidate_from_payload(
+            config,
+            parsed,
+            reason="LOCAL_CV_UNIVERSE_NOT_IN_P98",
+            in_comicvine_volume_universe=True,
+            in_universe_volume=False,
+        )
         if cand is not None:
             out.append(cand)
     out.sort(key=lambda c: c.priority_score, reverse=True)
@@ -246,7 +261,11 @@ def get_volume_expansion_candidates_from_local_db(session: Session) -> list[Miss
 class PublisherMissingVolumeReport:
     publisher: str
     comicvine_volumes_scanned: int = 0
+    already_in_comicvine_universe: int = 0
     already_in_universe: int = 0
+    in_both_tables: int = 0
+    missing_from_p98_only: int = 0
+    missing_from_both: int = 0
     missing_from_universe: int = 0
     would_insert: int = 0
     inserted: int = 0
@@ -259,7 +278,11 @@ class PublisherMissingVolumeReport:
         return {
             "publisher": self.publisher,
             "comicvine_volumes_scanned": self.comicvine_volumes_scanned,
+            "already_in_comicvine_universe": self.already_in_comicvine_universe,
             "already_in_universe": self.already_in_universe,
+            "in_both_tables": self.in_both_tables,
+            "missing_from_p98_only": self.missing_from_p98_only,
+            "missing_from_both": self.missing_from_both,
             "missing_from_universe": self.missing_from_universe,
             "would_insert": self.would_insert,
             "inserted": self.inserted,
@@ -327,6 +350,7 @@ def discover_missing_volumes_for_publisher(
         prog = PublisherDiscoveryProgress(publisher=config.canonical)
 
     existing_ids = universe_comicvine_volume_ids(session)
+    cv_universe_ids = comicvine_universe_volume_ids(session)
     missing_cap = int(limit_volumes) if limit_volumes is not None and limit_volumes > 0 else None
     pages_left = max(1, int(limit_pages))
     offset = start_offset
@@ -377,13 +401,26 @@ def discover_missing_volumes_for_publisher(
             if issue_count < int(min_issue_count):
                 continue
             cv_id = int(parsed["volume_id"])
-            if cv_id in existing_ids:
+            in_cv = cv_id in cv_universe_ids
+            in_p98 = cv_id in existing_ids
+            if in_cv:
+                report.already_in_comicvine_universe += 1
+            if in_p98:
                 report.already_in_universe += 1
+            if in_cv and in_p98:
+                report.in_both_tables += 1
+            elif in_cv and not in_p98:
+                report.missing_from_p98_only += 1
+            elif not in_cv and not in_p98:
+                report.missing_from_both += 1
+            if cv_id in existing_ids:
                 continue
             cand = _candidate_from_payload(
                 config,
                 parsed,
                 reason=f"COMICVINE_NOT_IN_UNIVERSE filter={filter_name}",
+                in_comicvine_volume_universe=in_cv,
+                in_universe_volume=in_p98,
             )
             if cand is None:
                 continue

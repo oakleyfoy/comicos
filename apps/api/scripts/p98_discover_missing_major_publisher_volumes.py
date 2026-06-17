@@ -49,8 +49,12 @@ def _print_report(reports) -> None:
     for report in reports:
         _log(f"Publisher: {report.publisher}")
         _log(f"  ComicVine volumes scanned: {report.comicvine_volumes_scanned}")
-        _log(f"  Already in universe:         {report.already_in_universe}")
-        _log(f"  Missing from universe:       {report.missing_from_universe}")
+        _log(f"  Already in comicvine_volume_universe: {report.already_in_comicvine_universe}")
+        _log(f"  Already in universe_volume (P98):   {report.already_in_universe}")
+        _log(f"  In both tables:                     {report.in_both_tables}")
+        _log(f"  Missing from P98 only (CV yes):     {report.missing_from_p98_only}")
+        _log(f"  Missing from both:                  {report.missing_from_both}")
+        _log(f"  Missing from universe (candidates): {report.missing_from_universe}")
         _log(f"  Would insert:                {report.would_insert}")
         if report.inserted:
             _log(f"  Inserted:                    {report.inserted}")
@@ -76,7 +80,8 @@ def _print_report(reports) -> None:
     for report in reports:
         _log(
             f"  {report.publisher}: scanned={report.comicvine_volumes_scanned} "
-            f"existing={report.already_in_universe} missing={report.missing_from_universe} "
+            f"existing_p98={report.already_in_universe} existing_cv={report.already_in_comicvine_universe} "
+            f"missing_p98_only={report.missing_from_p98_only} missing_both={report.missing_from_both} "
             f"would_insert={report.would_insert} inserted={report.inserted}"
         )
 
