@@ -10,7 +10,7 @@ from typing import Any
 from PIL import Image
 from sqlmodel import Session, delete
 
-from app.core.config import get_settings
+from app.services.photo_import_issue_number import apply_photo_issue_sanitization, normalize_photo_issue_number
 from app.models.photo_import import (
     DETECTION_STATUS_DETECTED,
     DETECTION_STATUS_NEEDS_REVIEW,
@@ -32,6 +32,10 @@ AI_SYSTEM = (
     '"alternate_titles":[],"reason":""}]} '
     "Rules: bbox values are normalized 0-1 relative to image size. "
     "Do not invent issue numbers; if unclear use null for issue_number_guess and put raw text in visible_issue_text. "
+    "issue_number_guess must be a numeric comic issue identifier only (examples: 4, 104, 1/2, 25.NOW). "
+    "Never put cover subtitles, taglines, story arcs, or slogans in issue_number_guess "
+    '(for example "The Initiative" or "Introducing The Spirits" belong in subtitle_guess or visible_title_text, not issue_number_guess). '
+    "If the issue number is not visible on the cover, issue_number_guess must be null. "
     "If title is uncertain, provide best series_guess plus alternate_titles. "
     "Include publisher imprints when visible. One object per visible comic. "
     "Include partially obscured books with lower confidence. "
@@ -79,7 +83,7 @@ def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(alternates, list):
         alternates = []
     confidence = float(book.get("confidence") or 0.0)
-    return {
+    normalized = {
         "bbox": book.get("bbox") or {},
         "series_guess": str(series).strip(),
         "issue_number_guess": issue or None,
@@ -96,6 +100,7 @@ def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
         "alternate_titles": [str(t).strip() for t in alternates if str(t).strip()],
         "reason": str(book.get("reason") or "").strip(),
     }
+    return apply_photo_issue_sanitization(normalized)  # type: ignore[return-value]
 
 
 def _call_openai_vision(image_bytes: bytes) -> dict[str, Any]:
@@ -191,7 +196,10 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
         confidence = float(book.get("confidence") or 0.0)
         status = DETECTION_STATUS_DETECTED if confidence >= 0.85 else DETECTION_STATUS_NEEDS_REVIEW
         issue_str = book.get("issue_number_guess")
-        issue_store = str(issue_str).strip()[:64] if issue_str else None
+        issue_store = None
+        if issue_str is not None:
+            sanitized = normalize_photo_issue_number(str(issue_str))
+            issue_store = sanitized[:64] if sanitized else None
         variant = book.get("variant_guess") or ""
         row = PhotoImportDetectedBook(
             session_id=int(image.session_id),

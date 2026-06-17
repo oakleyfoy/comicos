@@ -20,6 +20,15 @@ function cropUrl(cropPath: string | null): string | null {
   return `${API_BASE}/${cropPath.replace(/^\/+/, "")}`;
 }
 
+function displayIssueNumber(det: PhotoImportDetectedBook): string {
+  const n = det.ai_issue_number?.trim();
+  return n ? n : "Unknown";
+}
+
+function hasNumericIssue(det: PhotoImportDetectedBook): boolean {
+  return Boolean(det.ai_issue_number?.trim());
+}
+
 export function AddComicsPhotoReviewPage(): JSX.Element {
   const { token = "" } = useParams();
   const [detections, setDetections] = useState<PhotoImportDetectedBook[]>([]);
@@ -166,7 +175,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                   </div>
                   <div>
                     <dt className="text-xs uppercase text-slate-400">Issue #</dt>
-                    <dd>{det.ai_issue_number || det.ai_visible_issue_text || "?"}</dd>
+                    <dd>{displayIssueNumber(det)}</dd>
                   </div>
                   <div>
                     <dt className="text-xs uppercase text-slate-400">AI confidence</dt>
@@ -178,7 +187,19 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                       <dd>{det.ai_visible_title_text}</dd>
                     </div>
                   ) : null}
-                  {det.ai_visible_issue_text ? (
+                  {det.ai_subtitle_guess ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase text-slate-400">Subtitle</dt>
+                      <dd>{det.ai_subtitle_guess}</dd>
+                    </div>
+                  ) : null}
+                  {!hasNumericIssue(det) && det.ai_visible_issue_text ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase text-slate-400">Visible text</dt>
+                      <dd>{det.ai_visible_issue_text}</dd>
+                    </div>
+                  ) : null}
+                  {hasNumericIssue(det) && det.ai_visible_issue_text ? (
                     <div>
                       <dt className="text-xs uppercase text-slate-400">Visible issue text</dt>
                       <dd>{det.ai_visible_issue_text}</dd>
@@ -192,7 +213,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                   ) : null}
                 </dl>
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested match</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>
                   {best ? (
                     <p className="mt-1 text-slate-800">
                       {best.publisher} · {best.series} #{best.issue_number}{" "}
@@ -220,7 +241,11 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                       onClick={() => void loadCandidates(det.id)}
                       className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white"
                     >
-                      {det.candidate_count > 0 ? "Select match" : "Find match"}
+                      {!hasNumericIssue(det)
+                        ? "Select correct issue"
+                        : det.candidate_count > 0
+                          ? "Select match"
+                          : "Find match"}
                     </button>
                   )}
                   <button
