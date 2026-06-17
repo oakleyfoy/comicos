@@ -10,7 +10,8 @@ import {
 
 export function PhotoImportMobilePage(): JSX.Element {
   const { token = "" } = useParams();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [session, setSession] = useState<PhotoImportSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -29,7 +30,7 @@ export function PhotoImportMobilePage(): JSX.Element {
     void heartbeatPhotoImportSession(token, navigator.userAgent.slice(0, 120)).then(setSession).catch(() => refresh());
   }, [token, refresh]);
 
-  const onFiles = async (files: FileList | null) => {
+  const onFiles = async (files: FileList | null, input: HTMLInputElement | null) => {
     if (!files?.length || !token) return;
     const batch = Array.from(files).slice(0, 10);
     setUploading(true);
@@ -41,43 +42,67 @@ export function PhotoImportMobilePage(): JSX.Element {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
+      if (input) input.value = "";
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">ComicOS Photo Import</p>
-      <h1 className="mt-2 text-xl font-semibold">{session ? "Session connected" : "Connecting…"}</h1>
+      <h1 className="mt-2 text-xl font-semibold">Add Comics From Your Phone</h1>
+      <p className="mt-2 text-sm text-slate-400">Take a new photo or upload pictures you already took.</p>
       {session ? (
-        <p className="mt-2 text-sm text-slate-400">
-          Photos uploaded: {session.uploaded_photo_count} · Detections: {session.detected_book_count}
+        <p className="mt-3 text-sm text-emerald-300/90">
+          Session connected · Photos uploaded: {session.uploaded_photo_count} · Detections:{" "}
+          {session.detected_book_count}
         </p>
-      ) : null}
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">Connecting to session…</p>
+      )}
       {error ? (
         <p role="alert" className="mt-4 rounded-lg bg-rose-500/20 px-3 py-2 text-sm text-rose-200">
           {error}
         </p>
       ) : null}
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
+        data-testid="photo-import-camera-input"
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={(e) => void onFiles(e.target.files, e.target)}
+      />
+      <input
+        ref={galleryInputRef}
+        data-testid="photo-import-gallery-input"
+        type="file"
+        accept="image/*"
         multiple
         className="hidden"
-        onChange={(e) => void onFiles(e.target.files)}
+        onChange={(e) => void onFiles(e.target.files, e.target)}
       />
       <div className="mt-8 flex flex-col gap-3">
         <button
           type="button"
           disabled={uploading || !token}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => cameraInputRef.current?.click()}
           className="rounded-xl bg-sky-600 py-3 text-sm font-semibold disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : "Take Photo / Upload From Camera Roll"}
+          {uploading ? "Uploading…" : "Take Photo"}
         </button>
-        <p className="text-center text-xs text-slate-500">Up to 10 photos per batch</p>
+        <button
+          type="button"
+          disabled={uploading || !token}
+          onClick={() => galleryInputRef.current?.click()}
+          className="rounded-xl border border-slate-600 bg-slate-900 py-3 text-sm font-semibold disabled:opacity-50"
+        >
+          {uploading ? "Uploading…" : "Upload From Photos"}
+        </button>
+        <p className="text-center text-xs text-slate-500">
+          Use Upload From Photos for camera roll, screenshots, or pictures you took earlier.
+        </p>
+        <p className="text-center text-xs text-slate-600">Up to 10 photos per batch</p>
       </div>
     </div>
   );
