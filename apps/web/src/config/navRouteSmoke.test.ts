@@ -79,18 +79,30 @@ describe("nav route smoke manifest", () => {
     const addComics = visibleNavGroups(false).find((g) => g.id === "acquire");
     expect(addComics?.title).toBe("Add Comics");
     const labels = addComics?.links.map((l) => l.label) ?? [];
-    expect(labels).toEqual(["Online Retail", "Phone Photo", "Manual Entry"]);
+    expect(labels).toEqual([
+      "Online Retail",
+      "+ New Acquisition",
+      "Acquisitions",
+      "Phone Photo",
+      "Manual Entry",
+    ]);
     const paths = addComics?.links.map((l) => l.to) ?? [];
-    expect(paths).toEqual(["/connected-retailers/import", "/mobile-scan", "/orders/new"]);
+    expect(paths).toEqual([
+      "/connected-retailers/import",
+      "/acquisitions/new",
+      "/acquisitions",
+      "/mobile-scan",
+      "/orders/new",
+    ]);
   });
 
-  it("hides scanner, acquisition, and internal tools from non-admin navigation", () => {
+  it("hides scanner and internal tools from non-admin navigation", () => {
     const groups = visibleNavGroups(false);
     expect(groups.find((g) => g.id === "scanner")).toBeUndefined();
     expect(groups.find((g) => g.id === "internal-tools")).toBeUndefined();
     const labels = groups.flatMap((g) => g.links.map((l) => l.label));
-    expect(labels).not.toContain("Acquisitions");
-    expect(labels).not.toContain("+ New Acquisition");
+    expect(labels).toContain("+ New Acquisition");
+    expect(labels).toContain("Acquisitions");
     expect(labels).not.toContain("Webcam Receiving");
   });
 
@@ -102,10 +114,27 @@ describe("nav route smoke manifest", () => {
     expect(labels).toContain("Mobile Receiving");
     expect(labels).toContain("Convention Scan");
     expect(labels).toContain("Scan Intake");
-    expect(labels).toContain("Acquisitions");
+    expect(labels).not.toContain("Acquisitions");
+    expect(labels).not.toContain("+ New Acquisition");
     const paths = internal?.links.map((l) => l.to) ?? [];
     expect(paths).toEqual(
       expect.arrayContaining(["/receiving/live", "/receiving/mobile", "/convention-scan"]),
+    );
+  });
+
+  it("lists discovery intake routes under Reports instead of a Discovery group", () => {
+    expect(visibleNavGroups(true).find((g) => g.id === "discovery")).toBeUndefined();
+    const reports = visibleNavGroups(true).find((g) => g.id === "reports");
+    const labels = reports?.links.map((l) => l.label) ?? [];
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "Discovery Dashboard",
+        "Discovery Opportunities",
+        "Discovery Watchlists",
+        "Discovery Alerts",
+        "Release Lifecycle",
+        "Discovery Analytics",
+      ]),
     );
   });
 

@@ -53,12 +53,22 @@ describe("AppShell navigation", () => {
     expect(within(nav).getByRole("link", { name: "Command Center" })).toBeVisible();
   });
 
+  it("does not show a Discovery sidebar group; discovery routes live under Reports", () => {
+    renderShell();
+    const nav = getMainNav();
+    expect(within(nav).queryByRole("button", { name: "Discovery" })).not.toBeInTheDocument();
+    fireEvent.click(within(nav).getByRole("button", { name: "Reports" }));
+    expect(within(nav).getByRole("link", { name: "Discovery Dashboard" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Release Lifecycle" })).toBeVisible();
+  });
+
   it("does not show phase pages removed from the sidebar", () => {
     renderShell();
     const nav = getMainNav();
-    for (const group of ["Grade", "Discovery", "Storage", "Buy", "Inventory"]) {
+    for (const group of ["Grade", "Storage", "Buy", "Inventory"]) {
       fireEvent.click(within(nav).getByRole("button", { name: group }));
     }
+    expect(within(nav).queryByRole("link", { name: "Opportunities" })).not.toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Grading Platform" })).not.toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Release Intelligence" })).not.toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Box Contents" })).not.toBeInTheDocument();

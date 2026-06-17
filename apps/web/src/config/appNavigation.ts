@@ -31,31 +31,28 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "inventory",
+    title: "Inventory",
+    links: [
+      { label: "Portfolio", to: "/dashboard", prominent: true },
+      { label: "Collection insights", to: "/dashboard/collection", hiddenFromNav: true },
+      { label: "Collection Gaps", to: "/collection-gaps" },
+      { label: "Market & FMV", to: "/dashboard/market" },
+      { label: "FMV Intelligence", to: "/fmv-intelligence" },
+      { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
+      { label: "Key Issues", to: "/key-issues" },
+      { label: "Want Lists", to: "/want-lists", hiddenFromNav: true },
+    ],
+  },
+  {
     id: "acquire",
     title: "Add Comics",
     links: [
       { label: "Online Retail", to: "/connected-retailers/import", prominent: true },
+      { label: "+ New Acquisition", to: "/acquisitions/new" },
+      { label: "Acquisitions", to: "/acquisitions" },
       { label: "Phone Photo", to: "/mobile-scan" },
       { label: "Manual Entry", to: "/orders/new" },
-    ],
-  },
-  {
-    id: "internal-tools",
-    title: "Admin / Internal Tools",
-    links: [
-      { label: "Webcam Receiving", to: "/receiving/live", prominent: true, requiresOpsAdmin: true },
-      { label: "Mobile Receiving", to: "/receiving/mobile", requiresOpsAdmin: true },
-      { label: "Convention Scan", to: "/convention-scan", requiresOpsAdmin: true },
-      { label: "Scan Intake", to: "/mobile-scan", requiresOpsAdmin: true },
-      { label: "Mobile Intake", to: "/mobile-intake", requiresOpsAdmin: true },
-      { label: "Scan Sessions", to: "/scan-sessions", requiresOpsAdmin: true },
-      { label: "Scan Ingestion", to: "/scan-ingestion", requiresOpsAdmin: true },
-      { label: "Scan OCR", to: "/scan-ocr", requiresOpsAdmin: true },
-      { label: "Recognition Test", to: "/recognition-test", requiresOpsAdmin: true },
-      { label: "Acquisitions", to: "/acquisitions", requiresOpsAdmin: true },
-      { label: "+ New Acquisition", to: "/acquisitions/new", requiresOpsAdmin: true },
-      { label: "Scanner Profiles", to: "/settings/scanner-profiles", requiresOpsAdmin: true },
-      { label: "Operations Console", to: "/ops", requiresOpsAdmin: true },
     ],
   },
   {
@@ -69,22 +66,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Buy Opportunities", to: "/buy-opportunities" },
       { label: "Marketplace Monitoring", to: "/marketplace-monitoring" },
       { label: "Marketplace Command Center", to: "/marketplace-command-center" },
-      { label: "Discovery Feed", to: "/discovery-feed", hiddenFromNav: true },
       { label: "Future Pull List", to: "/future-pull-list" },
-    ],
-  },
-  {
-    id: "inventory",
-    title: "Inventory",
-    links: [
-      { label: "Portfolio", to: "/dashboard", prominent: true },
-      { label: "Collection insights", to: "/dashboard/collection", hiddenFromNav: true },
-      { label: "Collection Gaps", to: "/collection-gaps" },
-      { label: "Market & FMV", to: "/dashboard/market" },
-      { label: "FMV Intelligence", to: "/fmv-intelligence" },
-      { label: "Collection Valuation", to: "/collection-valuation-dashboard" },
-      { label: "Key Issues", to: "/key-issues" },
-      { label: "Want Lists", to: "/want-lists", hiddenFromNav: true },
     ],
   },
   {
@@ -126,19 +108,6 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "discovery",
-    title: "Discovery",
-    links: [
-      { label: "Discovery Dashboard", to: "/discovery-dashboard", prominent: true },
-      { label: "Opportunities", to: "/discovery-opportunities" },
-      { label: "Watchlists", to: "/discovery-watchlists" },
-      { label: "Discovery Alerts", to: "/discovery-alerts" },
-      { label: "Release Intelligence", to: "/release-intelligence", hiddenFromNav: true },
-      { label: "Release Lifecycle", to: "/release-lifecycle" },
-      { label: "Future Releases", to: "/future-releases", hiddenFromNav: true },
-    ],
-  },
-  {
     id: "mobile",
     title: "Mobile",
     links: [
@@ -154,11 +123,19 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Portfolio Analytics", to: "/portfolio-analytics", prominent: true },
       { label: "Recommendation Analytics", to: "/recommendation-analytics" },
+      { label: "Discovery Dashboard", to: "/discovery-dashboard" },
+      { label: "Discovery Opportunities", to: "/discovery-opportunities" },
+      { label: "Discovery Watchlists", to: "/discovery-watchlists" },
+      { label: "Discovery Alerts", to: "/discovery-alerts" },
+      { label: "Release Lifecycle", to: "/release-lifecycle" },
       { label: "Discovery Analytics", to: "/discovery-analytics" },
       { label: "Daily Briefing", to: "/daily-briefing" },
       { label: "Weekly Briefing", to: "/weekly-briefing" },
       { label: "Platform Certification", to: "/platform-certification" },
       { label: "Production Readiness", to: "/production-readiness" },
+      { label: "Discovery Feed", to: "/discovery-feed", hiddenFromNav: true },
+      { label: "Release Intelligence", to: "/release-intelligence", hiddenFromNav: true },
+      { label: "Future Releases", to: "/future-releases", hiddenFromNav: true },
     ],
   },
   {
@@ -193,6 +170,24 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Gmail & Integrations", to: "/settings/integrations" },
     ],
   },
+  /** Ops-only intake/scanner staging — last in sidebar until removed. */
+  {
+    id: "internal-tools",
+    title: "Admin / Internal Tools",
+    links: [
+      { label: "Webcam Receiving", to: "/receiving/live", prominent: true, requiresOpsAdmin: true },
+      { label: "Mobile Receiving", to: "/receiving/mobile", requiresOpsAdmin: true },
+      { label: "Convention Scan", to: "/convention-scan", requiresOpsAdmin: true },
+      { label: "Scan Intake", to: "/mobile-scan", requiresOpsAdmin: true },
+      { label: "Mobile Intake", to: "/mobile-intake", requiresOpsAdmin: true },
+      { label: "Scan Sessions", to: "/scan-sessions", requiresOpsAdmin: true },
+      { label: "Scan Ingestion", to: "/scan-ingestion", requiresOpsAdmin: true },
+      { label: "Scan OCR", to: "/scan-ocr", requiresOpsAdmin: true },
+      { label: "Recognition Test", to: "/recognition-test", requiresOpsAdmin: true },
+      { label: "Scanner Profiles", to: "/settings/scanner-profiles", requiresOpsAdmin: true },
+      { label: "Operations Console", to: "/ops", requiresOpsAdmin: true },
+    ],
+  },
 ];
 
 export const NAV_EXPANDED_STORAGE_KEY = "comic-os.nav.expanded-groups";
@@ -216,8 +211,11 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname === "/grading-platform" || pathname === "/grading-analytics") {
     return "grade";
   }
-  if (pathname === "/release-intelligence") {
-    return "discovery";
+  if (pathname.startsWith("/discovery-") || pathname === "/release-lifecycle") {
+    return "reports";
+  }
+  if (pathname === "/release-intelligence" || pathname === "/future-releases") {
+    return "reports";
   }
   if (pathname === "/storage-box-contents" || pathname === "/storage-assignment") {
     return "storage";
@@ -245,7 +243,7 @@ export function findGroupIdForPath(pathname: string): string | null {
     return "acquire";
   }
   if (pathname === "/acquisitions" || pathname.startsWith("/acquisitions/")) {
-    return "internal-tools";
+    return "acquire";
   }
   if (pathname.startsWith("/orders") || pathname.startsWith("/settings")) {
     return "settings";
