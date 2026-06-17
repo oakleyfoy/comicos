@@ -1,0 +1,114 @@
+"""P100 photo import API schemas."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class PhotoImportSessionCreatePayload(BaseModel):
+    source_device: str | None = None
+
+
+class PhotoImportSessionRead(BaseModel):
+    id: int
+    session_token: str
+    status: str
+    created_at: datetime
+    expires_at: datetime
+    last_seen_at: datetime | None
+    source_device: str | None
+    confirmed_count: int
+    uploaded_photo_count: int
+    detected_book_count: int
+    mobile_url: str
+    desktop_review_url: str
+
+
+class PhotoImportHeartbeatPayload(BaseModel):
+    source_device: str | None = None
+
+
+class PhotoImportImageRead(BaseModel):
+    id: int
+    session_id: int
+    original_filename: str
+    mime_type: str
+    file_size: int
+    width: int | None
+    height: int | None
+    status: str
+    created_at: datetime
+
+
+class PhotoImportDetectedBookRead(BaseModel):
+    id: int
+    session_id: int
+    image_id: int
+    crop_path: str | None
+    bbox_x: float
+    bbox_y: float
+    bbox_width: float
+    bbox_height: float
+    status: str
+    recognition_status: str
+    candidate_count: int
+    selected_catalog_issue_id: int | None
+    selected_variant_id: int | None
+    confidence: float
+    ai_series: str | None
+    ai_issue_number: str | None
+    ai_publisher: str | None
+    ai_variant_hint: str | None
+    ai_cover_year: str | None
+    ai_confidence: float | None
+    ai_reason: str | None
+    best_candidate: "PhotoImportCandidateRead | None" = None
+
+
+class PhotoImportCandidateRead(BaseModel):
+    id: int
+    detected_book_id: int
+    catalog_issue_id: int
+    variant_id: int | None
+    publisher: str | None
+    series: str | None
+    issue_number: str | None
+    variant_name: str | None
+    cover_url: str | None
+    release_date: str | None
+    match_score: float
+    match_reason: str | None
+    rank: int
+
+
+class PhotoImportSelectCandidatePayload(BaseModel):
+    candidate_id: int
+
+
+class PhotoImportConfirmItemPayload(BaseModel):
+    detected_book_id: int
+    catalog_issue_id: int
+    variant_id: int | None = None
+    quantity: int = Field(default=1, ge=1, le=99)
+
+
+class PhotoImportConfirmPayload(BaseModel):
+    items: list[PhotoImportConfirmItemPayload]
+    notes: str | None = None
+    cost: str | None = None
+    condition: str | None = None
+
+
+class PhotoImportConfirmResponse(BaseModel):
+    acquisition_id: int
+    inventory_copy_ids: list[int]
+    confirmed_count: int
+
+
+class PhotoImportBulkIdsPayload(BaseModel):
+    detected_book_ids: list[int]
+
+
+PhotoImportDetectedBookRead.model_rebuild()

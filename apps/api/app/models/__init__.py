@@ -489,6 +489,12 @@ from app.models.spec_automation import SpecAutomationRun
 from app.models.ai_spec_certification import AISpecCertificationRun
 from app.models.acquisition_opportunity import AcquisitionOpportunity
 from app.models.acquisition import Acquisition, AcquisitionPlaceholderIssue
+from app.models.photo_import import (
+    PhotoImportCandidate,
+    PhotoImportDetectedBook,
+    PhotoImportImage,
+    PhotoImportSession,
+)
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
     CollectionContinuityAlert,

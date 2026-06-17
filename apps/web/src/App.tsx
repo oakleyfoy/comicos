@@ -18,6 +18,11 @@ import { MasterUniversePage } from "./pages/MasterUniversePage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
+import { AddComicsManualPage } from "./pages/addComics/AddComicsManualPage";
+import { AddComicsOnlineRetailPage } from "./pages/addComics/AddComicsOnlineRetailPage";
+import { AddComicsPhotoPage } from "./pages/addComics/AddComicsPhotoPage";
+import { AddComicsPhotoReviewPage } from "./pages/addComics/AddComicsPhotoReviewPage";
+import { PhotoImportMobilePage } from "./pages/addComics/PhotoImportMobilePage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
 import { MarketplaceCoverageDashboardPage } from "./pages/MarketplaceCoverageDashboardPage";
@@ -263,6 +268,7 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
+      <Route path="/photo-import/mobile/:token" element={<PhotoImportMobilePage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<CollectorOnboardingGate />}>
         <Route path="/collector-onboarding" element={<CollectorOnboardingPage />} />
@@ -487,6 +493,11 @@ export default function App() {
         <Route path="/retailer-orders" element={<RetailerOrdersPage />} />
         <Route path="/retailer-orders/:id" element={<RetailerOrderDetailPage />} />
         <Route path="/connected-retailers" element={<ConnectedRetailersPage />} />
+        <Route path="/add-comics/online-retail" element={<AddComicsOnlineRetailPage />} />
+        <Route path="/add-comics/photo" element={<AddComicsPhotoPage />} />
+        <Route path="/add-comics/photo/session/:token" element={<AddComicsPhotoReviewPage />} />
+        <Route path="/add-comics/manual" element={<AddComicsManualPage />} />
+        <Route path="/mobile-scan" element={<Navigate to="/add-comics/photo" replace />} />
         <Route path="/connected-retailers/import" element={<RetailerHtmlImportPage />} />
         <Route path="/retailer-orders/import" element={<RetailerHtmlImportPage />} />
         <Route path="/connected-retailers/midtown" element={<MidtownBrowserSessionPage />} />

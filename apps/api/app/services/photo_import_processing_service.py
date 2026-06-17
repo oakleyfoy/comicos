@@ -1,0 +1,67 @@
+"""P100 photo processing pipeline (placeholder + AI hook)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlmodel import Session, select
+
+from app.models.photo_import import (
+    DETECTION_STATUS_DETECTED,
+    IMAGE_STATUS_PROCESSING,
+    IMAGE_STATUS_PROCESSED,
+    RECOGNITION_STATUS_PENDING,
+    PhotoImportDetectedBook,
+    PhotoImportImage,
+)
+from app.services.photo_import_ai_recognition_service import run_ai_recognition_for_image
+from app.services.photo_import_candidate_service import refresh_candidates_for_detection
+from app.services.photo_import_session_service import refresh_session_counts
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _abs_path(relative: str) -> Path:
+    return REPO_ROOT / relative.replace("/", "\\") if "\\" in relative else REPO_ROOT / relative
+
+
+def process_photo_import_image(session: Session, *, image_id: int) -> None:
+    image = session.get(PhotoImportImage, image_id)
+    if image is None:
+        return
+    image.status = IMAGE_STATUS_PROCESSING
+    session.add(image)
+    session.commit()
+
+    existing = session.exec(
+        select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == image_id)
+    ).first()
+    if existing is None:
+        row = PhotoImportDetectedBook(
+            session_id=int(image.session_id),
+            image_id=int(image.id or 0),
+            user_id=int(image.user_id),
+            crop_path=image.storage_path,
+            bbox_x=0.0,
+            bbox_y=0.0,
+            bbox_width=1.0,
+            bbox_height=1.0,
+            status=DETECTION_STATUS_DETECTED,
+            recognition_status=RECOGNITION_STATUS_PENDING,
+            confidence=0.0,
+        )
+        session.add(row)
+        session.commit()
+
+    run_ai_recognition_for_image(session, image_id=image_id)
+
+    detections = session.exec(
+        select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == image_id)
+    ).all()
+    for det in detections:
+        refresh_candidates_for_detection(session, detected_book_id=int(det.id or 0))
+
+    image.status = IMAGE_STATUS_PROCESSED
+    session.add(image)
+    session.commit()
+    refresh_session_counts(session, session_id=int(image.session_id))

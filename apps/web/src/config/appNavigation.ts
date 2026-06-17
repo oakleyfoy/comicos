@@ -48,10 +48,9 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "acquire",
     title: "Add Comics",
     links: [
-      { label: "Acquisitions", to: "/acquisitions", prominent: true },
-      { label: "Online Retail", to: "/connected-retailers/import" },
-      { label: "Phone Photo", to: "/mobile-scan" },
-      { label: "Manual Entry", to: "/orders/new" },
+      { label: "Online Retail", to: "/add-comics/online-retail", prominent: true },
+      { label: "Phone Photo", to: "/add-comics/photo" },
+      { label: "Manual Entry", to: "/add-comics/manual" },
     ],
   },
   {
@@ -228,11 +227,14 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (pathname === "/orders/new" || pathname === "/connected-retailers/import") {
     return "acquire";
   }
+  if (pathname.startsWith("/add-comics/")) {
+    return "acquire";
+  }
   if (pathname === "/mobile-scan" || pathname.startsWith("/mobile-scan/")) {
     return "acquire";
   }
   if (pathname === "/acquisitions" || pathname.startsWith("/acquisitions/")) {
-    return "acquire";
+    return null;
   }
   if (pathname.startsWith("/orders") || pathname.startsWith("/settings")) {
     return "settings";
