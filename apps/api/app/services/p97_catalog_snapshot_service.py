@@ -130,6 +130,7 @@ class CatalogSnapshotImportStats:
 INDEX_PROGRESS_INTERVAL = 25_000
 SCOPED_COMICVINE_LOOKUP_MAX = 2_000
 SMALL_SNAPSHOT_ISSUE_ROWS = 5_000
+_IN_CLAUSE_BATCH = 5_000
 
 
 class _ImportProgress:
@@ -193,10 +194,13 @@ def _collect_export_scope(
 
     issue_ids: set[int] = set()
     if series_ids:
-        for row in session.exec(
-            select(CatalogIssue).where(CatalogIssue.series_id.in_(list(series_ids)))  # type: ignore[attr-defined]
-        ).all():
-            issue_ids.add(int(row.id or 0))
+        series_list = sorted(series_ids)
+        for offset in range(0, len(series_list), _IN_CLAUSE_BATCH):
+            chunk = series_list[offset : offset + _IN_CLAUSE_BATCH]
+            for row in session.exec(
+                select(CatalogIssue).where(CatalogIssue.series_id.in_(chunk))  # type: ignore[attr-defined]
+            ).all():
+                issue_ids.add(int(row.id or 0))
 
     publisher_ids: set[int] = set()
     for sid in series_ids:
@@ -212,10 +216,13 @@ def _collect_export_scope(
 
     image_ids: set[int] = set()
     if issue_ids:
-        for row in session.exec(
-            select(CatalogImage).where(CatalogImage.issue_id.in_(list(issue_ids)))  # type: ignore[attr-defined]
-        ).all():
-            image_ids.add(int(row.id or 0))
+        issue_list = sorted(issue_ids)
+        for offset in range(0, len(issue_list), _IN_CLAUSE_BATCH):
+            chunk = issue_list[offset : offset + _IN_CLAUSE_BATCH]
+            for row in session.exec(
+                select(CatalogImage).where(CatalogImage.issue_id.in_(chunk))  # type: ignore[attr-defined]
+            ).all():
+                image_ids.add(int(row.id or 0))
 
     return publisher_ids, series_ids, issue_ids, image_ids
 
@@ -617,6 +624,50 @@ def _build_issue_index(
         if cv:
             by_cv[cv] = row
         by_series_number[(int(row.series_id), row.normalized_issue_number)] = row
+    return by_cv, by_series_number
+
+
+def build_issue_id_lookup_maps(
+    session: Session,
+    progress: _ImportProgress,
+) -> tuple[dict[str, int], dict[tuple[int, str], int]]:
+    """Map ComicVine issue id and (series_id, normalized_number) -> catalog_issue.id without ORM instances."""
+    query = (
+        "SELECT catalog_issue.id, series_id, normalized_issue_number, external_source_ids "
+        "(bulk id scan — safe after session.expire_all())"
+    )
+    progress.phase_start("build_issue_id_lookup_maps", query, mode="bulk_id_scan")
+    started = time.perf_counter()
+    by_cv: dict[str, int] = {}
+    by_series_number: dict[tuple[int, str], int] = {}
+    count = 0
+    stmt = select(
+        CatalogIssue.id,
+        CatalogIssue.series_id,
+        CatalogIssue.normalized_issue_number,
+        CatalogIssue.external_source_ids,
+    )
+    for row in session.exec(stmt).yield_per(1000):
+        count += 1
+        issue_id = int(row[0] or 0)
+        if issue_id <= 0:
+            continue
+        series_id = int(row[1] or 0)
+        norm = str(row[2] or "")
+        cv = primary_comicvine_id(row[3])
+        if cv:
+            by_cv[cv] = issue_id
+        if series_id and norm:
+            by_series_number[(series_id, norm)] = issue_id
+        if count % INDEX_PROGRESS_INTERVAL == 0:
+            progress.phase_progress("build_issue_id_lookup_maps", count, time.perf_counter() - started)
+    progress.phase_done(
+        "build_issue_id_lookup_maps",
+        query,
+        count,
+        time.perf_counter() - started,
+        mode="bulk_id_scan",
+    )
     return by_cv, by_series_number
 
 
