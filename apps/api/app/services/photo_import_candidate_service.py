@@ -17,13 +17,24 @@ from app.models.photo_import import (
     PhotoImportCandidate,
     PhotoImportDetectedBook,
 )
-from app.services.photo_import_candidate_cover_service import cover_urls_for_photo_import_candidates
+from app.services.photo_import_candidate_cover_service import (
+    cover_and_thumbnail_urls_for_photo_import_candidates,
+    cover_urls_for_photo_import_candidates,
+)
+from app.services.photo_import_cover_similarity_service import cover_similarity_score_for_issue
+from app.services.photo_import_crop_service import resolve_crop_abs_path
+from app.services.photo_import_fingerprint_service import fingerprint_hashes_for_crop, fingerprint_match_score_for_issue
+from app.services.photo_import_learning_service import learning_boost_for_issue
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
 
 logger = logging.getLogger(__name__)
 
 NO_ISSUE_SCORE_CAP = 65.0
+AUTO_SELECT_MIN_SCORE = 95.0
+AUTO_SELECT_MIN_GAP = 15.0
+COVER_SIMILARITY_WEIGHT = 0.25
+FINGERPRINT_WEIGHT = 0.45
 _LAUNCH_HINTS = ("introducing", "initiative", "premiere", "special", "first issue", "launch")
 
 # Conservative series-name corrections for common AI pluralization / noise.
@@ -504,6 +515,76 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
     return ranked[:10], search_terms
 
 
+def _apply_visual_ranking(
+    session: Session,
+    *,
+    det: PhotoImportDetectedBook,
+    ranked: list[ScoredCatalogRow],
+) -> list[ScoredCatalogRow]:
+    crop_abs = resolve_crop_abs_path(det.crop_path)
+    if crop_abs is None or not ranked:
+        return ranked
+    crop_hashes = fingerprint_hashes_for_crop(crop_abs)
+    phash_prefix = crop_hashes[0][:16] if crop_hashes else None
+    visually_scored: list[ScoredCatalogRow] = []
+    for row in ranked:
+        iid = int(row.issue.id or 0)
+        cover_sim = cover_similarity_score_for_issue(session, crop_path=crop_abs, catalog_issue_id=iid)
+        fp_sim = (
+            fingerprint_match_score_for_issue(session, crop_hashes=crop_hashes, catalog_issue_id=iid)
+            if crop_hashes
+            else 0.0
+        )
+        boost = learning_boost_for_issue(
+            catalog_issue_id=iid,
+            series_guess=det.ai_series or "",
+            crop_phash_prefix=phash_prefix,
+        )
+        combined = min(
+            100.0,
+            row.match_score + cover_sim * COVER_SIMILARITY_WEIGHT + fp_sim * FINGERPRINT_WEIGHT + boost,
+        )
+        reason_parts = [row.match_reason]
+        if cover_sim >= 40:
+            reason_parts.append(f"cover sim {cover_sim:.0f}")
+        if fp_sim >= 40:
+            reason_parts.append(f"fingerprint {fp_sim:.0f}")
+        if boost > 0:
+            reason_parts.append(f"learning +{boost:.0f}")
+        visually_scored.append(
+            ScoredCatalogRow(
+                issue=row.issue,
+                series=row.series,
+                publisher=row.publisher,
+                match_score=combined,
+                match_reason="; ".join(reason_parts),
+                matched_on=row.matched_on,
+            )
+        )
+    visually_scored.sort(
+        key=lambda row: (-row.match_score, int(row.issue.id or 0)),
+    )
+    return visually_scored
+
+
+def _maybe_auto_select_issue(
+    det: PhotoImportDetectedBook,
+    ranked: list[ScoredCatalogRow],
+) -> None:
+    if len(ranked) < 1:
+        return
+    top = ranked[0]
+    second_score = ranked[1].match_score if len(ranked) > 1 else 0.0
+    if top.match_score < AUTO_SELECT_MIN_SCORE:
+        return
+    if top.match_score - second_score < AUTO_SELECT_MIN_GAP:
+        return
+    if (top.matched_on or "") in NON_AUTO_CONFIRM_MATCHED_ON:
+        return
+    det.selected_catalog_issue_id = int(top.issue.id or 0)
+    det.selected_variant_id = None
+
+
 def refresh_candidates_for_detection(session: Session, *, detected_book_id: int) -> None:
     det = session.get(PhotoImportDetectedBook, detected_book_id)
     if det is None:
@@ -519,6 +600,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         or inp.subtitle_guess
     )
     scored, _search_terms = generate_scored_candidates(session, inp) if has_text else ([], [])
+    scored = _apply_visual_ranking(session, det=det, ranked=scored) if scored else scored
 
     issue_ids = [int(row.issue.id or 0) for row in scored]
     variant_by_issue: dict[int, CatalogVariant | None] = {}
@@ -530,7 +612,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         ).first()
         variant_by_issue[iid] = variant
         variant_id_by_issue[iid] = int(variant.id) if variant and variant.id else None
-    covers = cover_urls_for_photo_import_candidates(
+    covers = cover_and_thumbnail_urls_for_photo_import_candidates(
         session,
         issue_ids=issue_ids,
         variant_id_by_issue=variant_id_by_issue,
@@ -539,6 +621,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
     for rank, row in enumerate(scored, start=1):
         iid = int(row.issue.id or 0)
         variant = variant_by_issue.get(iid)
+        cover, thumb = covers.get(iid, (None, None))
         session.add(
             PhotoImportCandidate(
                 detected_book_id=detected_book_id,
@@ -548,7 +631,8 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
                 series=row.series.name,
                 issue_number=str(row.issue.issue_number),
                 variant_name=variant.variant_name if variant else None,
-                cover_url=covers.get(iid),
+                cover_url=cover,
+                thumbnail_url=thumb or cover,
                 release_date=str(getattr(row.issue, "cover_date", "") or "") or None,
                 match_score=row.match_score,
                 match_reason=row.match_reason,
@@ -560,10 +644,12 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
     det.candidate_count = len(scored)
     if scored:
         det.recognition_status = RECOGNITION_STATUS_MATCHED if scored[0].match_score >= 70 else RECOGNITION_STATUS_UNKNOWN
-        if len(scored) > 1 and scored[0].match_score - scored[1].match_score < 8:
+        if len(scored) > 1 and scored[0].match_score - scored[1].match_score < AUTO_SELECT_MIN_GAP:
             det.recognition_status = RECOGNITION_STATUS_AMBIGUOUS
     else:
         det.recognition_status = RECOGNITION_STATUS_UNKNOWN
+
+    _maybe_auto_select_issue(det, scored)
 
     top = scored[0] if scored else None
     logger.info(

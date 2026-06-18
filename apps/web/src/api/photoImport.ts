@@ -62,6 +62,7 @@ export type PhotoImportCandidate = {
   issue_number: string | null;
   variant_name: string | null;
   cover_url: string | null;
+  thumbnail_url: string | null;
   release_date: string | null;
   match_score: number;
   match_reason: string | null;
@@ -74,6 +75,8 @@ export type PhotoImportDetectedBook = {
   session_id: number;
   image_id: number;
   crop_path: string | null;
+  crop_image_url: string | null;
+  display_image_url: string | null;
   status: string;
   recognition_status: string;
   candidate_count: number;
@@ -173,6 +176,16 @@ export function selectPhotoImportCandidate(
 
 export function rejectPhotoImportDetection(detectionId: number): Promise<PhotoImportDetectedBook> {
   return requestPhotoImport(`/api/v1/photo-import/detections/${detectionId}/reject`, { method: "POST" });
+}
+
+export async function fetchDetectionCropObjectUrl(detectionId: number): Promise<string | null> {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const res = await fetch(`${API_BASE}/api/v1/photo-import/detections/${detectionId}/crop-image`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export function mobilePhotoImportUrl(token: string): string {

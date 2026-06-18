@@ -47,6 +47,8 @@ class PhotoImportDetectedBookRead(BaseModel):
     session_id: int
     image_id: int
     crop_path: str | None
+    crop_image_url: str | None = None
+    display_image_url: str | None = None
     bbox_x: float
     bbox_y: float
     bbox_width: float
@@ -88,6 +90,7 @@ class PhotoImportCandidateRead(BaseModel):
     issue_number: str | None
     variant_name: str | None
     cover_url: str | None
+    thumbnail_url: str | None = None
     release_date: str | None
     match_score: float
     match_reason: str | None

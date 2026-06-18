@@ -15,6 +15,9 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportSession,
 )
+from app.services.photo_import_candidate_cover_service import cover_urls_for_photo_import_candidates
+from app.services.photo_import_crop_service import crop_api_path, resolve_crop_abs_path
+from app.services.photo_import_learning_service import record_photo_import_confirmation
 from app.schemas.acquisition import AcquisitionCreatePayload, AddBooksItem, AddBooksPayload
 from app.schemas.photo_import import (
     PhotoImportCandidateDebugInfo,
@@ -46,6 +49,7 @@ def candidate_to_read(row: PhotoImportCandidate) -> PhotoImportCandidateRead:
         issue_number=row.issue_number,
         variant_name=row.variant_name,
         cover_url=row.cover_url,
+        thumbnail_url=row.thumbnail_url or row.cover_url,
         release_date=row.release_date,
         match_score=float(row.match_score),
         match_reason=row.match_reason,
@@ -75,6 +79,13 @@ def _selected_candidate(session: Session, det: PhotoImportDetectedBook) -> Photo
     ).first()
 
 
+def _display_image_url(session: Session, det: PhotoImportDetectedBook) -> str | None:
+    if det.status != DETECTION_STATUS_CONFIRMED or det.selected_catalog_issue_id is None:
+        return None
+    covers = cover_urls_for_photo_import_candidates(session, issue_ids=[int(det.selected_catalog_issue_id)])
+    return covers.get(int(det.selected_catalog_issue_id))
+
+
 def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoImportDetectedBookRead:
     best = _best_candidate(session, int(row.id or 0))
     can_confirm = can_confirm_detection(row, best_candidate=best)
@@ -87,11 +98,15 @@ def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoIm
         review_status = "needs_selection"
     else:
         review_status = "needs_match"
+    crop_url = crop_api_path(detection_id=int(row.id or 0)) if resolve_crop_abs_path(row.crop_path) else None
+    display_url = _display_image_url(session, row)
     return PhotoImportDetectedBookRead(
         id=int(row.id or 0),
         session_id=int(row.session_id),
         image_id=int(row.image_id),
         crop_path=row.crop_path,
+        crop_image_url=crop_url,
+        display_image_url=display_url,
         bbox_x=row.bbox_x,
         bbox_y=row.bbox_y,
         bbox_width=row.bbox_width,
@@ -183,6 +198,16 @@ def select_candidate(
     det.selected_variant_id = cand.variant_id
     session.add(det)
     session.commit()
+    rows = session.exec(
+        select(PhotoImportCandidate)
+        .where(PhotoImportCandidate.detected_book_id == detection_id)
+        .order_by(PhotoImportCandidate.rank.asc())
+    ).all()
+    record_photo_import_confirmation(
+        session,
+        det=det,
+        candidate_rankings=[(int(r.catalog_issue_id), float(r.match_score)) for r in rows],
+    )
     session.refresh(det)
     return detection_to_read(session, det)
 
@@ -209,6 +234,16 @@ def confirm_detection(session: Session, *, owner_user_id: int, detection_id: int
     det.status = DETECTION_STATUS_CONFIRMED
     session.add(det)
     session.commit()
+    rows = session.exec(
+        select(PhotoImportCandidate)
+        .where(PhotoImportCandidate.detected_book_id == detection_id)
+        .order_by(PhotoImportCandidate.rank.asc())
+    ).all()
+    record_photo_import_confirmation(
+        session,
+        det=det,
+        candidate_rankings=[(int(r.catalog_issue_id), float(r.match_score)) for r in rows],
+    )
     session.refresh(det)
     return detection_to_read(session, det)
 

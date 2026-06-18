@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from app.models.photo_import import RECOGNITION_STATUS_AMBIGUOUS, PhotoImportCandidate, PhotoImportDetectedBook
 
-MATCH_SCORE_CONFIRM_THRESHOLD = 70.0
+MATCH_SCORE_CONFIRM_THRESHOLD = 95.0
+AUTO_SELECT_SCORE_GAP = 15.0
 AI_CONFIDENCE_CONFIRM_THRESHOLD = 0.75
 
 

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   confirmPhotoImportSession,
+  fetchDetectionCropObjectUrl,
   getPhotoImportDetectionCandidates,
   listPhotoImportDetections,
   rejectPhotoImportDetection,
@@ -14,10 +15,21 @@ import { AppShell } from "../../components/AppShell";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
-function cropUrl(cropPath: string | null): string | null {
-  if (!cropPath) return null;
-  if (cropPath.startsWith("http")) return cropPath;
-  return `${API_BASE}/${cropPath.replace(/^\/+/, "")}`;
+function apiUrl(path: string): string {
+  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function cropUrl(det: PhotoImportDetectedBook): string | null {
+  if (det.crop_image_url) return apiUrl(det.crop_image_url);
+  if (!det.crop_path) return null;
+  if (det.crop_path.startsWith("http")) return det.crop_path;
+  return apiUrl(det.crop_path);
+}
+
+function displayUrl(det: PhotoImportDetectedBook, cropObjectUrls: Record<number, string>): string | null {
+  if (det.display_image_url) return det.display_image_url;
+  if (cropObjectUrls[det.id]) return cropObjectUrls[det.id];
+  return cropUrl(det);
 }
 
 function displayIssueNumber(det: PhotoImportDetectedBook): string {
@@ -37,6 +49,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [candidateMap, setCandidateMap] = useState<Record<number, PhotoImportCandidate[]>>({});
+  const [cropObjectUrls, setCropObjectUrls] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -52,6 +65,37 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
     const id = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(id);
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCrops = async () => {
+      const next: Record<number, string> = {};
+      await Promise.all(
+        detections.map(async (det) => {
+          if (!det.crop_image_url && !det.crop_path) return;
+          const url = await fetchDetectionCropObjectUrl(det.id);
+          if (url && !cancelled) next[det.id] = url;
+        }),
+      );
+      if (!cancelled) {
+        setCropObjectUrls((prev) => {
+          for (const url of Object.values(prev)) URL.revokeObjectURL(url);
+          return next;
+        });
+      }
+    };
+    void loadCrops();
+    return () => {
+      cancelled = true;
+    };
+  }, [detections]);
+
+  useEffect(
+    () => () => {
+      for (const url of Object.values(cropObjectUrls)) URL.revokeObjectURL(url);
+    },
+    [cropObjectUrls],
+  );
 
   const loadCandidates = async (detectionId: number) => {
     try {
@@ -150,14 +194,21 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
         <ul className="mt-6 space-y-4">
           {active.map((det) => {
             const best = det.best_candidate;
-            const thumb = cropUrl(det.crop_path);
+            const uploadedThumb = cropObjectUrls[det.id] ?? cropUrl(det);
+            const heroThumb = displayUrl(det, cropObjectUrls);
             const candidates = candidateMap[det.id] ?? [];
             const showPicker = expanded === det.id;
             return (
               <li key={det.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap gap-4">
-                  {thumb ? (
-                    <img src={thumb} alt="" className="h-24 w-16 rounded object-cover ring-1 ring-slate-200" />
+                  {heroThumb ? (
+                    <img src={heroThumb} alt="" className="h-32 w-20 rounded object-cover ring-1 ring-slate-200" />
+                  ) : null}
+                  {best?.cover_url && det.status !== "confirmed" ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold uppercase tracking-wide">vs</span>
+                      <img src={best.cover_url} alt="" className="h-32 w-20 rounded object-cover ring-1 ring-emerald-200" />
+                    </div>
                   ) : null}
                   <label className="flex min-w-[12rem] flex-1 items-start gap-2">
                     <input type="checkbox" checked={selected.has(det.id)} onChange={() => toggle(det.id)} />
@@ -274,14 +325,24 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                 </div>
                 {showPicker && candidates.length > 0 ? (
                   <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                    {uploadedThumb ? (
+                      <li className="mb-3 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <img src={uploadedThumb} alt="" className="h-16 w-11 rounded object-cover" />
+                        <span>Your crop — compare to candidate covers below</span>
+                      </li>
+                    ) : null}
                     {candidates.slice(0, 10).map((c) => (
                       <li
                         key={c.id}
                         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2"
                       >
                         <div className="flex items-center gap-3 text-sm">
-                          {c.cover_url ? (
-                            <img src={c.cover_url} alt="" className="h-14 w-10 rounded object-cover" />
+                          {c.thumbnail_url || c.cover_url ? (
+                            <img
+                              src={c.thumbnail_url || c.cover_url || ""}
+                              alt=""
+                              className="h-14 w-10 rounded object-cover"
+                            />
                           ) : null}
                           <div>
                             <p className="font-medium text-slate-800">

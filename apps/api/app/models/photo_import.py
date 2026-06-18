@@ -122,6 +122,7 @@ class PhotoImportCandidate(SQLModel, table=True):
     issue_number: str | None = Field(default=None, max_length=64, nullable=True)
     variant_name: str | None = Field(default=None, max_length=256, nullable=True)
     cover_url: str | None = Field(default=None, max_length=2048, nullable=True)
+    thumbnail_url: str | None = Field(default=None, max_length=2048, nullable=True)
     release_date: str | None = Field(default=None, max_length=32, nullable=True)
     match_score: float = Field(default=0.0, nullable=False)
     match_reason: str | None = Field(default=None, max_length=512, nullable=True)

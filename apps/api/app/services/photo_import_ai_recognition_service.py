@@ -24,7 +24,7 @@ from app.models.photo_import import (
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from app.services.photo_import_crop_service import REPO_ROOT, clamp_bbox01, extract_and_save_crop
 
 AI_SYSTEM = (
     "You are an expert comic book cover identification specialist. "
@@ -50,26 +50,6 @@ AI_SYSTEM = (
 
 def _abs_path(relative: str) -> Path:
     return REPO_ROOT / relative
-
-
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
-
-
-def _save_crop(image_path: Path, bbox: dict[str, float], *, session_id: int, image_id: int, idx: int) -> str:
-    crop_dir = REPO_ROOT / "data" / "photo_import" / "crops" / str(session_id)
-    crop_dir.mkdir(parents=True, exist_ok=True)
-    crop_name = f"{image_id}_{idx}.jpg"
-    crop_path = crop_dir / crop_name
-    with Image.open(image_path) as img:
-        w, h = img.size
-        x = int(_clamp01(bbox.get("x", 0)) * w)
-        y = int(_clamp01(bbox.get("y", 0)) * h)
-        bw = max(1, int(_clamp01(bbox.get("width", 1)) * w))
-        bh = max(1, int(_clamp01(bbox.get("height", 1)) * h))
-        cropped = img.crop((x, y, min(w, x + bw), min(h, y + bh)))
-        cropped.convert("RGB").save(crop_path, format="JPEG", quality=90)
-    return str(crop_path.relative_to(REPO_ROOT)).replace("\\", "/")
 
 
 def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
@@ -245,7 +225,13 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     for idx, raw_book in enumerate(books[:10]):
         book = _normalize_book_entry(raw_book)
         bbox = book.get("bbox") or {}
-        crop_rel = _save_crop(path, bbox, session_id=int(image.session_id), image_id=image_id, idx=idx)
+        crop_rel = extract_and_save_crop(
+            path,
+            bbox,
+            session_id=int(image.session_id),
+            image_id=image_id,
+            idx=idx,
+        )
         confidence = float(book.get("confidence") or 0.0)
         status = DETECTION_STATUS_DETECTED if confidence >= 0.85 else DETECTION_STATUS_NEEDS_REVIEW
         issue_str = book.get("issue_number_guess")
@@ -259,10 +245,10 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             image_id=int(image.id or 0),
             user_id=int(image.user_id),
             crop_path=crop_rel,
-            bbox_x=_clamp01(bbox.get("x", 0)),
-            bbox_y=_clamp01(bbox.get("y", 0)),
-            bbox_width=_clamp01(bbox.get("width", 1)),
-            bbox_height=_clamp01(bbox.get("height", 1)),
+            bbox_x=clamp_bbox01(bbox.get("x", 0)),
+            bbox_y=clamp_bbox01(bbox.get("y", 0)),
+            bbox_width=clamp_bbox01(bbox.get("width", 1)),
+            bbox_height=clamp_bbox01(bbox.get("height", 1)),
             status=status,
             recognition_status=RECOGNITION_STATUS_UNKNOWN,
             confidence=confidence,

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, FastAPI, File, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
@@ -28,6 +29,8 @@ from app.services.photo_import_detection_service import (
     reject_detection,
     select_candidate,
 )
+from app.services.photo_import_crop_service import resolve_crop_abs_path
+from app.models.photo_import import PhotoImportDetectedBook
 from app.services.photo_import_session_service import (
     complete_session,
     create_photo_import_session,
@@ -114,6 +117,22 @@ def list_candidates_endpoint(
 ) -> PhotoImportDetectionCandidatesResponse:
     assert current_user.id is not None
     return list_detection_candidates_debug(session, owner_user_id=int(current_user.id), detection_id=detection_id)
+
+
+@photo_import_router.get("/detections/{detection_id}/crop-image")
+def get_detection_crop_image_endpoint(
+    detection_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    assert current_user.id is not None
+    det = session.get(PhotoImportDetectedBook, detection_id)
+    if det is None or int(det.user_id) != int(current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection not found")
+    abs_path = resolve_crop_abs_path(det.crop_path)
+    if abs_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crop image not found")
+    return FileResponse(abs_path, media_type="image/jpeg", filename=f"photo-import-{detection_id}.jpg")
 
 
 @photo_import_router.post("/detections/{detection_id}/select-candidate", response_model=PhotoImportDetectedBookRead)

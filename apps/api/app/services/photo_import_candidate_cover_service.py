@@ -16,17 +16,25 @@ def _external_cover_from_issue(
     issue: ExternalCatalogIssue,
     *,
     variant: ExternalCatalogVariant | None = None,
-) -> str | None:
+) -> tuple[str | None, str | None]:
+    cover: str | None = None
+    thumb: str | None = None
     if variant is not None and variant.image_url and str(variant.image_url).strip():
-        return str(variant.image_url).strip()
+        cover = str(variant.image_url).strip()
     for url in (
         issue.high_resolution_image_url,
         issue.cover_image_url,
         issue.thumbnail_url,
     ):
         if url and str(url).strip():
-            return str(url).strip()
-    return None
+            if cover is None:
+                cover = str(url).strip()
+            break
+    if issue.thumbnail_url and str(issue.thumbnail_url).strip():
+        thumb = str(issue.thumbnail_url).strip()
+    elif cover:
+        thumb = cover
+    return cover, thumb
 
 
 def _find_external_issue(
@@ -152,7 +160,63 @@ def cover_urls_for_photo_import_candidates(
             catalog_variant=cat_var,
         )
         url = _external_cover_from_issue(external, variant=ext_var)
-        if url:
-            out[iid] = url
+        if url[0]:
+            out[iid] = url[0]
 
     return out
+
+
+def cover_and_thumbnail_urls_for_photo_import_candidates(
+    session: Session,
+    *,
+    issue_ids: list[int],
+    variant_id_by_issue: dict[int, int | None] | None = None,
+) -> dict[int, tuple[str | None, str | None]]:
+    """Resolve (cover_image_url, thumbnail_url) for catalog issues."""
+    covers = cover_urls_for_photo_import_candidates(
+        session,
+        issue_ids=issue_ids,
+        variant_id_by_issue=variant_id_by_issue,
+    )
+    result: dict[int, tuple[str | None, str | None]] = {}
+    for iid in issue_ids:
+        cover = covers.get(iid)
+        result[iid] = (cover, cover)
+    if not issue_ids:
+        return result
+
+    variant_id_by_issue = variant_id_by_issue or {}
+    missing = [iid for iid in issue_ids if iid not in covers]
+    if not missing:
+        return result
+
+    rows = session.exec(
+        select(CatalogIssue, CatalogSeries, CatalogPublisher)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id, isouter=True)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+        .where(CatalogIssue.id.in_(missing))  # type: ignore[attr-defined]
+    ).all()
+    catalog_variants: dict[int, CatalogVariant] = {}
+    variant_ids = [vid for vid in variant_id_by_issue.values() if vid]
+    if variant_ids:
+        for var in session.exec(select(CatalogVariant).where(CatalogVariant.id.in_(variant_ids))).all():  # type: ignore[attr-defined]
+            if var.id is not None:
+                catalog_variants[int(var.id)] = var
+
+    for issue, series, publisher in rows:
+        iid = int(issue.id or 0)
+        external = _find_external_issue(session, catalog_issue=issue, series=series, publisher=publisher)
+        if external is None:
+            continue
+        vid = variant_id_by_issue.get(iid)
+        cat_var = catalog_variants.get(int(vid)) if vid else None
+        ext_var = _external_variant_for_catalog_variant(
+            session,
+            external_issue_id=int(external.id or 0),
+            catalog_variant=cat_var,
+        )
+        cover, thumb = _external_cover_from_issue(external, variant=ext_var)
+        if cover or thumb:
+            result[iid] = (cover or thumb, thumb or cover)
+
+    return result
