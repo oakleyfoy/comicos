@@ -21,10 +21,22 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportImage,
 )
+from app.services.photo_import_crop_service import REPO_ROOT, clamp_bbox01, extract_and_save_crop
+from app.services.photo_import_segmentation_service import (
+    MAX_DETECTED_BOOKS,
+    comic_count_from_payload,
+    expand_books_to_match_bboxes,
+    extract_bbox_from_book,
+    grid_bboxes_for_count,
+    is_full_frame_bbox,
+    is_missing_bbox,
+    log_bbox_summary,
+    needs_multi_comic_segmentation,
+    parse_bboxes_from_ai_payload,
+    parse_books_from_ai_payload,
+)
 
 logger = logging.getLogger(__name__)
-
-from app.services.photo_import_crop_service import REPO_ROOT, clamp_bbox01, extract_and_save_crop
 
 AI_SYSTEM = (
     "You are an expert comic book cover identification specialist. "
@@ -35,16 +47,29 @@ AI_SYSTEM = (
     '"visible_title_text":"","visible_issue_text":"","visible_publisher_text":"",'
     '"visible_character_text":"","confidence":0,"uncertainty_reason":"",'
     '"alternate_titles":[],"reason":""}]} '
-    "Rules: bbox values are normalized 0-1 relative to image size. "
+    "Rules: bbox values are normalized 0-1 relative to image size (x,y = top-left corner). "
+    "Return exactly one books[] object per visible comic cover — never merge multiple comics into one entry. "
+    "If six comics are visible, return six objects with six distinct bboxes. "
+    "Stacked, overlapping, or grid layouts still require separate bboxes when covers are visible. "
+    "Each bbox must tightly frame one cover (not the entire photo). "
     "Do not invent issue numbers; if unclear use null for issue_number_guess and put raw text in visible_issue_text. "
     "issue_number_guess must be a numeric comic issue identifier only (examples: 4, 104, 1/2, 25.NOW). "
     "Never put cover subtitles, taglines, story arcs, or slogans in issue_number_guess "
     '(for example "The Initiative" or "Introducing The Spirits" belong in subtitle_guess or visible_title_text, not issue_number_guess). '
     "If the issue number is not visible on the cover, issue_number_guess must be null. "
     "If title is uncertain, provide best series_guess plus alternate_titles. "
-    "Include publisher imprints when visible. One object per visible comic. "
+    "Include publisher imprints when visible. "
     "Include partially obscured books with lower confidence. "
     "Confidence must reflect actual certainty (0-1)."
+)
+
+BBOX_SEGMENTATION_SYSTEM = (
+    "You locate comic book covers in a photo. Return JSON only: "
+    '{"comic_count":6,"bboxes":[{"x":0.0,"y":0.0,"width":0.3,"height":0.5}, ...]} '
+    "Rules: comic_count = number of distinct visible comic covers. "
+    "bboxes must have one entry per comic with normalized 0-1 coordinates (x,y,width,height). "
+    "Never return a single bbox covering the whole image when multiple comics are visible. "
+    "Do not merge comics. Include partially visible covers at edges."
 )
 
 
@@ -68,8 +93,9 @@ def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(alternates, list):
         alternates = []
     confidence = float(book.get("confidence") or 0.0)
+    bbox = extract_bbox_from_book(book)
     normalized = {
-        "bbox": book.get("bbox") or {},
+        "bbox": bbox,
         "series_guess": str(series).strip(),
         "issue_number_guess": issue or None,
         "publisher_guess": str(publisher).strip(),
@@ -92,7 +118,14 @@ class RecognitionConfigError(RuntimeError):
     """Raised when the AI provider is not configured (distinct from runtime failures)."""
 
 
-def _call_openai_vision(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
+def _call_openai_vision_json(
+    image_bytes: bytes,
+    *,
+    image_id: int,
+    system_prompt: str,
+    user_text: str,
+    log_label: str,
+) -> dict[str, Any]:
     import urllib.request
 
     settings = get_settings()
@@ -102,27 +135,20 @@ def _call_openai_vision(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
     model = settings.openai_order_parser_model
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     logger.info(
-        "photo_import.recognition.request image_id=%s model=%s image_bytes=%d b64_len=%d",
+        "photo_import.recognition.%s.request image_id=%s model=%s image_bytes=%d",
+        log_label,
         image_id,
         model,
         len(image_bytes),
-        len(b64),
     )
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": AI_SYSTEM},
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "List every comic book cover visible in this photo. "
-                            "Read cover logos and title text carefully. "
-                            "Do not guess issue numbers you cannot read."
-                        ),
-                    },
+                    {"type": "text", "text": user_text},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ],
             },
@@ -144,26 +170,55 @@ def _call_openai_vision(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
     elapsed_ms = int((time.monotonic() - started) * 1000)
     payload = json.loads(raw_text)
     content = payload["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
     logger.info(
-        "photo_import.recognition.response image_id=%s elapsed_ms=%d content_len=%d preview=%s",
+        "photo_import.recognition.%s.response image_id=%s elapsed_ms=%d content_len=%d",
+        log_label,
         image_id,
         elapsed_ms,
         len(content or ""),
-        (content or "")[:500].replace("\n", " "),
-    )
-    parsed = json.loads(content)
-    if "books" not in parsed:
-        parsed = {"books": parsed.get("book", []) if isinstance(parsed.get("book"), list) else []}
-    book_count = len(parsed.get("books") or [])
-    logger.info(
-        "photo_import.recognition.parsed image_id=%s book_count=%d",
-        image_id,
-        book_count,
     )
     return parsed
 
 
-def _fallback_books() -> dict[str, Any]:
+def _call_openai_vision(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
+    parsed = _call_openai_vision_json(
+        image_bytes,
+        image_id=image_id,
+        system_prompt=AI_SYSTEM,
+        user_text=(
+            "List every comic book cover visible in this photo. "
+            "Return one JSON object per visible comic with its own bbox. "
+            "Read cover logos and title text carefully. "
+            "Do not guess issue numbers you cannot read."
+        ),
+        log_label="identify",
+    )
+    if "books" not in parsed:
+        books = parse_books_from_ai_payload(parsed)
+        parsed = {"books": books}
+    logger.info(
+        "photo_import.recognition.parsed image_id=%s book_count=%d",
+        image_id,
+        len(parsed.get("books") or []),
+    )
+    return parsed
+
+
+def _call_openai_bbox_segmentation(image_bytes: bytes, *, image_id: int) -> dict[str, Any]:
+    return _call_openai_vision_json(
+        image_bytes,
+        image_id=image_id,
+        system_prompt=BBOX_SEGMENTATION_SYSTEM,
+        user_text=(
+            "How many comic book covers are visible? Return comic_count and one bbox per cover. "
+            "Use separate boxes for each comic even in a grid or stack."
+        ),
+        log_label="bbox_segmentation",
+    )
+
+
+def _fallback_books(*, reason: str) -> dict[str, Any]:
     return {
         "books": [
             {
@@ -174,12 +229,74 @@ def _fallback_books() -> dict[str, Any]:
                 "visible_title_text": "",
                 "visible_issue_text": "",
                 "confidence": 0.1,
-                "uncertainty_reason": "AI unavailable",
+                "uncertainty_reason": reason,
                 "alternate_titles": [],
-                "reason": "Placeholder detection (AI unavailable)",
+                "reason": f"Placeholder detection ({reason})",
             }
         ]
     }
+
+
+def resolve_books_for_image(
+    *,
+    image_id: int,
+    image_bytes: bytes,
+    image_width: int,
+    image_height: int,
+    books_raw: list[dict[str, Any]],
+    raw_response: dict[str, Any],
+    allow_bbox_retry: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Apply multi-comic segmentation fallbacks before persisting detections."""
+    log_bbox_summary(image_id=image_id, image_width=image_width, image_height=image_height, books=books_raw)
+
+    if not needs_multi_comic_segmentation(books_raw, image_width=image_width, image_height=image_height):
+        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+
+    if not allow_bbox_retry or raw_response.get("fallback"):
+        logger.warning(
+            "photo_import.segmentation.skipped_retry image_id=%s books=%d fallback=%s",
+            image_id,
+            len(books_raw),
+            bool(raw_response.get("fallback")),
+        )
+        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+
+    try:
+        seg_payload = _call_openai_bbox_segmentation(image_bytes, image_id=image_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("photo_import.segmentation.bbox_retry_failed image_id=%s error=%s", image_id, exc)
+        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+
+    bboxes = parse_bboxes_from_ai_payload(seg_payload)
+    count = comic_count_from_payload(seg_payload)
+    logger.info(
+        "photo_import.segmentation.bbox_retry image_id=%s comic_count=%s bbox_count=%d",
+        image_id,
+        count,
+        len(bboxes),
+    )
+
+    if len(bboxes) <= 1 and count and count > 1:
+        bboxes = grid_bboxes_for_count(count)
+        logger.info(
+            "photo_import.segmentation.grid_fallback image_id=%s count=%d bbox_count=%d",
+            image_id,
+            count,
+            len(bboxes),
+        )
+
+    if len(bboxes) > 1:
+        expanded = expand_books_to_match_bboxes(
+            books_raw,
+            bboxes,
+            reason="bbox_segmentation_retry",
+        )
+        raw_response = {**raw_response, "bbox_segmentation": seg_payload}
+        log_bbox_summary(image_id=image_id, image_width=image_width, image_height=image_height, books=expanded)
+        return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
+
+    return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
 
 
 def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
@@ -195,42 +312,80 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
         image.storage_path,
         path.is_file(),
     )
+    with Image.open(path) as img:
+        image_width, image_height = img.size
+    logger.info(
+        "photo_import.recognition.dimensions image_id=%s width=%d height=%d",
+        image_id,
+        image_width,
+        image_height,
+    )
+
     raw = path.read_bytes()
     raw_response: dict[str, Any]
+    allow_bbox_retry = True
     try:
         ai_payload = _call_openai_vision(raw, image_id=image_id)
         raw_response = ai_payload
     except RecognitionConfigError as exc:
         logger.error("photo_import.recognition.not_configured image_id=%s detail=%s", image_id, exc)
-        ai_payload = _fallback_books()
+        ai_payload = _fallback_books(reason="AI not configured")
         raw_response = {"fallback": True, "failure_kind": "not_configured", "failure_detail": str(exc), **ai_payload}
-    except Exception as exc:  # noqa: BLE001 - we record the real cause instead of hiding it
+        allow_bbox_retry = False
+    except Exception as exc:  # noqa: BLE001
         logger.exception("photo_import.recognition.failed image_id=%s error=%s", image_id, exc)
-        ai_payload = _fallback_books()
+        ai_payload = _fallback_books(reason=str(exc))
         raw_response = {
             "fallback": True,
             "failure_kind": exc.__class__.__name__,
             "failure_detail": str(exc),
             **ai_payload,
         }
+        allow_bbox_retry = False
 
-    books: list[dict[str, Any]] = list(ai_payload.get("books") or [])
-    if not books:
-        logger.warning("photo_import.recognition.empty_books image_id=%s using_fallback", image_id)
-        ai_payload = _fallback_books()
-        books = list(ai_payload.get("books") or [])
+    books_raw = parse_books_from_ai_payload(ai_payload)
+    if not books_raw and raw_response.get("fallback"):
+        books_raw = list(ai_payload.get("books") or [])
+
+    if not books_raw and not raw_response.get("fallback"):
+        logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
+
+    books, raw_response = resolve_books_for_image(
+        image_id=image_id,
+        image_bytes=raw,
+        image_width=image_width,
+        image_height=image_height,
+        books_raw=books_raw,
+        raw_response=raw_response,
+        allow_bbox_retry=allow_bbox_retry,
+    )
+
+    if not books and not raw_response.get("fallback"):
+        logger.error("photo_import.recognition.no_detections image_id=%s after_segmentation", image_id)
+        ai_payload = _fallback_books(reason="no detections after segmentation")
+        books = [_normalize_book_entry(b) for b in ai_payload["books"]]
+        raw_response = {**raw_response, "fallback": True, "failure_kind": "no_detections"}
 
     session.exec(delete(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == image_id))
 
-    for idx, raw_book in enumerate(books[:10]):
-        book = _normalize_book_entry(raw_book)
+    created = 0
+    for idx, book in enumerate(books[:MAX_DETECTED_BOOKS]):
         bbox = book.get("bbox") or {}
-        crop_rel = extract_and_save_crop(
+        crop_rel, (crop_w, crop_h) = extract_and_save_crop(
             path,
             bbox,
             session_id=int(image.session_id),
             image_id=image_id,
             idx=idx,
+        )
+        logger.info(
+            "photo_import.recognition.crop image_id=%s index=%d crop_path=%s crop_dimensions=%sx%s bbox=%s",
+            image_id,
+            idx,
+            crop_rel,
+            crop_w,
+            crop_h,
+            bbox,
         )
         confidence = float(book.get("confidence") or 0.0)
         status = DETECTION_STATUS_DETECTED if confidence >= 0.85 else DETECTION_STATUS_NEEDS_REVIEW
@@ -247,8 +402,8 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             crop_path=crop_rel,
             bbox_x=clamp_bbox01(bbox.get("x", 0)),
             bbox_y=clamp_bbox01(bbox.get("y", 0)),
-            bbox_width=clamp_bbox01(bbox.get("width", 1)),
-            bbox_height=clamp_bbox01(bbox.get("height", 1)),
+            bbox_width=clamp_bbox01(bbox.get("width", 1)) if not is_missing_bbox(bbox) else clamp_bbox01(bbox.get("width", 0)),
+            bbox_height=clamp_bbox01(bbox.get("height", 1)) if not is_missing_bbox(bbox) else clamp_bbox01(bbox.get("height", 0)),
             status=status,
             recognition_status=RECOGNITION_STATUS_UNKNOWN,
             confidence=confidence,
@@ -272,10 +427,12 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             raw_ai_response=raw_response if idx == 0 else None,
         )
         session.add(row)
+        created += 1
     session.commit()
     logger.info(
-        "photo_import.recognition.persisted image_id=%s detections=%d fallback=%s",
+        "photo_import.recognition.persisted image_id=%s ai_books_returned=%d detected_book_rows=%d fallback=%s",
         image_id,
-        min(len(books), 10),
+        len(books),
+        created,
         bool(raw_response.get("fallback")),
     )

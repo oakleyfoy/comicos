@@ -8,10 +8,8 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from app.models.photo_import import (
-    DETECTION_STATUS_DETECTED,
     IMAGE_STATUS_PROCESSING,
     IMAGE_STATUS_PROCESSED,
-    RECOGNITION_STATUS_PENDING,
     PhotoImportDetectedBook,
     PhotoImportImage,
 )
@@ -35,26 +33,6 @@ def process_photo_import_image(session: Session, *, image_id: int) -> None:
     image.status = IMAGE_STATUS_PROCESSING
     session.add(image)
     session.commit()
-
-    existing = session.exec(
-        select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == image_id)
-    ).first()
-    if existing is None:
-        row = PhotoImportDetectedBook(
-            session_id=int(image.session_id),
-            image_id=int(image.id or 0),
-            user_id=int(image.user_id),
-            crop_path=image.storage_path,
-            bbox_x=0.0,
-            bbox_y=0.0,
-            bbox_width=1.0,
-            bbox_height=1.0,
-            status=DETECTION_STATUS_DETECTED,
-            recognition_status=RECOGNITION_STATUS_PENDING,
-            confidence=0.0,
-        )
-        session.add(row)
-        session.commit()
 
     run_ai_recognition_for_image(session, image_id=image_id)
 

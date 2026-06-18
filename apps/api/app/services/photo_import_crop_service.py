@@ -27,8 +27,8 @@ def extract_and_save_crop(
     session_id: int,
     image_id: int,
     idx: int,
-) -> str:
-    """Crop source photo, save JPEG, return repo-relative storage path."""
+) -> tuple[str, tuple[int, int]]:
+    """Crop source photo, save JPEG; return (repo-relative path, (width, height))."""
     crop_dir = crop_storage_dir(session_id=session_id)
     crop_name = f"{image_id}_{idx}.jpg"
     crop_path = crop_dir / crop_name
@@ -40,7 +40,9 @@ def extract_and_save_crop(
         bh = max(1, int(clamp_bbox01(bbox.get("height", 1)) * h))
         cropped = img.crop((x, y, min(w, x + bw), min(h, y + bh)))
         cropped.convert("RGB").save(crop_path, format="JPEG", quality=90)
-    return str(crop_path.relative_to(REPO_ROOT)).replace("\\", "/")
+        cw, ch = cropped.size
+    rel = str(crop_path.relative_to(REPO_ROOT)).replace("\\", "/")
+    return rel, (cw, ch)
 
 
 def resolve_crop_abs_path(crop_path: str | None) -> Path | None:
