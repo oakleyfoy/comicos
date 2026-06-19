@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     midtown_sync_enabled: bool = Field(default=True, alias="MIDTOWN_SYNC_ENABLED")
     openai_api_key: str | None = None
     openai_order_parser_model: str = "gpt-4o-mini"
+    photo_import_vision_sandbox: bool = Field(default=False, alias="PHOTO_IMPORT_VISION_SANDBOX")
+    photo_import_vision_sandbox_model: str = Field(
+        default="gpt-4o",
+        alias="PHOTO_IMPORT_VISION_SANDBOX_MODEL",
+        description="OpenAI vision model for P100 vision sandbox reads",
+    )
     redis_url: str = "redis://localhost:6379/0"
     frontend_url: str = "http://127.0.0.1:5173"
     cors_origins_raw: str = Field(

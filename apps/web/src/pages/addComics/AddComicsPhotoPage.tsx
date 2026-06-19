@@ -75,7 +75,12 @@ export function AddComicsPhotoPage(): JSX.Element {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-700">Session status: {session.status}</p>
                 <p className="mt-1 text-sm text-slate-500">Uploaded photos: {session.uploaded_photo_count}</p>
-                <p className="text-sm text-slate-500">Detected books: {session.detected_book_count}</p>
+                <p className="text-sm text-slate-500">
+                  {session.vision_sandbox ? "Vision reads" : "Detected books"}: {session.detected_book_count}
+                </p>
+                {session.vision_sandbox ? (
+                  <p className="mt-2 text-sm font-medium text-indigo-800">Vision sandbox mode — catalog matching disabled.</p>
+                ) : null}
                 <label className="mt-4 block text-xs font-semibold uppercase text-slate-500">Mobile link</label>
                 <input
                   readOnly
@@ -95,13 +100,20 @@ export function AddComicsPhotoPage(): JSX.Element {
             <button
               type="button"
               disabled={!reviewReady}
-              onClick={() => navigate(`/add-comics/photo/session/${session.session_token}`)}
+              onClick={() => {
+                const path = session.vision_sandbox
+                  ? `/add-comics/photo/sandbox/session/${session.session_token}`
+                  : `/add-comics/photo/session/${session.session_token}`;
+                navigate(path);
+              }}
               className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              Review detected books
+              {session.vision_sandbox ? "Review GPT vision reads" : "Review detected books"}
             </button>
             {!reviewReady ? (
-              <p className="text-xs text-slate-500">Review unlocks after at least one detection is ready.</p>
+              <p className="text-xs text-slate-500">
+                Review unlocks after at least one {session.vision_sandbox ? "vision read" : "detection"} is ready.
+              </p>
             ) : null}
           </div>
         )}

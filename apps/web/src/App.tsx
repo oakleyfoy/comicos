@@ -22,6 +22,8 @@ import { AddComicsManualPage } from "./pages/addComics/AddComicsManualPage";
 import { AddComicsOnlineRetailPage } from "./pages/addComics/AddComicsOnlineRetailPage";
 import { AddComicsPhotoPage } from "./pages/addComics/AddComicsPhotoPage";
 import { AddComicsPhotoReviewPage } from "./pages/addComics/AddComicsPhotoReviewPage";
+import { PhotoImportVisionSandboxPage } from "./pages/addComics/PhotoImportVisionSandboxPage";
+import { PhotoImportVisionSandboxDashboardPage } from "./pages/ops/PhotoImportVisionSandboxDashboardPage";
 import { PhotoImportMobilePage } from "./pages/addComics/PhotoImportMobilePage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
@@ -496,6 +498,7 @@ export default function App() {
         <Route path="/add-comics/online-retail" element={<AddComicsOnlineRetailPage />} />
         <Route path="/add-comics/photo" element={<AddComicsPhotoPage />} />
         <Route path="/add-comics/photo/session/:token" element={<AddComicsPhotoReviewPage />} />
+        <Route path="/add-comics/photo/sandbox/session/:token" element={<PhotoImportVisionSandboxPage />} />
         <Route path="/add-comics/manual" element={<AddComicsManualPage />} />
         <Route path="/mobile-scan" element={<Navigate to="/add-comics/photo" replace />} />
         <Route path="/connected-retailers/import" element={<RetailerHtmlImportPage />} />
@@ -514,6 +517,7 @@ export default function App() {
         <Route path="/ops/marketplace-search" element={<MarketplaceSearchDashboardPage />} />
         <Route path="/ops/marketplace-coverage" element={<MarketplaceCoverageDashboardPage />} />
         <Route path="/ops/fmv-diagnostics" element={<FmvDiagnosticsPage />} />
+        <Route path="/ops/vision-sandbox" element={<PhotoImportVisionSandboxDashboardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

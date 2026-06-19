@@ -800,6 +800,8 @@ def _apply_vision_candidate_authority(
     for row in scored:
         cand_series = row.series.name
         cand_issue = str(row.issue.issue_number or "")
+        vision_series_norm = _norm_series(vision_series)
+        candidate_series_norm = _norm_series(cand_series)
         matches_vision = _catalog_row_matches_vision(det, series=row.series, issue=row.issue)
         can_override, override_reason = _catalog_can_override_vision(row)
 
@@ -823,12 +825,16 @@ def _apply_vision_candidate_authority(
 
         row.vision_authority_adjustment = adjustment
         logger.info(
-            "photo_import.candidates.vision_authority detection_id=%s vision_series=%r vision_issue=%r "
-            "candidate_series=%r candidate_issue=%r matches_vision=%s adjustment=%.1f override_reason=%s",
+            "photo_import.candidates.vision_authority detection_id=%s "
+            "vision_series_raw=%r candidate_series_raw=%r vision_series_normalized=%r "
+            "candidate_series_normalized=%r vision_issue=%r candidate_issue=%r matches_vision=%s "
+            "adjustment=%.1f override_reason=%s",
             det.id,
             vision_series,
-            vision_issue or None,
             cand_series,
+            vision_series_norm,
+            candidate_series_norm,
+            vision_issue or None,
             cand_issue,
             matches_vision,
             adjustment,
@@ -905,6 +911,9 @@ def vision_identification_label(det: PhotoImportDetectedBook) -> str | None:
 
 
 def refresh_candidates_for_detection(session: Session, *, detected_book_id: int) -> None:
+    from app.services.photo_import_sandbox_flags import assert_photo_import_matching_allowed
+
+    assert_photo_import_matching_allowed()
     det = session.get(PhotoImportDetectedBook, detected_book_id)
     if det is None:
         return

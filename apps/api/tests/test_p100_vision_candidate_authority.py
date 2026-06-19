@@ -21,6 +21,7 @@ from app.models.photo_import import (
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_candidate_service import (
     ScoredCatalogRow,
+    VISION_EXACT_MATCH_BOOST,
     _apply_vision_candidate_authority,
     refresh_candidates_for_detection,
 )
@@ -191,3 +192,51 @@ def test_detection_read_shows_verified_when_top_matches_vision(tmp_path, monkeyp
         assert read.vision_identification_label == "Falcon #1"
         assert read.catalog_verification_status == "verified"
         assert read.catalog_verification_label == "Falcon #1"
+
+
+def test_leading_the_series_matches_vision_authority() -> None:
+    assert normalize_series_name("The Falcon") == normalize_series_name("Falcon")
+    assert normalize_series_name("The New Avengers") == normalize_series_name("New Avengers")
+    assert normalize_series_name("The Defenders") == normalize_series_name("Defenders")
+
+    falcon_iss = CatalogIssue(id=1, series_id=1, publisher_id=1, issue_number="1", normalized_issue_number="1")
+    the_falcon_ser = CatalogSeries(id=1, name="The Falcon", normalized_name="the falcon", publisher_id=1)
+    pub = CatalogPublisher(id=1, name="Marvel", normalized_name="marvel")
+    row = ScoredCatalogRow(
+        falcon_iss,
+        the_falcon_ser,
+        pub,
+        70.0,
+        "Exact series and issue",
+        "exact_series_issue",
+    )
+    det = _vision_det(ai_series="Falcon")
+    assert _apply_vision_candidate_authority(det, [row])[0].vision_authority_adjustment == VISION_EXACT_MATCH_BOOST
+
+
+def test_detection_read_verified_with_catalog_the_prefix(tmp_path, monkeypatch) -> None:
+    engine, _api_root = _engine(tmp_path, monkeypatch)
+    expires = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    with Session(engine) as session:
+        _add_issue(session, publisher="Marvel", series="The Falcon", issue="1")
+        session.add(
+            PhotoImportSession(id=3, user_id=1, session_token="tok3", expires_at=expires, capture_mode="single_comic")
+        )
+        session.add(
+            PhotoImportImage(id=3, session_id=3, user_id=1, storage_path="z.jpg", mime_type="image/jpeg", file_size=1)
+        )
+        det = PhotoImportDetectedBook(
+            session_id=3,
+            image_id=3,
+            user_id=1,
+            recognition_mode="vision_first",
+            ai_series="Falcon",
+            ai_issue_number="1",
+        )
+        session.add(det)
+        session.commit()
+        refresh_candidates_for_detection(session, detected_book_id=int(det.id))
+        read = detection_to_read(session, session.get(PhotoImportDetectedBook, int(det.id)))
+        assert read.vision_identification_label == "Falcon #1"
+        assert read.catalog_verification_status == "verified"
+        assert read.catalog_verification_label == "The Falcon #1"

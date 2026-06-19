@@ -49,6 +49,41 @@ export type PhotoImportSession = {
   capture_mode: "single_comic" | "group";
   mobile_url: string;
   desktop_review_url: string;
+  vision_sandbox?: boolean;
+};
+
+export type PhotoImportVisionRead = {
+  id: number;
+  session_id: number;
+  image_id: number;
+  publisher: string | null;
+  series: string | null;
+  issue_number: string | null;
+  issue_title: string | null;
+  variant_description: string | null;
+  year: string | null;
+  cover_date: string | null;
+  barcode: string | null;
+  confidence: number | null;
+  reasoning: string | null;
+  raw_response: Record<string, unknown> | null;
+  is_correct: boolean | null;
+  feedback_notes: string | null;
+  created_at: string;
+};
+
+export type PhotoImportVisionSandboxMetrics = {
+  total_reads: number;
+  correct_reads: number;
+  incorrect_reads: number;
+  pending_feedback: number;
+  accuracy_percent: number;
+  publisher_accuracy: number;
+  series_accuracy: number;
+  issue_accuracy: number;
+  top_failures: Array<Record<string, unknown>>;
+  most_misidentified_series: Array<{ series: string; count: number }>;
+  most_misidentified_publishers: Array<{ publisher: string; count: number }>;
 };
 
 export type PhotoImportCaptureMode = "single_comic" | "group";
@@ -237,4 +272,37 @@ export function mobilePhotoImportUrl(token: string): string {
 
 export function qrCodeUrlForLink(link: string): string {
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(link)}`;
+}
+
+export async function listSessionVisionReads(sessionToken: string): Promise<PhotoImportVisionRead[]> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/vision-reads`,
+  );
+}
+
+export async function getVisionReadForImage(
+  imageId: number,
+  sessionToken: string,
+): Promise<PhotoImportVisionRead> {
+  const q = new URLSearchParams({ session_token: sessionToken });
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${imageId}?${q.toString()}`);
+}
+
+export async function submitVisionReadFeedback(
+  readId: number,
+  payload: { is_correct: boolean; feedback_notes?: string },
+): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function originalImageUrl(sessionToken: string, imageId: number): string {
+  const base = API_BASE || "";
+  return `${base}/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/images/${imageId}/original`;
+}
+
+export async function fetchVisionSandboxMetrics(): Promise<PhotoImportVisionSandboxMetrics> {
+  return requestPhotoImport("/api/v1/photo-import/admin/vision-sandbox/metrics");
 }

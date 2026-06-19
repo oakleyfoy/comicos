@@ -12,9 +12,9 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportImage,
 )
-from app.services.photo_import_ai_recognition_service import run_ai_recognition_for_image
-from app.services.photo_import_candidate_service import refresh_candidates_for_detection
+from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
 from app.services.photo_import_session_service import refresh_session_counts
+from app.services.photo_import_vision_sandbox_service import run_vision_sandbox_for_image
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,21 @@ def process_photo_import_image(session: Session, *, image_id: int) -> None:
     image.status = IMAGE_STATUS_PROCESSING
     session.add(image)
     session.commit()
+
+    if photo_import_vision_sandbox_enabled():
+        logger.info("photo_import.processing.vision_sandbox image_id=%s skipping_catalog_pipeline=true", image_id)
+        run_vision_sandbox_for_image(session, image_id=image_id)
+        image = session.get(PhotoImportImage, image_id)
+        if image is not None:
+            image.status = IMAGE_STATUS_PROCESSED
+            session.add(image)
+            session.commit()
+        refresh_session_counts(session, session_id=int(image.session_id) if image else 0)
+        logger.info("photo_import.processing.vision_sandbox.complete image_id=%s", image_id)
+        return
+
+    from app.services.photo_import_ai_recognition_service import run_ai_recognition_for_image
+    from app.services.photo_import_candidate_service import refresh_candidates_for_detection
 
     run_ai_recognition_for_image(session, image_id=image_id)
 

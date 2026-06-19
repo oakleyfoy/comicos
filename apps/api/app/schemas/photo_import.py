@@ -29,6 +29,46 @@ class PhotoImportSessionRead(BaseModel):
     capture_mode: str
     mobile_url: str
     desktop_review_url: str
+    vision_sandbox: bool = False
+
+
+class PhotoImportVisionReadPayload(BaseModel):
+    id: int
+    session_id: int
+    image_id: int
+    publisher: str | None
+    series: str | None
+    issue_number: str | None
+    issue_title: str | None
+    variant_description: str | None
+    year: str | None
+    cover_date: str | None
+    barcode: str | None
+    confidence: float | None
+    reasoning: str | None
+    raw_response: dict | None
+    is_correct: bool | None = None
+    feedback_notes: str | None = None
+    created_at: datetime
+
+
+class PhotoImportVisionReadFeedbackPayload(BaseModel):
+    is_correct: bool
+    feedback_notes: str | None = None
+
+
+class PhotoImportVisionSandboxMetricsRead(BaseModel):
+    total_reads: int
+    correct_reads: int
+    incorrect_reads: int
+    pending_feedback: int
+    accuracy_percent: float
+    publisher_accuracy: float
+    series_accuracy: float
+    issue_accuracy: float
+    top_failures: list[dict[str, object]]
+    most_misidentified_series: list[dict[str, object]]
+    most_misidentified_publishers: list[dict[str, object]]
 
 
 class PhotoImportHeartbeatPayload(BaseModel):

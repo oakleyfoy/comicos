@@ -20,7 +20,13 @@ from app.schemas.photo_import import (
     PhotoImportSelectCandidatePayload,
     PhotoImportSessionCreatePayload,
     PhotoImportSessionRead,
+    PhotoImportVisionReadFeedbackPayload,
+    PhotoImportVisionReadPayload,
+    PhotoImportVisionSandboxMetricsRead,
 )
+from app.core.config import get_settings
+from app.services.ops_admin import ensure_ops_admin_access
+from app.services.photo_import_sandbox_flags import assert_photo_import_matching_allowed, photo_import_vision_sandbox_enabled
 from app.services.photo_import_detection_service import (
     confirm_detection,
     confirm_session_books,
@@ -30,7 +36,7 @@ from app.services.photo_import_detection_service import (
     select_candidate,
 )
 from app.services.photo_import_crop_service import resolve_crop_abs_path
-from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
+from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage, PhotoImportSession
 from app.services.photo_import_session_service import (
     complete_session,
     create_photo_import_session,
@@ -41,6 +47,12 @@ from app.services.photo_import_session_service import (
 )
 from app.services.photo_import_upload_service import upload_session_images
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
+from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
+from app.services.photo_import_vision_read_api_service import vision_read_to_payload
+from app.services.photo_import_vision_sandbox_service import (
+    latest_vision_read_for_image,
+    vision_reads_for_session,
+)
 
 photo_import_router = APIRouter(prefix="/api/v1/photo-import", tags=["Photo Import (P100)"])
 
@@ -111,6 +123,8 @@ def list_detections_endpoint(
     token: str,
     session: Session = Depends(get_session),
 ) -> list[PhotoImportDetectedBookRead]:
+    if photo_import_vision_sandbox_enabled():
+        return []
     return list_session_detections(session, token=token)
 
 
@@ -138,6 +152,7 @@ def list_candidates_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportDetectionCandidatesResponse:
     assert current_user.id is not None
+    assert_photo_import_matching_allowed()
     return list_detection_candidates_debug(session, owner_user_id=int(current_user.id), detection_id=detection_id)
 
 
@@ -165,6 +180,7 @@ def select_candidate_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportDetectedBookRead:
     assert current_user.id is not None
+    assert_photo_import_matching_allowed()
     return select_candidate(
         session,
         owner_user_id=int(current_user.id),
@@ -180,6 +196,7 @@ def reject_detection_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportDetectedBookRead:
     assert current_user.id is not None
+    assert_photo_import_matching_allowed()
     return reject_detection(session, owner_user_id=int(current_user.id), detection_id=detection_id)
 
 
@@ -190,6 +207,7 @@ def confirm_detection_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportDetectedBookRead:
     assert current_user.id is not None
+    assert_photo_import_matching_allowed()
     return confirm_detection(session, owner_user_id=int(current_user.id), detection_id=detection_id)
 
 
@@ -201,9 +219,70 @@ def confirm_session_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportConfirmResponse:
     assert current_user.id is not None
+    assert_photo_import_matching_allowed()
     return confirm_session_books(
         session,
         owner_user_id=int(current_user.id),
         token=token,
         payload=payload,
     )
+
+
+@photo_import_router.get("/vision-read/{image_id}", response_model=PhotoImportVisionReadPayload)
+def get_vision_read_endpoint(
+    image_id: int,
+    session_token: str,
+    session: Session = Depends(get_session),
+) -> PhotoImportVisionReadPayload:
+    import_row = get_session_by_token_or_404(session, token=session_token)
+    image = session.get(PhotoImportImage, image_id)
+    if image is None or int(image.session_id) != int(import_row.id or 0):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo import image not found")
+    row = latest_vision_read_for_image(session, image_id=image_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vision read not found for image")
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.get("/sessions/{token}/vision-reads", response_model=list[PhotoImportVisionReadPayload])
+def list_session_vision_reads_endpoint(
+    token: str,
+    session: Session = Depends(get_session),
+) -> list[PhotoImportVisionReadPayload]:
+    import_row = get_session_by_token_or_404(session, token=token)
+    rows = vision_reads_for_session(session, session_id=int(import_row.id or 0))
+    return [vision_read_to_payload(r) for r in rows]
+
+
+@photo_import_router.post("/vision-read/{read_id}/feedback", response_model=PhotoImportVisionReadPayload)
+def vision_read_feedback_endpoint(
+    read_id: int,
+    payload: PhotoImportVisionReadFeedbackPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = session.get(PhotoImportVisionRead, read_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vision read not found")
+    import_row = session.get(PhotoImportSession, int(row.session_id))
+    if import_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vision read not found")
+    assert_session_owner(import_row, owner_user_id=int(current_user.id))
+    row.is_correct = payload.is_correct
+    row.feedback_notes = (payload.feedback_notes or "").strip() or None
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.get("/admin/vision-sandbox/metrics", response_model=PhotoImportVisionSandboxMetricsRead)
+def vision_sandbox_metrics_endpoint(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionSandboxMetricsRead:
+    settings = get_settings()
+    ensure_ops_admin_access(current_user, settings)
+    report = build_vision_sandbox_accuracy_report(session)
+    return PhotoImportVisionSandboxMetricsRead(**report)

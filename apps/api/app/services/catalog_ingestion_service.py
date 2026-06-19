@@ -19,11 +19,19 @@ from app.services.catalog_sources import CATALOG_SOURCE_PRIORITY
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _ISSUE_FRACTION = re.compile(r"^(\d+)\s*/\s*(\d+)$")
+_LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+")
 
 
 def normalize_series_name(name: str) -> str:
+    """Lowercase series key: trim, collapse punctuation/spaces, drop leading the/a/an."""
     cleaned = _NON_ALNUM.sub(" ", (name or "").lower()).strip()
-    return " ".join(cleaned.split())
+    collapsed = " ".join(cleaned.split())
+    while collapsed:
+        stripped = _LEADING_ARTICLE.sub("", collapsed, count=1)
+        if stripped == collapsed:
+            break
+        collapsed = stripped.strip()
+    return collapsed
 
 
 def normalize_issue_number(raw: str) -> str:

@@ -495,6 +495,7 @@ from app.models.photo_import import (
     PhotoImportImage,
     PhotoImportSession,
 )
+from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
     CollectionContinuityAlert,
