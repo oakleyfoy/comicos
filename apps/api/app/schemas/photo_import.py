@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field
 
 class PhotoImportSessionCreatePayload(BaseModel):
     source_device: str | None = None
+    capture_mode: str | None = Field(
+        default=None,
+        description="single_comic (default) or group (experimental)",
+    )
 
 
 class PhotoImportSessionRead(BaseModel):
@@ -22,12 +26,17 @@ class PhotoImportSessionRead(BaseModel):
     confirmed_count: int
     uploaded_photo_count: int
     detected_book_count: int
+    capture_mode: str
     mobile_url: str
     desktop_review_url: str
 
 
 class PhotoImportHeartbeatPayload(BaseModel):
     source_device: str | None = None
+    capture_mode: str | None = Field(
+        default=None,
+        description="single_comic or group (experimental)",
+    )
 
 
 class PhotoImportImageRead(BaseModel):

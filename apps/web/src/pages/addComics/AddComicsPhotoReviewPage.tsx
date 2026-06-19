@@ -220,27 +220,32 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
             const showPicker = expanded === det.id;
             return (
               <li key={det.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-start gap-4">
-                  {heroThumb ? (
-                    <img
-                      src={heroThumb}
-                      alt=""
-                      className="max-h-56 w-auto max-w-[11rem] shrink-0 rounded object-contain ring-1 ring-slate-200"
-                    />
-                  ) : null}
+                <div className="flex flex-wrap items-start gap-6">
+                  <div className="flex min-w-[10rem] flex-col gap-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your photo</p>
+                    {heroThumb ? (
+                      <img
+                        src={heroThumb}
+                        alt=""
+                        className="max-h-64 w-auto max-w-[12rem] shrink-0 rounded object-contain ring-1 ring-slate-200"
+                      />
+                    ) : (
+                      <p className="text-xs text-slate-400">No crop preview</p>
+                    )}
+                  </div>
                   {best?.cover_url && det.status !== "confirmed" ? (
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold uppercase tracking-wide">vs</span>
+                    <div className="flex min-w-[10rem] flex-col gap-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Catalog cover</p>
                       <img
                         src={best.cover_url}
                         alt=""
-                        className="max-h-56 w-auto max-w-[11rem] shrink-0 rounded object-contain ring-1 ring-emerald-200"
+                        className="max-h-64 w-auto max-w-[12rem] shrink-0 rounded object-contain ring-1 ring-emerald-200"
                       />
                     </div>
                   ) : null}
                   <label className="flex min-w-[12rem] flex-1 items-start gap-2">
                     <input type="checkbox" checked={selected.has(det.id)} onChange={() => toggle(det.id)} />
-                    <span className="text-sm font-medium text-slate-800">AI guess</span>
+                    <span className="text-sm font-medium text-slate-800">Include in bulk confirm</span>
                   </label>
                 </div>
                 <dl className="mt-3 grid gap-1 text-sm text-slate-700 sm:grid-cols-2">

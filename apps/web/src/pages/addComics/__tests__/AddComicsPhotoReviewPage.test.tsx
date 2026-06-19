@@ -81,7 +81,7 @@ describe("AddComicsPhotoReviewPage", () => {
     vi.spyOn(photoImport, "listPhotoImportDetections").mockResolvedValue([detection(1), detection(2)]);
     renderPage();
     await waitFor(() => {
-      expect(screen.getAllByText("AI guess")).toHaveLength(2);
+      expect(screen.getAllByText("Include in bulk confirm")).toHaveLength(2);
     });
     expect(screen.queryByText("No pending detections.")).not.toBeInTheDocument();
   });

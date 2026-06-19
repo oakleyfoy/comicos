@@ -20,6 +20,10 @@ SESSION_STATUS_COMPLETED = "completed"
 SESSION_STATUS_EXPIRED = "expired"
 SESSION_STATUS_CANCELLED = "cancelled"
 
+CAPTURE_MODE_SINGLE_COMIC = "single_comic"
+CAPTURE_MODE_GROUP = "group"
+DEFAULT_CAPTURE_MODE = CAPTURE_MODE_SINGLE_COMIC
+
 IMAGE_STATUS_UPLOADED = "uploaded"
 IMAGE_STATUS_QUEUED = "queued"
 IMAGE_STATUS_PROCESSING = "processing"
@@ -54,6 +58,7 @@ class PhotoImportSession(SQLModel, table=True):
     confirmed_count: int = Field(default=0, nullable=False)
     uploaded_photo_count: int = Field(default=0, nullable=False)
     detected_book_count: int = Field(default=0, nullable=False)
+    capture_mode: str = Field(max_length=32, default=DEFAULT_CAPTURE_MODE, nullable=False)
     acquisition_id: int | None = Field(default=None, foreign_key="acquisitions.id", nullable=True)
 
 

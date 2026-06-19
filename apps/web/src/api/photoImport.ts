@@ -46,9 +46,12 @@ export type PhotoImportSession = {
   confirmed_count: number;
   uploaded_photo_count: number;
   detected_book_count: number;
+  capture_mode: "single_comic" | "group";
   mobile_url: string;
   desktop_review_url: string;
 };
+
+export type PhotoImportCaptureMode = "single_comic" | "group";
 
 export type PhotoImportImage = {
   id: number;
@@ -131,10 +134,16 @@ export type PhotoImportCandidatesDebugResponse = {
   };
 };
 
-export function createPhotoImportSession(sourceDevice?: string): Promise<PhotoImportSession> {
+export function createPhotoImportSession(
+  sourceDevice?: string,
+  captureMode?: PhotoImportCaptureMode,
+): Promise<PhotoImportSession> {
   return requestPhotoImport("/api/v1/photo-import/sessions", {
     method: "POST",
-    body: JSON.stringify(sourceDevice ? { source_device: sourceDevice } : {}),
+    body: JSON.stringify({
+      ...(sourceDevice ? { source_device: sourceDevice } : {}),
+      ...(captureMode ? { capture_mode: captureMode } : {}),
+    }),
   });
 }
 
@@ -142,10 +151,16 @@ export function getPhotoImportSession(token: string): Promise<PhotoImportSession
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}`);
 }
 
-export function heartbeatPhotoImportSession(token: string, sourceDevice?: string): Promise<PhotoImportSession> {
+export function heartbeatPhotoImportSession(
+  token: string,
+  options?: { sourceDevice?: string; captureMode?: PhotoImportCaptureMode },
+): Promise<PhotoImportSession> {
+  const body: { source_device?: string; capture_mode?: PhotoImportCaptureMode } = {};
+  if (options?.sourceDevice) body.source_device = options.sourceDevice;
+  if (options?.captureMode) body.capture_mode = options.captureMode;
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}/heartbeat`, {
     method: "POST",
-    body: JSON.stringify(sourceDevice ? { source_device: sourceDevice } : {}),
+    body: JSON.stringify(body),
   });
 }
 

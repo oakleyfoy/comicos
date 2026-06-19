@@ -9,6 +9,8 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from app.models.photo_import import (
+    CAPTURE_MODE_GROUP,
+    CAPTURE_MODE_SINGLE_COMIC,
     PhotoImportSession,
     SESSION_STATUS_ACTIVE,
     SESSION_STATUS_COMPLETED,
@@ -20,6 +22,12 @@ from app.models.photo_import import (
 from app.schemas.photo_import import PhotoImportSessionRead
 
 SESSION_TTL_HOURS = 4
+
+
+def normalize_capture_mode(value: str | None) -> str:
+    if value == CAPTURE_MODE_GROUP:
+        return CAPTURE_MODE_GROUP
+    return CAPTURE_MODE_SINGLE_COMIC
 
 
 def _public_base_url() -> str:
@@ -68,6 +76,7 @@ def create_photo_import_session(
     *,
     owner_user_id: int,
     source_device: str | None = None,
+    capture_mode: str | None = None,
 ) -> PhotoImportSessionRead:
     token = secrets.token_urlsafe(32)
     now = utc_now()
@@ -78,6 +87,7 @@ def create_photo_import_session(
         created_at=now,
         expires_at=now + timedelta(hours=SESSION_TTL_HOURS),
         source_device=source_device,
+        capture_mode=normalize_capture_mode(capture_mode),
     )
     session.add(row)
     session.commit()
@@ -107,6 +117,7 @@ def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
         confirmed_count=int(row.confirmed_count),
         uploaded_photo_count=int(row.uploaded_photo_count),
         detected_book_count=int(row.detected_book_count),
+        capture_mode=normalize_capture_mode(row.capture_mode),
         mobile_url=mobile,
         desktop_review_url=review,
     )
@@ -117,11 +128,14 @@ def heartbeat_session(
     *,
     token: str,
     source_device: str | None = None,
+    capture_mode: str | None = None,
 ) -> PhotoImportSessionRead:
     row = get_session_by_token_or_404(session, token=token)
     row.last_seen_at = utc_now()
     if source_device:
         row.source_device = source_device
+    if capture_mode is not None:
+        row.capture_mode = normalize_capture_mode(capture_mode)
     activate_session(session, row)
     session.add(row)
     session.commit()

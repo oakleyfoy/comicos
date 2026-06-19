@@ -48,7 +48,9 @@ export function AddComicsPhotoPage(): JSX.Element {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Add Comics</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-900">Phone Photo Import</h1>
         <p className="mt-3 text-slate-600">
-          Start a session on this device, then scan the QR code or open the link on your phone or iPad to upload photos.
+          Start a session on this device, then scan the QR code on your phone. Photograph{" "}
+          <strong className="font-semibold text-slate-800">one comic per photo</strong> for the fastest, most reliable
+          review (group photos are experimental on mobile).
         </p>
 
         {error ? (

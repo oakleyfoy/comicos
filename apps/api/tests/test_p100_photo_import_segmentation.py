@@ -10,6 +10,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 import app.models  # noqa: F401
 
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage, PhotoImportSession
+from app.models.photo_import import CAPTURE_MODE_GROUP
 from app.services.photo_import_ai_recognition_service import run_ai_recognition_for_image
 from app.services.photo_import_segmentation_service import (
     expand_books_to_match_bboxes,
@@ -71,7 +72,7 @@ def test_run_ai_recognition_creates_six_detections_and_crops(tmp_path, monkeypat
     expires = datetime(2099, 1, 1, tzinfo=timezone.utc)
     with mock.patch.object(ai_mod, "_call_openai_vision", return_value=six_books):
         with Session(engine) as session:
-            session.add(PhotoImportSession(id=1, user_id=1, session_token="t", expires_at=expires))
+            session.add(PhotoImportSession(id=1, user_id=1, session_token="t", expires_at=expires, capture_mode=CAPTURE_MODE_GROUP))
             session.add(
                 PhotoImportImage(
                     id=10,
@@ -126,7 +127,15 @@ def test_group_photo_hard_guard_splits_one_full_frame_into_six(tmp_path, monkeyp
     with mock.patch.object(ai_mod, "_call_openai_vision", return_value=one_merged):
         with mock.patch.object(ai_mod, "_call_openai_bbox_segmentation", return_value={"comic_count": 1, "bboxes": []}):
             with Session(engine) as session:
-                session.add(PhotoImportSession(id=3, user_id=1, session_token="t3", expires_at=expires))
+                session.add(
+                    PhotoImportSession(
+                        id=3,
+                        user_id=1,
+                        session_token="t3",
+                        expires_at=expires,
+                        capture_mode=CAPTURE_MODE_GROUP,
+                    )
+                )
                 session.add(
                     PhotoImportImage(
                         id=12,

@@ -59,6 +59,7 @@ def create_session_endpoint(
         session,
         owner_user_id=int(current_user.id),
         source_device=payload.source_device if payload else None,
+        capture_mode=payload.capture_mode if payload else None,
     )
 
 
@@ -77,7 +78,12 @@ def heartbeat_endpoint(
     payload: PhotoImportHeartbeatPayload | None = None,
     session: Session = Depends(get_session),
 ) -> PhotoImportSessionRead:
-    return heartbeat_session(session, token=token, source_device=payload.source_device if payload else None)
+    return heartbeat_session(
+        session,
+        token=token,
+        source_device=payload.source_device if payload else None,
+        capture_mode=payload.capture_mode if payload else None,
+    )
 
 
 @photo_import_router.post("/sessions/{token}/complete", response_model=PhotoImportSessionRead)

@@ -15,11 +15,15 @@ from sqlmodel import Session, delete
 from app.core.config import get_settings
 from app.services.photo_import_issue_number import apply_photo_issue_sanitization, normalize_photo_issue_number
 from app.models.photo_import import (
+    CAPTURE_MODE_GROUP,
+    CAPTURE_MODE_SINGLE_COMIC,
+    DEFAULT_CAPTURE_MODE,
     DETECTION_STATUS_DETECTED,
     DETECTION_STATUS_NEEDS_REVIEW,
     RECOGNITION_STATUS_UNKNOWN,
     PhotoImportDetectedBook,
     PhotoImportImage,
+    PhotoImportSession,
 )
 from app.services.photo_import_crop_service import clamp_bbox01, extract_and_save_crop
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
@@ -242,6 +246,49 @@ def _fallback_books(*, reason: str) -> dict[str, Any]:
     }
 
 
+SINGLE_COMIC_FULL_FRAME_BBOX = {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}
+
+
+def _session_capture_mode(session: Session, session_id: int) -> str:
+    row = session.get(PhotoImportSession, session_id)
+    if row is None:
+        return DEFAULT_CAPTURE_MODE
+    mode = getattr(row, "capture_mode", None) or DEFAULT_CAPTURE_MODE
+    return CAPTURE_MODE_GROUP if mode == CAPTURE_MODE_GROUP else CAPTURE_MODE_SINGLE_COMIC
+
+
+def _pick_best_book_metadata(books_raw: list[dict[str, Any]]) -> dict[str, Any]:
+    if not books_raw:
+        return _normalize_book_entry(_fallback_books(reason="empty AI response")["books"][0])
+    normalized = [_normalize_book_entry(b) for b in books_raw]
+    normalized.sort(key=lambda b: float(b.get("confidence") or 0.0), reverse=True)
+    return normalized[0]
+
+
+def resolve_single_comic_book(
+    *,
+    image_id: int,
+    books_raw: list[dict[str, Any]],
+    raw_response: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """One uploaded photo → one comic: metadata from AI, full-frame crop + boundary cleanup."""
+    book = _pick_best_book_metadata(books_raw)
+    if len(books_raw) > 1:
+        logger.info(
+            "photo_import.single_comic.collapse image_id=%s ai_book_count=%d using_highest_confidence",
+            image_id,
+            len(books_raw),
+        )
+    book["bbox"] = dict(SINGLE_COMIC_FULL_FRAME_BBOX)
+    meta = {
+        **raw_response,
+        "capture_mode": CAPTURE_MODE_SINGLE_COMIC,
+        "single_comic": True,
+        "ai_book_count_before_collapse": len(books_raw),
+    }
+    return [book], meta
+
+
 def resolve_books_for_image(
     *,
     image_id: int,
@@ -414,15 +461,25 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     if not books_raw and not raw_response.get("fallback"):
         logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
 
-    books, raw_response = resolve_books_for_image(
-        image_id=image_id,
-        image_bytes=raw,
-        image_width=image_width,
-        image_height=image_height,
-        books_raw=books_raw,
-        raw_response=raw_response,
-        allow_bbox_retry=allow_bbox_retry,
-    )
+    capture_mode = _session_capture_mode(session, int(image.session_id))
+    logger.info("photo_import.recognition.capture_mode image_id=%s mode=%s", image_id, capture_mode)
+
+    if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
+        books, raw_response = resolve_single_comic_book(
+            image_id=image_id,
+            books_raw=books_raw,
+            raw_response=raw_response,
+        )
+    else:
+        books, raw_response = resolve_books_for_image(
+            image_id=image_id,
+            image_bytes=raw,
+            image_width=image_width,
+            image_height=image_height,
+            books_raw=books_raw,
+            raw_response=raw_response,
+            allow_bbox_retry=allow_bbox_retry,
+        )
 
     if not books and not raw_response.get("fallback"):
         logger.error("photo_import.recognition.no_detections image_id=%s after_segmentation", image_id)
