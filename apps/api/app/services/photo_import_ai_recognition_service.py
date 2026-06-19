@@ -435,7 +435,7 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     created = 0
     for idx, book in enumerate(books[:MAX_DETECTED_BOOKS]):
         bbox = book.get("bbox") or {}
-        crop_rel, (crop_w, crop_h) = extract_and_save_crop(
+        crop_result = extract_and_save_crop(
             path,
             bbox,
             session_id=int(image.session_id),
@@ -443,16 +443,22 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             idx=idx,
         )
         logger.info(
-            "photo_import.recognition.detection image_id=%s index=%d series=%r visible_title=%r bbox=%s "
-            "crop_path=%s crop_dimensions=%sx%s",
+            "photo_import.recognition.detection image_id=%s index=%d series=%r visible_title=%r "
+            "bbox=%s expanded_bbox=%s refined_bbox=%s crop_path=%s crop_dimensions=%sx%s "
+            "crop_quality=%s crop_area_percent=%s boundary_method=%s",
             image_id,
             idx,
             book.get("series_guess") or book.get("series"),
             book.get("visible_title_text"),
             bbox,
-            crop_rel,
-            crop_w,
-            crop_h,
+            crop_result.expanded_bbox,
+            crop_result.refined_bbox,
+            crop_result.relative_path,
+            crop_result.width,
+            crop_result.height,
+            crop_result.crop_quality,
+            crop_result.crop_area_percent,
+            crop_result.boundary_method,
         )
         confidence = float(book.get("confidence") or 0.0)
         status = DETECTION_STATUS_DETECTED if confidence >= 0.85 else DETECTION_STATUS_NEEDS_REVIEW
@@ -466,7 +472,7 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             session_id=int(image.session_id),
             image_id=int(image.id or 0),
             user_id=int(image.user_id),
-            crop_path=crop_rel,
+            crop_path=crop_result.relative_path,
             bbox_x=clamp_bbox01(bbox.get("x", 0)),
             bbox_y=clamp_bbox01(bbox.get("y", 0)),
             bbox_width=clamp_bbox01(bbox.get("width", 1)) if not is_missing_bbox(bbox) else clamp_bbox01(bbox.get("width", 0)),

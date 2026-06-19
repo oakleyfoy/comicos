@@ -200,14 +200,22 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
             const showPicker = expanded === det.id;
             return (
               <li key={det.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap items-start gap-4">
                   {heroThumb ? (
-                    <img src={heroThumb} alt="" className="h-32 w-20 rounded object-cover ring-1 ring-slate-200" />
+                    <img
+                      src={heroThumb}
+                      alt=""
+                      className="max-h-56 w-auto max-w-[11rem] shrink-0 rounded object-contain ring-1 ring-slate-200"
+                    />
                   ) : null}
                   {best?.cover_url && det.status !== "confirmed" ? (
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       <span className="font-semibold uppercase tracking-wide">vs</span>
-                      <img src={best.cover_url} alt="" className="h-32 w-20 rounded object-cover ring-1 ring-emerald-200" />
+                      <img
+                        src={best.cover_url}
+                        alt=""
+                        className="max-h-56 w-auto max-w-[11rem] shrink-0 rounded object-contain ring-1 ring-emerald-200"
+                      />
                     </div>
                   ) : null}
                   <label className="flex min-w-[12rem] flex-1 items-start gap-2">
@@ -327,7 +335,11 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                   <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
                     {uploadedThumb ? (
                       <li className="mb-3 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        <img src={uploadedThumb} alt="" className="h-16 w-11 rounded object-cover" />
+                        <img
+                          src={uploadedThumb}
+                          alt=""
+                          className="max-h-40 w-auto max-w-[9rem] rounded object-contain"
+                        />
                         <span>Your crop — compare to candidate covers below</span>
                       </li>
                     ) : null}
@@ -349,9 +361,18 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                               {c.publisher} · {c.series} #{c.issue_number}
                             </p>
                             <p className="text-xs text-slate-500">
-                              Score {Math.round(c.match_score)} · {c.match_reason}
+                              Score {Math.round(c.final_score ?? c.match_score)}
+                              {c.visual_match_label ? ` · ${c.visual_match_label}` : ""}
                               {c.release_date ? ` · ${c.release_date}` : ""}
                             </p>
+                            {c.cover_similarity_score != null || c.fingerprint_score != null ? (
+                              <p className="text-xs text-indigo-700">
+                                {c.cover_similarity_score != null ? `Cover ${Math.round(c.cover_similarity_score)}` : ""}
+                                {c.cover_similarity_score != null && c.fingerprint_score != null ? " · " : ""}
+                                {c.fingerprint_score != null ? `Fingerprint ${Math.round(c.fingerprint_score)}` : ""}
+                              </p>
+                            ) : null}
+                            {c.match_reason ? <p className="text-xs text-slate-500">{c.match_reason}</p> : null}
                           </div>
                         </div>
                         <button
