@@ -123,37 +123,76 @@ def grid_bboxes_for_count(count: int) -> list[dict[str, float]]:
     return bboxes
 
 
+PHOTO_IMPORT_PIPELINE_VERSION = "P100-16"
+
+
+def reading_order_key(bbox: dict[str, float]) -> tuple[float, float]:
+    """Top-to-bottom, then left-to-right (by bbox center)."""
+    cy = bbox.get("y", 0.0) + bbox.get("height", 0.0) / 2.0
+    cx = bbox.get("x", 0.0) + bbox.get("width", 0.0) / 2.0
+    return (cy, cx)
+
+
+def sort_bboxes_reading_order(bboxes: list[dict[str, float]]) -> list[dict[str, float]]:
+    indexed = list(enumerate(bboxes))
+    indexed.sort(key=lambda pair: (*reading_order_key(pair[1]), pair[0]))
+    return [bbox for _, bbox in indexed]
+
+
+def sort_books_reading_order(books: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    indexed = list(enumerate(books))
+    indexed.sort(key=lambda pair: (*reading_order_key(extract_bbox_from_book(pair[1])), pair[0]))
+    return [book for _, book in indexed]
+
+
+def combine_books_with_bboxes(
+    books: list[dict[str, Any]],
+    bboxes: list[dict[str, float]],
+    *,
+    reason: str,
+) -> list[dict[str, Any]]:
+    """Build one dict per bbox with aligned metadata + bbox (never reorder after this)."""
+    if not bboxes:
+        return books
+    ordered_bboxes = sort_bboxes_reading_order(bboxes)
+    if len(books) == 1:
+        template = dict(books[0])
+        combined: list[dict[str, Any]] = []
+        for bbox in ordered_bboxes:
+            entry = dict(template)
+            entry["bbox"] = dict(bbox)
+            entry.setdefault("confidence", float(template.get("confidence") or 0.35))
+            entry.setdefault("reason", reason)
+            entry.setdefault("uncertainty_reason", "Segmented from multi-comic photo")
+            combined.append(entry)
+        return combined
+
+    ordered_books = sort_books_reading_order(books)
+    combined = []
+    for idx, bbox in enumerate(ordered_bboxes):
+        if idx < len(ordered_books):
+            entry = {k: v for k, v in ordered_books[idx].items() if k != "bbox"}
+        else:
+            entry = {}
+        entry["bbox"] = dict(bbox)
+        if idx < len(ordered_books):
+            entry.setdefault("confidence", float(ordered_books[idx].get("confidence") or 0.35))
+        else:
+            entry.setdefault("confidence", 0.35)
+        entry.setdefault("reason", reason)
+        entry.setdefault("uncertainty_reason", "Segmented from multi-comic photo")
+        combined.append(entry)
+    return combined
+
+
 def expand_books_to_match_bboxes(
     books: list[dict[str, Any]],
     bboxes: list[dict[str, float]],
     *,
     reason: str,
 ) -> list[dict[str, Any]]:
-    """One detection per bbox; reuse metadata when a single book entry was returned for many comics."""
-    if not bboxes:
-        return books
-    if len(bboxes) == len(books):
-        merged: list[dict[str, Any]] = []
-        for book, bbox in zip(books, bboxes, strict=False):
-            entry = dict(book)
-            entry["bbox"] = bbox
-            merged.append(entry)
-        return merged
-    template = dict(books[0]) if len(books) == 1 else {}
-    expanded: list[dict[str, Any]] = []
-    for idx, bbox in enumerate(bboxes):
-        entry = dict(template) if template else {}
-        entry["bbox"] = bbox
-        if len(books) > idx and isinstance(books[idx], dict):
-            entry.update({k: v for k, v in books[idx].items() if k != "bbox"})
-        entry.setdefault("confidence", 0.35)
-        entry.setdefault("reason", reason)
-        entry.setdefault("uncertainty_reason", "Segmented from multi-comic photo")
-        expanded.append(entry)
-    return expanded
-
-
-PHOTO_IMPORT_PIPELINE_VERSION = "P100-15b"
+    """One detection per bbox; metadata paired by spatial reading order."""
+    return combine_books_with_bboxes(books, bboxes, reason=reason)
 
 
 def book_has_weak_metadata(book: dict[str, Any]) -> bool:

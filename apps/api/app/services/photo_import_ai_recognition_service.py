@@ -38,6 +38,7 @@ from app.services.photo_import_segmentation_service import (
     parse_bboxes_from_ai_payload,
     parse_books_from_ai_payload,
     should_run_bbox_segmentation,
+    sort_books_reading_order,
 )
 
 logger = logging.getLogger(__name__)
@@ -261,7 +262,7 @@ def resolve_books_for_image(
             image_id,
             len(books_raw),
         )
-        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+        return [_normalize_book_entry(b) for b in sort_books_reading_order(books_raw)][:MAX_DETECTED_BOOKS], raw_response
 
     if not allow_bbox_retry or raw_response.get("fallback"):
         logger.warning(
@@ -282,7 +283,7 @@ def resolve_books_for_image(
                 )
                 raw_response = {**raw_response, "layout_grid_fallback": layout_count}
                 return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
-        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+        return [_normalize_book_entry(b) for b in sort_books_reading_order(books_raw)][:MAX_DETECTED_BOOKS], raw_response
 
     seg_payload: dict[str, Any] | None = None
     try:
@@ -340,7 +341,7 @@ def resolve_books_for_image(
         )
         return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
 
-    return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
+    return [_normalize_book_entry(b) for b in sort_books_reading_order(books_raw)][:MAX_DETECTED_BOOKS], raw_response
 
 
 def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
@@ -442,13 +443,16 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             idx=idx,
         )
         logger.info(
-            "photo_import.recognition.crop image_id=%s index=%d crop_path=%s crop_dimensions=%sx%s bbox=%s",
+            "photo_import.recognition.detection image_id=%s index=%d series=%r visible_title=%r bbox=%s "
+            "crop_path=%s crop_dimensions=%sx%s",
             image_id,
             idx,
+            book.get("series_guess") or book.get("series"),
+            book.get("visible_title_text"),
+            bbox,
             crop_rel,
             crop_w,
             crop_h,
-            bbox,
         )
         confidence = float(book.get("confidence") or 0.0)
         status = DETECTION_STATUS_DETECTED if confidence >= 0.85 else DETECTION_STATUS_NEEDS_REVIEW
