@@ -43,6 +43,10 @@ WEIGHT_TEXT = 0.20
 WEIGHT_PUBLISHER_META = 0.05
 TEXT_ONLY_PENALTY = 12.0
 STRONG_VISUAL_BOOST = 5.0
+VISION_SERIES_MISMATCH_PENALTY = 50.0
+VISION_EXACT_MATCH_BOOST = 15.0
+VISION_OVERRIDE_FINGERPRINT_MIN = 50.0
+VISION_OVERRIDE_COVER_MIN = 50.0
 
 _AMBIGUOUS_SERIES_FAMILIES: dict[str, list[str]] = {
     "x": ["X-Men", "X-Factor", "X-Force", "X-Man", "Uncanny X-Men"],
@@ -142,6 +146,8 @@ class ScoredCatalogRow:
     fingerprint_score: float = 0.0
     publisher_meta_score: float = 0.0
     barcode_score: float = 0.0
+    vision_authority_adjustment: float = 0.0
+    override_reason: str = ""
     visual_score_status: str = "unavailable"
     visual_match_label: str = "No cover available"
 
@@ -659,6 +665,7 @@ def _apply_visual_ranking(
                 cover_similarity_score=cover_sim,
                 fingerprint_score=fp_sim,
                 publisher_meta_score=pub_meta,
+                barcode_score=row.barcode_score,
                 visual_score_status=status,
                 visual_match_label=label,
             )
@@ -740,6 +747,117 @@ def _apply_barcode_verification(
     return scored
 
 
+def _vision_series_issue_from_detection(det: PhotoImportDetectedBook) -> tuple[str, str]:
+    series = (det.ai_series or "").strip()
+    issue = ""
+    for raw in (det.ai_issue_number, det.ai_visible_issue_text):
+        if not raw:
+            continue
+        sanitized = normalize_photo_issue_number(str(raw))
+        if sanitized:
+            issue = normalize_issue_number(sanitized)
+            break
+    return series, issue
+
+
+def _catalog_row_matches_vision(
+    det: PhotoImportDetectedBook,
+    *,
+    series: CatalogSeries,
+    issue: CatalogIssue,
+) -> bool:
+    vision_series, vision_issue = _vision_series_issue_from_detection(det)
+    if not vision_series:
+        return False
+    if not _exact_series(series, vision_series):
+        return False
+    if vision_issue and not _exact_issue(issue, vision_issue):
+        return False
+    return True
+
+
+def _catalog_can_override_vision(row: ScoredCatalogRow) -> tuple[bool, str]:
+    if row.barcode_score >= 100:
+        return True, "barcode"
+    if row.fingerprint_score >= VISION_OVERRIDE_FINGERPRINT_MIN:
+        return True, "fingerprint"
+    if row.cover_similarity_score >= VISION_OVERRIDE_COVER_MIN:
+        return True, "cover_similarity"
+    return False, ""
+
+
+def _apply_vision_candidate_authority(
+    det: PhotoImportDetectedBook,
+    scored: list[ScoredCatalogRow],
+) -> list[ScoredCatalogRow]:
+    """Vision-first: catalog candidates validate vision; weaker text matches cannot replace a vision guess."""
+    if getattr(det, "recognition_mode", None) != "vision_first":
+        return scored
+    vision_series, vision_issue = _vision_series_issue_from_detection(det)
+    if not vision_series:
+        return scored
+
+    for row in scored:
+        cand_series = row.series.name
+        cand_issue = str(row.issue.issue_number or "")
+        matches_vision = _catalog_row_matches_vision(det, series=row.series, issue=row.issue)
+        can_override, override_reason = _catalog_can_override_vision(row)
+
+        adjustment = 0.0
+        logged_override = ""
+        if matches_vision:
+            adjustment = VISION_EXACT_MATCH_BOOST
+            row.match_score = min(100.0, row.match_score + adjustment)
+            if "Vision exact issue match" not in (row.match_reason or ""):
+                row.match_reason = f"Vision exact issue match; {row.match_reason or ''}".strip().rstrip(";")
+        elif can_override:
+            logged_override = override_reason
+            row.override_reason = override_reason
+        else:
+            adjustment = -VISION_SERIES_MISMATCH_PENALTY
+            row.match_score = max(0.0, row.match_score + adjustment)
+            row.match_reason = (
+                f"Penalized: catalog candidate disagrees with vision ({vision_series}"
+                f"{f' #{vision_issue}' if vision_issue else ''}); {row.match_reason or ''}"
+            ).strip().rstrip(";")
+
+        row.vision_authority_adjustment = adjustment
+        logger.info(
+            "photo_import.candidates.vision_authority detection_id=%s vision_series=%r vision_issue=%r "
+            "candidate_series=%r candidate_issue=%r matches_vision=%s adjustment=%.1f override_reason=%s",
+            det.id,
+            vision_series,
+            vision_issue or None,
+            cand_series,
+            cand_issue,
+            matches_vision,
+            adjustment,
+            logged_override or None,
+        )
+
+    scored.sort(
+        key=lambda row: (
+            -row.barcode_score,
+            -1 if _catalog_row_matches_vision(det, series=row.series, issue=row.issue) else 0,
+            -row.match_score,
+            int(row.issue.id or 0),
+        )
+    )
+    return scored
+
+
+def _top_respects_vision_authority(det: PhotoImportDetectedBook, top: ScoredCatalogRow) -> bool:
+    if getattr(det, "recognition_mode", None) != "vision_first":
+        return True
+    vision_series, _ = _vision_series_issue_from_detection(det)
+    if not vision_series:
+        return True
+    if _catalog_row_matches_vision(det, series=top.series, issue=top.issue):
+        return True
+    can_override, _ = _catalog_can_override_vision(top)
+    return can_override
+
+
 def _maybe_auto_select_issue(
     det: PhotoImportDetectedBook,
     ranked: list[ScoredCatalogRow],
@@ -756,8 +874,34 @@ def _maybe_auto_select_issue(
         return
     if not _visual_signal_for_auto_select(top):
         return
+    if not _top_respects_vision_authority(det, top):
+        return
     det.selected_catalog_issue_id = int(top.issue.id or 0)
     det.selected_variant_id = None
+
+
+def catalog_candidate_matches_vision(
+    det: PhotoImportDetectedBook,
+    *,
+    series: str | None,
+    issue_number: str | None,
+) -> bool:
+    """True when a persisted candidate series/issue aligns with the vision-first guess."""
+    vision_series, vision_issue = _vision_series_issue_from_detection(det)
+    if not vision_series or not series:
+        return False
+    if normalize_series_name(series) != normalize_series_name(vision_series):
+        return False
+    if vision_issue:
+        return normalize_issue_number(str(issue_number or "")) == vision_issue
+    return True
+
+
+def vision_identification_label(det: PhotoImportDetectedBook) -> str | None:
+    series, issue = _vision_series_issue_from_detection(det)
+    if not series:
+        return None
+    return f"{series} #{issue}".strip() if issue else series
 
 
 def refresh_candidates_for_detection(session: Session, *, detected_book_id: int) -> None:
@@ -797,6 +941,8 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
             len(scored),
         )
 
+    scored = _apply_vision_candidate_authority(det, scored) if scored else scored
+
     issue_ids = [int(row.issue.id or 0) for row in scored]
     variant_by_issue: dict[int, CatalogVariant | None] = {}
     variant_id_by_issue: dict[int, int | None] = {}
@@ -823,6 +969,8 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
             "fingerprint_score": row.fingerprint_score,
             "publisher_meta_score": row.publisher_meta_score,
             "barcode_score": row.barcode_score,
+            "vision_authority_adjustment": row.vision_authority_adjustment,
+            "override_reason": row.override_reason or None,
             "final_score": row.match_score,
             "matched_on": row.matched_on,
             "visual_score_status": row.visual_score_status,

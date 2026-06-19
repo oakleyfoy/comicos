@@ -296,11 +296,40 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                     </div>
                   ) : null}
                 </dl>
-                {det.verification_reason ? (
-                  <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
-                    {det.recognition_mode === "vision_first" ? "Vision-first · " : ""}
-                    {det.verification_reason}
-                  </p>
+                {det.vision_identification_label || det.verification_reason ? (
+                  <div className="mt-3 space-y-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+                    {det.vision_identification_label ? (
+                      <p>
+                        <span className="font-semibold">Vision identified:</span>{" "}
+                        {det.vision_identification_label}
+                      </p>
+                    ) : null}
+                    {det.catalog_verification_status === "verified" && det.catalog_verification_label ? (
+                      <p>
+                        <span className="font-semibold">Catalog verified:</span>{" "}
+                        {det.catalog_verification_label}
+                      </p>
+                    ) : null}
+                    {det.catalog_verification_status === "disagrees" && det.catalog_verification_label ? (
+                      <>
+                        <p>
+                          <span className="font-semibold">Catalog disagrees:</span>{" "}
+                          {det.catalog_verification_label}
+                        </p>
+                        {det.catalog_disagreement_reason ? (
+                          <p>
+                            <span className="font-semibold">Reason:</span> {det.catalog_disagreement_reason}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {det.catalog_verification_status === "unmatched" ? (
+                      <p className="font-medium text-amber-900">No catalog match found for this vision guess.</p>
+                    ) : null}
+                    {!det.vision_identification_label && det.verification_reason ? (
+                      <p className="font-medium">{det.verification_reason}</p>
+                    ) : null}
+                  </div>
                 ) : null}
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>

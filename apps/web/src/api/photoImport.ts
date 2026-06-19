@@ -127,6 +127,10 @@ export type PhotoImportDetectedBook = {
   recognition_mode?: string | null;
   ai_barcode?: string | null;
   verification_reason?: string | null;
+  vision_identification_label?: string | null;
+  catalog_verification_status?: string | null;
+  catalog_verification_label?: string | null;
+  catalog_disagreement_reason?: string | null;
 };
 
 export type PhotoImportCandidatesDebugResponse = {

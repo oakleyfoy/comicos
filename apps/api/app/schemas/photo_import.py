@@ -93,6 +93,10 @@ class PhotoImportDetectedBookRead(BaseModel):
     recognition_mode: str | None = None
     ai_barcode: str | None = None
     verification_reason: str | None = None
+    vision_identification_label: str | None = None
+    catalog_verification_status: str | None = None
+    catalog_verification_label: str | None = None
+    catalog_disagreement_reason: str | None = None
 
 
 class PhotoImportCandidateRead(BaseModel):

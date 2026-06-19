@@ -31,7 +31,11 @@ from app.schemas.photo_import import (
 )
 from app.services.acquisition.acquisition_inventory_service import add_catalog_issues
 from app.services.acquisition.acquisition_service import create_acquisition
-from app.services.photo_import_candidate_service import candidate_debug_info
+from app.services.photo_import_candidate_service import (
+    candidate_debug_info,
+    catalog_candidate_matches_vision,
+    vision_identification_label,
+)
 from app.services.photo_import_review_rules import can_confirm_detection, qualifies_for_bulk_high_confidence_confirm
 from app.services.photo_import_session_service import (
     assert_session_owner,
@@ -101,7 +105,48 @@ def _display_image_url(session: Session, det: PhotoImportDetectedBook) -> str | 
     return covers.get(int(det.selected_catalog_issue_id))
 
 
-def _verification_reason(
+def _catalog_verification_fields(
+    row: PhotoImportDetectedBook,
+    best: PhotoImportCandidate | None,
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+    """vision_label, status (verified|disagrees|unmatched), catalog_label, disagreement_reason, legacy_reason."""
+    vision_label = vision_identification_label(row)
+    if vision_label is None:
+        return None, None, None, None, _verification_reason_legacy(row, best)
+
+    if best is None:
+        legacy = f"Vision identified {vision_label}; no catalog match found"
+        return vision_label, "unmatched", None, None, legacy
+
+    catalog_label = f"{best.series} #{best.issue_number}".strip()
+    if catalog_candidate_matches_vision(row, series=best.series, issue_number=best.issue_number):
+        legacy = f"Vision identified {vision_label}; catalog verified {catalog_label}"
+        return vision_label, "verified", catalog_label, None, legacy
+
+    breakdown = best.score_breakdown or {}
+    evidence: list[str] = []
+    if float(breakdown.get("barcode_score") or 0) >= 100:
+        evidence.append("Barcode")
+    if float(breakdown.get("fingerprint_score") or 0) >= 50:
+        evidence.append("fingerprint")
+    if float(breakdown.get("cover_similarity_score") or 0) >= 50:
+        evidence.append("cover similarity")
+    override = str(breakdown.get("override_reason") or "").strip()
+    if override == "barcode" and "Barcode" not in evidence:
+        evidence.insert(0, "Barcode")
+    elif override == "fingerprint" and "fingerprint" not in evidence:
+        evidence.append("fingerprint")
+    elif override == "cover_similarity" and "cover similarity" not in evidence:
+        evidence.append("cover similarity")
+    disagree_reason = " / ".join(evidence) if evidence else "OCR or text match only (weak)"
+    legacy = (
+        f"Vision identified {vision_label}; catalog disagrees {catalog_label} "
+        f"({disagree_reason})"
+    )
+    return vision_label, "disagrees", catalog_label, disagree_reason, legacy
+
+
+def _verification_reason_legacy(
     row: PhotoImportDetectedBook,
     best: PhotoImportCandidate | None,
 ) -> str | None:
@@ -134,6 +179,13 @@ def detection_to_read(
     session_token: str | None = None,
 ) -> PhotoImportDetectedBookRead:
     best = _best_candidate(session, int(row.id or 0))
+    (
+        vision_label,
+        catalog_status,
+        catalog_label,
+        catalog_disagree_reason,
+        verification_reason,
+    ) = _catalog_verification_fields(row, best)
     can_confirm = can_confirm_detection(row, best_candidate=best)
     has_candidates = int(row.candidate_count) > 0
     # needs_match: catalog genuinely has nothing to offer. needs_selection: candidates exist, user must pick.
@@ -202,7 +254,11 @@ def detection_to_read(
         best_candidate=candidate_to_read(best) if best else None,
         recognition_mode=getattr(row, "recognition_mode", None),
         ai_barcode=getattr(row, "ai_barcode", None),
-        verification_reason=_verification_reason(row, best),
+        verification_reason=verification_reason,
+        vision_identification_label=vision_label,
+        catalog_verification_status=catalog_status,
+        catalog_verification_label=catalog_label,
+        catalog_disagreement_reason=catalog_disagree_reason,
     )
 
 
