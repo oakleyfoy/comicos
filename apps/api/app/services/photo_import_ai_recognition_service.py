@@ -391,6 +391,59 @@ def resolve_books_for_image(
     return [_normalize_book_entry(b) for b in sort_books_reading_order(books_raw)][:MAX_DETECTED_BOOKS], raw_response
 
 
+def _try_vision_first_single_comic(
+    image_bytes: bytes, *, image_id: int
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
+    """Vision-first identification for single-comic mode. Returns (None, None) to trigger OCR fallback."""
+    from app.services.photo_import_vision_identification_service import (
+        VisionUnavailableError,
+        identify_comic_from_image,
+        vision_identification_to_book,
+    )
+
+    try:
+        identification = identify_comic_from_image(image_bytes, image_id=image_id)
+    except VisionUnavailableError as exc:
+        logger.warning(
+            "photo_import.recognition.vision_unavailable image_id=%s recognition_mode=vision_first reason=%s",
+            image_id,
+            exc,
+        )
+        return None, None
+
+    if not identification.is_usable():
+        logger.warning(
+            "photo_import.recognition.vision_unusable image_id=%s reason=%s",
+            image_id,
+            identification.uncertainty_reason or "no_series_or_barcode",
+        )
+        return None, None
+
+    book = vision_identification_to_book(identification)
+    raw_response = {
+        "recognition_mode": "vision_first",
+        "capture_mode": CAPTURE_MODE_SINGLE_COMIC,
+        "single_comic": True,
+        "vision_identification": identification.raw,
+        "vision_confidence": identification.confidence,
+        "vision_possible_alternates": identification.possible_alternates,
+        "vision_reasons": identification.top_identification_reasons,
+        "vision_barcode": identification.normalized_barcode(),
+        "vision_uncertainty_reason": identification.uncertainty_reason,
+    }
+    logger.info(
+        "photo_import.recognition.vision_first image_id=%s recognition_mode=vision_first "
+        "series=%r issue=%r barcode=%r confidence=%.2f preview=%s",
+        image_id,
+        book.get("series_guess"),
+        book.get("issue_number_guess"),
+        book.get("barcode"),
+        identification.confidence,
+        json.dumps(identification.raw, default=str)[:2000],
+    )
+    return [book], raw_response
+
+
 def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     image = session.get(PhotoImportImage, image_id)
     if image is None:
@@ -422,70 +475,85 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     raw = path.read_bytes()
     raw_response: dict[str, Any]
     allow_bbox_retry = True
+    recognition_mode = "ocr_only"
 
     capture_mode = _session_capture_mode(session, int(image.session_id))
     logger.info("photo_import.recognition.capture_mode image_id=%s mode=%s", image_id, capture_mode)
+
+    books: list[dict[str, Any]] | None = None
     if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
         logger.info(
-            "photo_import.recognition.start image_id=%s recognition_source=full_image display_crop=true",
+            "photo_import.recognition.start image_id=%s recognition_mode=vision_first "
+            "recognition_source=full_image display_crop=true",
             image_id,
         )
+        vision_books, vision_raw = _try_vision_first_single_comic(raw, image_id=image_id)
+        if vision_books is not None and vision_raw is not None:
+            books = vision_books
+            raw_response = vision_raw
+            recognition_mode = "vision_first"
 
-    try:
-        ai_payload = _call_openai_vision(raw, image_id=image_id)
-        raw_response = ai_payload
-    except RecognitionConfigError as exc:
-        logger.error("photo_import.recognition.not_configured image_id=%s detail=%s", image_id, exc)
-        ai_payload = _fallback_books(reason="AI not configured")
-        raw_response = {"fallback": True, "failure_kind": "not_configured", "failure_detail": str(exc), **ai_payload}
-        allow_bbox_retry = False
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("photo_import.recognition.failed image_id=%s error=%s", image_id, exc)
-        ai_payload = _fallback_books(reason=str(exc))
-        raw_response = {
-            "fallback": True,
-            "failure_kind": exc.__class__.__name__,
-            "failure_detail": str(exc),
-            **ai_payload,
-        }
-        allow_bbox_retry = False
+    if books is None:
+        try:
+            ai_payload = _call_openai_vision(raw, image_id=image_id)
+            raw_response = ai_payload
+        except RecognitionConfigError as exc:
+            logger.error("photo_import.recognition.not_configured image_id=%s detail=%s", image_id, exc)
+            ai_payload = _fallback_books(reason="AI not configured")
+            raw_response = {"fallback": True, "failure_kind": "not_configured", "failure_detail": str(exc), **ai_payload}
+            allow_bbox_retry = False
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("photo_import.recognition.failed image_id=%s error=%s", image_id, exc)
+            ai_payload = _fallback_books(reason=str(exc))
+            raw_response = {
+                "fallback": True,
+                "failure_kind": exc.__class__.__name__,
+                "failure_detail": str(exc),
+                **ai_payload,
+            }
+            allow_bbox_retry = False
 
-    books_raw = parse_books_from_ai_payload(ai_payload)
-    if not books_raw and raw_response.get("fallback"):
-        books_raw = list(ai_payload.get("books") or [])
+        books_raw = parse_books_from_ai_payload(ai_payload)
+        if not books_raw and raw_response.get("fallback"):
+            books_raw = list(ai_payload.get("books") or [])
 
-    logger.info(
-        "photo_import.recognition.ai_parse image_id=%s parsed_book_count=%d raw_keys=%s",
-        image_id,
-        len(books_raw),
-        sorted(ai_payload.keys()) if isinstance(ai_payload, dict) else [],
-    )
-    if isinstance(raw_response, dict) and not raw_response.get("fallback"):
         logger.info(
-            "photo_import.recognition.ai_raw_preview image_id=%s preview=%s",
+            "photo_import.recognition.ai_parse image_id=%s parsed_book_count=%d raw_keys=%s",
             image_id,
-            json.dumps(ai_payload, default=str)[:2000],
+            len(books_raw),
+            sorted(ai_payload.keys()) if isinstance(ai_payload, dict) else [],
         )
+        if isinstance(raw_response, dict) and not raw_response.get("fallback"):
+            logger.info(
+                "photo_import.recognition.ai_raw_preview image_id=%s preview=%s",
+                image_id,
+                json.dumps(ai_payload, default=str)[:2000],
+            )
 
-    if not books_raw and not raw_response.get("fallback"):
-        logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
+        if not books_raw and not raw_response.get("fallback"):
+            logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
 
-    if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
-        books, raw_response = resolve_single_comic_book(
-            image_id=image_id,
-            books_raw=books_raw,
-            raw_response=raw_response,
-        )
-    else:
-        books, raw_response = resolve_books_for_image(
-            image_id=image_id,
-            image_bytes=raw,
-            image_width=image_width,
-            image_height=image_height,
-            books_raw=books_raw,
-            raw_response=raw_response,
-            allow_bbox_retry=allow_bbox_retry,
-        )
+        if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
+            books, raw_response = resolve_single_comic_book(
+                image_id=image_id,
+                books_raw=books_raw,
+                raw_response=raw_response,
+            )
+            recognition_mode = "ocr_fallback"
+            logger.info(
+                "photo_import.recognition.vision_fallback image_id=%s recognition_mode=ocr_fallback",
+                image_id,
+            )
+        else:
+            books, raw_response = resolve_books_for_image(
+                image_id=image_id,
+                image_bytes=raw,
+                image_width=image_width,
+                image_height=image_height,
+                books_raw=books_raw,
+                raw_response=raw_response,
+                allow_bbox_retry=allow_bbox_retry,
+            )
 
     if not books and not raw_response.get("fallback"):
         logger.error("photo_import.recognition.no_detections image_id=%s after_segmentation", image_id)
@@ -568,6 +636,8 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             ai_alternate_titles=book.get("alternate_titles") or [],
             ai_confidence=confidence,
             ai_reason=(book.get("reason") or "")[:4000] or None,
+            ai_barcode=(str(book.get("barcode") or "")[:32] or None),
+            recognition_mode=(book.get("recognition_mode") or recognition_mode),
             raw_ai_response=raw_response if idx == 0 else None,
         )
         session.add(row)

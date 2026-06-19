@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, or_
 from sqlmodel import Session, delete, select
 
-from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogVariant
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc, CatalogVariant
 from app.models.photo_import import (
     RECOGNITION_STATUS_AMBIGUOUS,
     RECOGNITION_STATUS_MATCHED,
@@ -30,6 +30,7 @@ from app.services.photo_import_learning_service import learning_boost_for_issue
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
 from app.services.photo_import_session_service import normalize_capture_mode
+from app.services.photo_import_vision_identification_service import normalize_barcode
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ class ScoredCatalogRow:
     cover_similarity_score: float = 0.0
     fingerprint_score: float = 0.0
     publisher_meta_score: float = 0.0
+    barcode_score: float = 0.0
     visual_score_status: str = "unavailable"
     visual_match_label: str = "No cover available"
 
@@ -668,9 +670,74 @@ def _apply_visual_ranking(
 
 
 def _visual_signal_for_auto_select(row: ScoredCatalogRow) -> bool:
+    if row.barcode_score >= 100:
+        return True
     if row.visual_score_status == "available":
         return row.cover_similarity_score >= 50 or row.fingerprint_score >= 50
     return _exact_issue_matched_on(row.matched_on or "")
+
+
+def _barcode_issue_id_for_detection(session: Session, det: PhotoImportDetectedBook) -> int | None:
+    """Resolve the catalog issue id for a detected barcode (vision-read UPC), if any."""
+    code = normalize_barcode(getattr(det, "ai_barcode", None))
+    if not code:
+        return None
+    row = session.exec(
+        select(CatalogUpc).where(or_(CatalogUpc.normalized_upc == code, CatalogUpc.upc == code))
+    ).first()
+    if row is None or row.issue_id is None:
+        return None
+    return int(row.issue_id)
+
+
+def _fetch_catalog_issue_row(
+    session: Session, issue_id: int
+) -> tuple[CatalogIssue, CatalogSeries, CatalogPublisher | None] | None:
+    stmt = (
+        select(CatalogIssue, CatalogSeries, CatalogPublisher)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+        .where(CatalogIssue.id == issue_id)
+    )
+    return session.exec(stmt).first()
+
+
+def _apply_barcode_verification(
+    session: Session,
+    *,
+    scored: list[ScoredCatalogRow],
+    barcode_issue_id: int,
+) -> list[ScoredCatalogRow]:
+    """Barcode is the strongest signal: confirm the matching issue, injecting it if text search missed it."""
+    BARCODE_MIN_SCORE = 97.0
+    matched = next((r for r in scored if int(r.issue.id or 0) == barcode_issue_id), None)
+    if matched is not None:
+        matched.barcode_score = 100.0
+        matched.match_score = min(100.0, max(matched.match_score, BARCODE_MIN_SCORE))
+        matched.visual_match_label = "Barcode match"
+        reason = matched.match_reason or ""
+        matched.match_reason = f"Barcode confirms issue; {reason}".strip().rstrip(";").strip()
+    else:
+        fetched = _fetch_catalog_issue_row(session, barcode_issue_id)
+        if fetched is None:
+            return scored
+        issue, series, publisher = fetched
+        scored.append(
+            ScoredCatalogRow(
+                issue=issue,
+                series=series,
+                publisher=publisher,
+                match_score=BARCODE_MIN_SCORE,
+                match_reason=f"Barcode confirms issue: {series.name} #{issue.issue_number}",
+                matched_on="barcode_exact",
+                base_text_score=0.0,
+                barcode_score=100.0,
+                visual_score_status="available",
+                visual_match_label="Barcode match",
+            )
+        )
+    scored.sort(key=lambda row: (-row.match_score, -row.barcode_score, int(row.issue.id or 0)))
+    return scored
 
 
 def _maybe_auto_select_issue(
@@ -718,6 +785,18 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         )
     scored = _apply_visual_ranking(session, det=det, ranked=scored) if scored else scored
 
+    barcode_issue_id = _barcode_issue_id_for_detection(session, det)
+    if barcode_issue_id:
+        scored = _apply_barcode_verification(session, scored=scored, barcode_issue_id=barcode_issue_id)
+        logger.info(
+            "photo_import.candidates.barcode detection_id=%s recognition_mode=%s barcode_issue_id=%s "
+            "candidate_count=%d",
+            detected_book_id,
+            getattr(det, "recognition_mode", None),
+            barcode_issue_id,
+            len(scored),
+        )
+
     issue_ids = [int(row.issue.id or 0) for row in scored]
     variant_by_issue: dict[int, CatalogVariant | None] = {}
     variant_id_by_issue: dict[int, int | None] = {}
@@ -743,6 +822,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
             "cover_similarity_score": row.cover_similarity_score,
             "fingerprint_score": row.fingerprint_score,
             "publisher_meta_score": row.publisher_meta_score,
+            "barcode_score": row.barcode_score,
             "final_score": row.match_score,
             "matched_on": row.matched_on,
             "visual_score_status": row.visual_score_status,

@@ -84,6 +84,7 @@ export type PhotoImportCandidate = {
   base_text_score?: number | null;
   cover_similarity_score?: number | null;
   fingerprint_score?: number | null;
+  barcode_score?: number | null;
   final_score?: number | null;
   visual_score_status?: string | null;
   visual_match_label?: string | null;
@@ -123,6 +124,9 @@ export type PhotoImportDetectedBook = {
   needs_match: boolean;
   review_status: string;
   best_candidate: PhotoImportCandidate | null;
+  recognition_mode?: string | null;
+  ai_barcode?: string | null;
+  verification_reason?: string | null;
 };
 
 export type PhotoImportCandidatesDebugResponse = {

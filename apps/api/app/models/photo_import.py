@@ -112,6 +112,8 @@ class PhotoImportDetectedBook(SQLModel, table=True):
     ai_alternate_titles: list[str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     ai_confidence: float | None = Field(default=None, nullable=True)
     ai_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    ai_barcode: str | None = Field(default=None, max_length=32, nullable=True)
+    recognition_mode: str | None = Field(default=None, max_length=32, nullable=True)
     raw_ai_response: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 

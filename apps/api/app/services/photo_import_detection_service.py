@@ -66,6 +66,7 @@ def candidate_to_read(row: PhotoImportCandidate) -> PhotoImportCandidateRead:
         base_text_score=breakdown.get("base_text_score"),
         cover_similarity_score=breakdown.get("cover_similarity_score"),
         fingerprint_score=breakdown.get("fingerprint_score"),
+        barcode_score=breakdown.get("barcode_score"),
         final_score=breakdown.get("final_score") or float(row.match_score),
         visual_score_status=breakdown.get("visual_score_status"),
         visual_match_label=breakdown.get("visual_match_label"),
@@ -98,6 +99,32 @@ def _display_image_url(session: Session, det: PhotoImportDetectedBook) -> str | 
         return None
     covers = cover_urls_for_photo_import_candidates(session, issue_ids=[int(det.selected_catalog_issue_id)])
     return covers.get(int(det.selected_catalog_issue_id))
+
+
+def _verification_reason(
+    row: PhotoImportDetectedBook,
+    best: PhotoImportCandidate | None,
+) -> str | None:
+    """Human-readable summary of the vision guess and catalog verification result."""
+    series = (row.ai_series or row.ai_visible_title_text or "").strip()
+    issue = (row.ai_issue_number or "").strip()
+    label = f"{series} #{issue}".strip() if issue else series
+    alternates = [str(a).strip() for a in (row.ai_alternate_titles or []) if str(a).strip()]
+    if best is not None:
+        breakdown = best.score_breakdown or {}
+        if float(breakdown.get("barcode_score") or 0) >= 100:
+            return f"Barcode confirms issue: {best.series} #{best.issue_number}"
+        visual = str(breakdown.get("visual_match_label") or "")
+        if visual in {"Cover match", "Fingerprint match"}:
+            return f"{visual} confirms issue: {best.series} #{best.issue_number}"
+        if label:
+            return f"Vision identified {label}; catalog match found ({best.series} #{best.issue_number})"
+        return f"Catalog match found: {best.series} #{best.issue_number}"
+    if alternates:
+        return f"Vision uncertain: possible {' or '.join(alternates[:3])}"
+    if label:
+        return f"Vision guessed {label}; no catalog match found"
+    return None
 
 
 def detection_to_read(
@@ -173,6 +200,9 @@ def detection_to_read(
         needs_match=needs_match,
         review_status=review_status,
         best_candidate=candidate_to_read(best) if best else None,
+        recognition_mode=getattr(row, "recognition_mode", None),
+        ai_barcode=getattr(row, "ai_barcode", None),
+        verification_reason=_verification_reason(row, best),
     )
 
 

@@ -90,6 +90,9 @@ class PhotoImportDetectedBookRead(BaseModel):
     source_image_url: str | None = None
     recognition_source: str | None = None
     display_crop: bool = False
+    recognition_mode: str | None = None
+    ai_barcode: str | None = None
+    verification_reason: str | None = None
 
 
 class PhotoImportCandidateRead(BaseModel):
@@ -111,6 +114,7 @@ class PhotoImportCandidateRead(BaseModel):
     base_text_score: float | None = None
     cover_similarity_score: float | None = None
     fingerprint_score: float | None = None
+    barcode_score: float | None = None
     final_score: float | None = None
     visual_score_status: str | None = None
     visual_match_label: str | None = None

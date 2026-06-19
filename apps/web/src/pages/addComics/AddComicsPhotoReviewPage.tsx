@@ -296,6 +296,12 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                     </div>
                   ) : null}
                 </dl>
+                {det.verification_reason ? (
+                  <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
+                    {det.recognition_mode === "vision_first" ? "Vision-first · " : ""}
+                    {det.verification_reason}
+                  </p>
+                ) : null}
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>
                   {best ? (
