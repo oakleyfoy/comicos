@@ -6,8 +6,9 @@ from pathlib import Path
 
 from PIL import Image
 
-API_ROOT = Path(__file__).resolve().parents[2]
-REPO_ROOT = API_ROOT
+from app.services.photo_import_storage_service import REPO_ROOT
+
+API_ROOT = REPO_ROOT
 
 
 def clamp_bbox01(value: float) -> float:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
@@ -22,17 +23,15 @@ from app.services.photo_import_session_service import (
     get_session_by_token_or_404,
     refresh_session_counts,
 )
+from app.services.photo_import_storage_service import (
+    relative_path_under_repo_root,
+    resolve_photo_import_storage_path,
+    upload_storage_dir,
+)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-PHOTO_IMPORT_ROOT = REPO_ROOT / "data" / "photo_import"
+logger = logging.getLogger(__name__)
 MAX_BATCH_FILES = 10
 MAX_FILE_BYTES = 15 * 1024 * 1024
-
-
-def _storage_dir(user_id: int, session_id: int) -> Path:
-    path = PHOTO_IMPORT_ROOT / str(user_id) / str(session_id)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def image_to_read(row: PhotoImportImage) -> PhotoImportImageRead:
@@ -79,15 +78,16 @@ async def upload_session_images(
 
         ext = Path(upload.filename or "photo.jpg").suffix or ".jpg"
         filename = f"{uuid.uuid4().hex}{ext}"
-        dest_dir = _storage_dir(int(import_row.user_id), int(import_row.id or 0))
+        dest_dir = upload_storage_dir(user_id=int(import_row.user_id), session_id=int(import_row.id or 0))
         dest_path = dest_dir / filename
         dest_path.write_bytes(raw)
+        storage_rel = relative_path_under_repo_root(dest_path)
 
         row = PhotoImportImage(
             session_id=int(import_row.id or 0),
             user_id=int(import_row.user_id),
             original_filename=upload.filename or filename,
-            storage_path=str(dest_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+            storage_path=storage_rel,
             mime_type=upload.content_type or "image/jpeg",
             file_size=len(raw),
             width=width,
@@ -97,6 +97,15 @@ async def upload_session_images(
         session.add(row)
         session.commit()
         session.refresh(row)
+        resolved = resolve_photo_import_storage_path(storage_rel, image_id=int(row.id or 0))
+        logger.info(
+            "photo_import.upload.saved image_id=%s absolute_write_path=%s storage_path=%s resolved_path=%s exists=%s",
+            row.id,
+            dest_path,
+            storage_rel,
+            resolved,
+            resolved.is_file(),
+        )
         try:
             from app.services.photo_import_processing_service import process_photo_import_image
 

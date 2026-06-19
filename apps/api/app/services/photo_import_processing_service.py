@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from sqlmodel import Session, select
 
@@ -18,12 +17,6 @@ from app.services.photo_import_candidate_service import refresh_candidates_for_d
 from app.services.photo_import_session_service import refresh_session_counts
 
 logger = logging.getLogger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
-def _abs_path(relative: str) -> Path:
-    return REPO_ROOT / relative.replace("/", "\\") if "\\" in relative else REPO_ROOT / relative
 
 
 def process_photo_import_image(session: Session, *, image_id: int) -> None:

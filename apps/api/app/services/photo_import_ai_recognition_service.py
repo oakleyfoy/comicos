@@ -21,7 +21,8 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportImage,
 )
-from app.services.photo_import_crop_service import REPO_ROOT, clamp_bbox01, extract_and_save_crop
+from app.services.photo_import_crop_service import clamp_bbox01, extract_and_save_crop
+from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.photo_import_segmentation_service import (
     MAX_DETECTED_BOOKS,
     PHOTO_IMPORT_PIPELINE_VERSION,
@@ -76,8 +77,8 @@ BBOX_SEGMENTATION_SYSTEM = (
 )
 
 
-def _abs_path(relative: str) -> Path:
-    return REPO_ROOT / relative
+def _abs_path(relative: str, *, image_id: int | None = None) -> Path:
+    return resolve_photo_import_storage_path(relative, image_id=image_id)
 
 
 def _normalize_book_entry(book: dict[str, Any]) -> dict[str, Any]:
@@ -347,12 +348,13 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     if image is None:
         logger.warning("photo_import.recognition.image_missing image_id=%s", image_id)
         return
-    path = _abs_path(image.storage_path)
+    path = _abs_path(image.storage_path, image_id=image_id)
     logger.info(
-        "photo_import.recognition.image_received image_id=%s session_id=%s storage_path=%s exists=%s",
+        "photo_import.recognition.image_received image_id=%s session_id=%s storage_path=%s resolved_path=%s exists=%s",
         image_id,
         image.session_id,
         image.storage_path,
+        path,
         path.is_file(),
     )
     logger.info(
