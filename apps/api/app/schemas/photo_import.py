@@ -96,6 +96,12 @@ class PhotoImportCandidateRead(BaseModel):
     match_reason: str | None
     matched_on: str | None = None
     rank: int
+    base_text_score: float | None = None
+    cover_similarity_score: float | None = None
+    fingerprint_score: float | None = None
+    final_score: float | None = None
+    visual_score_status: str | None = None
+    visual_match_label: str | None = None
 
 
 class PhotoImportCandidateDebugInfo(BaseModel):

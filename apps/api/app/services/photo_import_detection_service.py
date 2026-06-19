@@ -39,6 +39,7 @@ from app.services.photo_import_session_service import (
 
 
 def candidate_to_read(row: PhotoImportCandidate) -> PhotoImportCandidateRead:
+    breakdown = row.score_breakdown or {}
     return PhotoImportCandidateRead(
         id=int(row.id or 0),
         detected_book_id=int(row.detected_book_id),
@@ -55,6 +56,12 @@ def candidate_to_read(row: PhotoImportCandidate) -> PhotoImportCandidateRead:
         match_reason=row.match_reason,
         matched_on=row.matched_on,
         rank=int(row.rank),
+        base_text_score=breakdown.get("base_text_score"),
+        cover_similarity_score=breakdown.get("cover_similarity_score"),
+        fingerprint_score=breakdown.get("fingerprint_score"),
+        final_score=breakdown.get("final_score") or float(row.match_score),
+        visual_score_status=breakdown.get("visual_score_status"),
+        visual_match_label=breakdown.get("visual_match_label"),
     )
 
 

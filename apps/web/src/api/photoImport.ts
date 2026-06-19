@@ -68,6 +68,12 @@ export type PhotoImportCandidate = {
   match_reason: string | null;
   matched_on: string | null;
   rank: number;
+  base_text_score?: number | null;
+  cover_similarity_score?: number | null;
+  fingerprint_score?: number | null;
+  final_score?: number | null;
+  visual_score_status?: string | null;
+  visual_match_label?: string | null;
 };
 
 export type PhotoImportDetectedBook = {

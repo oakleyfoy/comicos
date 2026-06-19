@@ -33,8 +33,20 @@ logger = logging.getLogger(__name__)
 NO_ISSUE_SCORE_CAP = 65.0
 AUTO_SELECT_MIN_SCORE = 95.0
 AUTO_SELECT_MIN_GAP = 15.0
-COVER_SIMILARITY_WEIGHT = 0.25
-FINGERPRINT_WEIGHT = 0.45
+WEIGHT_FINGERPRINT = 0.40
+WEIGHT_COVER_SIMILARITY = 0.35
+WEIGHT_TEXT = 0.20
+WEIGHT_PUBLISHER_META = 0.05
+TEXT_ONLY_PENALTY = 12.0
+STRONG_VISUAL_BOOST = 5.0
+
+_AMBIGUOUS_SERIES_FAMILIES: dict[str, list[str]] = {
+    "x": ["X-Men", "X-Factor", "X-Force", "X-Man", "Uncanny X-Men"],
+    "spider": ["Spider-Man", "Spider-Woman", "The Amazing Spider-Man", "Spectacular Spider-Man"],
+    "captain": ["Captain America", "Captain Marvel", "Captain Britain"],
+    "batman": ["Batman", "Detective Comics", "Batman and the Outsiders"],
+    "superman": ["Superman", "Action Comics", "Adventures of Superman"],
+}
 _LAUNCH_HINTS = ("introducing", "initiative", "premiere", "special", "first issue", "launch")
 
 # Conservative series-name corrections for common AI pluralization / noise.
@@ -121,6 +133,60 @@ class ScoredCatalogRow:
     match_score: float
     match_reason: str
     matched_on: str
+    base_text_score: float = 0.0
+    cover_similarity_score: float = 0.0
+    fingerprint_score: float = 0.0
+    publisher_meta_score: float = 0.0
+    visual_score_status: str = "unavailable"
+    visual_match_label: str = "No cover available"
+
+
+def _expand_ambiguous_series_tokens(tokens: list[str]) -> list[str]:
+    """Broaden short/ambiguous AI titles so cover ranking can disambiguate (e.g. X vs X-Factor)."""
+    expanded: list[str] = list(tokens)
+    for raw in tokens:
+        key = (raw or "").strip().lower()
+        if not key:
+            continue
+        families: list[str] | None = None
+        if key in _AMBIGUOUS_SERIES_FAMILIES:
+            families = _AMBIGUOUS_SERIES_FAMILIES[key]
+        elif len(key) <= 3 and key in _AMBIGUOUS_SERIES_FAMILIES:
+            families = _AMBIGUOUS_SERIES_FAMILIES[key]
+        elif key in {"captain", "spider", "batman", "superman"}:
+            families = _AMBIGUOUS_SERIES_FAMILIES.get(key)
+        if not families:
+            continue
+        for name in families:
+            if name not in expanded:
+                expanded.append(name)
+    return expanded
+
+
+def _visual_match_label(*, status: str, cover: float, fingerprint: float) -> str:
+    if status == "unavailable":
+        return "No cover available"
+    if fingerprint >= 55:
+        return "Fingerprint match"
+    if cover >= 55:
+        return "Cover match"
+    if cover >= 25 or fingerprint >= 25:
+        return "Partial visual match"
+    return "Text match only"
+
+
+def _exact_issue_matched_on(matched_on: str) -> bool:
+    return matched_on in {
+        "exact_series_issue_publisher",
+        "exact_series_issue",
+        "alternate_title_issue",
+        "visible_text_issue",
+    }
+
+
+def _score_row_with_base(row: ScoredCatalogRow) -> ScoredCatalogRow:
+    row.base_text_score = float(row.match_score)
+    return row
 
 
 def _strip_issue(value: str | None) -> str:
@@ -416,7 +482,7 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
         "fuzzy_series",
         "character_title_fallback",
     ]
-    tokens = _series_tokens(inp)
+    tokens = _expand_ambiguous_series_tokens(_series_tokens(inp))
     if inp.series_guess:
         search_terms.append(f"series:{inp.series_guess}")
     if inp.issue_number_guess:
@@ -456,7 +522,7 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
                 if scored is None:
                     continue
                 seen_issue_ids.add(iid)
-                ranked.append(scored)
+                ranked.append(_score_row_with_base(scored))
 
         if not inp.issue_number_guess and token:
             search_terms.append(f"series_no_issue:{token}")
@@ -475,7 +541,7 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
                 if scored is None:
                     continue
                 seen_issue_ids.add(iid)
-                ranked.append(scored)
+                ranked.append(_score_row_with_base(scored))
 
     if not ranked and query_tokens:
         for token in query_tokens[:3]:
@@ -503,7 +569,7 @@ def generate_scored_candidates(session: Session, inp: PhotoImportMatchInput) -> 
                     )
                 if scored:
                     seen_issue_ids.add(iid)
-                    ranked.append(scored)
+                    ranked.append(_score_row_with_base(scored))
                     search_terms.append(f"broad:{token}")
 
     def _issue_order(row: ScoredCatalogRow) -> float:
@@ -523,12 +589,18 @@ def _apply_visual_ranking(
 ) -> list[ScoredCatalogRow]:
     crop_abs = resolve_crop_abs_path(det.crop_path)
     if crop_abs is None or not ranked:
+        for row in ranked:
+            row.base_text_score = float(row.match_score)
+            row.visual_score_status = "unavailable"
+            row.visual_match_label = "No cover available"
         return ranked
     crop_hashes = fingerprint_hashes_for_crop(crop_abs)
     phash_prefix = crop_hashes[0][:16] if crop_hashes else None
     visually_scored: list[ScoredCatalogRow] = []
     for row in ranked:
         iid = int(row.issue.id or 0)
+        base_text = float(row.base_text_score or row.match_score)
+        pub_meta = 100.0 if _publisher_matches(row.publisher, det.ai_publisher or det.ai_visible_publisher_text or "") else 0.0
         cover_sim = cover_similarity_score_for_issue(session, crop_path=crop_abs, catalog_issue_id=iid)
         fp_sim = (
             fingerprint_match_score_for_issue(session, crop_hashes=crop_hashes, catalog_issue_id=iid)
@@ -540,13 +612,28 @@ def _apply_visual_ranking(
             series_guess=det.ai_series or "",
             crop_phash_prefix=phash_prefix,
         )
-        combined = min(
-            100.0,
-            row.match_score + cover_sim * COVER_SIMILARITY_WEIGHT + fp_sim * FINGERPRINT_WEIGHT + boost,
-        )
-        reason_parts = [row.match_reason]
+        has_visual = cover_sim > 0 or fp_sim > 0
+        if has_visual:
+            combined = (
+                fp_sim * WEIGHT_FINGERPRINT
+                + cover_sim * WEIGHT_COVER_SIMILARITY
+                + base_text * WEIGHT_TEXT
+                + pub_meta * WEIGHT_PUBLISHER_META
+                + boost
+            )
+            if base_text >= 75 and cover_sim < 35 and fp_sim < 35:
+                combined = max(0.0, combined - TEXT_ONLY_PENALTY)
+            if cover_sim >= 65 or fp_sim >= 65:
+                combined = min(100.0, combined + STRONG_VISUAL_BOOST)
+            status = "available"
+        else:
+            combined = min(100.0, base_text + boost)
+            status = "unavailable"
+        combined = min(100.0, combined)
+        label = _visual_match_label(status=status, cover=cover_sim, fingerprint=fp_sim)
+        reason_parts = [row.match_reason, label]
         if cover_sim >= 40:
-            reason_parts.append(f"cover sim {cover_sim:.0f}")
+            reason_parts.append(f"cover {cover_sim:.0f}")
         if fp_sim >= 40:
             reason_parts.append(f"fingerprint {fp_sim:.0f}")
         if boost > 0:
@@ -557,14 +644,26 @@ def _apply_visual_ranking(
                 series=row.series,
                 publisher=row.publisher,
                 match_score=combined,
-                match_reason="; ".join(reason_parts),
+                match_reason="; ".join(p for p in reason_parts if p),
                 matched_on=row.matched_on,
+                base_text_score=base_text,
+                cover_similarity_score=cover_sim,
+                fingerprint_score=fp_sim,
+                publisher_meta_score=pub_meta,
+                visual_score_status=status,
+                visual_match_label=label,
             )
         )
     visually_scored.sort(
         key=lambda row: (-row.match_score, int(row.issue.id or 0)),
     )
     return visually_scored
+
+
+def _visual_signal_for_auto_select(row: ScoredCatalogRow) -> bool:
+    if row.visual_score_status == "available":
+        return row.cover_similarity_score >= 50 or row.fingerprint_score >= 50
+    return _exact_issue_matched_on(row.matched_on or "")
 
 
 def _maybe_auto_select_issue(
@@ -580,6 +679,8 @@ def _maybe_auto_select_issue(
     if top.match_score - second_score < AUTO_SELECT_MIN_GAP:
         return
     if (top.matched_on or "") in NON_AUTO_CONFIRM_MATCHED_ON:
+        return
+    if not _visual_signal_for_auto_select(top):
         return
     det.selected_catalog_issue_id = int(top.issue.id or 0)
     det.selected_variant_id = None
@@ -622,6 +723,16 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         iid = int(row.issue.id or 0)
         variant = variant_by_issue.get(iid)
         cover, thumb = covers.get(iid, (None, None))
+        breakdown = {
+            "base_text_score": row.base_text_score,
+            "cover_similarity_score": row.cover_similarity_score,
+            "fingerprint_score": row.fingerprint_score,
+            "publisher_meta_score": row.publisher_meta_score,
+            "final_score": row.match_score,
+            "matched_on": row.matched_on,
+            "visual_score_status": row.visual_score_status,
+            "visual_match_label": row.visual_match_label,
+        }
         session.add(
             PhotoImportCandidate(
                 detected_book_id=detected_book_id,
@@ -638,6 +749,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
                 match_reason=row.match_reason,
                 matched_on=row.matched_on,
                 rank=rank,
+                score_breakdown=breakdown,
             )
         )
 

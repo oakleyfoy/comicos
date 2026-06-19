@@ -128,4 +128,5 @@ class PhotoImportCandidate(SQLModel, table=True):
     match_reason: str | None = Field(default=None, max_length=512, nullable=True)
     matched_on: str | None = Field(default=None, max_length=64, nullable=True)
     rank: int = Field(default=0, nullable=False)
+    score_breakdown: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
