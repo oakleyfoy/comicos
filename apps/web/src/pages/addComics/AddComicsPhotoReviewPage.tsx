@@ -6,6 +6,7 @@ import {
   fetchDetectionCropObjectUrl,
   getPhotoImportDetectionCandidates,
   listPhotoImportDetections,
+  PhotoImportApiError,
   rejectPhotoImportDetection,
   selectPhotoImportCandidate,
   type PhotoImportCandidate,
@@ -41,9 +42,19 @@ function hasNumericIssue(det: PhotoImportDetectedBook): boolean {
   return Boolean(det.ai_issue_number?.trim());
 }
 
+function detectionListErrorMessage(err: unknown): string {
+  if (err instanceof PhotoImportApiError) {
+    if (err.status === 401) return "Please log in again to review detections.";
+    if (err.status === 403) return "This photo session belongs to another user.";
+    return err.message;
+  }
+  return err instanceof Error ? err.message : "Could not load detections";
+}
+
 export function AddComicsPhotoReviewPage(): JSX.Element {
   const { token = "" } = useParams();
   const [detections, setDetections] = useState<PhotoImportDetectedBook[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -54,9 +65,13 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      setDetections(await listPhotoImportDetections(token));
+      const rows = await listPhotoImportDetections(token);
+      setDetections(rows);
+      setLoadState("ready");
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load detections");
+      setLoadState((prev) => (prev === "ready" ? "ready" : "failed"));
+      setError(detectionListErrorMessage(err));
     }
   }, [token]);
 
@@ -168,6 +183,11 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
           ← Phone Photo session
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-slate-900">Review detected books</h1>
+        {loadState === "loading" ? (
+          <p className="mt-3 text-sm text-slate-600" aria-live="polite">
+            Loading detections…
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {error}
@@ -391,7 +411,9 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
             );
           })}
         </ul>
-        {active.length === 0 ? <p className="mt-6 text-sm text-slate-500">No pending detections.</p> : null}
+        {loadState === "ready" && active.length === 0 ? (
+          <p className="mt-6 text-sm text-slate-500">No pending detections.</p>
+        ) : null}
       </div>
     </AppShell>
   );

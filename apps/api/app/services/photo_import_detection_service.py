@@ -146,9 +146,9 @@ def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoIm
     )
 
 
-def list_session_detections(session: Session, *, token: str, owner_user_id: int) -> list[PhotoImportDetectedBookRead]:
+def list_session_detections(session: Session, *, token: str) -> list[PhotoImportDetectedBookRead]:
+    """List detections for a session. Access is gated by the session token (QR / review link)."""
     import_row = get_session_by_token_or_404(session, token=token)
-    assert_session_owner(import_row, owner_user_id=owner_user_id)
     rows = session.exec(
         select(PhotoImportDetectedBook)
         .where(PhotoImportDetectedBook.session_id == import_row.id)

@@ -2,6 +2,16 @@ import { TOKEN_STORAGE_KEY } from "./client";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
+export class PhotoImportApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "PhotoImportApiError";
+    this.status = status;
+  }
+}
+
 async function requestPhotoImport<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY);
   const res = await fetch(`${API_BASE}${path}`, {
@@ -20,7 +30,7 @@ async function requestPhotoImport<T>(path: string, init?: RequestInit): Promise<
     } catch {
       /* ignore */
     }
-    throw new Error(detail);
+    throw new PhotoImportApiError(detail, res.status);
   }
   return (await res.json()) as T;
 }

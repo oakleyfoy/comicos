@@ -103,10 +103,8 @@ async def upload_images_endpoint(
 def list_detections_endpoint(
     token: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
 ) -> list[PhotoImportDetectedBookRead]:
-    assert current_user.id is not None
-    return list_session_detections(session, token=token, owner_user_id=int(current_user.id))
+    return list_session_detections(session, token=token)
 
 
 @photo_import_router.get("/detections/{detection_id}/candidates", response_model=PhotoImportDetectionCandidatesResponse)
