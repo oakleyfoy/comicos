@@ -153,27 +153,94 @@ def expand_books_to_match_bboxes(
     return expanded
 
 
-def needs_multi_comic_segmentation(books: list[dict[str, Any]], *, image_width: int, image_height: int) -> bool:
-    if image_width < 400 or image_height < 400:
+PHOTO_IMPORT_PIPELINE_VERSION = "P100-15b"
+
+
+def book_has_weak_metadata(book: dict[str, Any]) -> bool:
+    series = str(book.get("series_guess") or book.get("visible_title_text") or "").strip()
+    publisher = str(book.get("publisher_guess") or book.get("visible_publisher_text") or "").strip()
+    issue = book.get("issue_number_guess")
+    confidence = float(book.get("confidence") or 0.0)
+    if series or publisher:
+        return confidence < 0.2
+    return confidence < 0.35
+
+
+def looks_like_group_photo(*, image_width: int, image_height: int) -> bool:
+    """Wide shelf/table rows or tall multi-book stacks — not a single portrait cover."""
+    w, h = image_width, image_height
+    if min(w, h) < 200:
         return False
-    if len(books) > 1:
-        return False
-    if not books:
+    if w >= h * 1.15 and w >= 700:
         return True
-    bbox = extract_bbox_from_book(books[0])
-    if is_missing_bbox(bbox) or is_full_frame_bbox(bbox):
+    if h >= w * 1.35 and h >= 700:
         return True
     return False
 
 
+def estimate_comic_slots_from_layout(*, image_width: int, image_height: int) -> int:
+    """Heuristic slot count for shelf/table group photos when vision under-segments."""
+    if image_width <= 0 or image_height <= 0:
+        return 1
+    ratio = image_width / image_height
+    if ratio >= 1.2:
+        cols = 3 if image_width >= 900 else 2
+        rows = 2 if image_height >= 450 else 1
+        return min(MAX_DETECTED_BOOKS, cols * rows)
+    if ratio <= 0.85:
+        rows = min(8, max(2, int(image_height / max(160, image_width * 1.1))))
+        return min(MAX_DETECTED_BOOKS, rows)
+    return min(MAX_DETECTED_BOOKS, 4)
+
+
+def _distinct_bbox_count(books: list[dict[str, Any]]) -> int:
+    keys: set[tuple[float, float, float, float]] = set()
+    for book in books:
+        bbox = extract_bbox_from_book(book)
+        keys.add((bbox["x"], bbox["y"], bbox["width"], bbox["height"]))
+    return len(keys)
+
+
+def should_run_bbox_segmentation(
+    books: list[dict[str, Any]],
+    *,
+    image_width: int,
+    image_height: int,
+) -> bool:
+    group = looks_like_group_photo(image_width=image_width, image_height=image_height)
+    if not books:
+        return group or image_width >= 400
+    if len(books) == 1:
+        bbox = extract_bbox_from_book(books[0])
+        if is_missing_bbox(bbox) or is_full_frame_bbox(bbox):
+            return True
+        if group and book_has_weak_metadata(books[0]):
+            return True
+        return False
+
+    if _distinct_bbox_count(books) <= 1:
+        return True
+    if all(is_full_frame_bbox(extract_bbox_from_book(b)) for b in books):
+        return True
+    if group and len(books) < estimate_comic_slots_from_layout(image_width=image_width, image_height=image_height):
+        return True
+    return False
+
+
+def needs_multi_comic_segmentation(books: list[dict[str, Any]], *, image_width: int, image_height: int) -> bool:
+    return should_run_bbox_segmentation(books, image_width=image_width, image_height=image_height)
+
+
 def log_bbox_summary(*, image_id: int, image_width: int, image_height: int, books: list[dict[str, Any]]) -> None:
+    distinct = _distinct_bbox_count(books)
     logger.info(
-        "photo_import.segmentation.summary image_id=%s dimensions=%sx%s ai_books=%d bbox_count=%d",
+        "photo_import.segmentation.summary image_id=%s dimensions=%sx%s group_photo=%s ai_books=%d distinct_bboxes=%d",
         image_id,
         image_width,
         image_height,
+        looks_like_group_photo(image_width=image_width, image_height=image_height),
         len(books),
-        len(books),
+        distinct,
     )
     for idx, book in enumerate(books):
         bbox = extract_bbox_from_book(book)

@@ -24,16 +24,19 @@ from app.models.photo_import import (
 from app.services.photo_import_crop_service import REPO_ROOT, clamp_bbox01, extract_and_save_crop
 from app.services.photo_import_segmentation_service import (
     MAX_DETECTED_BOOKS,
+    PHOTO_IMPORT_PIPELINE_VERSION,
     comic_count_from_payload,
+    estimate_comic_slots_from_layout,
     expand_books_to_match_bboxes,
     extract_bbox_from_book,
     grid_bboxes_for_count,
     is_full_frame_bbox,
     is_missing_bbox,
     log_bbox_summary,
-    needs_multi_comic_segmentation,
+    looks_like_group_photo,
     parse_bboxes_from_ai_payload,
     parse_books_from_ai_payload,
+    should_run_bbox_segmentation,
 )
 
 logger = logging.getLogger(__name__)
@@ -249,40 +252,69 @@ def resolve_books_for_image(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Apply multi-comic segmentation fallbacks before persisting detections."""
     log_bbox_summary(image_id=image_id, image_width=image_width, image_height=image_height, books=books_raw)
+    group_photo = looks_like_group_photo(image_width=image_width, image_height=image_height)
 
-    if not needs_multi_comic_segmentation(books_raw, image_width=image_width, image_height=image_height):
+    if not should_run_bbox_segmentation(books_raw, image_width=image_width, image_height=image_height):
+        logger.info(
+            "photo_import.segmentation.skip image_id=%s reason=distinct_bboxes_ok books=%d",
+            image_id,
+            len(books_raw),
+        )
         return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
 
     if not allow_bbox_retry or raw_response.get("fallback"):
         logger.warning(
-            "photo_import.segmentation.skipped_retry image_id=%s books=%d fallback=%s",
+            "photo_import.segmentation.skipped_retry image_id=%s books=%d fallback=%s group_photo=%s",
             image_id,
             len(books_raw),
             bool(raw_response.get("fallback")),
+            group_photo,
         )
+        if group_photo and books_raw:
+            layout_count = estimate_comic_slots_from_layout(image_width=image_width, image_height=image_height)
+            if layout_count > 1:
+                bboxes = grid_bboxes_for_count(layout_count)
+                expanded = expand_books_to_match_bboxes(
+                    books_raw,
+                    bboxes,
+                    reason="layout_grid_no_ai_retry",
+                )
+                raw_response = {**raw_response, "layout_grid_fallback": layout_count}
+                return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
         return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
 
+    seg_payload: dict[str, Any] | None = None
     try:
         seg_payload = _call_openai_bbox_segmentation(image_bytes, image_id=image_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("photo_import.segmentation.bbox_retry_failed image_id=%s error=%s", image_id, exc)
-        return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
 
-    bboxes = parse_bboxes_from_ai_payload(seg_payload)
-    count = comic_count_from_payload(seg_payload)
+    bboxes: list[dict[str, float]] = parse_bboxes_from_ai_payload(seg_payload or {}) if seg_payload else []
+    count = comic_count_from_payload(seg_payload or {}) if seg_payload else None
     logger.info(
-        "photo_import.segmentation.bbox_retry image_id=%s comic_count=%s bbox_count=%d",
+        "photo_import.segmentation.bbox_retry image_id=%s comic_count=%s bbox_count=%d group_photo=%s",
         image_id,
         count,
         len(bboxes),
+        group_photo,
     )
 
-    if len(bboxes) <= 1 and count and count > 1:
-        bboxes = grid_bboxes_for_count(count)
+    layout_estimate = estimate_comic_slots_from_layout(image_width=image_width, image_height=image_height)
+    target_count = count if count and count > 1 else None
+    if target_count is None and group_photo and layout_estimate > 1:
+        target_count = layout_estimate
+        logger.info(
+            "photo_import.segmentation.layout_estimate image_id=%s slots=%d",
+            image_id,
+            layout_estimate,
+        )
+
+    if len(bboxes) <= 1 and target_count and target_count > 1:
+        bboxes = grid_bboxes_for_count(int(target_count))
         logger.info(
             "photo_import.segmentation.grid_fallback image_id=%s count=%d bbox_count=%d",
             image_id,
-            count,
+            target_count,
             len(bboxes),
         )
 
@@ -294,6 +326,17 @@ def resolve_books_for_image(
         )
         raw_response = {**raw_response, "bbox_segmentation": seg_payload}
         log_bbox_summary(image_id=image_id, image_width=image_width, image_height=image_height, books=expanded)
+        return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
+
+    if group_photo and layout_estimate > 1:
+        bboxes = grid_bboxes_for_count(layout_estimate)
+        expanded = expand_books_to_match_bboxes(books_raw, bboxes, reason="layout_grid_after_retry")
+        raw_response = {**raw_response, "bbox_segmentation": seg_payload, "layout_grid_fallback": layout_estimate}
+        logger.warning(
+            "photo_import.segmentation.hard_guard_layout image_id=%s final_bboxes=%d",
+            image_id,
+            len(bboxes),
+        )
         return [_normalize_book_entry(b) for b in expanded][:MAX_DETECTED_BOOKS], raw_response
 
     return [_normalize_book_entry(b) for b in books_raw][:MAX_DETECTED_BOOKS], raw_response
@@ -311,6 +354,11 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
         image.session_id,
         image.storage_path,
         path.is_file(),
+    )
+    logger.info(
+        "photo_import.recognition.pipeline image_id=%s version=%s",
+        image_id,
+        PHOTO_IMPORT_PIPELINE_VERSION,
     )
     with Image.open(path) as img:
         image_width, image_height = img.size
@@ -346,6 +394,19 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     books_raw = parse_books_from_ai_payload(ai_payload)
     if not books_raw and raw_response.get("fallback"):
         books_raw = list(ai_payload.get("books") or [])
+
+    logger.info(
+        "photo_import.recognition.ai_parse image_id=%s parsed_book_count=%d raw_keys=%s",
+        image_id,
+        len(books_raw),
+        sorted(ai_payload.keys()) if isinstance(ai_payload, dict) else [],
+    )
+    if isinstance(raw_response, dict) and not raw_response.get("fallback"):
+        logger.info(
+            "photo_import.recognition.ai_raw_preview image_id=%s preview=%s",
+            image_id,
+            json.dumps(ai_payload, default=str)[:2000],
+        )
 
     if not books_raw and not raw_response.get("fallback"):
         logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
@@ -430,9 +491,46 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
         created += 1
     session.commit()
     logger.info(
-        "photo_import.recognition.persisted image_id=%s ai_books_returned=%d detected_book_rows=%d fallback=%s",
+        "photo_import.recognition.persisted image_id=%s pipeline=%s ai_books_returned=%d detected_book_rows=%d fallback=%s",
         image_id,
+        PHOTO_IMPORT_PIPELINE_VERSION,
         len(books),
         created,
         bool(raw_response.get("fallback")),
     )
+
+
+def diagnose_image_file(image_path: Path, *, image_id: int = 0) -> dict[str, Any]:
+    """Run identify + segmentation without DB (for regression/debug)."""
+    raw = image_path.read_bytes()
+    with Image.open(image_path) as img:
+        image_width, image_height = img.size
+    allow_bbox_retry = True
+    try:
+        ai_payload = _call_openai_vision(raw, image_id=image_id or 1)
+        raw_response: dict[str, Any] = dict(ai_payload)
+    except Exception as exc:  # noqa: BLE001
+        ai_payload = _fallback_books(reason=str(exc))
+        raw_response = {"fallback": True, "failure_detail": str(exc), **ai_payload}
+        allow_bbox_retry = False
+
+    books_raw = parse_books_from_ai_payload(ai_payload)
+    books, raw_response = resolve_books_for_image(
+        image_id=image_id or 1,
+        image_bytes=raw,
+        image_width=image_width,
+        image_height=image_height,
+        books_raw=books_raw,
+        raw_response=raw_response,
+        allow_bbox_retry=allow_bbox_retry,
+    )
+    return {
+        "pipeline_version": PHOTO_IMPORT_PIPELINE_VERSION,
+        "image_dimensions": {"width": image_width, "height": image_height},
+        "group_photo": looks_like_group_photo(image_width=image_width, image_height=image_height),
+        "ai_raw_response": ai_payload,
+        "parsed_book_count": len(books_raw),
+        "final_book_count": len(books),
+        "final_bboxes": [b.get("bbox") for b in books],
+        "raw_response_meta": {k: v for k, v in raw_response.items() if k != "books"},
+    }

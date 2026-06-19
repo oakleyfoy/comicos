@@ -87,6 +87,61 @@ def test_run_ai_recognition_creates_six_detections_and_crops(tmp_path, monkeypat
                 assert row.crop_path != rel_path
 
 
+def test_group_photo_hard_guard_splits_one_full_frame_into_six(tmp_path, monkeypatch) -> None:
+    import app.services.photo_import_ai_recognition_service as ai_mod
+    import app.services.photo_import_crop_service as crop_mod
+
+    monkeypatch.setattr(crop_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(ai_mod, "REPO_ROOT", tmp_path)
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+
+    src = tmp_path / "group.jpg"
+    Image.new("RGB", (1200, 800), color=(30, 30, 30)).save(src, format="JPEG")
+    rel_path = str(src.relative_to(tmp_path)).replace("\\", "/")
+
+    one_merged = {
+        "books": [
+            {
+                "bbox": {"x": 0, "y": 0, "width": 1, "height": 1},
+                "series_guess": "",
+                "confidence": 0.05,
+            }
+        ]
+    }
+
+    expires = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    with mock.patch.object(ai_mod, "_call_openai_vision", return_value=one_merged):
+        with mock.patch.object(ai_mod, "_call_openai_bbox_segmentation", return_value={"comic_count": 1, "bboxes": []}):
+            with Session(engine) as session:
+                session.add(PhotoImportSession(id=3, user_id=1, session_token="t3", expires_at=expires))
+                session.add(
+                    PhotoImportImage(
+                        id=12,
+                        session_id=3,
+                        user_id=1,
+                        storage_path=rel_path,
+                        mime_type="image/jpeg",
+                        file_size=1,
+                    )
+                )
+                session.commit()
+                run_ai_recognition_for_image(session, image_id=12)
+                rows = session.exec(select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == 12)).all()
+                assert len(rows) == 6
+
+
+def test_should_run_segmentation_when_multiple_books_share_full_frame() -> None:
+    from app.services.photo_import_segmentation_service import should_run_bbox_segmentation
+
+    books = [
+        {"bbox": {"x": 0, "y": 0, "width": 1, "height": 1}, "series_guess": "A"},
+        {"bbox": {"x": 0, "y": 0, "width": 1, "height": 1}, "series_guess": "B"},
+    ]
+    assert should_run_bbox_segmentation(books, image_width=1200, image_height=800) is True
+
+
 def test_fallback_full_image_only_when_ai_unavailable(tmp_path, monkeypatch) -> None:
     import app.services.photo_import_ai_recognition_service as ai_mod
     import app.services.photo_import_crop_service as crop_mod
