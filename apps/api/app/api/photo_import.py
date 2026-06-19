@@ -30,7 +30,7 @@ from app.services.photo_import_detection_service import (
     select_candidate,
 )
 from app.services.photo_import_crop_service import resolve_crop_abs_path
-from app.models.photo_import import PhotoImportDetectedBook
+from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
 from app.services.photo_import_session_service import (
     complete_session,
     create_photo_import_session,
@@ -40,6 +40,7 @@ from app.services.photo_import_session_service import (
     assert_session_owner,
 )
 from app.services.photo_import_upload_service import upload_session_images
+from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 
 photo_import_router = APIRouter(prefix="/api/v1/photo-import", tags=["Photo Import (P100)"])
 
@@ -111,6 +112,23 @@ def list_detections_endpoint(
     session: Session = Depends(get_session),
 ) -> list[PhotoImportDetectedBookRead]:
     return list_session_detections(session, token=token)
+
+
+@photo_import_router.get("/sessions/{token}/images/{image_id}/original")
+def get_session_original_image_endpoint(
+    token: str,
+    image_id: int,
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    import_row = get_session_by_token_or_404(session, token=token)
+    image = session.get(PhotoImportImage, image_id)
+    if image is None or int(image.session_id) != int(import_row.id or 0):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo import image not found")
+    abs_path = resolve_photo_import_storage_path(image.storage_path, image_id=image_id)
+    if not abs_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Original image not found")
+    media = image.mime_type if image.mime_type.startswith("image/") else "image/jpeg"
+    return FileResponse(abs_path, media_type=media, filename=image.original_filename or f"photo-import-{image_id}.jpg")
 
 
 @photo_import_router.get("/detections/{detection_id}/candidates", response_model=PhotoImportDetectionCandidatesResponse)

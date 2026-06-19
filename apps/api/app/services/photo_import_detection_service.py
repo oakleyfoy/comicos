@@ -9,10 +9,12 @@ from sqlmodel import Session, select
 
 from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.photo_import import (
+    CAPTURE_MODE_SINGLE_COMIC,
     DETECTION_STATUS_CONFIRMED,
     DETECTION_STATUS_REJECTED,
     PhotoImportCandidate,
     PhotoImportDetectedBook,
+    PhotoImportImage,
     PhotoImportSession,
 )
 from app.services.photo_import_candidate_cover_service import cover_urls_for_photo_import_candidates
@@ -34,7 +36,12 @@ from app.services.photo_import_review_rules import can_confirm_detection, qualif
 from app.services.photo_import_session_service import (
     assert_session_owner,
     get_session_by_token_or_404,
+    normalize_capture_mode,
     refresh_session_counts,
+)
+from app.services.photo_import_storage_service import (
+    resolve_photo_import_storage_path,
+    source_image_api_path,
 )
 
 
@@ -93,7 +100,12 @@ def _display_image_url(session: Session, det: PhotoImportDetectedBook) -> str | 
     return covers.get(int(det.selected_catalog_issue_id))
 
 
-def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoImportDetectedBookRead:
+def detection_to_read(
+    session: Session,
+    row: PhotoImportDetectedBook,
+    *,
+    session_token: str | None = None,
+) -> PhotoImportDetectedBookRead:
     best = _best_candidate(session, int(row.id or 0))
     can_confirm = can_confirm_detection(row, best_candidate=best)
     has_candidates = int(row.candidate_count) > 0
@@ -107,6 +119,21 @@ def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoIm
         review_status = "needs_match"
     crop_url = crop_api_path(detection_id=int(row.id or 0)) if resolve_crop_abs_path(row.crop_path) else None
     display_url = _display_image_url(session, row)
+
+    recognition_source: str | None = None
+    display_crop = False
+    source_url: str | None = None
+    import_row = session.get(PhotoImportSession, int(row.session_id))
+    single_comic = import_row is not None and normalize_capture_mode(import_row.capture_mode) == CAPTURE_MODE_SINGLE_COMIC
+    if single_comic:
+        recognition_source = "full_image"
+        display_crop = True
+    image = session.get(PhotoImportImage, int(row.image_id))
+    if session_token and image is not None:
+        abs_original = resolve_photo_import_storage_path(image.storage_path, image_id=int(image.id or 0))
+        if abs_original.is_file():
+            source_url = source_image_api_path(session_token=session_token, image_id=int(image.id or 0))
+
     return PhotoImportDetectedBookRead(
         id=int(row.id or 0),
         session_id=int(row.session_id),
@@ -114,6 +141,9 @@ def detection_to_read(session: Session, row: PhotoImportDetectedBook) -> PhotoIm
         crop_path=row.crop_path,
         crop_image_url=crop_url,
         display_image_url=display_url,
+        source_image_url=source_url,
+        recognition_source=recognition_source,
+        display_crop=display_crop,
         bbox_x=row.bbox_x,
         bbox_y=row.bbox_y,
         bbox_width=row.bbox_width,
@@ -154,7 +184,7 @@ def list_session_detections(session: Session, *, token: str) -> list[PhotoImport
         .where(PhotoImportDetectedBook.session_id == import_row.id)
         .order_by(PhotoImportDetectedBook.id.asc())
     ).all()
-    return [detection_to_read(session, row) for row in rows]
+    return [detection_to_read(session, row, session_token=token) for row in rows]
 
 
 def list_detection_candidates_debug(

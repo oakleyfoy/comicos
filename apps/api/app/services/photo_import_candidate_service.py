@@ -14,8 +14,10 @@ from app.models.photo_import import (
     RECOGNITION_STATUS_AMBIGUOUS,
     RECOGNITION_STATUS_MATCHED,
     RECOGNITION_STATUS_UNKNOWN,
+    CAPTURE_MODE_SINGLE_COMIC,
     PhotoImportCandidate,
     PhotoImportDetectedBook,
+    PhotoImportSession,
 )
 from app.services.photo_import_candidate_cover_service import (
     cover_and_thumbnail_urls_for_photo_import_candidates,
@@ -27,6 +29,7 @@ from app.services.photo_import_fingerprint_service import fingerprint_hashes_for
 from app.services.photo_import_learning_service import learning_boost_for_issue
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
+from app.services.photo_import_session_service import normalize_capture_mode
 
 logger = logging.getLogger(__name__)
 
@@ -594,6 +597,10 @@ def _apply_visual_ranking(
             row.visual_score_status = "unavailable"
             row.visual_match_label = "No cover available"
         return ranked
+    logger.debug(
+        "photo_import.candidates.visual_compare detection_id=%s visual_comparison_source=crop",
+        det.id,
+    )
     crop_hashes = fingerprint_hashes_for_crop(crop_abs)
     phash_prefix = crop_hashes[0][:16] if crop_hashes else None
     visually_scored: list[ScoredCatalogRow] = []
@@ -701,6 +708,14 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         or inp.subtitle_guess
     )
     scored, _search_terms = generate_scored_candidates(session, inp) if has_text else ([], [])
+    import_row = session.get(PhotoImportSession, int(det.session_id))
+    single_comic = import_row is not None and normalize_capture_mode(import_row.capture_mode) == CAPTURE_MODE_SINGLE_COMIC
+    if single_comic and scored:
+        logger.info(
+            "photo_import.candidates.ranking detection_id=%s recognition_source=full_image "
+            "text_source=full_image visual_comparison_source=crop display_crop=true",
+            detected_book_id,
+        )
     scored = _apply_visual_ranking(session, det=det, ranked=scored) if scored else scored
 
     issue_ids = [int(row.issue.id or 0) for row in scored]

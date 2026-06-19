@@ -87,6 +87,9 @@ class PhotoImportDetectedBookRead(BaseModel):
     needs_match: bool = False
     review_status: str = "needs_match"
     best_candidate: "PhotoImportCandidateRead | None" = None
+    source_image_url: str | None = None
+    recognition_source: str | None = None
+    display_crop: bool = False
 
 
 class PhotoImportCandidateRead(BaseModel):

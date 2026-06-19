@@ -422,6 +422,15 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     raw = path.read_bytes()
     raw_response: dict[str, Any]
     allow_bbox_retry = True
+
+    capture_mode = _session_capture_mode(session, int(image.session_id))
+    logger.info("photo_import.recognition.capture_mode image_id=%s mode=%s", image_id, capture_mode)
+    if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
+        logger.info(
+            "photo_import.recognition.start image_id=%s recognition_source=full_image display_crop=true",
+            image_id,
+        )
+
     try:
         ai_payload = _call_openai_vision(raw, image_id=image_id)
         raw_response = ai_payload
@@ -461,9 +470,6 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
     if not books_raw and not raw_response.get("fallback"):
         logger.warning("photo_import.recognition.empty_books image_id=%s", image_id)
 
-    capture_mode = _session_capture_mode(session, int(image.session_id))
-    logger.info("photo_import.recognition.capture_mode image_id=%s mode=%s", image_id, capture_mode)
-
     if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
         books, raw_response = resolve_single_comic_book(
             image_id=image_id,
@@ -499,6 +505,14 @@ def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
             image_id=image_id,
             idx=idx,
         )
+        if capture_mode == CAPTURE_MODE_SINGLE_COMIC:
+            logger.info(
+                "photo_import.recognition.display_crop image_id=%s index=%d display_crop=true "
+                "recognition_source=full_image crop_path=%s",
+                image_id,
+                idx,
+                crop_result.relative_path,
+            )
         logger.info(
             "photo_import.recognition.detection image_id=%s index=%d series=%r visible_title=%r "
             "bbox=%s expanded_bbox=%s refined_bbox=%s crop_path=%s crop_dimensions=%sx%s "

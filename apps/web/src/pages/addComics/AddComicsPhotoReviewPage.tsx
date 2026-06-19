@@ -27,9 +27,8 @@ function cropUrl(det: PhotoImportDetectedBook): string | null {
   return apiUrl(det.crop_path);
 }
 
-function displayUrl(det: PhotoImportDetectedBook, cropObjectUrls: Record<number, string>): string | null {
-  if (det.display_image_url) return det.display_image_url;
-  if (cropObjectUrls[det.id]) return cropObjectUrls[det.id];
+function uploadedPhotoUrl(det: PhotoImportDetectedBook): string | null {
+  if (det.source_image_url) return apiUrl(det.source_image_url);
   return cropUrl(det);
 }
 
@@ -87,6 +86,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
       const next: Record<number, string> = {};
       await Promise.all(
         detections.map(async (det) => {
+          if (det.source_image_url) return;
           if (!det.crop_image_url && !det.crop_path) return;
           const url = await fetchDetectionCropObjectUrl(det.id);
           if (url && !cancelled) next[det.id] = url;
@@ -214,8 +214,8 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
         <ul className="mt-6 space-y-4">
           {active.map((det) => {
             const best = det.best_candidate;
-            const uploadedThumb = cropObjectUrls[det.id] ?? cropUrl(det);
-            const heroThumb = displayUrl(det, cropObjectUrls);
+            const uploadedThumb = uploadedPhotoUrl(det) ?? cropObjectUrls[det.id] ?? cropUrl(det);
+            const compareCropThumb = cropObjectUrls[det.id] ?? cropUrl(det);
             const candidates = candidateMap[det.id] ?? [];
             const showPicker = expanded === det.id;
             return (
@@ -223,14 +223,14 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                 <div className="flex flex-wrap items-start gap-6">
                   <div className="flex min-w-[10rem] flex-col gap-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your photo</p>
-                    {heroThumb ? (
+                    {uploadedThumb ? (
                       <img
-                        src={heroThumb}
+                        src={uploadedThumb}
                         alt=""
                         className="max-h-64 w-auto max-w-[12rem] shrink-0 rounded object-contain ring-1 ring-slate-200"
                       />
                     ) : (
-                      <p className="text-xs text-slate-400">No crop preview</p>
+                      <p className="text-xs text-slate-400">No photo preview</p>
                     )}
                   </div>
                   {best?.cover_url && det.status !== "confirmed" ? (
@@ -361,11 +361,15 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
                     {uploadedThumb ? (
                       <li className="mb-3 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                         <img
-                          src={uploadedThumb}
+                          src={compareCropThumb ?? uploadedThumb}
                           alt=""
                           className="max-h-40 w-auto max-w-[9rem] rounded object-contain"
                         />
-                        <span>Your crop — compare to candidate covers below</span>
+                        <span>
+                          {compareCropThumb && compareCropThumb !== uploadedThumb
+                            ? "Display crop for visual compare — full photo used for recognition"
+                            : "Your photo — compare to candidate covers below"}
+                        </span>
                       </li>
                     ) : null}
                     {candidates.slice(0, 10).map((c) => (

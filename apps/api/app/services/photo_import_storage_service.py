@@ -59,3 +59,7 @@ def upload_storage_dir(*, user_id: int, session_id: int) -> Path:
     path = PHOTO_IMPORT_ROOT / str(user_id) / str(session_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def source_image_api_path(*, session_token: str, image_id: int) -> str:
+    return f"/api/v1/photo-import/sessions/{session_token}/images/{int(image_id)}/original"

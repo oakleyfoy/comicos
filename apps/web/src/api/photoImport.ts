@@ -96,6 +96,9 @@ export type PhotoImportDetectedBook = {
   crop_path: string | null;
   crop_image_url: string | null;
   display_image_url: string | null;
+  source_image_url: string | null;
+  recognition_source: string | null;
+  display_crop: boolean;
   status: string;
   recognition_status: string;
   candidate_count: number;
