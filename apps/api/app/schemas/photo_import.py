@@ -32,6 +32,13 @@ class PhotoImportSessionRead(BaseModel):
     vision_sandbox: bool = False
 
 
+class PhotoImportVisionSandboxStatusRead(BaseModel):
+    photo_import_vision_sandbox: bool
+    photo_import_vision_sandbox_model: str
+    environment_value: str | None
+    hostname: str
+
+
 class PhotoImportVisionReadPayload(BaseModel):
     id: int
     session_id: int

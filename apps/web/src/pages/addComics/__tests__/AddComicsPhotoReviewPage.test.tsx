@@ -104,6 +104,12 @@ describe("AddComicsPhotoReviewPage", () => {
   });
 
   it("redirects to sandbox review when session is vision sandbox", async () => {
+    const hrefSet = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...original, set href(v: string) { hrefSet(v); } },
+    });
     vi.spyOn(photoImport, "getPhotoImportSession").mockResolvedValue({
       ...baseSession,
       vision_sandbox: true,
@@ -112,8 +118,9 @@ describe("AddComicsPhotoReviewPage", () => {
     vi.spyOn(photoImport, "listPhotoImportDetections").mockResolvedValue([detection(1)]);
     renderPage();
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith("/add-comics/photo/sandbox/session/review-token", { replace: true });
+      expect(hrefSet).toHaveBeenCalledWith("/add-comics/photo/sandbox/session/review-token");
     });
+    Object.defineProperty(window, "location", { configurable: true, value: original });
   });
 
   it("renders pending detections when list succeeds", async () => {

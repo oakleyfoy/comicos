@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import socket
 
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -25,6 +27,7 @@ from app.schemas.photo_import import (
     PhotoImportVisionReadFeedbackPayload,
     PhotoImportVisionReadPayload,
     PhotoImportVisionSandboxMetricsRead,
+    PhotoImportVisionSandboxStatusRead,
 )
 from app.core.config import get_settings
 from app.services.ops_admin import ensure_ops_admin_access
@@ -63,6 +66,18 @@ photo_import_router = APIRouter(prefix="/api/v1/photo-import", tags=["Photo Impo
 
 def attach_photo_import_layer(app: FastAPI) -> None:
     app.include_router(photo_import_router)
+
+
+@photo_import_router.get("/admin/vision-sandbox-status", response_model=PhotoImportVisionSandboxStatusRead)
+def vision_sandbox_status_endpoint() -> PhotoImportVisionSandboxStatusRead:
+    """P100-26 temporary diagnostic — no auth until sandbox activation is verified in production."""
+    settings = get_settings()
+    return PhotoImportVisionSandboxStatusRead(
+        photo_import_vision_sandbox=bool(settings.photo_import_vision_sandbox),
+        photo_import_vision_sandbox_model=settings.photo_import_vision_sandbox_model,
+        environment_value=os.getenv("PHOTO_IMPORT_VISION_SANDBOX"),
+        hostname=socket.gethostname(),
+    )
 
 
 @photo_import_router.post("/sessions", response_model=PhotoImportSessionRead)
@@ -134,7 +149,13 @@ def list_detections_endpoint(
     token: str,
     session: Session = Depends(get_session),
 ) -> list[PhotoImportDetectedBookRead]:
-    if photo_import_vision_sandbox_enabled():
+    sandbox = photo_import_vision_sandbox_enabled()
+    logger.warning(
+        "photo_import.detections_called token=%s vision_sandbox=%s",
+        token,
+        sandbox,
+    )
+    if sandbox:
         return []
     return list_session_detections(session, token=token)
 

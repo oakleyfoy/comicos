@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import timedelta, timezone
 
@@ -20,6 +21,8 @@ from app.models.photo_import import (
     utc_now,
 )
 from app.schemas.photo_import import PhotoImportSessionRead
+
+logger = logging.getLogger(__name__)
 
 SESSION_TTL_HOURS = 4
 
@@ -113,6 +116,13 @@ def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
     from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
 
     mobile, review = _session_urls(row.session_token)
+    sandbox = photo_import_vision_sandbox_enabled()
+    logger.info(
+        "photo_import.session_response token=%s vision_sandbox=%s desktop_review_url=%s",
+        row.session_token,
+        sandbox,
+        review,
+    )
     return PhotoImportSessionRead(
         id=int(row.id or 0),
         session_token=row.session_token,
@@ -127,7 +137,7 @@ def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
         capture_mode=normalize_capture_mode(row.capture_mode),
         mobile_url=mobile,
         desktop_review_url=review,
-        vision_sandbox=photo_import_vision_sandbox_enabled(),
+        vision_sandbox=sandbox,
     )
 
 

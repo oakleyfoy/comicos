@@ -64,7 +64,7 @@ describe("PhotoImportVisionSandboxPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Preacher")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("vision-sandbox-banner")).toHaveTextContent("VISION SANDBOX ACTIVE");
+    expect(screen.getByTestId("vision-sandbox-banner")).toHaveTextContent("GPT VISION SANDBOX ACTIVE");
     expect(screen.getByText("GPT vision read")).toBeInTheDocument();
     expect(screen.getByText(/Recognized Preacher trade dress/)).toBeInTheDocument();
     expect(screen.getByText("Preacher Annual")).toBeInTheDocument();

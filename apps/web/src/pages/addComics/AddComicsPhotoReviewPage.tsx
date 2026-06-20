@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import {
   confirmPhotoImportSession,
@@ -53,7 +53,6 @@ function detectionListErrorMessage(err: unknown): string {
 
 export function AddComicsPhotoReviewPage(): JSX.Element {
   const { token = "" } = useParams();
-  const navigate = useNavigate();
   const [detections, setDetections] = useState<PhotoImportDetectedBook[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [sandboxRedirecting, setSandboxRedirecting] = useState(true);
@@ -86,8 +85,9 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
     void getPhotoImportSession(token)
       .then((session) => {
         if (cancelled) return;
+        console.log("VISION SANDBOX", session.vision_sandbox);
         if (session.vision_sandbox) {
-          navigate(`/add-comics/photo/sandbox/session/${token}`, { replace: true });
+          window.location.href = `/add-comics/photo/sandbox/session/${token}`;
           return;
         }
         setSandboxRedirecting(false);
@@ -98,7 +98,7 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [token, navigate]);
+  }, [token]);
 
   useEffect(() => {
     if (sandboxRedirecting) return;
