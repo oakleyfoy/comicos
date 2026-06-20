@@ -46,6 +46,11 @@ class Settings(BaseSettings):
         alias="PHOTO_IMPORT_VISION_SANDBOX_MODEL",
         description="OpenAI vision model for P100 vision sandbox reads",
     )
+    gpt_comic_read_model: str = Field(
+        default="gpt-4o",
+        alias="GPT_COMIC_READ_MODEL",
+        description="OpenAI vision model for the standalone GPT Comic Read tool",
+    )
     redis_url: str = "redis://localhost:6379/0"
     frontend_url: str = "http://127.0.0.1:5173"
     cors_origins_raw: str = Field(

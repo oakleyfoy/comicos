@@ -21,6 +21,7 @@ import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
 import { AddComicsManualPage } from "./pages/addComics/AddComicsManualPage";
 import { AddComicsOnlineRetailPage } from "./pages/addComics/AddComicsOnlineRetailPage";
 import { AddComicsPhotoPage } from "./pages/addComics/AddComicsPhotoPage";
+import { GptComicReadPage } from "./pages/addComics/GptComicReadPage";
 import { AddComicsPhotoReviewPage } from "./pages/addComics/AddComicsPhotoReviewPage";
 import { PhotoImportVisionSandboxPage } from "./pages/addComics/PhotoImportVisionSandboxPage";
 import { PhotoImportVisionSandboxDashboardPage } from "./pages/ops/PhotoImportVisionSandboxDashboardPage";
@@ -500,6 +501,7 @@ export default function App() {
         <Route path="/add-comics/photo/session/:token" element={<AddComicsPhotoReviewPage />} />
         <Route path="/add-comics/photo/sandbox/session/:token" element={<PhotoImportVisionSandboxPage />} />
         <Route path="/add-comics/manual" element={<AddComicsManualPage />} />
+        <Route path="/add-comics/gpt-read" element={<GptComicReadPage />} />
         <Route path="/mobile-scan" element={<Navigate to="/add-comics/photo" replace />} />
         <Route path="/connected-retailers/import" element={<RetailerHtmlImportPage />} />
         <Route path="/retailer-orders/import" element={<RetailerHtmlImportPage />} />

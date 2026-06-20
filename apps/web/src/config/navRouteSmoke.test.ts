@@ -79,9 +79,14 @@ describe("nav route smoke manifest", () => {
     const addComics = visibleNavGroups(false).find((g) => g.id === "acquire");
     expect(addComics?.title).toBe("Add Comics");
     const labels = addComics?.links.map((l) => l.label) ?? [];
-    expect(labels).toEqual(["Online Retail", "Phone Photo", "Manual Entry"]);
+    expect(labels).toEqual(["Online Retail", "Phone Photo", "GPT Comic Read", "Manual Entry"]);
     const paths = addComics?.links.map((l) => l.to) ?? [];
-    expect(paths).toEqual(["/add-comics/online-retail", "/add-comics/photo", "/add-comics/manual"]);
+    expect(paths).toEqual([
+      "/add-comics/online-retail",
+      "/add-comics/photo",
+      "/add-comics/gpt-read",
+      "/add-comics/manual",
+    ]);
   });
 
   it("hides scanner and internal tools from non-admin navigation", () => {
