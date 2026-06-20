@@ -29,7 +29,7 @@ const sandboxSession: photoImport.PhotoImportSession = {
   detected_book_count: 2,
   capture_mode: "single_comic",
   mobile_url: "http://localhost/photo-import/mobile/sandbox-tok",
-  desktop_review_url: "http://localhost/add-comics/photo/sandbox/session/sandbox-tok",
+  desktop_review_url: "http://localhost/add-comics/photo/session/sandbox-tok",
   vision_sandbox: true,
 };
 
@@ -43,8 +43,8 @@ beforeEach(() => {
   vi.spyOn(photoImport, "mobilePhotoImportUrl").mockReturnValue("http://localhost/mobile");
 });
 
-describe("AddComicsPhotoPage vision sandbox", () => {
-  it("links to sandbox review route when flag is on", async () => {
+describe("AddComicsPhotoPage GPT review", () => {
+  it("links to the canonical GPT review route", async () => {
     render(
       <MemoryRouter>
         <AddComicsPhotoPage />
@@ -54,8 +54,8 @@ describe("AddComicsPhotoPage vision sandbox", () => {
     await waitFor(() => {
       expect(screen.getByText(/GPT reads complete/i)).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: /Review GPT vision reads/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Review GPT vision reads/i }));
-    expect(navigate).toHaveBeenCalledWith("/add-comics/photo/sandbox/session/sandbox-tok");
+    expect(screen.getByRole("button", { name: /Review GPT reads/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Review GPT reads/i }));
+    expect(navigate).toHaveBeenCalledWith("/add-comics/photo/session/sandbox-tok");
   });
 });

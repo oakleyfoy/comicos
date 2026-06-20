@@ -39,4 +39,6 @@ class PhotoImportVisionRead(SQLModel, table=True):
     is_correct: bool | None = Field(default=None, nullable=True)
     feedback_notes: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
+    added_to_inventory: bool = Field(default=False, nullable=False)
+
     created_at: datetime = Field(default_factory=utc_now, nullable=False)

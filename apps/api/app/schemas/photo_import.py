@@ -57,12 +57,33 @@ class PhotoImportVisionReadPayload(BaseModel):
     raw_response: dict | None
     is_correct: bool | None = None
     feedback_notes: str | None = None
+    added_to_inventory: bool = False
     created_at: datetime
 
 
 class PhotoImportVisionReadFeedbackPayload(BaseModel):
     is_correct: bool
     feedback_notes: str | None = None
+
+
+class PhotoImportVisionReadUpdatePayload(BaseModel):
+    """Editable GPT fields the reviewer can correct before adding to inventory."""
+
+    publisher: str | None = None
+    series: str | None = None
+    issue_number: str | None = None
+    issue_title: str | None = None
+    variant_description: str | None = None
+    year: str | None = None
+    cover_date: str | None = None
+    barcode: str | None = None
+
+
+class PhotoImportVisionReadInventoryResponse(BaseModel):
+    vision_read: PhotoImportVisionReadPayload
+    acquisition_id: int
+    created_count: int
+    inventory_copy_ids: list[int]
 
 
 class PhotoImportVisionSandboxMetricsRead(BaseModel):

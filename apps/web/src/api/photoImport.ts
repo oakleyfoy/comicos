@@ -70,7 +70,26 @@ export type PhotoImportVisionRead = {
   raw_response: Record<string, unknown> | null;
   is_correct: boolean | null;
   feedback_notes: string | null;
+  added_to_inventory?: boolean;
   created_at: string;
+};
+
+export type PhotoImportVisionReadUpdate = {
+  publisher?: string | null;
+  series?: string | null;
+  issue_number?: string | null;
+  issue_title?: string | null;
+  variant_description?: string | null;
+  year?: string | null;
+  cover_date?: string | null;
+  barcode?: string | null;
+};
+
+export type PhotoImportVisionReadInventoryResult = {
+  vision_read: PhotoImportVisionRead;
+  acquisition_id: number;
+  created_count: number;
+  inventory_copy_ids: number[];
 };
 
 export type PhotoImportVisionSandboxMetrics = {
@@ -302,6 +321,30 @@ export async function submitVisionReadFeedback(
   return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/feedback`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function updateVisionRead(
+  readId: number,
+  payload: PhotoImportVisionReadUpdate,
+): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addVisionReadToInventory(
+  readId: number,
+): Promise<PhotoImportVisionReadInventoryResult> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/add-to-inventory`, {
+    method: "POST",
+  });
+}
+
+export async function rereadVisionRead(readId: number): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/reread`, {
+    method: "POST",
   });
 }
 

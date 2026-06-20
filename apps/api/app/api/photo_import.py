@@ -25,7 +25,9 @@ from app.schemas.photo_import import (
     PhotoImportSessionCreatePayload,
     PhotoImportSessionRead,
     PhotoImportVisionReadFeedbackPayload,
+    PhotoImportVisionReadInventoryResponse,
     PhotoImportVisionReadPayload,
+    PhotoImportVisionReadUpdatePayload,
     PhotoImportVisionSandboxMetricsRead,
     PhotoImportVisionSandboxStatusRead,
 )
@@ -42,6 +44,7 @@ from app.services.photo_import_detection_service import (
 )
 from app.services.photo_import_crop_service import resolve_crop_abs_path
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage, PhotoImportSession
+from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_session_service import (
     complete_session,
     create_photo_import_session,
@@ -54,6 +57,11 @@ from app.services.photo_import_upload_service import upload_session_images
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
 from app.services.photo_import_vision_read_api_service import vision_read_to_payload
+from app.services.photo_import_vision_read_actions_service import (
+    add_vision_read_to_inventory,
+    reread_vision_read,
+    update_vision_read_fields,
+)
 from app.services.photo_import_vision_sandbox_service import (
     latest_vision_read_for_image,
     vision_reads_for_session,
@@ -306,6 +314,55 @@ def vision_read_feedback_endpoint(
     session.add(row)
     session.commit()
     session.refresh(row)
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.patch("/vision-read/{read_id}", response_model=PhotoImportVisionReadPayload)
+def update_vision_read_endpoint(
+    read_id: int,
+    payload: PhotoImportVisionReadUpdatePayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = update_vision_read_fields(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+        payload=payload,
+    )
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.post(
+    "/vision-read/{read_id}/add-to-inventory",
+    response_model=PhotoImportVisionReadInventoryResponse,
+)
+def add_vision_read_to_inventory_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadInventoryResponse:
+    assert current_user.id is not None
+    return add_vision_read_to_inventory(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+    )
+
+
+@photo_import_router.post("/vision-read/{read_id}/reread", response_model=PhotoImportVisionReadPayload)
+def reread_vision_read_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = reread_vision_read(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+    )
     return vision_read_to_payload(row)
 
 

@@ -40,14 +40,10 @@ def _public_base_url() -> str:
 
 
 def _session_urls(token: str) -> tuple[str, str]:
-    from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
-
     base = _public_base_url()
     mobile = f"{base}/photo-import/mobile/{token}" if base else f"/photo-import/mobile/{token}"
-    if photo_import_vision_sandbox_enabled():
-        review = f"{base}/add-comics/photo/sandbox/session/{token}" if base else f"/add-comics/photo/sandbox/session/{token}"
-    else:
-        review = f"{base}/add-comics/photo/session/{token}" if base else f"/add-comics/photo/session/{token}"
+    # The phone-photo review is now the GPT vision read page at the canonical route.
+    review = f"{base}/add-comics/photo/session/{token}" if base else f"/add-comics/photo/session/{token}"
     return mobile, review
 
 

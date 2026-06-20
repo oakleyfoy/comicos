@@ -25,5 +25,6 @@ def vision_read_to_payload(row: PhotoImportVisionRead) -> PhotoImportVisionReadP
         raw_response=row.raw_response,
         is_correct=row.is_correct,
         feedback_notes=row.feedback_notes,
+        added_to_inventory=bool(getattr(row, "added_to_inventory", False)),
         created_at=row.created_at,
     )
