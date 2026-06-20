@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
   confirmPhotoImportSession,
   fetchDetectionCropObjectUrl,
   getPhotoImportDetectionCandidates,
+  getPhotoImportSession,
   listPhotoImportDetections,
   PhotoImportApiError,
   rejectPhotoImportDetection,
@@ -52,8 +53,10 @@ function detectionListErrorMessage(err: unknown): string {
 
 export function AddComicsPhotoReviewPage(): JSX.Element {
   const { token = "" } = useParams();
+  const navigate = useNavigate();
   const [detections, setDetections] = useState<PhotoImportDetectedBook[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
+  const [sandboxRedirecting, setSandboxRedirecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -75,10 +78,34 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   }, [token]);
 
   useEffect(() => {
+    if (!token) {
+      setSandboxRedirecting(false);
+      return;
+    }
+    let cancelled = false;
+    void getPhotoImportSession(token)
+      .then((session) => {
+        if (cancelled) return;
+        if (session.vision_sandbox) {
+          navigate(`/add-comics/photo/sandbox/session/${token}`, { replace: true });
+          return;
+        }
+        setSandboxRedirecting(false);
+      })
+      .catch(() => {
+        if (!cancelled) setSandboxRedirecting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, navigate]);
+
+  useEffect(() => {
+    if (sandboxRedirecting) return;
     void load();
     const id = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [load, sandboxRedirecting]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +206,13 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-4 py-10">
+        {sandboxRedirecting ? (
+          <p className="text-sm text-slate-600" aria-live="polite">
+            Checking photo import mode…
+          </p>
+        ) : null}
+        {!sandboxRedirecting ? (
+          <>
         <Link to="/add-comics/photo" className="text-sm text-blue-700 hover:underline">
           ← Phone Photo session
         </Link>
@@ -457,6 +491,8 @@ export function AddComicsPhotoReviewPage(): JSX.Element {
         </ul>
         {loadState === "ready" && active.length === 0 ? (
           <p className="mt-6 text-sm text-slate-500">No pending detections.</p>
+        ) : null}
+          </>
         ) : null}
       </div>
     </AppShell>

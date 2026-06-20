@@ -68,7 +68,13 @@ export function PhotoImportVisionSandboxPage(): JSX.Element {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">Vision sandbox</p>
+        <div
+          className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-center text-sm font-bold uppercase tracking-wide text-amber-950"
+          data-testid="vision-sandbox-banner"
+        >
+          VISION SANDBOX ACTIVE
+        </div>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">Vision sandbox</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Pure GPT vision reader</h1>
         <p className="mt-2 text-sm text-slate-600">
           Catalog matching, candidates, and inventory are disabled while{" "}

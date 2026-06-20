@@ -28,7 +28,10 @@ def process_photo_import_image(session: Session, *, image_id: int) -> None:
     session.commit()
 
     if photo_import_vision_sandbox_enabled():
-        logger.info("photo_import.processing.vision_sandbox image_id=%s skipping_catalog_pipeline=true", image_id)
+        logger.info(
+            "photo_import.vision_sandbox.enabled=true image_id=%s skipping_catalog_pipeline=true",
+            image_id,
+        )
         run_vision_sandbox_for_image(session, image_id=image_id)
         image = session.get(PhotoImportImage, image_id)
         if image is not None:

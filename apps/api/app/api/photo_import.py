@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlmodel import Session
@@ -54,6 +56,8 @@ from app.services.photo_import_vision_sandbox_service import (
     vision_reads_for_session,
 )
 
+logger = logging.getLogger(__name__)
+
 photo_import_router = APIRouter(prefix="/api/v1/photo-import", tags=["Photo Import (P100)"])
 
 
@@ -82,7 +86,14 @@ def get_session_endpoint(
     session: Session = Depends(get_session),
 ) -> PhotoImportSessionRead:
     row = get_session_by_token_or_404(session, token=token)
-    return session_to_read(row)
+    payload = session_to_read(row)
+    if payload.vision_sandbox:
+        logger.info(
+            "photo_import.session vision_sandbox=true session_id=%s token_prefix=%s",
+            payload.id,
+            token[:8],
+        )
+    return payload
 
 
 @photo_import_router.post("/sessions/{token}/heartbeat", response_model=PhotoImportSessionRead)

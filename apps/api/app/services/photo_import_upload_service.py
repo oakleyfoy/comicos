@@ -23,6 +23,7 @@ from app.services.photo_import_session_service import (
     get_session_by_token_or_404,
     refresh_session_counts,
 )
+from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
 from app.services.photo_import_storage_service import (
     relative_path_under_repo_root,
     resolve_photo_import_storage_path,
@@ -105,6 +106,12 @@ async def upload_session_images(
             storage_rel,
             resolved,
             resolved.is_file(),
+        )
+        logger.info(
+            "photo_import.upload.process image_id=%s session_id=%s vision_sandbox=%s",
+            row.id,
+            import_row.id,
+            photo_import_vision_sandbox_enabled(),
         )
         try:
             from app.services.photo_import_processing_service import process_photo_import_image

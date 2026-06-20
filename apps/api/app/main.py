@@ -1349,7 +1349,24 @@ def configure_logging() -> None:
 
 configure_logging()
 
+_startup_logger = logging.getLogger("app.startup")
+_startup_logger.info(
+    "PHOTO_IMPORT_VISION_SANDBOX env=%r photo_import_vision_sandbox=%s",
+    os.getenv("PHOTO_IMPORT_VISION_SANDBOX"),
+    settings.photo_import_vision_sandbox,
+)
+
 app = FastAPI(title="ComicOS API")
+
+
+@app.on_event("startup")
+def _log_photo_import_vision_sandbox_on_startup() -> None:
+    s = get_settings()
+    _startup_logger.info(
+        "photo_import.vision_sandbox.startup enabled=%s model=%s",
+        s.photo_import_vision_sandbox,
+        s.photo_import_vision_sandbox_model,
+    )
 
 attach_market_v1_layer(app)
 attach_scan_ingestion_layer(app)

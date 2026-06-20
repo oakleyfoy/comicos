@@ -10,6 +10,16 @@ import {
 } from "../../api/photoImport";
 import { AppShell } from "../../components/AppShell";
 
+function photoImportDesktopReviewPath(session: PhotoImportSession): string {
+  try {
+    return new URL(session.desktop_review_url, window.location.origin).pathname;
+  } catch {
+    return session.vision_sandbox
+      ? `/add-comics/photo/sandbox/session/${session.session_token}`
+      : `/add-comics/photo/session/${session.session_token}`;
+  }
+}
+
 export function AddComicsPhotoPage(): JSX.Element {
   const navigate = useNavigate();
   const [session, setSession] = useState<PhotoImportSession | null>(null);
@@ -102,10 +112,7 @@ export function AddComicsPhotoPage(): JSX.Element {
               type="button"
               disabled={!reviewReady}
               onClick={() => {
-                const path = session.vision_sandbox
-                  ? `/add-comics/photo/sandbox/session/${session.session_token}`
-                  : `/add-comics/photo/session/${session.session_token}`;
-                navigate(path);
+                navigate(photoImportDesktopReviewPath(session));
               }}
               className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
