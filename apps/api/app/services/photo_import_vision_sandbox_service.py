@@ -1,4 +1,4 @@
-"""P100-24 pure GPT vision read (no catalog, no crop, no OCR)."""
+"""P100-24/25 pure GPT vision read (no catalog, no crop, no OCR)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import base64
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlmodel import Session, select
@@ -21,20 +21,23 @@ logger = logging.getLogger(__name__)
 
 VISION_SANDBOX_SYSTEM = (
     "You are a professional comic book identifier. "
-    "Your task is to identify the comic shown. "
-    "Use logo, title, issue box, barcode, cover art, trade dress, publisher logos, "
-    "creator credits, cover design, and publication era. "
+    "Identify the comic book shown in this photo as accurately as possible. "
+    "Use cover logo, character art, issue number box, barcode area, publisher logo, trade dress, "
+    "creator credits, cover design, publication era, and distinctive markings or overprints. "
     "Return JSON only with this schema: "
     '{"publisher":"","series":"","issue_number":null,"issue_title":"","variant_description":"",'
-    '"year":"","cover_date":"","barcode":"","confidence":0,"reasoning":""} '
-    "IMPORTANT: Do NOT search a database. Do NOT attempt catalog matching. "
-    "Do NOT guess issue #1 simply because an issue number is unclear — use null and explain. "
-    "If you recognize the cover itself, you may infer the issue number and explain why."
+    '"year":"","cover_date":"","barcode":"","confidence":0,"reasoning":"","possible_alternates":[]} '
+    "Rules: Do not search a catalog. Do not compare to a ComicOS database. "
+    "Do not default to issue #1 unless issue #1 is clearly visible or the cover is known to be issue #1. "
+    "If issue number is uncertain, set issue_number to null. "
+    "If you infer the issue from known cover art, explain that in reasoning. "
+    "If red text, sticker, stamp, price tag, bag glare, or overlay is not part of the printed cover, say that. "
+    "If uncertain, list possible_alternates."
 )
 
 VISION_SANDBOX_USER = (
-    "Identify the comic book in this photo using the full image. "
-    "Return the structured JSON described. Explain your reasoning clearly."
+    "Identify the comic in this photo using the full uploaded image. "
+    "Return the structured JSON only. Do not match against any database."
 )
 
 
@@ -52,6 +55,18 @@ class VisionSandboxReadResult:
     reasoning: str
     raw_response: dict[str, Any]
     raw_response_text: str
+    possible_alternates: list[str] = field(default_factory=list)
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text)
+    return out
 
 
 def _as_str(value: Any) -> str:
@@ -80,6 +95,7 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
         barcode=_as_str(payload.get("barcode")),
         confidence=max(0.0, min(1.0, confidence)),
         reasoning=_as_str(payload.get("reasoning")),
+        possible_alternates=_as_str_list(payload.get("possible_alternates")),
         raw_response=payload,
         raw_response_text="",
     )
@@ -168,6 +184,7 @@ def persist_vision_read(
         barcode=result.barcode[:64] or None,
         confidence=result.confidence,
         reasoning=result.reasoning or None,
+        possible_alternates=result.possible_alternates or None,
         raw_response=result.raw_response,
         raw_response_text=result.raw_response_text,
     )

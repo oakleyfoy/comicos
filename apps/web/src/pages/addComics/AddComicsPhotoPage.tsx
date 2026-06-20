@@ -75,12 +75,13 @@ export function AddComicsPhotoPage(): JSX.Element {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-700">Session status: {session.status}</p>
                 <p className="mt-1 text-sm text-slate-500">Uploaded photos: {session.uploaded_photo_count}</p>
-                <p className="text-sm text-slate-500">
-                  {session.vision_sandbox ? "Vision reads" : "Detected books"}: {session.detected_book_count}
-                </p>
                 {session.vision_sandbox ? (
-                  <p className="mt-2 text-sm font-medium text-indigo-800">Vision sandbox mode — catalog matching disabled.</p>
-                ) : null}
+                  <p className="text-sm text-slate-500">
+                    GPT reads complete: {session.detected_book_count} / {session.uploaded_photo_count}
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-500">Detected books: {session.detected_book_count}</p>
+                )}
                 <label className="mt-4 block text-xs font-semibold uppercase text-slate-500">Mobile link</label>
                 <input
                   readOnly

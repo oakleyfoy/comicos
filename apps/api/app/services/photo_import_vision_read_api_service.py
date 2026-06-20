@@ -21,6 +21,7 @@ def vision_read_to_payload(row: PhotoImportVisionRead) -> PhotoImportVisionReadP
         barcode=row.barcode,
         confidence=row.confidence,
         reasoning=row.reasoning,
+        possible_alternates=row.possible_alternates,
         raw_response=row.raw_response,
         is_correct=row.is_correct,
         feedback_notes=row.feedback_notes,

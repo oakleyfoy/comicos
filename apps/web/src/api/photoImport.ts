@@ -66,6 +66,7 @@ export type PhotoImportVisionRead = {
   barcode: string | null;
   confidence: number | null;
   reasoning: string | null;
+  possible_alternates?: string[] | null;
   raw_response: Record<string, unknown> | null;
   is_correct: boolean | null;
   feedback_notes: string | null;
@@ -78,6 +79,12 @@ export type PhotoImportVisionSandboxMetrics = {
   incorrect_reads: number;
   pending_feedback: number;
   accuracy_percent: number;
+  publisher_filled_percent?: number;
+  series_filled_percent?: number;
+  issue_number_filled_percent?: number;
+  average_confidence?: number;
+  top_uncertain_reads?: Array<Record<string, unknown>>;
+  latest_incorrect_reads?: Array<Record<string, unknown>>;
   publisher_accuracy: number;
   series_accuracy: number;
   issue_accuracy: number;

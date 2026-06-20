@@ -69,7 +69,7 @@ export function PhotoImportVisionSandboxPage(): JSX.Element {
     <AppShell>
       <div className="mx-auto max-w-6xl px-4 py-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">Vision sandbox</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">GPT vision read (no catalog)</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Pure GPT vision reader</h1>
         <p className="mt-2 text-sm text-slate-600">
           Catalog matching, candidates, and inventory are disabled while{" "}
           <code className="rounded bg-slate-100 px-1">PHOTO_IMPORT_VISION_SANDBOX=true</code>.
@@ -106,27 +106,39 @@ export function PhotoImportVisionSandboxPage(): JSX.Element {
               />
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">GPT vision results</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">GPT vision read</p>
               <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Field label="Publisher" value={selected.publisher} />
                 <Field label="Series" value={selected.series} />
-                <Field label="Issue" value={selected.issue_number} />
+                <Field label="Issue number" value={selected.issue_number} />
+                <Field label="Issue title" value={selected.issue_title} />
+                <Field label="Year" value={selected.year} />
+                <Field label="Cover date" value={selected.cover_date} />
+                <Field label="Variant description" value={selected.variant_description} />
+                <Field label="Barcode" value={selected.barcode} />
                 <Field
                   label="Confidence"
                   value={
                     selected.confidence != null ? `${Math.round(selected.confidence * 100)}%` : null
                   }
                 />
-                <Field label="Year" value={selected.year} />
-                <Field label="Cover date" value={selected.cover_date} />
-                <Field label="Issue title" value={selected.issue_title} />
-                <Field label="Variant" value={selected.variant_description} />
-                <Field label="Barcode" value={selected.barcode} />
               </dl>
               {selected.reasoning ? (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reasoning</p>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{selected.reasoning}</p>
+                </div>
+              ) : null}
+              {selected.possible_alternates && selected.possible_alternates.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Possible alternatives
+                  </p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-slate-800">
+                    {selected.possible_alternates.map((alt) => (
+                      <li key={alt}>{alt}</li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
               {selected.is_correct != null ? (
@@ -156,7 +168,7 @@ export function PhotoImportVisionSandboxPage(): JSX.Element {
               <textarea
                 className="mt-3 w-full rounded-lg border border-slate-200 p-2 text-sm"
                 rows={2}
-                placeholder="Optional notes (wrong series, wrong issue, etc.)"
+                placeholder="Optional feedback notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />

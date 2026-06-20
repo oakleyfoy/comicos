@@ -31,6 +31,7 @@ class PhotoImportVisionRead(SQLModel, table=True):
 
     confidence: float | None = Field(default=None, nullable=True)
     reasoning: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    possible_alternates: list[str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
     raw_response: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     raw_response_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))

@@ -46,6 +46,7 @@ class PhotoImportVisionReadPayload(BaseModel):
     barcode: str | None
     confidence: float | None
     reasoning: str | None
+    possible_alternates: list[str] | None = None
     raw_response: dict | None
     is_correct: bool | None = None
     feedback_notes: str | None = None
@@ -63,6 +64,12 @@ class PhotoImportVisionSandboxMetricsRead(BaseModel):
     incorrect_reads: int
     pending_feedback: int
     accuracy_percent: float
+    publisher_filled_percent: float = 0.0
+    series_filled_percent: float = 0.0
+    issue_number_filled_percent: float = 0.0
+    average_confidence: float = 0.0
+    top_uncertain_reads: list[dict[str, object]] = []
+    latest_incorrect_reads: list[dict[str, object]] = []
     publisher_accuracy: float
     series_accuracy: float
     issue_accuracy: float

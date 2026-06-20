@@ -36,18 +36,48 @@ export function PhotoImportVisionSandboxDashboardPage(): JSX.Element {
                 </div>
               ))}
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                ["Publisher accuracy", metrics.publisher_accuracy],
-                ["Series accuracy", metrics.series_accuracy],
-                ["Issue accuracy", metrics.issue_accuracy],
+                ["Publisher filled", `${metrics.publisher_filled_percent ?? metrics.publisher_accuracy}%`],
+                ["Series filled", `${metrics.series_filled_percent ?? metrics.series_accuracy}%`],
+                ["Issue # filled", `${metrics.issue_number_filled_percent ?? metrics.issue_accuracy}%`],
+                [
+                  "Avg confidence",
+                  metrics.average_confidence != null ? `${metrics.average_confidence}%` : "—",
+                ],
               ].map(([label, val]) => (
                 <div key={String(label)} className="rounded-xl bg-indigo-50 p-4">
                   <p className="text-xs uppercase text-indigo-800">{label}</p>
-                  <p className="mt-1 text-xl font-semibold text-indigo-950">{val}%</p>
+                  <p className="mt-1 text-xl font-semibold text-indigo-950">{val}</p>
                 </div>
               ))}
             </div>
+            {metrics.top_uncertain_reads && metrics.top_uncertain_reads.length > 0 ? (
+              <section>
+                <h2 className="text-lg font-semibold text-slate-900">Top uncertain reads</h2>
+                <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                  {metrics.top_uncertain_reads.map((row) => (
+                    <li key={String(row.read_id)} className="rounded-lg border border-slate-100 p-2">
+                      {String(row.publisher ?? "?")} · {String(row.series ?? "?")} #
+                      {String(row.issue_number ?? "?")} — conf {String(row.confidence ?? "?")}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {metrics.latest_incorrect_reads && metrics.latest_incorrect_reads.length > 0 ? (
+              <section>
+                <h2 className="text-lg font-semibold text-slate-900">Latest incorrect reads</h2>
+                <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                  {metrics.latest_incorrect_reads.map((row) => (
+                    <li key={String(row.read_id)} className="rounded-lg border border-red-100 p-2">
+                      {String(row.publisher ?? "?")} · {String(row.series ?? "?")} #
+                      {String(row.issue_number ?? "?")} — {String(row.feedback_notes ?? "no notes")}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             <section>
               <h2 className="text-lg font-semibold text-slate-900">Most misidentified series</h2>
               <ul className="mt-2 list-disc pl-5 text-sm text-slate-700">

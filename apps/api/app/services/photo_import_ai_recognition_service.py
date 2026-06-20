@@ -445,6 +445,14 @@ def _try_vision_first_single_comic(
 
 
 def run_ai_recognition_for_image(session: Session, *, image_id: int) -> None:
+    from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
+
+    if photo_import_vision_sandbox_enabled():
+        logger.info(
+            "photo_import.recognition.skipped image_id=%s reason=vision_sandbox_enabled",
+            image_id,
+        )
+        return
     image = session.get(PhotoImportImage, image_id)
     if image is None:
         logger.warning("photo_import.recognition.image_missing image_id=%s", image_id)
