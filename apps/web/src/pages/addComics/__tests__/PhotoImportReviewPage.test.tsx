@@ -48,6 +48,22 @@ beforeEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.spyOn(photoImport, "listSessionVisionReads").mockResolvedValue([makeRead()]);
+  vi.spyOn(photoImport, "getPhotoImportSession").mockResolvedValue({
+    id: 1,
+    session_token: "tok",
+    status: "review_ready",
+    created_at: "2026-06-20T00:00:00Z",
+    expires_at: "2026-06-21T00:00:00Z",
+    last_seen_at: null,
+    source_device: "desktop",
+    confirmed_count: 0,
+    uploaded_photo_count: 1,
+    detected_book_count: 1,
+    capture_mode: "single_comic",
+    mobile_url: "http://localhost/mobile",
+    desktop_review_url: "http://localhost/review",
+    vision_sandbox: true,
+  });
   vi.spyOn(photoImport, "originalImageUrl").mockReturnValue("http://localhost/img");
 });
 

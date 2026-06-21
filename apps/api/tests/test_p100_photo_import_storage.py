@@ -11,7 +11,6 @@ import app.models  # noqa: F401
 
 from app.models.photo_import import (
     IMAGE_STATUS_PROCESSED,
-    PhotoImportDetectedBook,
     PhotoImportImage,
     PhotoImportSession,
 )
@@ -66,7 +65,6 @@ def test_legacy_apps_data_path_still_resolves(tmp_path, monkeypatch) -> None:
 
 
 def test_process_photo_import_image_opens_uploaded_file(tmp_path, monkeypatch) -> None:
-    import app.services.photo_import_ai_recognition_service as ai_mod
     import app.services.photo_import_crop_service as crop_mod
     import app.services.photo_import_storage_service as storage_mod
 
@@ -95,8 +93,30 @@ def test_process_photo_import_image_opens_uploaded_file(tmp_path, monkeypatch) -
         ]
     }
 
+    from app.models.photo_import_vision_read import PhotoImportVisionRead
+    from app.services.photo_import_vision_sandbox_service import VisionSandboxReadResult
+
+    fake_vision = VisionSandboxReadResult(
+        publisher="Test Pub",
+        series="Test Series",
+        issue_number="1",
+        issue_title="",
+        variant_description="",
+        year="",
+        cover_date="",
+        barcode="",
+        confidence=0.5,
+        reasoning="test",
+        possible_alternates=[],
+        raw_response={"parsed": {}},
+        raw_response_text="{}",
+    )
+
     expires = datetime(2099, 1, 1, tzinfo=timezone.utc)
-    with mock.patch.object(ai_mod, "_call_openai_vision", return_value=one_book):
+    with mock.patch(
+        "app.services.photo_import_vision_sandbox_service.read_comic_with_gpt_vision",
+        return_value=fake_vision,
+    ):
         with Session(engine) as session:
             session.add(PhotoImportSession(id=5, user_id=1, session_token="tok", expires_at=expires))
             session.add(
@@ -115,5 +135,6 @@ def test_process_photo_import_image_opens_uploaded_file(tmp_path, monkeypatch) -
             img = session.get(PhotoImportImage, 20)
             assert img is not None
             assert img.status == IMAGE_STATUS_PROCESSED
-            rows = session.exec(select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == 20)).all()
-            assert len(rows) >= 1
+            read = session.exec(select(PhotoImportVisionRead).where(PhotoImportVisionRead.image_id == 20)).first()
+            assert read is not None
+            assert read.series == "Test Series"

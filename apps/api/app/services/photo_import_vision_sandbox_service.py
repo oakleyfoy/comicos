@@ -233,3 +233,46 @@ def vision_reads_for_session(session: Session, *, session_id: int) -> list[Photo
             .order_by(PhotoImportVisionRead.id.asc())
         ).all()
     )
+
+
+def backfill_missing_vision_reads_for_session(session: Session, *, session_id: int) -> int:
+    """Create GPT vision reads for session photos that never got one (legacy catalog uploads)."""
+    from app.models.photo_import import (
+        IMAGE_STATUS_FAILED,
+        IMAGE_STATUS_PROCESSED,
+        IMAGE_STATUS_UPLOADED,
+    )
+
+    images = list(
+        session.exec(
+            select(PhotoImportImage)
+            .where(PhotoImportImage.session_id == session_id)
+            .order_by(PhotoImportImage.id.asc())
+        ).all()
+    )
+    created = 0
+    for image in images:
+        image_id = int(image.id or 0)
+        if latest_vision_read_for_image(session, image_id=image_id) is not None:
+            continue
+        if image.status not in {IMAGE_STATUS_PROCESSED, IMAGE_STATUS_FAILED, IMAGE_STATUS_UPLOADED}:
+            continue
+        try:
+            run_vision_sandbox_for_image(session, image_id=image_id)
+            image = session.get(PhotoImportImage, image_id)
+            if image is not None:
+                image.status = IMAGE_STATUS_PROCESSED
+                session.add(image)
+                session.commit()
+            created += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "photo_import.vision_read.backfill_failed image_id=%s error=%s",
+                image_id,
+                exc,
+            )
+    if created:
+        from app.services.photo_import_session_service import refresh_session_counts
+
+        refresh_session_counts(session, session_id=session_id)
+    return created

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.models.photo_import import (
+    IMAGE_STATUS_FAILED,
     IMAGE_STATUS_PROCESSING,
     IMAGE_STATUS_PROCESSED,
-    PhotoImportDetectedBook,
     PhotoImportImage,
 )
-from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
 from app.services.photo_import_session_service import refresh_session_counts
 from app.services.photo_import_vision_sandbox_service import run_vision_sandbox_for_image
 
@@ -20,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def process_photo_import_image(session: Session, *, image_id: int) -> None:
+    """Run pure GPT vision on each uploaded photo (no catalog detections/candidates)."""
     image = session.get(PhotoImportImage, image_id)
     if image is None:
         return
@@ -27,50 +27,25 @@ def process_photo_import_image(session: Session, *, image_id: int) -> None:
     session.add(image)
     session.commit()
 
-    if photo_import_vision_sandbox_enabled():
-        logger.info(
-            "photo_import.vision_sandbox.enabled=true image_id=%s skipping_catalog_pipeline=true",
-            image_id,
-        )
+    logger.info(
+        "photo_import.processing.gpt_vision image_id=%s skipping_catalog_pipeline=true",
+        image_id,
+    )
+    try:
         run_vision_sandbox_for_image(session, image_id=image_id)
         image = session.get(PhotoImportImage, image_id)
         if image is not None:
             image.status = IMAGE_STATUS_PROCESSED
             session.add(image)
             session.commit()
-        refresh_session_counts(session, session_id=int(image.session_id) if image else 0)
-        logger.info("photo_import.processing.vision_sandbox.complete image_id=%s", image_id)
-        return
+    except Exception:
+        logger.exception("photo_import.processing.gpt_vision.failed image_id=%s", image_id)
+        image = session.get(PhotoImportImage, image_id)
+        if image is not None:
+            image.status = IMAGE_STATUS_FAILED
+            session.add(image)
+            session.commit()
+        raise
 
-    from app.services.photo_import_ai_recognition_service import run_ai_recognition_for_image
-    from app.services.photo_import_candidate_service import refresh_candidates_for_detection
-
-    run_ai_recognition_for_image(session, image_id=image_id)
-
-    detections = session.exec(
-        select(PhotoImportDetectedBook).where(PhotoImportDetectedBook.image_id == image_id)
-    ).all()
-    logger.info(
-        "photo_import.processing.detections image_id=%s crop_count=%d",
-        image_id,
-        len(detections),
-    )
-    for det in detections:
-        refresh_candidates_for_detection(session, detected_book_id=int(det.id or 0))
-        refreshed = session.get(PhotoImportDetectedBook, int(det.id or 0))
-        logger.info(
-            "photo_import.processing.candidates image_id=%s detection_id=%s series=%r issue=%r "
-            "candidate_count=%s recognition_status=%s",
-            image_id,
-            det.id,
-            (refreshed.ai_series if refreshed else None),
-            (refreshed.ai_issue_number if refreshed else None),
-            (refreshed.candidate_count if refreshed else None),
-            (refreshed.recognition_status if refreshed else None),
-        )
-
-    image.status = IMAGE_STATUS_PROCESSED
-    session.add(image)
-    session.commit()
-    refresh_session_counts(session, session_id=int(image.session_id))
-    logger.info("photo_import.processing.complete image_id=%s status=%s", image_id, image.status)
+    refresh_session_counts(session, session_id=int(image.session_id) if image else 0)
+    logger.info("photo_import.processing.gpt_vision.complete image_id=%s", image_id)

@@ -63,6 +63,7 @@ from app.services.photo_import_vision_read_actions_service import (
     update_vision_read_fields,
 )
 from app.services.photo_import_vision_sandbox_service import (
+    backfill_missing_vision_reads_for_session,
     latest_vision_read_for_image,
     vision_reads_for_session,
 )
@@ -290,7 +291,9 @@ def list_session_vision_reads_endpoint(
     session: Session = Depends(get_session),
 ) -> list[PhotoImportVisionReadPayload]:
     import_row = get_session_by_token_or_404(session, token=token)
-    rows = vision_reads_for_session(session, session_id=int(import_row.id or 0))
+    session_id = int(import_row.id or 0)
+    backfill_missing_vision_reads_for_session(session, session_id=session_id)
+    rows = vision_reads_for_session(session, session_id=session_id)
     return [vision_read_to_payload(r) for r in rows]
 
 

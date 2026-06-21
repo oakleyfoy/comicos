@@ -109,14 +109,11 @@ def activate_session(session: Session, row: PhotoImportSession) -> PhotoImportSe
 
 
 def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
-    from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
-
     mobile, review = _session_urls(row.session_token)
-    sandbox = photo_import_vision_sandbox_enabled()
     logger.info(
         "photo_import.session_response token=%s vision_sandbox=%s desktop_review_url=%s",
         row.session_token,
-        sandbox,
+        True,
         review,
     )
     return PhotoImportSessionRead(
@@ -133,7 +130,7 @@ def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
         capture_mode=normalize_capture_mode(row.capture_mode),
         mobile_url=mobile,
         desktop_review_url=review,
-        vision_sandbox=sandbox,
+        vision_sandbox=True,
     )
 
 
@@ -170,8 +167,7 @@ def complete_session(session: Session, *, owner_user_id: int, token: str) -> Pho
 def refresh_session_counts(session: Session, *, session_id: int) -> None:
     from sqlmodel import func
 
-    from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
-    from app.services.photo_import_sandbox_flags import photo_import_vision_sandbox_enabled
+    from app.models.photo_import import PhotoImportImage
     from app.services.photo_import_vision_accuracy_service import count_vision_reads_for_session
 
     row = session.get(PhotoImportSession, session_id)
@@ -180,19 +176,9 @@ def refresh_session_counts(session: Session, *, session_id: int) -> None:
     uploads = session.exec(
         select(func.count(PhotoImportImage.id)).where(PhotoImportImage.session_id == session_id)
     ).one()
-    if photo_import_vision_sandbox_enabled():
-        vision_count = count_vision_reads_for_session(session, session_id=session_id)
-        row.uploaded_photo_count = int(uploads or 0)
-        row.detected_book_count = vision_count
-    else:
-        detections = session.exec(
-            select(func.count(PhotoImportDetectedBook.id)).where(
-                PhotoImportDetectedBook.session_id == session_id,
-                PhotoImportDetectedBook.status != "rejected",
-            )
-        ).one()
-        row.uploaded_photo_count = int(uploads or 0)
-        row.detected_book_count = int(detections or 0)
+    vision_count = count_vision_reads_for_session(session, session_id=session_id)
+    row.uploaded_photo_count = int(uploads or 0)
+    row.detected_book_count = vision_count
     if row.detected_book_count > 0 and row.status not in {SESSION_STATUS_COMPLETED, SESSION_STATUS_EXPIRED}:
         row.status = SESSION_STATUS_REVIEW_READY
     session.add(row)

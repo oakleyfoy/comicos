@@ -3,11 +3,13 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   addVisionReadToInventory,
+  getPhotoImportSession,
   listSessionVisionReads,
   originalImageUrl,
   rereadVisionRead,
   submitVisionReadFeedback,
   updateVisionRead,
+  type PhotoImportSession,
   type PhotoImportVisionRead,
   type PhotoImportVisionReadUpdate,
 } from "../../api/photoImport";
@@ -72,6 +74,7 @@ function EditField({
 export function PhotoImportReviewPage(): JSX.Element {
   const { token = "" } = useParams<{ token: string }>();
   const [reads, setReads] = useState<PhotoImportVisionRead[]>([]);
+  const [sessionInfo, setSessionInfo] = useState<PhotoImportSession | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
@@ -83,8 +86,12 @@ export function PhotoImportReviewPage(): JSX.Element {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const rows = await listSessionVisionReads(token);
+      const [rows, sessionRow] = await Promise.all([
+        listSessionVisionReads(token),
+        getPhotoImportSession(token),
+      ]);
       setReads(rows);
+      setSessionInfo(sessionRow);
       setError(null);
       setSelectedId((prev) => prev ?? (rows.length ? rows[rows.length - 1].id : null));
     } catch (err) {
@@ -185,6 +192,8 @@ export function PhotoImportReviewPage(): JSX.Element {
   };
 
   const confidencePct = selected?.confidence != null ? `${Math.round(selected.confidence * 100)}%` : null;
+  const uploadedCount = sessionInfo?.uploaded_photo_count ?? 0;
+  const waitingForGpt = uploadedCount > reads.length;
 
   return (
     <AppShell>
@@ -223,9 +232,20 @@ export function PhotoImportReviewPage(): JSX.Element {
         ) : null}
 
         {!selected ? (
-          <p className="mt-8 text-slate-600">
-            No GPT reads yet — scan the QR code on your phone and photograph a comic.
-          </p>
+          <div className="mt-8 space-y-2 text-slate-600">
+            {uploadedCount > 0 && waitingForGpt ? (
+              <>
+                <p className="font-medium text-slate-800">Reading your photos with GPT…</p>
+                <p className="text-sm">
+                  {reads.length} of {uploadedCount} complete. This page refreshes every few seconds.
+                </p>
+              </>
+            ) : uploadedCount > 0 ? (
+              <p>GPT could not load results for your uploads. Check the error above or try uploading again.</p>
+            ) : (
+              <p>No GPT reads yet — scan the QR code on your phone and photograph a comic.</p>
+            )}
+          </div>
         ) : (
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
