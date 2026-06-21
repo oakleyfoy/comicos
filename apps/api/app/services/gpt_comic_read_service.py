@@ -17,6 +17,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.core.config import get_settings
+from app.services.gpt_comic_identification_prompts import (
+    COMIC_IDENTIFICATION_SYSTEM,
+    COMIC_IDENTIFICATION_USER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,26 +37,8 @@ class GptComicReadImageError(GptComicReadError):
     """Raised when the uploaded bytes are not a valid image."""
 
 
-GPT_COMIC_READ_SYSTEM = (
-    "You are a professional comic book identifier. "
-    "Look at this image and identify the comic book as accurately as possible. "
-    "Use the full image. "
-    "Consider: cover logo, publisher logo, issue number box, barcode area, cover art, "
-    "trade dress, creator credits, publication era, and any visible stickers, stamps, "
-    "glare, bags, screenshots, or overlays. "
-    "Return JSON only with this schema: "
-    '{"publisher":"","series":"","issue_number":"","issue_title":"","year":"",'
-    '"cover_date":"","variant_description":"","barcode":"","confidence":0,'
-    '"reasoning":"","possible_alternates":[]} '
-    "Rules: Do not use a ComicOS catalog. Do not verify against any database. "
-    "Do not default to issue #1 unless clearly supported. "
-    "If issue number is uncertain, set issue_number to null. "
-    "If you infer the issue from cover art, explain why. "
-    "If something like 'BANNED' appears to be a stamp/sticker/overlay, say so. "
-    "If the image is a screenshot of a photo, still identify the comic from the visible cover."
-)
-
-GPT_COMIC_READ_USER = "Identify the comic book in this image. Return the structured JSON only."
+GPT_COMIC_READ_SYSTEM = COMIC_IDENTIFICATION_SYSTEM
+GPT_COMIC_READ_USER = COMIC_IDENTIFICATION_USER
 
 
 @dataclass
@@ -154,12 +140,15 @@ def read_comic_with_gpt(image_bytes: bytes, *, filename: str | None = None) -> G
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": GPT_COMIC_READ_SYSTEM},
+            {"role": "system", "content": COMIC_IDENTIFICATION_SYSTEM},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": GPT_COMIC_READ_USER},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    {"type": "text", "text": COMIC_IDENTIFICATION_USER},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
+                    },
                 ],
             },
         ],

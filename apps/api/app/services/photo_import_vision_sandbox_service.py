@@ -15,30 +15,18 @@ from app.core.config import get_settings
 from app.models.photo_import import PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_ai_recognition_service import RecognitionConfigError
+from app.services.photo_import_ai_recognition_service import RecognitionConfigError
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
+from app.services.gpt_comic_identification_prompts import (
+    COMIC_IDENTIFICATION_SYSTEM,
+    COMIC_IDENTIFICATION_USER,
+)
 
 logger = logging.getLogger(__name__)
 
-VISION_SANDBOX_SYSTEM = (
-    "You are a professional comic book identifier. "
-    "Identify the comic book shown in this photo as accurately as possible. "
-    "Use cover logo, character art, issue number box, barcode area, publisher logo, trade dress, "
-    "creator credits, cover design, publication era, and distinctive markings or overprints. "
-    "Return JSON only with this schema: "
-    '{"publisher":"","series":"","issue_number":null,"issue_title":"","variant_description":"",'
-    '"year":"","cover_date":"","barcode":"","confidence":0,"reasoning":"","possible_alternates":[]} '
-    "Rules: Do not search a catalog. Do not compare to a ComicOS database. "
-    "Do not default to issue #1 unless issue #1 is clearly visible or the cover is known to be issue #1. "
-    "If issue number is uncertain, set issue_number to null. "
-    "If you infer the issue from known cover art, explain that in reasoning. "
-    "If red text, sticker, stamp, price tag, bag glare, or overlay is not part of the printed cover, say that. "
-    "If uncertain, list possible_alternates."
-)
-
-VISION_SANDBOX_USER = (
-    "Identify the comic in this photo using the full uploaded image. "
-    "Return the structured JSON only. Do not match against any database."
-)
+# Back-compat names for tests/docs
+VISION_SANDBOX_SYSTEM = COMIC_IDENTIFICATION_SYSTEM
+VISION_SANDBOX_USER = COMIC_IDENTIFICATION_USER
 
 
 @dataclass
@@ -101,6 +89,16 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
     )
 
 
+def _mime_for_image_bytes(image_bytes: bytes) -> str:
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(image_bytes)) as img:
+        fmt = (img.format or "").lower()
+    return "image/png" if fmt == "png" else "image/jpeg"
+
+
 def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSandboxReadResult:
     """Call OpenAI vision on the full uploaded image; no catalog or OCR."""
     import urllib.request
@@ -110,6 +108,7 @@ def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSa
         raise RecognitionConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
 
     model = settings.photo_import_vision_sandbox_model
+    mime = _mime_for_image_bytes(image_bytes)
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     logger.info(
         "photo_import.vision_sandbox.request image_id=%s model=%s image_bytes=%d",
@@ -120,12 +119,15 @@ def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSa
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": VISION_SANDBOX_SYSTEM},
+            {"role": "system", "content": COMIC_IDENTIFICATION_SYSTEM},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": VISION_SANDBOX_USER},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    {"type": "text", "text": COMIC_IDENTIFICATION_USER},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
+                    },
                 ],
             },
         ],
