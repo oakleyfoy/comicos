@@ -23,7 +23,13 @@ COMIC_IDENTIFICATION_SYSTEM = (
     "cannot pick one issue (then list possible_alternates). "
     "Do not default to #1 unless the cover is clearly issue #1. "
     "Do not reference or require any external ComicOS catalog. "
-    "confidence is 0–1 reflecting certainty on series AND issue together."
+    "Confidence calibration (be honest, do not inflate): "
+    "confidence is 0–1 for series AND issue together. "
+    "If the issue number is clearly PRINTED on the cover, confidence may be high. "
+    "If you INFERRED the issue from cover art, creator, or barcode rather than reading it, "
+    "set confidence to at most 0.6 and include at least two possible_alternates (other "
+    "plausible issues for this cover). Never claim 1.0/100% unless the printed issue number "
+    "is unambiguously legible. Reflect any barcode-vs-cover conflict by lowering confidence."
 )
 
 COMIC_IDENTIFICATION_USER = (

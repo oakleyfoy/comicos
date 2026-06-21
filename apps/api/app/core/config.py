@@ -42,14 +42,14 @@ class Settings(BaseSettings):
     openai_order_parser_model: str = "gpt-4o-mini"
     photo_import_vision_sandbox: bool = Field(default=False, alias="PHOTO_IMPORT_VISION_SANDBOX")
     photo_import_vision_sandbox_model: str = Field(
-        default="gpt-4o",
+        default="gpt-5",
         alias="PHOTO_IMPORT_VISION_SANDBOX_MODEL",
-        description="OpenAI vision model for P100 vision sandbox reads",
+        description="OpenAI vision model for P100 phone-import GPT reads (reasoning model preferred)",
     )
     gpt_comic_read_model: str = Field(
-        default="gpt-4o",
+        default="gpt-5",
         alias="GPT_COMIC_READ_MODEL",
-        description="OpenAI vision model for the standalone GPT Comic Read tool",
+        description="OpenAI vision model for the standalone GPT Comic Read tool (reasoning model preferred)",
     )
     redis_url: str = "redis://localhost:6379/0"
     frontend_url: str = "http://127.0.0.1:5173"

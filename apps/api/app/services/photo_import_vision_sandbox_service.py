@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import base64
-import json
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,12 +12,12 @@ from app.core.config import get_settings
 from app.models.photo_import import PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_ai_recognition_service import RecognitionConfigError
-from app.services.photo_import_ai_recognition_service import RecognitionConfigError
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.gpt_comic_identification_prompts import (
     COMIC_IDENTIFICATION_SYSTEM,
     COMIC_IDENTIFICATION_USER,
 )
+from app.services.gpt_comic_vision_client import call_comic_vision
 
 logger = logging.getLogger(__name__)
 
@@ -89,76 +86,32 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
     )
 
 
-def _mime_for_image_bytes(image_bytes: bytes) -> str:
-    import io
-
-    from PIL import Image
-
-    with Image.open(io.BytesIO(image_bytes)) as img:
-        fmt = (img.format or "").lower()
-    return "image/png" if fmt == "png" else "image/jpeg"
-
-
 def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSandboxReadResult:
     """Call OpenAI vision on the full uploaded image; no catalog or OCR."""
-    import urllib.request
-
     settings = get_settings()
     if not settings.openai_api_key:
         raise RecognitionConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
 
     model = settings.photo_import_vision_sandbox_model
-    mime = _mime_for_image_bytes(image_bytes)
-    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     logger.info(
         "photo_import.vision_sandbox.request image_id=%s model=%s image_bytes=%d",
         image_id,
         model,
         len(image_bytes),
     )
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": COMIC_IDENTIFICATION_SYSTEM},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": COMIC_IDENTIFICATION_USER},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
-                    },
-                ],
-            },
-        ],
-        "response_format": {"type": "json_object"},
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+    parsed, api_payload, api_raw_text, model_used = call_comic_vision(
+        image_bytes,
+        model=model,
+        api_key=settings.openai_api_key,
+        log_context=f"photo_import image_id={image_id}",
     )
-    started = time.monotonic()
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        api_raw_text = resp.read().decode("utf-8")
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    api_payload = json.loads(api_raw_text)
-    content = api_payload["choices"][0]["message"]["content"]
-    parsed = json.loads(content)
-    result = _parse_sandbox_payload(parsed if isinstance(parsed, dict) else {})
-    result.raw_response = {
-        "parsed": parsed,
-        "openai_response": api_payload,
-    }
+    result = _parse_sandbox_payload(parsed)
+    result.raw_response = {"parsed": parsed, "openai_response": api_payload, "model_used": model_used}
     result.raw_response_text = api_raw_text
     logger.info(
-        "photo_import.vision_sandbox.response image_id=%s elapsed_ms=%d series=%r issue=%r confidence=%.2f",
+        "photo_import.vision_sandbox.response image_id=%s model_used=%s series=%r issue=%r confidence=%.2f",
         image_id,
-        elapsed_ms,
+        model_used,
         result.series,
         result.issue_number,
         result.confidence,

@@ -8,11 +8,8 @@ OpenAI vision and returns the parsed answer.
 
 from __future__ import annotations
 
-import base64
 import io
-import json
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,6 +18,7 @@ from app.services.gpt_comic_identification_prompts import (
     COMIC_IDENTIFICATION_SYSTEM,
     COMIC_IDENTIFICATION_USER,
 )
+from app.services.gpt_comic_vision_client import ComicVisionError, call_comic_vision
 
 logger = logging.getLogger(__name__)
 
@@ -117,11 +115,8 @@ def _parse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def read_comic_with_gpt(image_bytes: bytes, *, filename: str | None = None) -> GptComicReadResult:
     """Send the exact uploaded image bytes to OpenAI vision and return the parsed answer."""
-    import urllib.error
-    import urllib.request
-
     settings = get_settings()
-    width, height, mime = _image_dimensions(image_bytes)
+    width, height, _mime = _image_dimensions(image_bytes)
 
     if not settings.openai_api_key:
         raise GptComicReadConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
@@ -136,57 +131,29 @@ def read_comic_with_gpt(image_bytes: bytes, *, filename: str | None = None) -> G
         height,
     )
 
-    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": COMIC_IDENTIFICATION_SYSTEM},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": COMIC_IDENTIFICATION_USER},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
-                    },
-                ],
-            },
-        ],
-        "response_format": {"type": "json_object"},
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    started = time.monotonic()
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            api_raw_text = resp.read().decode("utf-8")
-    except urllib.error.URLError as exc:  # noqa: BLE001
-        raise GptComicReadError(f"OpenAI request failed: {exc}") from exc
-    elapsed_ms = int((time.monotonic() - started) * 1000)
+        parsed, api_payload, _raw_text, model_used = call_comic_vision(
+            image_bytes,
+            model=model,
+            api_key=settings.openai_api_key,
+            log_context=f"gpt_comic_read filename={filename}",
+        )
+    except ComicVisionError as exc:
+        raise GptComicReadError(str(exc)) from exc
 
-    api_payload = json.loads(api_raw_text)
-    content = api_payload["choices"][0]["message"]["content"]
-    parsed = json.loads(content)
-    fields = _parse_payload(parsed if isinstance(parsed, dict) else {})
+    fields = _parse_payload(parsed)
 
     result = GptComicReadResult(
-        model=model,
+        model=model_used,
         image_width=width,
         image_height=height,
-        raw_response={"parsed": parsed, "openai_response": api_payload},
+        raw_response={"parsed": parsed, "openai_response": api_payload, "model_used": model_used},
         **fields,
     )
     logger.info(
-        "gpt_comic_read.parsed filename=%s elapsed_ms=%d series=%r issue=%r confidence=%.2f",
+        "gpt_comic_read.parsed filename=%s model_used=%s series=%r issue=%r confidence=%.2f",
         filename,
-        elapsed_ms,
+        model_used,
         result.series,
         result.issue_number,
         result.confidence,
