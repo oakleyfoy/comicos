@@ -27,7 +27,9 @@ function photoImportDesktopReviewPath(session: PhotoImportSession): string {
   }
 }
 
-type DirHandle = FileSystemDirectoryHandle;
+type DirHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterableIterator<FileSystemHandle>;
+};
 
 const FOLDER_SESSION_STORAGE_KEY = "comicos.importFolder.sessionToken";
 
@@ -127,7 +129,7 @@ export function AddComicsImportFolderPage(): JSX.Element {
       return;
     }
     try {
-      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      const handle = (await window.showDirectoryPicker({ mode: "readwrite" })) as DirHandle;
       dirHandleRef.current = handle;
       setFolderLabel(handle.name);
       seenLocalFilesRef.current.clear();
