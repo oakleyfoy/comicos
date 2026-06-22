@@ -69,6 +69,7 @@ from app.services.photo_import_vision_read_actions_service import (
     update_vision_read_fields,
 )
 from app.services.photo_import_catalog_match_service import rematch_stale_automatic_catalog_link
+from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
 from app.services.photo_import_vision_sandbox_service import (
     backfill_missing_vision_reads_for_session,
     latest_vision_read_for_image,
@@ -307,6 +308,8 @@ def list_session_vision_reads_endpoint(
     rows = vision_reads_for_session(session, session_id=session_id)
     for row in rows:
         rematch_stale_automatic_catalog_link(session, row)
+        try_comicvine_ondemand_for_read(session, row)
+    session.commit()
     return [vision_read_to_payload(r) for r in rows]
 
 

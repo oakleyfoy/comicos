@@ -42,7 +42,10 @@ def process_photo_import_image(session: Session, *, image_id: int) -> None:
         image_id,
     )
     try:
-        run_vision_sandbox_for_image(session, image_id=image_id)
+        reads = run_vision_sandbox_for_image(session, image_id=image_id)
+        from app.services.photo_import_comicvine_ondemand_service import backfill_comicvine_ondemand_for_reads
+
+        backfill_comicvine_ondemand_for_reads(session, reads)
         image = session.get(PhotoImportImage, image_id)
         if image is not None:
             image.status = IMAGE_STATUS_PROCESSED

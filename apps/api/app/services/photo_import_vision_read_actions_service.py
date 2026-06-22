@@ -159,7 +159,11 @@ def rematch_vision_read(
 ) -> PhotoImportVisionRead:
     """Re-run the catalog match for a read (e.g. after editing series/issue/barcode)."""
     row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
-    match_and_apply(session, row)
+    from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
+
+    try_comicvine_ondemand_for_read(session, row)
+    if row.catalog_issue_id is None:
+        match_and_apply(session, row)
     session.add(row)
     session.commit()
     session.refresh(row)
