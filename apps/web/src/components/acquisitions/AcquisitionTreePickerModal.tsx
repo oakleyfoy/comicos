@@ -27,6 +27,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  /** When true, renders inline on the page instead of a fullscreen modal. */
+  embedded?: boolean;
 };
 
 type Mode = "single" | "bulk";
@@ -41,6 +43,7 @@ export function AcquisitionTreePickerModal({
   open,
   onClose,
   onCreated,
+  embedded = false,
 }: Props): JSX.Element | null {
   const [mode, setMode] = useState<Mode>("single");
   const [error, setError] = useState<string | null>(null);
@@ -174,29 +177,37 @@ export function AcquisitionTreePickerModal({
 
   const createSingle = async () => {
     if (!selectedPublisher || !selectedVolume || !selectedIssue) return;
+    const qty = Math.min(100, Math.max(1, Number(quantity) || 1));
     const catalogIssueId =
-      selectedVariant?.catalog_issue_id ?? selectedIssue.catalog_issue_id ?? null;
-    const issueTitle = selectedVariant?.variant_label ?? selectedVariant?.title ?? selectedIssue.issue_title;
+      selectedVariant?.catalog_issue_id ??
+      (!selectedIssue.has_variants ? selectedIssue.catalog_issue_id : null);
     setBusy(true);
     setError(null);
     try {
-      await apiClient.createTreePlaceholderIssue(acquisitionId, {
-        publisher: selectedPublisher,
-        volume_id: selectedVolume.volume_id,
-        issue_number: selectedIssue.issue_number,
-        quantity: Math.min(100, Math.max(1, Number(quantity) || 1)),
-        issue_title: issueTitle,
-        source_issue_id:
-          selectedIssue.comicvine_issue_id != null
-            ? String(selectedIssue.comicvine_issue_id)
-            : catalogIssueId != null
-              ? String(catalogIssueId)
-              : null,
-      });
+      if (catalogIssueId != null) {
+        await apiClient.addAcquisitionItems(acquisitionId, [{ catalog_issue_id: catalogIssueId, quantity: qty }]);
+      } else {
+        const issueTitle = selectedVariant?.variant_label ?? selectedVariant?.title ?? selectedIssue.issue_title;
+        await apiClient.createTreePlaceholderIssue(acquisitionId, {
+          publisher: selectedPublisher,
+          volume_id: selectedVolume.volume_id,
+          issue_number: selectedIssue.issue_number,
+          quantity: qty,
+          issue_title: issueTitle,
+          source_issue_id:
+            selectedIssue.comicvine_issue_id != null
+              ? String(selectedIssue.comicvine_issue_id)
+              : catalogIssueId != null
+                ? String(catalogIssueId)
+                : null,
+        });
+      }
       onCreated();
-      onClose();
+      if (!embedded) {
+        onClose();
+      }
     } catch (err) {
-      const message = flowErrorMessage(err, "Could not create placeholder.");
+      const message = flowErrorMessage(err, "Could not add book.");
       if (message) setError(message);
     } finally {
       setBusy(false);
@@ -214,7 +225,9 @@ export function AcquisitionTreePickerModal({
         quantity: Math.min(100, Math.max(1, Number(quantity) || 1)),
       });
       onCreated();
-      onClose();
+      if (!embedded) {
+        onClose();
+      }
     } catch (err) {
       const message = flowErrorMessage(err, "Could not create unknown issue placeholder.");
       if (message) setError(message);
@@ -271,7 +284,9 @@ export function AcquisitionTreePickerModal({
     try {
       await apiClient.createPlaceholderRange(acquisitionId, buildRangePayload());
       onCreated();
-      onClose();
+      if (!embedded) {
+        onClose();
+      }
     } catch (err) {
       const message = flowErrorMessage(err, "Could not create range items.");
       if (message) setError(message);
@@ -280,23 +295,32 @@ export function AcquisitionTreePickerModal({
     }
   };
 
-  if (!open) return null;
+  if (!embedded && !open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div
-        role="dialog"
-        aria-label="Universe tree picker"
-        className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl border border-slate-700 bg-slate-950 shadow-xl"
-      >
-        <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+  const panel = (
+    <div
+      role={embedded ? undefined : "dialog"}
+      aria-label="Universe tree picker"
+      className={
+        embedded
+          ? "flex w-full flex-col rounded-2xl border border-white/10 bg-slate-900/70 shadow-xl"
+          : "flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl border border-slate-700 bg-slate-950 shadow-xl"
+      }
+    >
+        <header
+          className={`flex items-center justify-between border-b px-4 py-3 ${embedded ? "border-white/10" : "border-slate-800"}`}
+        >
           <div>
-            <h2 className="text-lg font-semibold text-white">Universe Tree Picker</h2>
-            <p className="text-xs text-slate-400">Local database only — no ComicVine calls</p>
+            <h2 className="text-lg font-semibold text-white">Catalog universe tree</h2>
+            <p className="text-xs text-slate-400">
+              Publisher → volume → issue # → cover variant (local catalog)
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="text-sm text-slate-400 hover:text-white">
-            Close
-          </button>
+          {!embedded ? (
+            <button type="button" onClick={onClose} className="text-sm text-slate-400 hover:text-white">
+              Close
+            </button>
+          ) : null}
         </header>
 
         <div className="flex gap-2 border-b border-slate-800 px-4 py-2">
@@ -626,7 +650,7 @@ export function AcquisitionTreePickerModal({
                 onClick={() => void createSingle()}
                 className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-50"
               >
-                Create Placeholder
+                Add to collection
               </button>
               <button
                 type="button"
@@ -654,7 +678,14 @@ export function AcquisitionTreePickerModal({
           )}
           {busy ? <span className="text-xs text-slate-500">Working…</span> : null}
         </footer>
-      </div>
     </div>
+  );
+
+  if (embedded) {
+    return panel;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">{panel}</div>
   );
 }

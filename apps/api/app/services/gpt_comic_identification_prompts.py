@@ -50,3 +50,17 @@ COMIC_IDENTIFICATION_USER = (
     "the cover, prefer matching recognizable cover art to the correct issue; use barcode only to confirm. "
     "Return structured JSON only."
 )
+
+COMIC_IDENTIFICATION_QUICK_SYSTEM = (
+    "You identify comic books from cover photos. Return JSON only: "
+    '{"comics":[{"publisher":"","series":"","issue_number":"","issue_title":"","year":"",'
+    '"barcode":"","confidence":0,"reasoning":""}]} '
+    "Use a comics array with one entry per distinct cover (one element for a single comic). "
+    "Read publisher, series, issue number, year, and barcode when visible. "
+    "Ignore bags, glare, and retailer stamps on plastic—not part of the printed cover. "
+    "Keep reasoning to one short sentence. Do not reference any external catalog."
+)
+
+COMIC_IDENTIFICATION_QUICK_USER = (
+    "What comic(s) are in this photo? Return the JSON comics array only."
+)

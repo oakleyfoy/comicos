@@ -21965,11 +21965,12 @@ export const apiClient = {
     return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}`);
   },
 
-  confirmRetailerOrder(orderId: number): Promise<RetailerOrderSnapshotRead> {
+  confirmRetailerOrder(orderId: number, itemCount = 0): Promise<RetailerOrderSnapshotRead> {
+    const timeoutMs = Math.min(180_000, 45_000 + Math.max(0, itemCount) * 3_000);
     return requestWithTimeout<RetailerOrderSnapshotRead>(
       `/api/v1/retailer-orders/${orderId}/confirm`,
       { method: "POST" },
-      30_000,
+      timeoutMs,
       "Confirmation may still be processing. Refresh or check your Portfolio.",
     );
   },

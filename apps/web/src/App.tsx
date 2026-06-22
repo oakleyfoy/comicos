@@ -18,6 +18,7 @@ import { MasterUniversePage } from "./pages/MasterUniversePage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
+import { AddComicsImportFolderPage } from "./pages/addComics/AddComicsImportFolderPage";
 import { AddComicsManualPage } from "./pages/addComics/AddComicsManualPage";
 import { AddComicsOnlineRetailPage } from "./pages/addComics/AddComicsOnlineRetailPage";
 import { AddComicsPhotoPage } from "./pages/addComics/AddComicsPhotoPage";
@@ -496,6 +497,7 @@ export default function App() {
         <Route path="/retailer-orders/:id" element={<RetailerOrderDetailPage />} />
         <Route path="/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/add-comics/online-retail" element={<AddComicsOnlineRetailPage />} />
+        <Route path="/add-comics/import-folder" element={<AddComicsImportFolderPage />} />
         <Route path="/add-comics/photo" element={<AddComicsPhotoPage />} />
         <Route path="/add-comics/photo/session/:token" element={<PhotoImportReviewPage />} />
         <Route path="/add-comics/photo/sandbox/session/:token" element={<PhotoImportReviewPage />} />

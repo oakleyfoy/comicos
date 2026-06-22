@@ -4,15 +4,15 @@ import { Link, useParams } from "react-router-dom";
 import {
   addAllSessionReads,
   addVisionReadToInventory,
+  cancelVisionReadCatalogMatch,
   catalogMatchVisionRead,
   chooseVisionReadMatch,
   getPhotoImportSession,
   listSessionVisionReads,
   originalImageUrl,
-  rematchVisionRead,
   rereadVisionRead,
-  submitVisionReadFeedback,
   updateVisionRead,
+  validateComicvineOnDemand,
   type PhotoImportSession,
   type PhotoImportVisionRead,
   type PhotoImportVisionReadUpdate,
@@ -106,6 +106,17 @@ function catalogSearchCompleted(read: PhotoImportVisionRead): boolean {
   return read.match_method != null && read.match_method !== "";
 }
 
+function ondemandComicvineMissed(read: PhotoImportVisionRead): boolean {
+  if (read.catalog_issue_id != null || read.added_to_inventory) {
+    return false;
+  }
+  const raw = read.raw_response;
+  if (!raw) {
+    return false;
+  }
+  return raw.comicvine_ondemand_attempted === true && raw.comicvine_ondemand_result === "no_volume";
+}
+
 export function PhotoImportReviewPage(): JSX.Element {
   const { token = "" } = useParams<{ token: string }>();
   const [reads, setReads] = useState<PhotoImportVisionRead[]>([]);
@@ -115,6 +126,7 @@ export function PhotoImportReviewPage(): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [ondemandConfirmIds, setOndemandConfirmIds] = useState<Set<number>>(new Set());
   const knownReadIds = useRef<Set<number>>(new Set());
 
   const seedDrafts = useCallback((rows: PhotoImportVisionRead[]) => {
@@ -172,12 +184,11 @@ export function PhotoImportReviewPage(): JSX.Element {
     setNotice(null);
     try {
       const payload: PhotoImportVisionReadUpdate = { ...drafts[read.id] };
-      await updateVisionRead(read.id, payload);
-      const rematched = await rematchVisionRead(read.id);
-      applyRead(rematched);
-      setNotice("Saved changes and refreshed catalog match.");
+      const updated = await updateVisionRead(read.id, payload);
+      applyRead(updated);
+      setNotice("Saved your edits (publisher, series, issue, etc.). Use Find in catalog to search again.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save changes");
+      setError(err instanceof Error ? err.message : "Could not save edits");
     } finally {
       setBusyId(null);
     }
@@ -186,14 +197,19 @@ export function PhotoImportReviewPage(): JSX.Element {
   const findInCatalog = async (read: PhotoImportVisionRead) => {
     setBusyId(read.id);
     setNotice(null);
+    setOndemandConfirmIds((prev) => {
+      const next = new Set(prev);
+      next.delete(read.id);
+      return next;
+    });
     try {
       await updateVisionRead(read.id, { ...drafts[read.id] });
       const updated = await catalogMatchVisionRead(read.id);
       applyRead(updated);
       if (updated.catalog_issue_id != null) {
-        setNotice("Found a catalog match.");
+        setNotice("Found a match in our catalog. If it looks wrong, try Validate on demand or pick another match below.");
       } else {
-        setNotice("No catalog match — we checked our database and ComicVine. You can add without a cover.");
+        setNotice("No match in our catalog yet. Add to collection anyway, or Validate on demand (ComicVine).");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Catalog search failed");
@@ -202,7 +218,51 @@ export function PhotoImportReviewPage(): JSX.Element {
     }
   };
 
-  const addToInventory = async (read: PhotoImportVisionRead) => {
+  const validateOnDemand = async (read: PhotoImportVisionRead) => {
+    setBusyId(read.id);
+    setNotice(null);
+    try {
+      await updateVisionRead(read.id, { ...drafts[read.id] });
+      const updated = await validateComicvineOnDemand(read.id);
+      applyRead(updated);
+      if (updated.catalog_issue_id != null) {
+        setOndemandConfirmIds((prev) => new Set(prev).add(read.id));
+        setNotice("ComicVine import found a catalog match. Add to collection or cancel.");
+      } else {
+        setOndemandConfirmIds((prev) => {
+          const next = new Set(prev);
+          next.delete(read.id);
+          return next;
+        });
+        setNotice("Validate on demand did not find a catalog match. Use Add to inventory with placeholder cover if you still want the book in your collection.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Validate on demand failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const cancelOndemandConfirm = async (read: PhotoImportVisionRead) => {
+    setBusyId(read.id);
+    setNotice(null);
+    try {
+      const updated = await cancelVisionReadCatalogMatch(read.id);
+      applyRead(updated);
+      setOndemandConfirmIds((prev) => {
+        const next = new Set(prev);
+        next.delete(read.id);
+        return next;
+      });
+      setNotice("Catalog match cleared. You can edit fields, find again, or add without a cover.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const addToInventory = async (read: PhotoImportVisionRead, options?: { placeholderCover?: boolean }) => {
     setBusyId(read.id);
     setNotice(null);
     try {
@@ -210,8 +270,15 @@ export function PhotoImportReviewPage(): JSX.Element {
       applyRead(saved);
       const result = await addVisionReadToInventory(read.id);
       applyRead(result.vision_read);
+      setOndemandConfirmIds((prev) => {
+        const next = new Set(prev);
+        next.delete(read.id);
+        return next;
+      });
       setNotice(
-        `Added to your collection (${result.created_count} cop${result.created_count === 1 ? "y" : "ies"}). Find it in Inventory.`,
+        options?.placeholderCover
+          ? `Added to your collection with a placeholder cover (${result.created_count} cop${result.created_count === 1 ? "y" : "ies"}). Your photo is kept as the source image.`
+          : `Added to your collection (${result.created_count} cop${result.created_count === 1 ? "y" : "ies"}). Find it in Inventory.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add to inventory");
@@ -263,18 +330,6 @@ export function PhotoImportReviewPage(): JSX.Element {
     }
   };
 
-  const sendFeedback = async (read: PhotoImportVisionRead, isCorrect: boolean) => {
-    setBusyId(read.id);
-    try {
-      const updated = await submitVisionReadFeedback(read.id, { is_correct: isCorrect });
-      applyRead(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save feedback");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const uploadedCount = sessionInfo?.uploaded_photo_count ?? 0;
   const photos = groupByImage(reads);
   const waitingForGpt = uploadedCount > photos.length;
@@ -286,9 +341,9 @@ export function PhotoImportReviewPage(): JSX.Element {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Add Comics</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Phone Photo Import — GPT review</h1>
         <p className="mt-2 text-sm text-slate-600">
-          GPT reads each photo first (publisher, series, issue, year, barcode). When the fields look right, click{" "}
-          <strong className="font-medium">Find in catalog</strong> — we search our database, then ComicVine once if needed.
-          Add to your collection with a cover when matched, or without a catalog cover if not.
+          GPT reads each photo first. Save field edits if needed, then <strong className="font-medium">Find in catalog</strong>{" "}
+          (local database). If there is no good match, use <strong className="font-medium">Validate on demand</strong> to pull the
+          series from ComicVine, then add to your collection.
         </p>
 
         {error ? (
@@ -346,7 +401,7 @@ export function PhotoImportReviewPage(): JSX.Element {
                     className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                     onClick={() => void rereadPhoto(photo.books[0])}
                   >
-                    ↻ Re-read with GPT
+                    ↻ Re-read (accurate GPT)
                   </button>
                 </div>
 
@@ -362,6 +417,8 @@ export function PhotoImportReviewPage(): JSX.Element {
                       const draft = drafts[read.id] ?? draftFromRead(read);
                       const matched = read.catalog_issue_id != null;
                       const searched = catalogSearchCompleted(read);
+                      const ondemandConfirm = ondemandConfirmIds.has(read.id);
+                      const ondemandMiss = ondemandComicvineMissed(read);
                       const confidencePct =
                         read.confidence != null ? `${Math.round(read.confidence * 100)}%` : null;
                       const busy = busyId === read.id;
@@ -452,23 +509,42 @@ export function PhotoImportReviewPage(): JSX.Element {
                                 <p className="mt-3 whitespace-pre-wrap text-xs text-slate-600">{read.reasoning}</p>
                               ) : null}
 
-                              {searched && !matched && !read.added_to_inventory ? (
+                              {ondemandMiss && !read.added_to_inventory ? (
                                 <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                  Not in our catalog (database + ComicVine). You can still add this copy without a
-                                  catalog cover.
+                                  ComicVine on demand did not find this book. You can retry validation or add it with a
+                                  placeholder cover (your photo) so intake is not blocked.
+                                </p>
+                              ) : null}
+
+                              {searched && !matched && !read.added_to_inventory && !ondemandMiss ? (
+                                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                  No match in our catalog yet. Add to collection with your photo, or validate on demand via
+                                  ComicVine.
+                                </p>
+                              ) : null}
+
+                              {ondemandConfirm && matched && !read.added_to_inventory ? (
+                                <p className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                                  ComicVine validation found:{" "}
+                                  <strong>
+                                    {read.catalog_series ?? read.series} #{read.catalog_issue_number ?? read.issue_number}
+                                  </strong>
+                                  . Add to collection or cancel to clear this match.
                                 </p>
                               ) : null}
 
                               <div className="mt-4 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-50"
-                                  onClick={() => void saveEdits(read)}
-                                >
-                                  Save changes
-                                </button>
-                                {!read.added_to_inventory && !matched ? (
+                                {!read.added_to_inventory && !ondemandConfirm ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-50"
+                                    onClick={() => void saveEdits(read)}
+                                  >
+                                    Save field edits
+                                  </button>
+                                ) : null}
+                                {!read.added_to_inventory && !searched && !ondemandConfirm ? (
                                   <button
                                     type="button"
                                     disabled={busy}
@@ -478,50 +554,57 @@ export function PhotoImportReviewPage(): JSX.Element {
                                     {busy ? "Searching…" : "Find in catalog"}
                                   </button>
                                 ) : null}
-                                {matched && !read.added_to_inventory ? (
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
-                                    onClick={() => void addToInventory(read)}
-                                  >
-                                    Add to collection
-                                  </button>
+                                {!read.added_to_inventory && searched && !ondemandConfirm ? (
+                                  <>
+                                    {!ondemandMiss ? (
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                                        onClick={() => void addToInventory(read)}
+                                      >
+                                        Add to collection
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                                        onClick={() => void addToInventory(read, { placeholderCover: true })}
+                                      >
+                                        Add to inventory with placeholder cover
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      disabled={busy}
+                                      className="rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
+                                      onClick={() => void validateOnDemand(read)}
+                                    >
+                                      {busy ? "Validating…" : "Validate on demand"}
+                                    </button>
+                                  </>
                                 ) : null}
-                                {searched && !matched && !read.added_to_inventory ? (
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-                                    onClick={() => void addToInventory(read)}
-                                  >
-                                    Add without catalog cover
-                                  </button>
-                                ) : null}
-                                {read.is_correct == null ? (
+                                {ondemandConfirm && !read.added_to_inventory ? (
                                   <>
                                     <button
                                       type="button"
                                       disabled={busy}
-                                      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                                      onClick={() => void sendFeedback(read, true)}
+                                      className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                                      onClick={() => void addToInventory(read)}
                                     >
-                                      ✓ Correct
+                                      Add to collection
                                     </button>
                                     <button
                                       type="button"
                                       disabled={busy}
-                                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                                      onClick={() => void sendFeedback(read, false)}
+                                      className="rounded-lg border border-slate-400 px-3 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+                                      onClick={() => void cancelOndemandConfirm(read)}
                                     >
-                                      ✗ Incorrect
+                                      Cancel
                                     </button>
                                   </>
-                                ) : (
-                                  <span className="self-center text-sm font-medium text-slate-700">
-                                    {read.is_correct ? "GPT got this right" : "GPT got this wrong"}
-                                  </span>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                           </div>

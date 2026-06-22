@@ -28,6 +28,7 @@
     { "path": "/connected-retailers/import", "apis": ["/api/v1/retailer-orders/import/retailers"] },
     { "path": "/add-comics/online-retail", "apis": ["/api/v1/retailer-orders/import/retailers"] },
     { "path": "/add-comics/photo", "apis": ["/api/v1/photo-import/sessions"] },
+    { "path": "/add-comics/import-folder", "apis": ["/api/v1/photo-import/sessions"] },
     { "path": "/add-comics/gpt-read", "apis": ["/api/v1/gpt-comic-read"] },
     { "path": "/add-comics/manual", "apis": [] },
     { "path": "/orders/new", "apis": [] },

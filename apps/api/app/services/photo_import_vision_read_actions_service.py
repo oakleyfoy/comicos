@@ -20,12 +20,16 @@ from app.schemas.photo_import import (
     PhotoImportVisionReadUpdatePayload,
 )
 from app.services.photo_import_catalog_match_service import (
+    CatalogMatchResult,
+    apply_match_to_read,
     choose_match_for_read,
     match_and_apply,
 )
 from app.services.photo_import_acquisition_service import create_catalog_copy_from_vision_read
 from app.services.photo_import_session_service import assert_session_owner, refresh_session_counts
+from app.services.photo_import_storage_service import resolve_photo_import_storage_path, source_image_api_path
 from app.services.photo_import_vision_read_api_service import vision_read_to_payload
+from app.services.comic_vision_read_mode import ComicVisionReadMode
 from app.services.photo_import_vision_sandbox_service import run_vision_sandbox_for_image
 
 logger = logging.getLogger(__name__)
@@ -103,7 +107,14 @@ def add_vision_read_to_inventory(
         )
 
     image = session.get(PhotoImportImage, int(row.image_id))
-    source_image_url = getattr(image, "storage_path", None) if image is not None else None
+    source_image_url: str | None = None
+    if image is not None:
+        abs_original = resolve_photo_import_storage_path(image.storage_path, image_id=int(image.id or 0))
+        if abs_original.is_file():
+            source_image_url = source_image_api_path(
+                session_token=str(import_row.session_token),
+                image_id=int(image.id or 0),
+            )
 
     acquisition_id, copy_id = create_catalog_copy_from_vision_read(
         session,
@@ -139,6 +150,7 @@ def reread_vision_read(
     *,
     read_id: int,
     owner_user_id: int,
+    mode: ComicVisionReadMode | str = ComicVisionReadMode.ACCURATE,
 ) -> list[PhotoImportVisionRead]:
     """Re-run GPT on the photo this read came from: clear-and-rebuild all its books."""
     row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
@@ -146,18 +158,18 @@ def reread_vision_read(
     image = session.get(PhotoImportImage, image_id)
     if image is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo import image not found")
-    rows = run_vision_sandbox_for_image(session, image_id=image_id)
+    rows = run_vision_sandbox_for_image(
+        session,
+        image_id=image_id,
+        mode=mode,
+    )
     logger.info("photo_import.vision_read.reread image_id=%s books=%d", image_id, len(rows))
     return rows
 
 
-def _catalog_match_with_ondemand_fallback(session: Session, read: PhotoImportVisionRead) -> None:
-    """Local catalog match first; if missing, one ComicVine on-demand import + rematch."""
+def _catalog_match_local(session: Session, read: PhotoImportVisionRead) -> None:
+    """Match against the local master catalog only (no ComicVine import)."""
     match_and_apply(session, read)
-    if read.catalog_issue_id is None:
-        from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
-
-        try_comicvine_ondemand_for_read(session, read)
 
 
 def catalog_match_vision_read(
@@ -166,9 +178,55 @@ def catalog_match_vision_read(
     read_id: int,
     owner_user_id: int,
 ) -> PhotoImportVisionRead:
-    """Match GPT to local catalog, then ComicVine on-demand once if still unmatched."""
+    """Match GPT fields to the local catalog database only."""
     row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
-    _catalog_match_with_ondemand_fallback(session, row)
+    _catalog_match_local(session, row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def validate_comicvine_ondemand_vision_read(
+    session: Session,
+    *,
+    read_id: int,
+    owner_user_id: int,
+) -> PhotoImportVisionRead:
+    """Import from ComicVine on demand using GPT fields, then rematch (even if a prior text match existed)."""
+    from app.services.photo_import_comicvine_ondemand_service import (
+        _mark_ondemand_attempt,
+        run_comicvine_ondemand_import,
+    )
+
+    row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
+    apply_match_to_read(row, CatalogMatchResult())
+    raw = dict(row.raw_response or {})
+    raw.pop("comicvine_ondemand_attempted", None)
+    raw.pop("comicvine_ondemand_result", None)
+    row.raw_response = raw
+
+    outcome = run_comicvine_ondemand_import(session, row)
+    if outcome == "imported":
+        match_and_apply(session, row)
+        _mark_ondemand_attempt(row, "imported")
+    elif outcome == "no_volume":
+        _mark_ondemand_attempt(row, "no_volume")
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def cancel_vision_read_catalog_match(
+    session: Session,
+    *,
+    read_id: int,
+    owner_user_id: int,
+) -> PhotoImportVisionRead:
+    """Drop the current catalog link so the user can search again or add as placeholder."""
+    row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
+    apply_match_to_read(row, CatalogMatchResult())
+    session.add(row)
     session.commit()
     session.refresh(row)
     return row
@@ -196,7 +254,7 @@ def catalog_match_session_reads(
         row = session.get(PhotoImportVisionRead, int(read_id))
         if row is None or int(row.session_id) != int(import_row.id or 0):
             continue
-        _catalog_match_with_ondemand_fallback(session, row)
+        _catalog_match_local(session, row)
         updated.append(row)
     session.commit()
     for row in updated:

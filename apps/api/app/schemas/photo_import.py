@@ -281,6 +281,21 @@ class PhotoImportBulkIdsPayload(BaseModel):
     detected_book_ids: list[int]
 
 
+class PhotoImportFolderQueueStatusRead(BaseModel):
+    pending_uploads: int
+    processing: int
+    processed: int
+    failed: int
+    vision_reads: int
+    pending_inventory: int
+    queue_empty: bool
+
+
+class PhotoImportProcessPendingResponse(BaseModel):
+    started_image_ids: list[int]
+    queue: PhotoImportFolderQueueStatusRead
+
+
 PhotoImportImageVerificationRead.model_rebuild()
 PhotoImportDetectedBookRead.model_rebuild()
 PhotoImportDetectionCandidatesResponse.model_rebuild()

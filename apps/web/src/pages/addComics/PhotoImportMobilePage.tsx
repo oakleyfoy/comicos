@@ -7,7 +7,9 @@ import {
   getPhotoImportImageVerification,
   getPhotoImportSession,
   heartbeatPhotoImportSession,
+  PHOTO_IMPORT_FOLDER_SOURCE,
   rereadVisionRead,
+  streamPhotoImportVision,
   uploadPhotoImportImages,
   type PhotoImportCaptureMode,
   type PhotoImportImageVerification,
@@ -45,6 +47,8 @@ export function PhotoImportMobilePage(): JSX.Element {
   const [selectedReadIds, setSelectedReadIds] = useState<Set<number>>(new Set());
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [actionReadId, setActionReadId] = useState<number | null>(null);
+  const [visionBusy, setVisionBusy] = useState(false);
+  const [streamPreview, setStreamPreview] = useState("");
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -68,7 +72,7 @@ export function PhotoImportMobilePage(): JSX.Element {
   }, [token, refresh]);
 
   useEffect(() => {
-    if (!token || activeImageId == null) return;
+    if (!token || activeImageId == null || visionBusy) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -92,12 +96,35 @@ export function PhotoImportMobilePage(): JSX.Element {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [token, activeImageId]);
+  }, [token, activeImageId, visionBusy]);
+
+  const runQuickVisionStream = async (imageId: number) => {
+    setVisionBusy(true);
+    setStreamPreview("");
+    setGptReady(false);
+    setError(null);
+    try {
+      await streamPhotoImportVision(token, imageId, "quick", {
+        onToken: (text) => setStreamPreview((prev) => prev + text),
+        onDone: (payload) => {
+          setVerification(payload);
+          setGptReady(payload.reads.length > 0 && payload.image_status === "processed");
+          setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
+        },
+        onError: (message) => setError(message),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "GPT read failed");
+    } finally {
+      setVisionBusy(false);
+    }
+  };
 
   const resetVerification = () => {
     setActiveImageId(null);
     setVerification(null);
     setGptReady(false);
+    setStreamPreview("");
     setSelectedReadIds(new Set());
   };
 
@@ -121,13 +148,19 @@ export function PhotoImportMobilePage(): JSX.Element {
     setUploading(true);
     setError(null);
     resetVerification();
+    const folderDrop = session?.source_device === PHOTO_IMPORT_FOLDER_SOURCE;
     try {
       const saved = await uploadPhotoImportImages(token, batch);
       await refresh();
-      const last = saved[saved.length - 1];
-      if (last?.id) {
-        setActiveImageId(last.id);
-        setGptReady(false);
+      if (folderDrop) {
+        setActiveImageId(null);
+        return;
+      }
+      for (const img of saved) {
+        if (img.id) {
+          setActiveImageId(img.id);
+          await runQuickVisionStream(img.id);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -213,20 +246,28 @@ export function PhotoImportMobilePage(): JSX.Element {
   };
 
   const singleComic = captureMode === "single_comic";
-  const captureReady = gptReady && !uploading;
+  const folderDrop = session?.source_device === PHOTO_IMPORT_FOLDER_SOURCE;
+  const captureReady = !folderDrop && gptReady && !uploading && !visionBusy;
   const reads = verification?.reads ?? [];
-  const gptPending = activeImageId != null && !gptReady && !uploading;
+  const gptPending = !folderDrop && ((activeImageId != null && !gptReady && !uploading) || visionBusy);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">ComicOS Photo Import</p>
-      <h1 className="mt-2 text-xl font-semibold">Add Comics From Your Phone</h1>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+        {folderDrop ? "ComicOS Import Folder" : "ComicOS Photo Import"}
+      </p>
+      <h1 className="mt-2 text-xl font-semibold">
+        {folderDrop ? "Drop photos into your folder" : "Add Comics From Your Phone"}
+      </h1>
       <p className="mt-2 text-sm text-slate-400">
-        {singleComic
-          ? "Snap one comic — GPT reads it in a few seconds. Match our catalog when you are ready."
-          : "One photo can include several comics. GPT lists each book; you choose which to match."}
+        {folderDrop
+          ? "Shoot one comic per photo. Your computer runs GPT and adds books to your collection — no review on this phone."
+          : singleComic
+            ? "Snap one comic — GPT reads it in a few seconds. Match our catalog when you are ready."
+            : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>
 
+      {!folderDrop ? (
       <fieldset className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Capture mode</legend>
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 has-[:checked]:border-sky-500 has-[:checked]:ring-1 has-[:checked]:ring-sky-500/40">
@@ -258,19 +299,28 @@ export function PhotoImportMobilePage(): JSX.Element {
           </span>
         </label>
       </fieldset>
+      ) : null}
 
       {session ? (
         <p className="mt-4 text-sm text-slate-400">
           Session connected · Photos: {session.uploaded_photo_count}
+          {folderDrop && !uploading ? (
+            <span className="block mt-1 text-emerald-300/90">Ready for the next shot.</span>
+          ) : null}
         </p>
       ) : (
         <p className="mt-4 text-sm text-slate-500">Connecting to session…</p>
       )}
 
       {gptPending ? (
-        <p className="mt-3 text-sm text-amber-200/90" role="status">
-          GPT is reading this photo…
-        </p>
+        <div className="mt-3 space-y-2" role="status">
+          <p className="text-sm text-amber-200/90">Reading cover (fast mode)…</p>
+          {streamPreview ? (
+            <pre className="max-h-32 overflow-auto rounded-lg bg-slate-900/80 p-2 text-[11px] text-slate-400 whitespace-pre-wrap">
+              {streamPreview}
+            </pre>
+          ) : null}
+        </div>
       ) : null}
       {captureReady ? (
         <p
@@ -281,7 +331,7 @@ export function PhotoImportMobilePage(): JSX.Element {
         </p>
       ) : null}
 
-      {reads.length > 0 ? (
+      {reads.length > 0 && !folderDrop ? (
         <section className="mt-6 space-y-4" aria-label="GPT verification">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-200">What GPT read</h2>
@@ -292,7 +342,7 @@ export function PhotoImportMobilePage(): JSX.Element {
                 onClick={() => void rereadPhoto()}
                 className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
               >
-                Re-read photo
+                Re-read (accurate)
               </button>
               <button
                 type="button"
@@ -424,7 +474,16 @@ export function PhotoImportMobilePage(): JSX.Element {
         onChange={(e) => void onFiles(e.target.files, e.target)}
       />
       <div className="mt-8 flex flex-col gap-3">
-        {singleComic ? (
+        {folderDrop ? (
+          <button
+            type="button"
+            disabled={uploading || !token}
+            onClick={() => cameraInputRef.current?.click()}
+            className="rounded-xl bg-sky-600 py-4 text-base font-semibold hover:bg-sky-500 disabled:opacity-50"
+          >
+            {uploading ? "Uploading…" : "Take next photo"}
+          </button>
+        ) : singleComic ? (
           <button
             type="button"
             disabled={uploading || !token}
@@ -453,6 +512,7 @@ export function PhotoImportMobilePage(): JSX.Element {
             {uploading ? "Uploading…" : "Take photo"}
           </button>
         )}
+        {!folderDrop ? (
         <button
           type="button"
           disabled={uploading || !token}
@@ -464,6 +524,7 @@ export function PhotoImportMobilePage(): JSX.Element {
         >
           {uploading ? "Uploading…" : singleComic ? "Choose one photo" : "Upload from library"}
         </button>
+        ) : null}
       </div>
     </div>
   );

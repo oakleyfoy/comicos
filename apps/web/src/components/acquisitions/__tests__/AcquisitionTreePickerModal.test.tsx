@@ -81,6 +81,12 @@ describe("AcquisitionTreePickerModal", () => {
     vi.spyOn(apiClient, "listCatalogUniversePublishers").mockResolvedValue(publisherResp);
     vi.spyOn(apiClient, "listCatalogUniverseVolumes").mockResolvedValue(volumeResp);
     vi.spyOn(apiClient, "listCatalogUniverseIssues").mockResolvedValue(issueResp);
+    vi.spyOn(apiClient, "addAcquisitionItems").mockResolvedValue({
+      created_count: 1,
+      results: [],
+      duplicate_catalog_issue_ids: [],
+      acquisition: {} as never,
+    });
     vi.spyOn(apiClient, "createTreePlaceholderIssue").mockResolvedValue({
       created_count: 1,
       skipped_count: 0,
@@ -121,7 +127,7 @@ describe("AcquisitionTreePickerModal", () => {
     expect(await screen.findByText(/Uncanny X-Men \(1963\)/)).toBeInTheDocument();
   });
 
-  it("creates a tree placeholder for a selected issue", async () => {
+  it("adds a catalog issue for a selected tree row", async () => {
     const onCreated = vi.fn();
     render(
       <AcquisitionTreePickerModal acquisitionId={5} open onClose={() => undefined} onCreated={onCreated} />,
@@ -129,9 +135,9 @@ describe("AcquisitionTreePickerModal", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Marvel" }));
     fireEvent.click(await screen.findByRole("button", { name: /Uncanny X-Men \(1963\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: /#221/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Placeholder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to collection" }));
     await waitFor(() => {
-      expect(apiClient.createTreePlaceholderIssue).toHaveBeenCalled();
+      expect(apiClient.addAcquisitionItems).toHaveBeenCalledWith(5, [{ catalog_issue_id: 42, quantity: 1 }]);
       expect(onCreated).toHaveBeenCalled();
     });
   });

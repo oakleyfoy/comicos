@@ -56,7 +56,7 @@ describe("PhotoImportMobilePage", () => {
     expect(gallery.hasAttribute("multiple")).toBe(false);
   });
 
-  it("shows captured message after upload in single-comic mode", async () => {
+  it("starts streaming vision read after upload in single-comic mode", async () => {
     vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
       {
         id: 99,
@@ -70,14 +70,44 @@ describe("PhotoImportMobilePage", () => {
         created_at: "2026-06-17T00:00:00Z",
       },
     ]);
+    vi.spyOn(photoImport, "streamPhotoImportVision").mockImplementation(async (_t, _id, _m, handlers) => {
+      handlers.onToken?.('{"comics":[{"series":"Falcon"');
+      handlers.onDone?.({
+        image_id: 99,
+        image_status: "processed",
+        reads: [
+          {
+            id: 1,
+            session_id: 1,
+            image_id: 99,
+            publisher: "Marvel",
+            series: "Falcon",
+            issue_number: "1",
+            issue_title: null,
+            variant_description: null,
+            year: "2017",
+            cover_date: null,
+            barcode: null,
+            confidence: 0.9,
+            reasoning: "Logo",
+            created_at: "2026-06-17T00:00:00Z",
+          },
+        ],
+      });
+    });
     renderPage();
     const gallery = screen.getByTestId("photo-import-gallery-input") as HTMLInputElement;
     const file = new File(["pixels"], "roll.jpg", { type: "image/jpeg" });
     fireEvent.change(gallery, { target: { files: [file] } });
     await waitFor(() => {
-      expect(photoImport.uploadPhotoImportImages).toHaveBeenCalledWith("test-token-123", [file]);
+      expect(photoImport.streamPhotoImportVision).toHaveBeenCalledWith(
+        "test-token-123",
+        99,
+        "quick",
+        expect.any(Object),
+      );
     });
-    expect(await screen.findByText(/GPT is reading/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Verified/i)).toBeInTheDocument();
   });
 
   it("can switch to experimental group mode", async () => {
@@ -89,5 +119,41 @@ describe("PhotoImportMobilePage", () => {
         captureMode: "group",
       });
     });
+  });
+
+  it("folder import uploads only without streaming GPT on phone", async () => {
+    vi.spyOn(photoImport, "heartbeatPhotoImportSession").mockResolvedValue({
+      ...sessionMock,
+      source_device: "folder_import",
+    });
+    vi.spyOn(photoImport, "getPhotoImportSession").mockResolvedValue({
+      ...sessionMock,
+      source_device: "folder_import",
+      uploaded_photo_count: 1,
+    });
+    vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
+      {
+        id: 42,
+        session_id: 1,
+        original_filename: "cover.jpg",
+        mime_type: "image/jpeg",
+        file_size: 1,
+        width: null,
+        height: null,
+        status: "uploaded",
+        created_at: "2026-06-17T00:00:00Z",
+      },
+    ]);
+    const streamSpy = vi.spyOn(photoImport, "streamPhotoImportVision");
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /Drop photos into your folder/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Take next photo/i }));
+    const camera = screen.getByTestId("photo-import-camera-input") as HTMLInputElement;
+    const file = new File(["pixels"], "cover.jpg", { type: "image/jpeg" });
+    fireEvent.change(camera, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(photoImport.uploadPhotoImportImages).toHaveBeenCalled();
+    });
+    expect(streamSpy).not.toHaveBeenCalled();
   });
 });

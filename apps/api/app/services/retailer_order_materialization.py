@@ -337,6 +337,8 @@ def _attach_inventory_to_default_portfolio(
             )
         )
         added += 1
+    if added:
+        session.flush()
     return added
 
 

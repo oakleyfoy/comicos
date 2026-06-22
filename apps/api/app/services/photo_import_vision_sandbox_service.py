@@ -13,15 +13,17 @@ from app.models.photo_import import PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_ai_recognition_service import RecognitionConfigError
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
-from app.services.gpt_comic_identification_prompts import (
-    COMIC_IDENTIFICATION_SYSTEM,
-    COMIC_IDENTIFICATION_USER,
-)
+from app.services.comic_vision_read_mode import ComicVisionReadMode, normalize_vision_read_mode, resolve_vision_profile
 from app.services.gpt_comic_vision_client import call_comic_vision
 
 logger = logging.getLogger(__name__)
 
 # Back-compat names for tests/docs
+from app.services.gpt_comic_identification_prompts import (
+    COMIC_IDENTIFICATION_SYSTEM,
+    COMIC_IDENTIFICATION_USER,
+)
+
 VISION_SANDBOX_SYSTEM = COMIC_IDENTIFICATION_SYSTEM
 VISION_SANDBOX_USER = COMIC_IDENTIFICATION_USER
 
@@ -102,16 +104,24 @@ def _extract_comics_payloads(parsed: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def read_comics_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> list[VisionSandboxReadResult]:
+def read_comics_with_gpt_vision(
+    image_bytes: bytes,
+    *,
+    image_id: int,
+    mode: ComicVisionReadMode | str = ComicVisionReadMode.QUICK,
+) -> list[VisionSandboxReadResult]:
     """Call OpenAI vision once and return one result per distinct comic in the photo."""
     settings = get_settings()
     if not settings.openai_api_key:
         raise RecognitionConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
 
-    model = settings.photo_import_vision_sandbox_model
+    read_mode = normalize_vision_read_mode(mode.value if isinstance(mode, ComicVisionReadMode) else str(mode))
+    profile = resolve_vision_profile(settings, read_mode)
+    model = str(profile["model"])
     logger.info(
-        "photo_import.vision_sandbox.request image_id=%s model=%s image_bytes=%d",
+        "photo_import.vision_sandbox.request image_id=%s mode=%s model=%s image_bytes=%d",
         image_id,
+        read_mode.value,
         model,
         len(image_bytes),
     )
@@ -119,9 +129,18 @@ def read_comics_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> list[Vi
         image_bytes,
         model=model,
         api_key=settings.openai_api_key,
-        log_context=f"photo_import image_id={image_id}",
+        log_context=f"photo_import image_id={image_id} mode={read_mode.value}",
+        system=str(profile["system"]),
+        user=str(profile["user"]),
+        image_detail=str(profile["image_detail"]),
+        max_image_side_px=int(profile["max_image_side_px"]),
     )
-    raw_response = {"parsed": parsed, "openai_response": api_payload, "model_used": model_used}
+    raw_response = {
+        "parsed": parsed,
+        "openai_response": api_payload,
+        "model_used": model_used,
+        "vision_mode": read_mode.value,
+    }
     books = _extract_comics_payloads(parsed)
     results: list[VisionSandboxReadResult] = []
     for book in books:
@@ -188,7 +207,12 @@ def persist_vision_read(
     return row
 
 
-def run_vision_sandbox_for_image(session: Session, *, image_id: int) -> list[PhotoImportVisionRead]:
+def run_vision_sandbox_for_image(
+    session: Session,
+    *,
+    image_id: int,
+    mode: ComicVisionReadMode | str = ComicVisionReadMode.QUICK,
+) -> list[PhotoImportVisionRead]:
     """Read every comic in the photo, clear any prior reads, and persist + match each."""
     image = session.get(PhotoImportImage, image_id)
     if image is None:
@@ -200,7 +224,7 @@ def run_vision_sandbox_for_image(session: Session, *, image_id: int) -> list[Pho
         return []
     raw = path.read_bytes()
     try:
-        results = read_comics_with_gpt_vision(raw, image_id=image_id)
+        results = read_comics_with_gpt_vision(raw, image_id=image_id, mode=mode)
     except Exception as exc:  # noqa: BLE001
         logger.exception("photo_import.vision_sandbox.failed image_id=%s error=%s", image_id, exc)
         raise

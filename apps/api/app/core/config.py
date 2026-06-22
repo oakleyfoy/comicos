@@ -42,9 +42,36 @@ class Settings(BaseSettings):
     openai_order_parser_model: str = "gpt-4o-mini"
     photo_import_vision_sandbox: bool = Field(default=False, alias="PHOTO_IMPORT_VISION_SANDBOX")
     photo_import_vision_sandbox_model: str = Field(
-        default="gpt-5",
+        default="gpt-4o",
         alias="PHOTO_IMPORT_VISION_SANDBOX_MODEL",
-        description="OpenAI vision model for P100 phone-import GPT reads (reasoning model preferred)",
+        description="Accurate / legacy vision model when PHOTO_IMPORT_ACCURATE_VISION_MODEL is unset",
+    )
+    photo_import_quick_vision_model: str = Field(
+        default="gpt-4o-mini",
+        alias="PHOTO_IMPORT_QUICK_VISION_MODEL",
+        description="Fast ChatGPT-style vision model for default phone import reads",
+    )
+    photo_import_accurate_vision_model: str = Field(
+        default="",
+        alias="PHOTO_IMPORT_ACCURATE_VISION_MODEL",
+        description="Slower, detailed re-read model (defaults to PHOTO_IMPORT_VISION_SANDBOX_MODEL)",
+    )
+    photo_import_quick_max_image_side_px: int = Field(
+        default=1280,
+        alias="PHOTO_IMPORT_QUICK_MAX_IMAGE_SIDE_PX",
+    )
+    photo_import_accurate_max_image_side_px: int = Field(
+        default=2048,
+        alias="PHOTO_IMPORT_ACCURATE_MAX_IMAGE_SIDE_PX",
+    )
+    photo_import_quick_image_detail: str = Field(
+        default="low",
+        alias="PHOTO_IMPORT_QUICK_IMAGE_DETAIL",
+        description="OpenAI image detail for quick reads: low | auto | high",
+    )
+    photo_import_accurate_image_detail: str = Field(
+        default="high",
+        alias="PHOTO_IMPORT_ACCURATE_IMAGE_DETAIL",
     )
     gpt_comic_read_model: str = Field(
         default="gpt-5",

@@ -117,6 +117,9 @@ describe("RetailerOrderDetailPage", () => {
       order_total: "104.79",
       source_url: "https://www.midtowncomics.com/account/orders/view/4272232",
       review_status: "confirmed",
+      linked_order_id: 555,
+      inventory_copies_created: 2,
+      total_ordered_quantity: 2,
       item_count: 2,
       cover_image_count: 1,
       product_url_count: 1,
@@ -170,12 +173,12 @@ describe("RetailerOrderDetailPage", () => {
     const coverImg = screen.getByAltText("Immortal Thor #1 Cover A") as HTMLImageElement;
     expect(coverImg.className).toContain("object-cover");
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm Retailer Order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to portfolio" }));
 
     await waitFor(() => {
-      expect(apiClient.confirmRetailerOrder).toHaveBeenCalledWith(11);
-      expect(screen.getByText("confirmed")).toBeInTheDocument();
-      expect(screen.getByText("Retailer order confirmed.")).toBeInTheDocument();
+      expect(apiClient.confirmRetailerOrder).toHaveBeenCalledWith(11, 2);
+      expect(screen.getByText("CONFIRMED")).toBeInTheDocument();
+      expect(screen.getByText("Confirmed. Created 2 inventory copies in your portfolio.")).toBeInTheDocument();
     });
   });
 
@@ -238,7 +241,7 @@ describe("RetailerOrderDetailPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Confirm Retailer Order" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add to portfolio" }));
 
     await waitFor(() => {
       expect(screen.getByText("Confirmed. Created 41 inventory copies in your portfolio.")).toBeInTheDocument();
@@ -325,7 +328,7 @@ describe("RetailerOrderDetailPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Re-run catalog enrichment" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Re-run catalog enrichment" }))[0]!);
 
     await waitFor(() => {
       expect(reenrichSpy).toHaveBeenCalledWith(11);

@@ -89,6 +89,21 @@ function enrichmentBadgeClass(status: string | null | undefined): string {
   return "border-rose-400/30 bg-rose-400/10 text-rose-100";
 }
 
+function orderReviewStatusKey(status: string | null | undefined): string {
+  return (status ?? "").trim().toLowerCase();
+}
+
+function retailerOrderIsConfirmed(order: RetailerOrderSnapshotRead): boolean {
+  if (order.linked_order_id != null) {
+    return true;
+  }
+  return orderReviewStatusKey(order.review_status) === "confirmed";
+}
+
+function inventoryCopyCount(order: RetailerOrderSnapshotRead): number {
+  return order.inventory_copies_created ?? order.total_ordered_quantity ?? 0;
+}
+
 export function RetailerOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -106,6 +121,9 @@ export function RetailerOrderDetailPage() {
   } | null>(null);
   const [isReenriching, setIsReenriching] = useState(false);
   const [enrichResult, setEnrichResult] = useState<RetailerOrderReEnrichResponse | null>(null);
+
+  const orderConfirmed = order != null && retailerOrderIsConfirmed(order);
+  const orderCopyCount = order ? inventoryCopyCount(order) : 0;
 
   const debugSummary = useMemo(() => {
     if (!order) {
@@ -150,6 +168,46 @@ export function RetailerOrderDetailPage() {
     };
   }, [orderId]);
 
+  function applyConfirmedOrderState(next: RetailerOrderSnapshotRead): void {
+    setOrder(next);
+    const copies = inventoryCopyCount(next);
+    if (next.linked_order_id && copies > 0) {
+      setConfirmStats({
+        inventoryCopies: copies,
+        linkedOrderId: next.linked_order_id,
+        retailer: next.retailer,
+      });
+      setSuccess(
+        `Confirmed. Created ${copies} inventory cop${copies === 1 ? "y" : "ies"} in your portfolio.`,
+      );
+      return;
+    }
+    if (retailerOrderIsConfirmed(next)) {
+      setSuccess("Retailer order confirmed.");
+    }
+  }
+
+  async function pollRetailerOrderUntilConfirmed(
+    retailerOrderId: number,
+    options: { attempts: number; intervalMs: number },
+  ): Promise<RetailerOrderSnapshotRead | null> {
+    const { attempts, intervalMs } = options;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+      }
+      try {
+        const refreshed = await apiClient.getRetailerOrder(retailerOrderId);
+        if (retailerOrderIsConfirmed(refreshed) && refreshed.linked_order_id != null) {
+          return refreshed;
+        }
+      } catch {
+        // Keep polling until attempts are exhausted.
+      }
+    }
+    return null;
+  }
+
   async function confirmOrder(): Promise<void> {
     if (!order) {
       return;
@@ -159,50 +217,27 @@ export function RetailerOrderDetailPage() {
     setNotice(null);
     setSuccess(null);
     setConfirmStats(null);
+
     try {
-      const response = await apiClient.confirmRetailerOrder(order.id);
-      setOrder(response);
-      const copies = response.inventory_copies_created ?? response.total_ordered_quantity ?? 0;
-      if (response.linked_order_id && copies > 0) {
-        setConfirmStats({
-          inventoryCopies: copies,
-          linkedOrderId: response.linked_order_id,
-          retailer: response.retailer,
-        });
-      }
-      setSuccess(
-        copies > 0
-          ? `Confirmed. Created ${copies} inventory cop${copies === 1 ? "y" : "ies"} in your portfolio.`
-          : "Retailer order confirmed.",
-      );
+      const response = await apiClient.confirmRetailerOrder(order.id, order.item_count);
+      applyConfirmedOrderState(response);
     } catch (confirmError) {
       if (confirmError instanceof ApiError && confirmError.status === 408) {
-        // The confirm request timed out client-side, but the backend may have
-        // already finished (confirm is idempotent). Poll the order once: if it is
-        // now confirmed, show success; otherwise surface a non-blocking notice.
         const timeoutNotice =
           confirmError.message || "Confirmation may still be processing. Refresh or check your Portfolio.";
-        try {
-          const refreshed = await apiClient.getRetailerOrder(order.id);
-          setOrder(refreshed);
-          const copies = refreshed.inventory_copies_created ?? refreshed.total_ordered_quantity ?? 0;
-          if (refreshed.review_status === "confirmed" && refreshed.linked_order_id && copies > 0) {
-            setConfirmStats({
-              inventoryCopies: copies,
-              linkedOrderId: refreshed.linked_order_id,
-              retailer: refreshed.retailer,
-            });
-            setSuccess(
-              `Confirmed. Created ${copies} inventory cop${copies === 1 ? "y" : "ies"} in your portfolio.`,
-            );
-          } else {
-            setNotice(timeoutNotice);
-          }
-        } catch {
+        const refreshed = await pollRetailerOrderUntilConfirmed(order.id, { attempts: 15, intervalMs: 2_000 });
+        if (refreshed) {
+          applyConfirmedOrderState(refreshed);
+        } else {
           setNotice(timeoutNotice);
         }
       } else {
-        setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
+        const maybeDone = await pollRetailerOrderUntilConfirmed(order.id, { attempts: 5, intervalMs: 1_500 });
+        if (maybeDone) {
+          applyConfirmedOrderState(maybeDone);
+        } else {
+          setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
+        }
       }
     } finally {
       setIsSaving(false);
@@ -246,7 +281,7 @@ export function RetailerOrderDetailPage() {
       <PageHeader
         eyebrow="Retailer Order"
         title="Retailer Order"
-        description="Review the retailer snapshot directly, inspect the captured items, and confirm the order when it is ready for receiving."
+        description="Captured retailer orders stay here until you confirm them into your ComicOS portfolio (inventory)."
       />
 
       {error ? (
@@ -307,16 +342,36 @@ export function RetailerOrderDetailPage() {
                 <span
                   className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(order.review_status)}`}
                 >
-                  {order.review_status}
+                  {orderConfirmed ? "CONFIRMED" : order.review_status}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void confirmOrder()}
-                  disabled={isSaving}
-                  className="rounded-xl bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? "Saving..." : "Confirm Retailer Order"}
-                </button>
+                {orderConfirmed ? (
+                  <Link
+                    to={`/dashboard?q=${encodeURIComponent(order.retailer)}`}
+                    className="rounded-xl bg-emerald-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-emerald-300"
+                  >
+                    Open portfolio
+                    {orderCopyCount > 0 ? ` (${orderCopyCount})` : ""}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void confirmOrder()}
+                    disabled={isSaving}
+                    className="rounded-xl bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? "Adding to portfolio…" : "Add to portfolio"}
+                  </button>
+                )}
+                {orderConfirmed && order.linked_order_id ? (
+                  <button
+                    type="button"
+                    onClick={() => void confirmOrder()}
+                    disabled={isSaving}
+                    className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? "Syncing…" : "Re-sync portfolio link"}
+                  </button>
+                ) : null}
                 {order.linked_order_id ? (
                   <button
                     type="button"
@@ -428,6 +483,25 @@ export function RetailerOrderDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : null}
+
+            {!orderConfirmed ? (
+              <div className="mt-4">
+                <StatusBanner tone="info">
+                  <strong className="font-semibold">CAPTURED</strong> means Midtown data is saved in ComicOS only.
+                  Books are not in your portfolio until you click <strong className="font-semibold">Add to portfolio</strong>.
+                  Catalog badges can stay on “Review pending” until background matching runs; that does not block adding.
+                </StatusBanner>
+              </div>
+            ) : null}
+
+            {isSaving ? (
+              <div className="mt-4">
+                <StatusBanner tone="info">
+                  Creating inventory and linking your default portfolio collection. Large orders can take up to a few
+                  minutes—this page will update when finished.
+                </StatusBanner>
               </div>
             ) : null}
 

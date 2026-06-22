@@ -6,8 +6,8 @@ import logging
 import os
 import socket
 
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
@@ -20,11 +20,13 @@ from app.schemas.photo_import import (
     PhotoImportConfirmPayload,
     PhotoImportConfirmResponse,
     PhotoImportDetectedBookRead,
+    PhotoImportFolderQueueStatusRead,
     PhotoImportHeartbeatPayload,
     PhotoImportImageRead,
     PhotoImportImageVerificationRead,
     PhotoImportCandidateRead,
     PhotoImportDetectionCandidatesResponse,
+    PhotoImportProcessPendingResponse,
     PhotoImportSelectCandidatePayload,
     PhotoImportSessionCreatePayload,
     PhotoImportSessionRead,
@@ -57,8 +59,13 @@ from app.services.photo_import_session_service import (
     session_to_read,
     assert_session_owner,
 )
-from app.services.photo_import_processing_service import run_photo_import_image_processing
+from app.services.comic_vision_read_mode import normalize_vision_read_mode
+from app.services.photo_import_folder_pipeline_service import (
+    folder_queue_status,
+    kick_folder_process_pending,
+)
 from app.services.photo_import_upload_service import upload_session_images
+from app.services.photo_import_vision_stream_service import iter_vision_read_sse
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
 from app.services.photo_import_vision_read_api_service import vision_read_to_payload
@@ -67,6 +74,8 @@ from app.services.photo_import_vision_read_actions_service import (
     add_vision_read_to_inventory,
     catalog_match_session_reads,
     catalog_match_vision_read,
+    cancel_vision_read_catalog_match,
+    validate_comicvine_ondemand_vision_read,
     choose_vision_read_match,
     rematch_vision_read,
     reread_vision_read,
@@ -111,8 +120,44 @@ def create_session_endpoint(
     return create_photo_import_session(
         session,
         owner_user_id=int(current_user.id),
-        source_device=payload.source_device if payload else None,
+        source_device=(payload.source_device if payload else None) or None,
         capture_mode=payload.capture_mode if payload else None,
+    )
+
+
+@photo_import_router.get(
+    "/sessions/{token}/folder-queue",
+    response_model=PhotoImportFolderQueueStatusRead,
+)
+def folder_queue_status_endpoint(
+    token: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportFolderQueueStatusRead:
+    assert current_user.id is not None
+    import_row = get_session_by_token_or_404(session, token=token)
+    assert_session_owner(import_row, owner_user_id=int(current_user.id))
+    return folder_queue_status(session, import_row=import_row)
+
+
+@photo_import_router.post(
+    "/sessions/{token}/folder-process-pending",
+    response_model=PhotoImportProcessPendingResponse,
+)
+def folder_process_pending_endpoint(
+    token: str,
+    limit: int = Query(default=2, ge=1, le=3),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportProcessPendingResponse:
+    assert current_user.id is not None
+    import_row = get_session_by_token_or_404(session, token=token)
+    assert_session_owner(import_row, owner_user_id=int(current_user.id))
+    return kick_folder_process_pending(
+        session,
+        token=token,
+        owner_user_id=int(current_user.id),
+        limit=limit,
     )
 
 
@@ -159,13 +204,11 @@ def complete_session_endpoint(
 @photo_import_router.post("/sessions/{token}/images", response_model=list[PhotoImportImageRead])
 async def upload_images_endpoint(
     token: str,
-    background_tasks: BackgroundTasks,
     images: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ) -> list[PhotoImportImageRead]:
-    saved, pending_ids = await upload_session_images(session, token=token, files=images)
-    for image_id in pending_ids:
-        background_tasks.add_task(run_photo_import_image_processing, image_id)
+    """Save uploads; clients should call vision-stream (quick) per image for GPT reads."""
+    saved, _pending_ids = await upload_session_images(session, token=token, files=images)
     return saved
 
 
@@ -338,6 +381,40 @@ def get_image_verification_endpoint(
     )
 
 
+@photo_import_router.post("/sessions/{token}/images/{image_id}/vision-stream")
+def vision_stream_endpoint(
+    token: str,
+    image_id: int,
+    session: Session = Depends(get_session),
+    mode: str = Query(default="quick", description="quick (default) or accurate"),
+    force: bool = Query(default=False, description="Re-run even if already processed"),
+) -> StreamingResponse:
+    """Stream GPT vision tokens (ChatGPT-style), then persist vision reads."""
+    import_row = get_session_by_token_or_404(session, token=token)
+    image = session.get(PhotoImportImage, image_id)
+    if image is None or int(image.session_id) != int(import_row.id or 0):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo import image not found")
+    read_mode = normalize_vision_read_mode(mode)
+
+    def generate():
+        from app.db.session import get_engine
+
+        with Session(get_engine()) as db:
+            for chunk in iter_vision_read_sse(
+                db,
+                image_id=image_id,
+                mode=read_mode,
+                force=force,
+            ):
+                yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @photo_import_router.post("/vision-read/{read_id}/catalog-match", response_model=PhotoImportVisionReadPayload)
 def catalog_match_vision_read_endpoint(
     read_id: int,
@@ -346,6 +423,42 @@ def catalog_match_vision_read_endpoint(
 ) -> PhotoImportVisionReadPayload:
     assert current_user.id is not None
     row = catalog_match_vision_read(session, read_id=read_id, owner_user_id=int(current_user.id))
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.post(
+    "/vision-read/{read_id}/validate-ondemand",
+    response_model=PhotoImportVisionReadPayload,
+)
+def validate_ondemand_vision_read_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = validate_comicvine_ondemand_vision_read(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+    )
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.post(
+    "/vision-read/{read_id}/cancel-catalog-match",
+    response_model=PhotoImportVisionReadPayload,
+)
+def cancel_catalog_match_vision_read_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = cancel_vision_read_catalog_match(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+    )
     return vision_read_to_payload(row)
 
 
@@ -433,12 +546,15 @@ def reread_vision_read_endpoint(
     read_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    mode: str = Query(default="accurate", description="accurate (default) or quick"),
 ) -> list[PhotoImportVisionReadPayload]:
     assert current_user.id is not None
+    read_mode = normalize_vision_read_mode(mode)
     rows = reread_vision_read(
         session,
         read_id=read_id,
         owner_user_id=int(current_user.id),
+        mode=read_mode,
     )
     return [vision_read_to_payload(r) for r in rows]
 

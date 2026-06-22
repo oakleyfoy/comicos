@@ -15,6 +15,7 @@ from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSer
 from app.models.photo_import import PhotoImportImage, PhotoImportSession
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_vision_sandbox_service import VisionSandboxReadResult
+from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from test_inventory import auth_headers, register_and_login
 
 
@@ -59,6 +60,9 @@ def _seed_read(session: Session, *, session_token: str, **fields) -> PhotoImport
     session.add(image)
     session.commit()
     session.refresh(image)
+    resolved = resolve_photo_import_storage_path(image.storage_path, image_id=int(image.id or 0))
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_bytes(b"\xff\xd8\xff\xd9")
     read = PhotoImportVisionRead(
         session_id=int(import_row.id),
         image_id=int(image.id),
@@ -122,6 +126,7 @@ def test_add_vision_read_to_inventory_creates_copy(client: TestClient, session: 
     assert copy.variant_id is None
     assert copy.order_status == "received"
     assert copy.received_via == "PHOTO_IMPORT"
+    assert copy.source_image_url == f"/api/v1/photo-import/sessions/{created['session_token']}/images/{read.image_id}/original"
 
     # The copy must actually appear in the user's Inventory grid / collection.
     grid = client.get("/inventory?page=1&page_size=50", headers=auth_headers(token))
@@ -164,6 +169,7 @@ def test_add_unmatched_read_creates_placeholder_copy(client: TestClient, session
     assert copy.catalog_issue_id is None
     assert copy.placeholder_issue_id is not None
     assert copy.received_via == "PHOTO_IMPORT"
+    assert copy.source_image_url == f"/api/v1/photo-import/sessions/{created['session_token']}/images/{read.image_id}/original"
 
     grid = client.get("/inventory?page=1&page_size=50", headers=auth_headers(token))
     assert grid.status_code == 200, grid.text
@@ -258,10 +264,10 @@ def test_reread_overwrites_read(client: TestClient, session: Session, tmp_path, 
     assert body[0]["issue_number"] == "404"
 
 
-def test_catalog_match_calls_ondemand_when_local_catalog_misses(
+def test_catalog_match_local_only_skips_ondemand(
     client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    token = register_and_login(client, "gpt-review-cv-fallback@example.com")
+    token = register_and_login(client, "gpt-review-local-only@example.com")
     created = _start_session(client, token)
     read = _seed_read(
         session,
@@ -270,17 +276,11 @@ def test_catalog_match_calls_ondemand_when_local_catalog_misses(
         series="Falcon",
         issue_number="1",
         year="2017",
-        confidence=0.95,
         catalog_issue_id=None,
     )
-    calls: list[int] = []
 
     def fake_ondemand(session: Session, row: PhotoImportVisionRead) -> bool:
-        calls.append(int(row.id or 0))
-        row.catalog_issue_id = 99901
-        row.match_method = "text"
-        session.add(row)
-        return True
+        raise AssertionError("ondemand should not run on catalog-match")
 
     monkeypatch.setattr(
         "app.services.photo_import_comicvine_ondemand_service.try_comicvine_ondemand_for_read",
@@ -292,5 +292,37 @@ def test_catalog_match_calls_ondemand_when_local_catalog_misses(
         headers=auth_headers(token),
     )
     assert res.status_code == 200, res.text
-    assert calls == [int(read.id)]
-    assert res.json()["catalog_issue_id"] == 99901
+
+
+def test_validate_ondemand_calls_comicvine_import(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = register_and_login(client, "gpt-review-cv-validate@example.com")
+    created = _start_session(client, token)
+    read = _seed_read(
+        session,
+        session_token=created["session_token"],
+        publisher="DC",
+        series="Justice League",
+        issue_number="11",
+        year="2017",
+        catalog_issue_id=88001,
+        match_method="text",
+    )
+    imported: list[int] = []
+
+    def fake_run(session: Session, row: PhotoImportVisionRead) -> str:
+        imported.append(int(row.id or 0))
+        return "imported"
+
+    monkeypatch.setattr(
+        "app.services.photo_import_comicvine_ondemand_service.run_comicvine_ondemand_import",
+        fake_run,
+    )
+
+    res = client.post(
+        f"/api/v1/photo-import/vision-read/{read.id}/validate-ondemand",
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 200, res.text
+    assert imported == [int(read.id)]

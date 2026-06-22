@@ -139,6 +139,24 @@ export type PhotoImportVisionSandboxMetrics = {
 
 export type PhotoImportCaptureMode = "single_comic" | "group";
 
+/** Desktop folder pipeline + phone drop box (scan QR once). */
+export const PHOTO_IMPORT_FOLDER_SOURCE = "folder_import";
+
+export type PhotoImportFolderQueueStatus = {
+  pending_uploads: number;
+  processing: number;
+  processed: number;
+  failed: number;
+  vision_reads: number;
+  pending_inventory: number;
+  queue_empty: boolean;
+};
+
+export type PhotoImportProcessPendingResponse = {
+  started_image_ids: number[];
+  queue: PhotoImportFolderQueueStatus;
+};
+
 export type PhotoImportImage = {
   id: number;
   session_id: number;
@@ -155,6 +173,13 @@ export type PhotoImportImageVerification = {
   image_id: number;
   image_status: string;
   reads: PhotoImportVisionRead[];
+};
+
+export type PhotoImportVisionStreamHandlers = {
+  onStatus?: (data: { phase?: string; vision_mode?: string; message?: string }) => void;
+  onToken?: (text: string) => void;
+  onDone?: (verification: PhotoImportImageVerification) => void;
+  onError?: (message: string) => void;
 };
 
 export type PhotoImportCandidate = {
@@ -252,6 +277,22 @@ export function createPhotoImportSession(
 
 export function getPhotoImportSession(token: string): Promise<PhotoImportSession> {
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}`);
+}
+
+export function getPhotoImportFolderQueue(token: string): Promise<PhotoImportFolderQueueStatus> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(token)}/folder-queue`,
+  );
+}
+
+export function processPhotoImportFolderPending(
+  token: string,
+  limit = 2,
+): Promise<PhotoImportProcessPendingResponse> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(token)}/folder-process-pending?limit=${limit}`,
+    { method: "POST" },
+  );
 }
 
 export function heartbeatPhotoImportSession(
@@ -373,8 +414,12 @@ export async function addVisionReadToInventory(
   });
 }
 
-export async function rereadVisionRead(readId: number): Promise<PhotoImportVisionRead[]> {
-  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/reread`, {
+export async function rereadVisionRead(
+  readId: number,
+  mode: "quick" | "accurate" = "accurate",
+): Promise<PhotoImportVisionRead[]> {
+  const q = new URLSearchParams({ mode });
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/reread?${q.toString()}`, {
     method: "POST",
   });
 }
@@ -387,6 +432,18 @@ export async function rematchVisionRead(readId: number): Promise<PhotoImportVisi
 
 export async function catalogMatchVisionRead(readId: number): Promise<PhotoImportVisionRead> {
   return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/catalog-match`, {
+    method: "POST",
+  });
+}
+
+export async function validateComicvineOnDemand(readId: number): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/validate-ondemand`, {
+    method: "POST",
+  });
+}
+
+export async function cancelVisionReadCatalogMatch(readId: number): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/cancel-catalog-match`, {
     method: "POST",
   });
 }
@@ -411,6 +468,86 @@ export async function getPhotoImportImageVerification(
   return requestPhotoImport(
     `/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/images/${imageId}/verification`,
   );
+}
+
+function parseSseBlock(block: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  }
+  if (!dataLines.length) return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+/** ChatGPT-style streaming GPT read after upload (quick mode by default). */
+export async function streamPhotoImportVision(
+  sessionToken: string,
+  imageId: number,
+  mode: "quick" | "accurate" = "quick",
+  handlers: PhotoImportVisionStreamHandlers,
+  options?: { force?: boolean; signal?: AbortSignal },
+): Promise<void> {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const q = new URLSearchParams({ mode });
+  if (options?.force) q.set("force", "true");
+  const res = await fetch(
+    `${API_BASE}/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/images/${imageId}/vision-stream?${q.toString()}`,
+    {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: options?.signal,
+    },
+  );
+  if (!res.ok) {
+    let detail = `vision-stream failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new PhotoImportApiError(detail, res.status);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new PhotoImportApiError("No response body", 500);
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let split = buffer.indexOf("\n\n");
+    while (split >= 0) {
+      const block = buffer.slice(0, split);
+      buffer = buffer.slice(split + 2);
+      const parsed = parseSseBlock(block);
+      if (parsed) {
+        try {
+          const payload = JSON.parse(parsed.data) as Record<string, unknown>;
+          if (parsed.event === "token" && typeof payload.text === "string") {
+            handlers.onToken?.(payload.text);
+          } else if (parsed.event === "status") {
+            handlers.onStatus?.(payload as { phase?: string; vision_mode?: string; message?: string });
+          } else if (parsed.event === "done") {
+            handlers.onDone?.({
+              image_id: Number(payload.image_id),
+              image_status: String(payload.image_status ?? "processed"),
+              reads: (payload.reads as PhotoImportVisionRead[]) ?? [],
+            });
+          } else if (parsed.event === "error") {
+            const msg = typeof payload.message === "string" ? payload.message : "Vision read failed";
+            handlers.onError?.(msg);
+            throw new PhotoImportApiError(msg, 500);
+          }
+        } catch (err) {
+          if (err instanceof PhotoImportApiError) throw err;
+        }
+      }
+      split = buffer.indexOf("\n\n");
+    }
+  }
 }
 
 export async function chooseVisionReadMatch(

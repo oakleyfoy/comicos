@@ -50,6 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Online Retail", to: "/add-comics/online-retail", prominent: true },
       { label: "Phone Photo", to: "/add-comics/photo" },
+      { label: "Import folder", to: "/add-comics/import-folder" },
       { label: "GPT Comic Read", to: "/add-comics/gpt-read" },
       { label: "Manual Entry", to: "/add-comics/manual" },
     ],

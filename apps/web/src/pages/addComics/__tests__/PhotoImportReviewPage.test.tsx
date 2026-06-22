@@ -138,7 +138,7 @@ describe("PhotoImportReviewPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Find in catalog$/i }));
     await waitFor(() => expect(catalogMatch).toHaveBeenCalledWith(10));
-    fireEvent.click(await screen.findByRole("button", { name: /Add without catalog cover/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Add to collection$/i }));
     await waitFor(() => expect(add).toHaveBeenCalledWith(10));
     expect(update).toHaveBeenCalled();
   });
@@ -164,7 +164,7 @@ describe("PhotoImportReviewPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByDisplayValue("Falcon")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /Re-read with GPT/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Re-read \(accurate GPT\)/i }));
     await waitFor(() => expect(reread).toHaveBeenCalledWith(10));
     expect(await screen.findByDisplayValue("Batman")).toBeInTheDocument();
   });
@@ -191,15 +191,39 @@ describe("PhotoImportReviewPage", () => {
     await waitFor(() => expect(choose).toHaveBeenCalledWith(10, 777));
   });
 
-  it("records feedback", async () => {
-    const feedback = vi
-      .spyOn(photoImport, "submitVisionReadFeedback")
-      .mockResolvedValue(makeRead({ is_correct: true }));
+  it("shows placeholder cover add after validate on demand misses", async () => {
+    vi.spyOn(photoImport, "listSessionVisionReads").mockResolvedValue([
+      makeRead({
+        match_method: "none",
+        catalog_issue_id: null,
+        raw_response: { comicvine_ondemand_attempted: true, comicvine_ondemand_result: "no_volume" },
+      }),
+    ]);
+    vi.spyOn(photoImport, "updateVisionRead").mockImplementation(async () =>
+      makeRead({
+        match_method: "none",
+        raw_response: { comicvine_ondemand_attempted: true, comicvine_ondemand_result: "no_volume" },
+      }),
+    );
+    const add = vi.spyOn(photoImport, "addVisionReadToInventory").mockResolvedValue({
+      vision_read: makeRead({
+        added_to_inventory: true,
+        match_method: "none",
+        raw_response: { comicvine_ondemand_attempted: true, comicvine_ondemand_result: "no_volume" },
+      }),
+      acquisition_id: null,
+      created_count: 1,
+      inventory_copy_ids: [42],
+    });
     renderPage();
     await waitFor(() => expect(screen.getByDisplayValue("Falcon")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /✓ Correct/i }));
-    await waitFor(() => expect(feedback).toHaveBeenCalled());
-    expect(await screen.findByText(/GPT got this right/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Add to inventory with placeholder cover$/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Add to collection$/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Add to inventory with placeholder cover$/i }));
+    await waitFor(() => expect(add).toHaveBeenCalledWith(10));
+    expect(await screen.findByText(/placeholder cover/i)).toBeInTheDocument();
   });
 });

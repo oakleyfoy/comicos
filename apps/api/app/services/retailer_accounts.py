@@ -431,6 +431,7 @@ def build_retailer_order_quality_summary(
         select(RetailerSyncRun)
         .where(RetailerSyncRun.retailer_account_id == order.retailer_account_id)
         .order_by(RetailerSyncRun.started_at.desc(), RetailerSyncRun.id.desc())
+        .limit(40)
     ).all()
     for sync_run in sync_runs:
         summary = sync_run.summary_json or {}

@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.models import Acquisition, CatalogIssue
+from app.models.catalog_master import CatalogImage
 from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.photo_import import PhotoImportSession
 from app.models.photo_import_vision_read import PhotoImportVisionRead, utc_now
@@ -18,6 +19,17 @@ from app.services.acquisition.acquisition_inventory_service import (
 )
 from app.services.acquisition.acquisition_service import create_acquisition, get_acquisition_or_404, require_open, recompute_actual_book_count
 from app.services.photo_import_catalog_match_service import match_and_apply
+
+
+def _primary_catalog_cover_image_id(session: Session, catalog_issue_id: int) -> int | None:
+    row = session.exec(
+        select(CatalogImage)
+        .where(CatalogImage.issue_id == catalog_issue_id, CatalogImage.image_type == "cover")
+        .order_by(CatalogImage.id.asc())
+    ).first()
+    if row is None or row.id is None:
+        return None
+    return int(row.id)
 
 
 def ensure_photo_import_session_acquisition(session: Session, import_row: PhotoImportSession) -> Acquisition:
@@ -109,6 +121,11 @@ def create_catalog_copy_from_vision_read(
         received_via="PHOTO_IMPORT",
         received_at=utc_now(),
     )
+    cover_id = _primary_catalog_cover_image_id(session, int(catalog_issue_id))
+    if cover_id is not None:
+        copy.catalog_image_id = cover_id
+        copy.primary_cover_image_id = cover_id
+        session.add(copy)
     session.flush()
     recompute_actual_book_count(session, acquisition)
     session.add(acquisition)

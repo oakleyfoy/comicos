@@ -89,7 +89,10 @@ def create_photo_import_session(
         session_token=token,
         status=SESSION_STATUS_CREATED,
         created_at=now,
-        expires_at=now + timedelta(hours=SESSION_TTL_HOURS),
+        expires_at=now
+        + timedelta(
+            hours=24 if (source_device or "").strip() == "folder_import" else SESSION_TTL_HOURS
+        ),
         source_device=source_device,
         capture_mode=normalize_capture_mode(capture_mode),
     )
