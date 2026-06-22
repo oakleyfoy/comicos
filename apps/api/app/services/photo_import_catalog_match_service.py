@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 from app.models.catalog_master import CatalogUpc
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
-from app.services.catalog_ingestion_service import normalize_upc
+from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc
 from app.services.photo_import_crop_service import resolve_crop_abs_path
 from app.services.photo_import_fingerprint_service import search_catalog_fingerprint_hits_for_crop_path
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
@@ -31,6 +31,83 @@ from app.services.recognition.recognition_catalog_candidate_service import searc
 logger = logging.getLogger(__name__)
 
 _MAX_ALTERNATES = 6
+
+
+def _series_aligns(vision_series: str | None, catalog_series: str | None) -> bool:
+    if not (vision_series or "").strip():
+        return True
+    if not (catalog_series or "").strip():
+        return False
+    left = normalize_series_name(vision_series)
+    right = normalize_series_name(catalog_series)
+    if left == right:
+        return True
+    return left in right or right in left
+
+
+def _issue_aligns(vision_issue: str | None, catalog_issue: str | None) -> bool:
+    if not (vision_issue or "").strip():
+        return True
+    if not (catalog_issue or "").strip():
+        return False
+    return normalize_issue_number(vision_issue) == normalize_issue_number(catalog_issue)
+
+
+def _vision_has_identity(read: PhotoImportVisionRead) -> bool:
+    return bool((read.series or "").strip() and (read.issue_number or "").strip())
+
+
+def _match_aligns_with_vision(read: PhotoImportVisionRead, match: CatalogMatchResult) -> bool:
+    if match.catalog_issue_id is None:
+        return False
+    if not _vision_has_identity(read):
+        return True
+    return _series_aligns(read.series, match.series) and _issue_aligns(read.issue_number, match.issue_number)
+
+
+def _alternate_from_result(match: CatalogMatchResult) -> CatalogMatchAlternate:
+    return CatalogMatchAlternate(
+        catalog_issue_id=int(match.catalog_issue_id or 0),
+        series=match.series,
+        issue_number=match.issue_number,
+        publisher=match.publisher,
+        cover_url=match.cover_url,
+        confidence=float(match.confidence or 0.0),
+    )
+
+
+def _prepend_alternates(primary: CatalogMatchResult, *extra: CatalogMatchAlternate) -> None:
+    seen = {primary.catalog_issue_id}
+    merged = list(primary.alternates)
+    for alt in extra:
+        if alt.catalog_issue_id in seen:
+            continue
+        merged.insert(0, alt)
+        seen.add(alt.catalog_issue_id)
+    primary.alternates = merged[:_MAX_ALTERNATES]
+
+
+def _merge_text_alternates(primary: CatalogMatchResult, text: CatalogMatchResult) -> CatalogMatchResult:
+    primary.alternates = [a for a in primary.alternates if a.catalog_issue_id != primary.catalog_issue_id]
+    if text.catalog_issue_id and text.catalog_issue_id != primary.catalog_issue_id:
+        _prepend_alternates(
+            primary,
+            CatalogMatchAlternate(
+                catalog_issue_id=text.catalog_issue_id,
+                series=text.series,
+                issue_number=text.issue_number,
+                publisher=text.publisher,
+                cover_url=text.cover_url,
+                confidence=float(text.confidence or 0.0),
+            ),
+        )
+    for alt in text.alternates:
+        if alt.catalog_issue_id != primary.catalog_issue_id and all(
+            a.catalog_issue_id != alt.catalog_issue_id for a in primary.alternates
+        ):
+            primary.alternates.append(alt)
+    primary.alternates = primary.alternates[:_MAX_ALTERNATES]
+    return primary
 
 
 @dataclass
@@ -190,58 +267,62 @@ def _fingerprint_match(session: Session, crop_path: Path) -> CatalogMatchResult 
 
 
 def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> CatalogMatchResult:
-    """Resolve the best catalog match for a vision read (barcode, fingerprint, then text)."""
+    """Resolve catalog match: trust barcode/fingerprint only when they agree with GPT series/issue."""
+    text = _text_match(
+        session, series=read.series, issue_number=read.issue_number, publisher=read.publisher
+    )
+    demoted: list[CatalogMatchAlternate] = []
+
     upc = _upc_match(session, read.barcode)
-    if upc is not None:
-        # Provide text alternates alongside a barcode hit for manual override.
-        text = _text_match(
-            session, series=read.series, issue_number=read.issue_number, publisher=read.publisher
+    if upc is not None and upc.catalog_issue_id is not None:
+        if _match_aligns_with_vision(read, upc):
+            return _merge_text_alternates(upc, text)
+        logger.info(
+            "photo_import.catalog_match upc_rejected read_id=%s catalog_issue_id=%s vision=%s #%s",
+            read.id,
+            upc.catalog_issue_id,
+            read.series,
+            read.issue_number,
         )
-        upc.alternates = [a for a in text.alternates if a.catalog_issue_id != upc.catalog_issue_id]
-        if text.catalog_issue_id and text.catalog_issue_id != upc.catalog_issue_id:
-            upc.alternates.insert(
-                0,
-                CatalogMatchAlternate(
-                    catalog_issue_id=text.catalog_issue_id,
-                    series=read.series,
-                    issue_number=read.issue_number,
-                    publisher=read.publisher,
-                    cover_url=text.cover_url,
-                    confidence=text.confidence or 0.0,
-                ),
-            )
-        return upc
+        demoted.append(_alternate_from_result(upc))
+
     crop = resolve_crop_path_for_vision_read(session, read)
     if crop is not None:
         fp = _fingerprint_match(session, crop)
-        if fp is not None:
-            text = _text_match(
-                session, series=read.series, issue_number=read.issue_number, publisher=read.publisher
+        if fp is not None and fp.catalog_issue_id is not None:
+            if _match_aligns_with_vision(read, fp):
+                result = _merge_text_alternates(fp, text)
+                _prepend_alternates(result, *demoted)
+                return result
+            logger.info(
+                "photo_import.catalog_match fingerprint_rejected read_id=%s catalog_issue_id=%s vision=%s #%s",
+                read.id,
+                fp.catalog_issue_id,
+                read.series,
+                read.issue_number,
             )
-            for alt in text.alternates:
-                if alt.catalog_issue_id != fp.catalog_issue_id and all(
-                    a.catalog_issue_id != alt.catalog_issue_id for a in fp.alternates
-                ):
-                    fp.alternates.append(alt)
-            if text.catalog_issue_id and text.catalog_issue_id != fp.catalog_issue_id and all(
-                a.catalog_issue_id != text.catalog_issue_id for a in fp.alternates
-            ):
-                fp.alternates.insert(
-                    0,
-                    CatalogMatchAlternate(
-                        catalog_issue_id=text.catalog_issue_id,
-                        series=text.series,
-                        issue_number=text.issue_number,
-                        publisher=text.publisher,
-                        cover_url=text.cover_url,
-                        confidence=text.confidence or 0.0,
-                    ),
-                )
-            fp.alternates = fp.alternates[:_MAX_ALTERNATES]
-            return fp
-    return _text_match(
-        session, series=read.series, issue_number=read.issue_number, publisher=read.publisher
-    )
+            demoted.append(_alternate_from_result(fp))
+
+    if text.catalog_issue_id is not None:
+        for alt in demoted:
+            if alt.catalog_issue_id != text.catalog_issue_id:
+                _prepend_alternates(text, alt)
+        return text
+
+    if demoted:
+        first = demoted[0]
+        return CatalogMatchResult(
+            catalog_issue_id=first.catalog_issue_id,
+            catalog_variant_id=None,
+            cover_url=first.cover_url,
+            method="upc" if upc and upc.catalog_issue_id == first.catalog_issue_id else "fingerprint",
+            confidence=first.confidence,
+            series=first.series,
+            issue_number=first.issue_number,
+            publisher=first.publisher,
+            alternates=demoted[1:_MAX_ALTERNATES],
+        )
+    return CatalogMatchResult()
 
 
 def apply_match_to_read(read: PhotoImportVisionRead, match: CatalogMatchResult) -> None:
