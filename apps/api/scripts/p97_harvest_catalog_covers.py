@@ -44,8 +44,24 @@ def main() -> int:
         action="store_true",
         help="Repeat batches of --limit until no pending (or failed/repair) work remains",
     )
-    parser.add_argument("--sleep-seconds", type=float, default=None)
+    parser.add_argument(
+        "--sleep-seconds",
+        type=float,
+        default=None,
+        help="Politeness delay. Default 0 (per-window when --concurrency>1). Set >0 only to throttle.",
+    )
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=16,
+        help="Parallel pooled downloads per window (I/O-bound). 1 = sequential (legacy). Try 16-32.",
+    )
+    parser.add_argument(
+        "--skip-dedup",
+        action="store_true",
+        help="Skip the per-image checksum dedup lookup (removes a remote round-trip; may store identical bytes twice).",
+    )
     parser.add_argument(
         "--database-url",
         default=None,
@@ -53,8 +69,13 @@ def main() -> int:
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # httpx logs one INFO line per request; at high concurrency that I/O (esp. piped
+    # through a PowerShell console/Tee) becomes the dominant bottleneck. Quiet it.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     settings = get_settings()
-    sleep = args.sleep_seconds if args.sleep_seconds is not None else settings.catalog_import_sleep_seconds
+    # Default to no throttle (fast path); only sleep when explicitly requested.
+    sleep = args.sleep_seconds if args.sleep_seconds is not None else 0.0
     batch = args.batch_size or settings.catalog_import_batch_size
     missing_only = not args.failed_only and not args.repair_missing_files
     repair_fp_only = args.repair_missing_fingerprints
@@ -70,7 +91,9 @@ def main() -> int:
 
     while True:
         batch_num += 1
-        with Session(engine) as session:
+        # expire_on_commit=False keeps warmed issue/series objects alive across the
+        # per-batch commits so path resolution doesn't re-query the remote DB per image.
+        with Session(engine, expire_on_commit=False) as session:
             last_summary = run_cover_harvest(
                 session,
                 source=args.source,
@@ -83,6 +106,8 @@ def main() -> int:
                 resume=batch_resume,
                 sleep_seconds=sleep,
                 batch_size=batch,
+                concurrency=args.concurrency,
+                dedup=not args.skip_dedup,
             )
         print(last_summary)
         if not args.loop:

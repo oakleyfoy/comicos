@@ -25,8 +25,12 @@ from app.services.photo_import_candidate_cover_service import (
 )
 from app.services.photo_import_cover_similarity_service import cover_similarity_score_for_issue
 from app.services.photo_import_crop_service import resolve_crop_abs_path
-from app.services.photo_import_fingerprint_service import fingerprint_hashes_for_crop, fingerprint_match_score_for_issue
-from app.services.photo_import_learning_service import learning_boost_for_issue
+from app.services.photo_import_fingerprint_service import (
+    fingerprint_hashes_for_crop,
+    fingerprint_match_score_for_issue,
+    search_catalog_fingerprint_hits_for_crop_path,
+)
+from app.services.photo_import_catalog_ocr_enrichment import enrich_match_input_from_catalog_ocr
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.photo_import_issue_number import normalize_photo_issue_number
 from app.services.photo_import_session_service import normalize_capture_mode
@@ -37,6 +41,8 @@ logger = logging.getLogger(__name__)
 NO_ISSUE_SCORE_CAP = 65.0
 AUTO_SELECT_MIN_SCORE = 95.0
 AUTO_SELECT_MIN_GAP = 15.0
+FINGERPRINT_SEED_MIN_SCORE = 55.0
+FINGERPRINT_SEED_LIMIT = 8
 WEIGHT_FINGERPRINT = 0.40
 WEIGHT_COVER_SIMILARITY = 0.35
 WEIGHT_TEXT = 0.20
@@ -679,6 +685,8 @@ def _apply_visual_ranking(
 def _visual_signal_for_auto_select(row: ScoredCatalogRow) -> bool:
     if row.barcode_score >= 100:
         return True
+    if row.matched_on == "fingerprint_catalog_search" and row.fingerprint_score >= 50:
+        return True
     if row.visual_score_status == "available":
         return row.cover_similarity_score >= 50 or row.fingerprint_score >= 50
     return _exact_issue_matched_on(row.matched_on or "")
@@ -707,6 +715,50 @@ def _fetch_catalog_issue_row(
         .where(CatalogIssue.id == issue_id)
     )
     return session.exec(stmt).first()
+
+
+def _apply_fingerprint_candidate_seeding(
+    session: Session,
+    *,
+    det: PhotoImportDetectedBook,
+    scored: list[ScoredCatalogRow],
+) -> list[ScoredCatalogRow]:
+    """Seed catalog candidates from global fingerprint search when a crop is available (E1)."""
+    crop_abs = resolve_crop_abs_path(det.crop_path)
+    if crop_abs is None:
+        return scored
+    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=crop_abs, limit=FINGERPRINT_SEED_LIMIT)
+    if not hits:
+        return scored
+    seen = {int(row.issue.id or 0) for row in scored}
+    for hit in hits:
+        if hit.score < FINGERPRINT_SEED_MIN_SCORE:
+            continue
+        iid = hit.issue_id
+        if iid in seen:
+            continue
+        fetched = _fetch_catalog_issue_row(session, iid)
+        if fetched is None:
+            continue
+        issue, series, publisher = fetched
+        seed_score = min(97.0, max(hit.score, 70.0))
+        scored.append(
+            ScoredCatalogRow(
+                issue=issue,
+                series=series,
+                publisher=publisher,
+                match_score=seed_score,
+                match_reason=f"Catalog fingerprint match ({hit.score:.0f})",
+                matched_on="fingerprint_catalog_search",
+                base_text_score=0.0,
+                fingerprint_score=hit.score,
+                visual_score_status="available",
+                visual_match_label="Fingerprint match",
+            )
+        )
+        seen.add(iid)
+    scored.sort(key=lambda row: (-row.match_score, -row.fingerprint_score, int(row.issue.id or 0)))
+    return scored
 
 
 def _apply_barcode_verification(
@@ -920,6 +972,10 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
     session.exec(delete(PhotoImportCandidate).where(PhotoImportCandidate.detected_book_id == detected_book_id))
 
     inp = build_match_input_from_detection(det)
+    if det.selected_catalog_issue_id:
+        inp = enrich_match_input_from_catalog_ocr(
+            session, catalog_issue_id=int(det.selected_catalog_issue_id), inp=inp
+        )
     has_text = bool(
         inp.series_guess
         or inp.visible_title_text
@@ -928,6 +984,21 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
         or inp.subtitle_guess
     )
     scored, _search_terms = generate_scored_candidates(session, inp) if has_text else ([], [])
+    scored = _apply_fingerprint_candidate_seeding(session, det=det, scored=scored)
+    if scored and not has_text:
+        top_id = int(scored[0].issue.id or 0)
+        if top_id:
+            enriched = enrich_match_input_from_catalog_ocr(session, catalog_issue_id=top_id, inp=inp)
+            if enriched != inp:
+                extra, _ = generate_scored_candidates(session, enriched)
+                seen = {int(r.issue.id or 0) for r in scored}
+                for row in extra:
+                    iid = int(row.issue.id or 0)
+                    if iid not in seen:
+                        scored.append(row)
+                        seen.add(iid)
+                inp = enriched
+                has_text = True
     import_row = session.get(PhotoImportSession, int(det.session_id))
     single_comic = import_row is not None and normalize_capture_mode(import_row.capture_mode) == CAPTURE_MODE_SINGLE_COMIC
     if single_comic and scored:
@@ -1033,7 +1104,7 @@ def refresh_candidates_for_detection(session: Session, *, detected_book_id: int)
             else None
         ),
         det.recognition_status,
-        None if scored else ("no_text" if not has_text else "no_catalog_match"),
+        None if scored else ("no_crop" if resolve_crop_abs_path(det.crop_path) is None else ("no_text" if not has_text else "no_catalog_match")),
     )
 
     session.add(det)

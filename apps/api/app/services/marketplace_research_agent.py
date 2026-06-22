@@ -6,20 +6,25 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import (
     AgentDefinition,
+    CatalogIssue,
     ComicIssue,
-    ComicTitle,
     DraftImport,
     InventoryCopy,
     InventoryFmvSnapshot,
     MarketFmvSnapshot,
     MarketTrendSnapshot,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.research_agent import ResearchSnapshotDetail
 from app.services.agent_execution import complete_execution, fail_execution, start_execution
@@ -78,25 +83,22 @@ def _agent_id(session: Session) -> int:
 
 def _inventory_rows(session: Session, *, owner_user_id: int) -> list[_InventoryRow]:
     rows = session.exec(
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            ComicIssue.id.label("canonical_issue_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-            InventoryCopy.acquisition_cost.label("acquisition_cost"),
-            InventoryCopy.current_fmv.label("current_fmv"),
-            InventoryCopy.grade_status.label("grade_status"),
-            InventoryCopy.hold_status.label("hold_status"),
-            InventoryCopy.order_status.label("order_status"),
-            InventoryCopy.received_at.label("received_at"),
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id.label("inventory_copy_id"),
+                InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+                func.coalesce(ComicIssue.id, CatalogIssue.id).label("canonical_issue_id"),
+                title_expr().label("title"),
+                publisher_expr().label("publisher"),
+                issue_number_expr().label("issue_number"),
+                InventoryCopy.acquisition_cost.label("acquisition_cost"),
+                InventoryCopy.current_fmv.label("current_fmv"),
+                InventoryCopy.grade_status.label("grade_status"),
+                InventoryCopy.hold_status.label("hold_status"),
+                InventoryCopy.order_status.label("order_status"),
+                InventoryCopy.received_at.label("received_at"),
+            ).select_from(InventoryCopy)
         )
-        .select_from(InventoryCopy)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.user_id == owner_user_id)
         .order_by(InventoryCopy.id.asc())
     ).all()

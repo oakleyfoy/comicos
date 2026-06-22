@@ -8,15 +8,13 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models import (
-    ComicIssue,
-    ComicTitle,
-    DealerProfile,
-    DealerStorefrontEvent,
-    DealerStorefrontSettings,
-    InventoryCopy,
-    Publisher,
-    Variant,
+from app.models import DealerProfile, DealerStorefrontEvent, DealerStorefrontSettings, InventoryCopy
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    cover_name_expr,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.dealer_storefront import (
     DealerProfileResponse,
@@ -123,20 +121,18 @@ def _project_public_rows(session: Session, *, inventory_ids: tuple[int, ...]) ->
     if not inventory_ids:
         return []
     rows = session.exec(
-        select(
-            InventoryCopy.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
-            Variant.cover_name,
-            InventoryCopy.grade_status,
-            InventoryCopy.current_fmv,
-            InventoryCopy.release_year,
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id,
+                title_expr(),
+                publisher_expr(),
+                issue_number_expr(),
+                cover_name_expr(),
+                InventoryCopy.grade_status,
+                InventoryCopy.current_fmv,
+                InventoryCopy.release_year,
+            ).select_from(InventoryCopy)
         )
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.id.in_(inventory_ids))
         .order_by(InventoryCopy.id.asc())
     ).all()

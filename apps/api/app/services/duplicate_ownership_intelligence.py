@@ -11,17 +11,11 @@ from sqlmodel import Session, select
 
 from app.models import (
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
-    ComicTitle,
     CoverImage,
     CoverImageLinkDecision,
     DuplicateCandidateReview,
     InventoryCopy,
-    Order,
-    OrderItem,
-    Publisher,
     User,
-    Variant,
 )
 from app.schemas.duplicate_ownership import (
     DuplicateOwnershipClassification,
@@ -84,12 +78,6 @@ def _inventory_projection_rows(session: Session, *, user_id: int) -> list:
             InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
         )
         .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.user_id == user_id)
         .order_by(InventoryCopy.id.asc())
     )

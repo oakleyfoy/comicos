@@ -45,6 +45,7 @@ class GradingSpreadSnapshot(SQLModel, table=True):
     owner_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
     inventory_item_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True, index=True)
     canonical_comic_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    catalog_issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
 
     target_grader: str = Field(max_length=16, nullable=False, index=True)
     target_grade: str | None = Field(default=None, max_length=32, nullable=True, index=True)

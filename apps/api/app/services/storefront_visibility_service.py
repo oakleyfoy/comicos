@@ -149,14 +149,12 @@ def resolve_featured_inventory(
         ordered = [inv_id for inv_id in manual_ids if inv_id in visible_set]
         return tuple(ordered[:limit])
 
-    from app.models import ComicIssue, ComicTitle, InventoryCopy, OrderItem, Publisher, Variant
+    from app.models import InventoryCopy
+    from app.services.inventory_canonical_spine import apply_inventory_spine_joins
 
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(InventoryCopy.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .select_from(InventoryCopy)
         .where(InventoryCopy.id.in_(tuple(sorted(visible_set))))
     )
     if sort_mode == "newest":

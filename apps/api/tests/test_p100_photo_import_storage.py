@@ -114,8 +114,8 @@ def test_process_photo_import_image_opens_uploaded_file(tmp_path, monkeypatch) -
 
     expires = datetime(2099, 1, 1, tzinfo=timezone.utc)
     with mock.patch(
-        "app.services.photo_import_vision_sandbox_service.read_comic_with_gpt_vision",
-        return_value=fake_vision,
+        "app.services.photo_import_vision_sandbox_service.read_comics_with_gpt_vision",
+        return_value=[fake_vision],
     ):
         with Session(engine) as session:
             session.add(PhotoImportSession(id=5, user_id=1, session_token="tok", expires_at=expires))

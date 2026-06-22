@@ -16,26 +16,28 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
-    ComicTitle,
     ConventionEvent,
     ConventionInventoryAssignment,
     GradingCandidate,
     InventoryCopy,
     InventoryLiquiditySnapshot,
     Listing,
-    Order,
-    OrderItem,
     Portfolio,
     PortfolioAllocationSnapshot,
     PortfolioExposureEvidence,
     PortfolioExposureSnapshot,
     PortfolioItem,
     PortfolioLifecycleEvent,
-    Publisher,
     SaleRecord,
     SaleRecordLineItem,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
 )
 from app.schemas.portfolio import (
     InventoryPortfolioIntelligenceTeaser,
@@ -245,16 +247,16 @@ def _rows_for_owner_scope(
     owner_user_id: int,
     portfolio_id: int | None,
 ) -> tuple[list[_CopyFact], dict[int, list[Listing]], dict[int, Decimal], set[int], set[int], set[int]]:
-    stmt = (
-        select(InventoryCopy, Order, Publisher.name, ComicTitle.name, ComicIssue.issue_number)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == owner_user_id)
-    )
+    stmt = apply_inventory_spine_joins(
+        select(
+            InventoryCopy,
+            source_type_expr().label("source_type"),
+            retailer_expr().label("retailer"),
+            publisher_expr().label("publisher_name"),
+            title_expr().label("comic_title_name"),
+            issue_number_expr().label("issue_number"),
+        )
+    ).where(InventoryCopy.user_id == owner_user_id)
     if portfolio_id is not None:
         stmt = stmt.join(
             PortfolioItem,
@@ -269,13 +271,13 @@ def _rows_for_owner_scope(
     hydrated: list[_CopyFact] = []
     id_list: list[int] = []
 
-    for inv, ord_row, publisher_name, comic_title_name, issue_number in session.exec(stmt).all():
+    for inv, source_type, retailer, publisher_name, comic_title_name, issue_number in session.exec(stmt).all():
         iid = int(inv.id or 0)
         if not iid:
             continue
         id_list.append(iid)
-        src = ord_row.source_type or "unknown"
-        acq_src = _slug(f"{src}:{ord_row.retailer}")
+        src = source_type or "unknown"
+        acq_src = _slug(f"{src}:{retailer}")
         ry = inv.release_year
         if ry is None and inv.release_date is not None:
             ry = inv.release_date.year

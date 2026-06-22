@@ -23,6 +23,10 @@ import { PageHeader } from "../components/PageHeader";
 import { LegacyFeatureBanner } from "../components/LegacyFeatureBanner";
 import { StatusBanner } from "../components/StatusBanner";
 import {
+  LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE,
+  LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED,
+} from "../config/productFlags";
+import {
   creatorAliasRowKey,
   hasCreatorMetadataWarningNotes,
   hasMalformedReleaseDateNote,
@@ -1840,6 +1844,10 @@ export function OrderImportPage() {
     if (isSubmitting) {
       return;
     }
+    if (!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED) {
+      setError(LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE);
+      return;
+    }
 
     setError(null);
     setFormErrors(emptyFormErrors());
@@ -1981,16 +1989,35 @@ export function OrderImportPage() {
       <PageHeader
         eyebrow="Import Draft Workspace"
         title="Import Order Draft"
-        description="Use AI parsing or build a manual draft directly. In both modes, you review, edit, and confirm before any order or inventory is created."
+        description={
+          LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED
+            ? "Use AI parsing or build a manual draft directly. In both modes, you review, edit, and confirm before any order or inventory is created."
+            : "Draft review only — confirming imports and creating legacy orders is retired. Use Add Comics for new inventory."
+        }
         actions={
+          LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED ? (
           <Link
             to="/orders/new"
             className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5"
           >
             Manual Entry
           </Link>
+          ) : (
+            <Link
+              to="/add-comics/photo"
+              className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            >
+              Add Comics
+            </Link>
+          )
         }
       />
+
+      {!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED ? (
+        <div className="mx-auto mt-4 max-w-7xl">
+          <StatusBanner tone="warning">{LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE}</StatusBanner>
+        </div>
+      ) : null}
 
       <div className="mx-auto max-w-7xl">
         {isLoadingImport ? (
@@ -2296,7 +2323,9 @@ export function OrderImportPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || importStatus !== "draft"}
+                  disabled={
+                    isSubmitting || importStatus !== "draft" || !LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED
+                  }
                   className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? "Confirming import..." : "Confirm Import and Create Order"}

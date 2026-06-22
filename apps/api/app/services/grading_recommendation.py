@@ -9,11 +9,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
     GraderPerformanceSnapshot,
     GradingCandidate,
     GradingRecommendation,
@@ -31,6 +30,10 @@ from app.models import (
     MarketSaleRecord,
     SaleRecord,
     Variant,
+)
+from app.services.catalog_unification_issue_id import (
+    effective_catalog_issue_id,
+    resolve_legacy_comic_issue_id,
 )
 from app.schemas.grading_recommendation import (
     GradingRecommendationDashboardSummary,
@@ -207,7 +210,7 @@ def _inventory_context(
     grading_candidate_id: int | None,
     inventory_item_id: int | None,
     canonical_comic_issue_id: int | None,
-) -> tuple[InventoryCopy, int, GradingCandidate | None]:
+) -> tuple[InventoryCopy, int | None, int | None, GradingCandidate | None]:
     candidate: GradingCandidate | None = None
     if grading_candidate_id is not None:
         candidate = session.get(GradingCandidate, grading_candidate_id)
@@ -218,11 +221,24 @@ def _inventory_context(
             canonical_comic_issue_id = candidate.canonical_comic_issue_id
     if inventory_item_id is None:
         if canonical_comic_issue_id is not None:
+            linked_catalog = effective_catalog_issue_id(
+                session,
+                catalog_issue_id=None,
+                canonical_comic_issue_id=canonical_comic_issue_id,
+                inventory_copy_id=None,
+            )
+            scope_filters = []
+            if linked_catalog is not None:
+                scope_filters.append(InventoryCopy.catalog_issue_id == linked_catalog)
+            scope_filters.append(
+                InventoryCopy.variant_id.in_(
+                    select(Variant.id).where(Variant.comic_issue_id == canonical_comic_issue_id)
+                )
+            )
             inventory = session.exec(
                 select(InventoryCopy)
-                .join(Variant, InventoryCopy.variant_id == Variant.id)
                 .where(InventoryCopy.user_id == owner_user_id)
-                .where(Variant.comic_issue_id == canonical_comic_issue_id)
+                .where(or_(*scope_filters))
                 .order_by(col(InventoryCopy.id).asc())
             ).first()
         else:
@@ -233,8 +249,18 @@ def _inventory_context(
             raise HTTPException(status_code=404, detail="inventory item not found")
     if inventory is None:
         raise HTTPException(status_code=404, detail="inventory item not found")
-    issue_id = int(
-        session.exec(select(Variant.comic_issue_id).where(Variant.id == inventory.variant_id)).one()
+    catalog_issue_id = effective_catalog_issue_id(
+        session,
+        catalog_issue_id=(candidate.catalog_issue_id if candidate else None) or inventory.catalog_issue_id,
+        canonical_comic_issue_id=canonical_comic_issue_id
+        or (candidate.canonical_comic_issue_id if candidate else None),
+        inventory_copy_id=int(inventory.id or 0),
+    )
+    issue_id = resolve_legacy_comic_issue_id(
+        session,
+        inventory,
+        fallback_canonical_comic_issue_id=canonical_comic_issue_id
+        or (candidate.canonical_comic_issue_id if candidate else None),
     )
     if candidate is None:
         candidate = session.exec(
@@ -243,7 +269,7 @@ def _inventory_context(
             .where(GradingCandidate.inventory_item_id == int(inventory.id or 0))
             .order_by(col(GradingCandidate.created_at).desc(), col(GradingCandidate.id).desc())
         ).first()
-    return inventory, issue_id, candidate
+    return inventory, issue_id, catalog_issue_id, candidate
 
 
 def _latest_roi_candidates(
@@ -260,7 +286,16 @@ def _latest_roi_candidates(
     elif inventory_item_id is not None:
         stmt = stmt.where(GradingRoiSnapshot.inventory_item_id == inventory_item_id)
     elif canonical_comic_issue_id is not None:
-        stmt = stmt.where(GradingRoiSnapshot.canonical_comic_issue_id == canonical_comic_issue_id)
+        linked_catalog = effective_catalog_issue_id(
+            session,
+            catalog_issue_id=None,
+            canonical_comic_issue_id=canonical_comic_issue_id,
+            inventory_copy_id=None,
+        )
+        scope = [GradingRoiSnapshot.canonical_comic_issue_id == canonical_comic_issue_id]
+        if linked_catalog is not None:
+            scope.append(GradingRoiSnapshot.catalog_issue_id == linked_catalog)
+        stmt = stmt.where(or_(*scope))
     rows = session.exec(
         stmt.order_by(col(GradingRoiSnapshot.snapshot_date).desc(), col(GradingRoiSnapshot.id).desc())
     ).all()
@@ -647,7 +682,16 @@ def _supersede_previous_recommendations(
     elif inventory_item_id is not None:
         stmt = stmt.where(GradingRecommendation.inventory_item_id == inventory_item_id)
     elif canonical_comic_issue_id is not None:
-        stmt = stmt.where(GradingRecommendation.canonical_comic_issue_id == canonical_comic_issue_id)
+        linked_catalog = effective_catalog_issue_id(
+            session,
+            catalog_issue_id=None,
+            canonical_comic_issue_id=canonical_comic_issue_id,
+            inventory_copy_id=None,
+        )
+        scope = [GradingRecommendation.canonical_comic_issue_id == canonical_comic_issue_id]
+        if linked_catalog is not None:
+            scope.append(GradingRecommendation.catalog_issue_id == linked_catalog)
+        stmt = stmt.where(or_(*scope))
     rows = session.exec(stmt).all()
     for row in rows:
         row.recommendation_status = "SUPERSEDED"
@@ -660,7 +704,7 @@ def generate_grading_recommendation(
     owner_user_id: int,
     payload: GradingRecommendationGeneratePayload,
 ) -> GradingRecommendationDetailRead:
-    inventory, issue_id, candidate = _inventory_context(
+    inventory, issue_id, catalog_issue_id, candidate = _inventory_context(
         session,
         owner_user_id=owner_user_id,
         grading_candidate_id=payload.grading_candidate_id,
@@ -878,6 +922,7 @@ def generate_grading_recommendation(
         grading_candidate_id=int(candidate.id or 0) if candidate is not None else None,
         inventory_item_id=int(inventory.id or 0),
         canonical_comic_issue_id=issue_id,
+        catalog_issue_id=catalog_issue_id,
         recommended_action=action,
         recommended_grader=selected_grader,
         recommended_grade_target=selected_grade,

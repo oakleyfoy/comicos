@@ -9,11 +9,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
     GradingSpreadBand,
     GradingSpreadEvidence,
     GradingSpreadHistory,
@@ -27,6 +26,10 @@ from app.models import (
     MarketSaleRecord,
     SaleRecord,
     Variant,
+)
+from app.services.catalog_unification_issue_id import (
+    effective_catalog_issue_id,
+    resolve_legacy_comic_issue_id,
 )
 from app.schemas.grading_spread import (
     GradingSpreadDashboardSummary,
@@ -112,21 +115,43 @@ def _inventory_row(
     owner_user_id: int | None,
     inventory_item_id: int | None,
     canonical_comic_issue_id: int | None,
-) -> tuple[InventoryCopy, int]:
-    stmt = select(InventoryCopy).join(Variant, InventoryCopy.variant_id == Variant.id).join(
-        ComicIssue, Variant.comic_issue_id == ComicIssue.id
-    )
+) -> tuple[InventoryCopy, int | None, int | None]:
+    stmt = select(InventoryCopy)
     if owner_user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == owner_user_id)
     if inventory_item_id is not None:
         stmt = stmt.where(InventoryCopy.id == inventory_item_id)
     if canonical_comic_issue_id is not None:
-        stmt = stmt.where(ComicIssue.id == canonical_comic_issue_id)
+        linked_catalog = effective_catalog_issue_id(
+            session,
+            catalog_issue_id=None,
+            canonical_comic_issue_id=canonical_comic_issue_id,
+            inventory_copy_id=inventory_item_id,
+        )
+        scope_filters = []
+        if linked_catalog is not None:
+            scope_filters.append(InventoryCopy.catalog_issue_id == linked_catalog)
+        scope_filters.append(
+            InventoryCopy.variant_id.in_(
+                select(Variant.id).where(Variant.comic_issue_id == canonical_comic_issue_id)
+            )
+        )
+        stmt = stmt.where(or_(*scope_filters))
     row = session.exec(stmt.order_by(InventoryCopy.id.asc())).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="inventory item not found")
-    issue_id = int(session.exec(select(Variant.comic_issue_id).where(Variant.id == row.variant_id)).one())
-    return row, issue_id
+    catalog_issue_id = effective_catalog_issue_id(
+        session,
+        catalog_issue_id=row.catalog_issue_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_copy_id=int(row.id or 0),
+    )
+    issue_id = resolve_legacy_comic_issue_id(
+        session,
+        row,
+        fallback_canonical_comic_issue_id=canonical_comic_issue_id,
+    )
+    return row, issue_id, catalog_issue_id
 
 
 def _latest_inventory_fmv(session: Session, inventory_item_id: int) -> Decimal | None:
@@ -177,7 +202,12 @@ def _latest_liquidity_snapshot(
     if inventory_item_id is not None:
         stmt = stmt.where(InventoryLiquiditySnapshot.inventory_item_id == inventory_item_id)
     if canonical_comic_issue_id is not None:
-        stmt = stmt.where(InventoryLiquiditySnapshot.canonical_comic_issue_id == canonical_comic_issue_id)
+        stmt = stmt.where(
+            or_(
+                InventoryLiquiditySnapshot.catalog_issue_id == canonical_comic_issue_id,
+                InventoryLiquiditySnapshot.canonical_comic_issue_id == canonical_comic_issue_id,
+            )
+        )
     return session.exec(
         stmt.order_by(col(InventoryLiquiditySnapshot.snapshot_date).desc()).order_by(
             col(InventoryLiquiditySnapshot.id).desc()
@@ -198,7 +228,12 @@ def _latest_listing_intelligence_snapshot(
     if inventory_item_id is not None:
         stmt = stmt.where(ListingIntelligenceSnapshot.inventory_item_id == inventory_item_id)
     if canonical_comic_issue_id is not None:
-        stmt = stmt.where(ListingIntelligenceSnapshot.canonical_comic_issue_id == canonical_comic_issue_id)
+        stmt = stmt.where(
+            or_(
+                ListingIntelligenceSnapshot.catalog_issue_id == canonical_comic_issue_id,
+                ListingIntelligenceSnapshot.canonical_comic_issue_id == canonical_comic_issue_id,
+            )
+        )
     return session.exec(
         stmt.order_by(col(ListingIntelligenceSnapshot.snapshot_date).desc()).order_by(
             col(ListingIntelligenceSnapshot.id).desc()
@@ -512,7 +547,16 @@ def _candidate_snapshot_query(
     if inventory_item_id is not None:
         q = q.where(GradingSpreadSnapshot.inventory_item_id == inventory_item_id)
     if canonical_comic_issue_id is not None:
-        q = q.where(GradingSpreadSnapshot.canonical_comic_issue_id == canonical_comic_issue_id)
+        linked_catalog = effective_catalog_issue_id(
+            session,
+            catalog_issue_id=None,
+            canonical_comic_issue_id=canonical_comic_issue_id,
+            inventory_copy_id=None,
+        )
+        scope = [GradingSpreadSnapshot.canonical_comic_issue_id == canonical_comic_issue_id]
+        if linked_catalog is not None:
+            scope.append(GradingSpreadSnapshot.catalog_issue_id == linked_catalog)
+        q = q.where(or_(*scope))
     if target_grader is not None:
         q = q.where(GradingSpreadSnapshot.target_grader == target_grader)
     if target_grade is not None:
@@ -534,6 +578,7 @@ def _build_row(
     owner_user_id: int | None,
     inventory_row: InventoryCopy,
     canonical_comic_issue_id: int | None,
+    catalog_issue_id: int | None,
     target_grader: str,
     target_grade: str | None,
     snapshot_date: date,
@@ -655,6 +700,7 @@ def _build_row(
         owner_user_id=owner_user_id,
         inventory_item_id=int(inventory_row.id or 0),
         canonical_comic_issue_id=canonical_comic_issue_id,
+        catalog_issue_id=catalog_issue_id,
         target_grader=target_grader,
         target_grade=target_grade,
         raw_fmv_amount=raw_fmv,
@@ -733,7 +779,7 @@ def generate_grading_spread(
             detail="inventory_item_id or canonical_comic_issue_id is required",
         )
 
-    inventory_row, canonical_comic_issue_id = _inventory_row(
+    inventory_row, canonical_comic_issue_id, catalog_issue_id = _inventory_row(
         session,
         owner_user_id=owner_user_id,
         inventory_item_id=payload.inventory_item_id,
@@ -747,6 +793,7 @@ def generate_grading_spread(
         owner_user_id=owner_user_id,
         inventory_row=inventory_row,
         canonical_comic_issue_id=canonical_comic_issue_id,
+        catalog_issue_id=catalog_issue_id,
         target_grader=target_grader,
         target_grade=target_grade,
         snapshot_date=snapshot_date,

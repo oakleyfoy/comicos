@@ -4,8 +4,14 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, OrderItem, Publisher, Variant
+from app.models import InventoryCopy
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
+)
 from app.models.release_watchlist import CollectionContinuityAlert, CollectionRun
 from app.schemas.release_watchlist import CollectionContinuityAlertRead, CollectionRunRead, WatchlistAgentExecutionRead
 from app.services.release_watchlist_execution import AGENT_RUN_CONTINUITY, run_with_watchlist_execution
@@ -28,15 +34,15 @@ def _issue_value(value: str) -> float | None:
 
 def _inventory_issue_rows(session: Session, *, owner_user_id: int) -> list[OwnedIssueRow]:
     rows = session.exec(
-        select(Publisher.name, ComicTitle.name, ComicIssue.issue_number)
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        apply_inventory_spine_joins(
+            select(
+                publisher_expr(),
+                title_expr(),
+                issue_number_expr(),
+            ).select_from(InventoryCopy)
+        )
         .where(InventoryCopy.user_id == owner_user_id)
-        .order_by(Publisher.name.asc(), ComicTitle.name.asc(), ComicIssue.issue_number.asc())
+        .order_by(publisher_expr().asc(), title_expr().asc(), issue_number_expr().asc())
     ).all()
     return [OwnedIssueRow(publisher=str(row[0]), series_name=str(row[1]), issue_number=str(row[2])) for row in rows]
 

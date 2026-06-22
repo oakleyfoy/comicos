@@ -1,16 +1,24 @@
+from dataclasses import dataclass
+
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import (
-    ComicIssue,
-    ComicTitle,
+    CatalogVariant,
     DraftImport,
     InventoryCopy,
     OrderItem,
-    Publisher,
     Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    cover_name_expr,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.ai import AiDraftOrderItem, ParseOrderResponse
 from app.schemas.orders import OrderItemCreate
@@ -25,6 +33,18 @@ from app.services.orders import resolve_order_item_canonical_series
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@dataclass(frozen=True)
+class _CopyMetadataFields:
+    publisher_name: str
+    title_name: str
+    issue_number: str
+    cover_name: str | None
+    printing: str | None
+    ratio: str | None
+    variant_type: str | None
+    cover_artist: str | None
 
 
 def get_draft_import_for_ops_or_404(session: Session, import_id: int) -> DraftImport:
@@ -106,29 +126,48 @@ def re_enrich_draft_import(
 def _load_inventory_copy_context(
     session: Session,
     inventory_copy_id: int,
-):
-    stmt = (
-        select(InventoryCopy, OrderItem, Variant, ComicIssue, ComicTitle, Publisher)
-        .join(OrderItem, OrderItem.id == InventoryCopy.order_item_id)
-        .join(Variant, Variant.id == InventoryCopy.variant_id)
-        .join(ComicIssue, ComicIssue.id == Variant.comic_issue_id)
-        .join(ComicTitle, ComicTitle.id == ComicIssue.comic_title_id)
-        .join(Publisher, Publisher.id == ComicTitle.publisher_id)
-        .where(InventoryCopy.id == inventory_copy_id)
+) -> tuple[InventoryCopy, OrderItem | None, _CopyMetadataFields]:
+    inventory_copy = session.get(InventoryCopy, inventory_copy_id)
+    if inventory_copy is None:
+        raise HTTPException(status_code=404, detail="Inventory copy not found")
+    order_item = (
+        session.get(OrderItem, inventory_copy.order_item_id)
+        if inventory_copy.order_item_id is not None
+        else None
     )
-    row = session.exec(stmt).first()
+    row = session.exec(
+        apply_inventory_spine_joins(
+            select(
+                title_expr().label("title_name"),
+                publisher_expr().label("publisher_name"),
+                issue_number_expr().label("issue_number"),
+                cover_name_expr().label("cover_name"),
+                func.coalesce(Variant.printing, None).label("printing"),
+                func.coalesce(Variant.ratio, CatalogVariant.ratio).label("ratio"),
+                func.coalesce(Variant.variant_type, None).label("variant_type"),
+                func.coalesce(Variant.cover_artist, CatalogVariant.cover_artist).label("cover_artist"),
+            ).select_from(InventoryCopy)
+        ).where(InventoryCopy.id == inventory_copy_id)
+    ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Inventory copy not found")
-    return row
+    fields = _CopyMetadataFields(
+        publisher_name=str(row.publisher_name or "Unknown"),
+        title_name=str(row.title_name or "Unknown"),
+        issue_number=str(row.issue_number or ""),
+        cover_name=row.cover_name,
+        printing=row.printing,
+        ratio=row.ratio,
+        variant_type=row.variant_type,
+        cover_artist=row.cover_artist,
+    )
+    return inventory_copy, order_item, fields
 
 
 def _inventory_copy_snapshot(
     copy: InventoryCopy,
     *,
-    publisher: Publisher,
-    title: ComicTitle,
-    issue: ComicIssue,
-    variant: Variant,
+    fields: _CopyMetadataFields,
 ) -> dict:
     return {
         "id": copy.id,
@@ -138,14 +177,14 @@ def _inventory_copy_snapshot(
         "release_year": copy.release_year,
         "variant_id": copy.variant_id,
         "order_item_id": copy.order_item_id,
-        "publisher": publisher.name,
-        "title": title.name,
-        "issue_number": issue.issue_number,
-        "cover_name": variant.cover_name,
-        "printing": variant.printing,
-        "ratio": variant.ratio,
-        "variant_type": variant.variant_type,
-        "cover_artist": variant.cover_artist,
+        "publisher": fields.publisher_name,
+        "title": fields.title_name,
+        "issue_number": fields.issue_number,
+        "cover_name": fields.cover_name,
+        "printing": fields.printing,
+        "ratio": fields.ratio,
+        "variant_type": fields.variant_type,
+        "cover_artist": fields.cover_artist,
         "acquisition_cost": copy.acquisition_cost,
         "grade_status": copy.grade_status,
         "hold_status": copy.hold_status,
@@ -162,30 +201,27 @@ def re_enrich_inventory_copy(
     actor_user_id: int | None = None,
     reason: str | None = None,
 ) -> InventoryCopy:
-    inventory_copy, order_item, variant, issue, title, publisher = _load_inventory_copy_context(
+    inventory_copy, order_item, fields = _load_inventory_copy_context(
         session,
         inventory_copy_id,
     )
 
     before_snapshot = _inventory_copy_snapshot(
         inventory_copy,
-        publisher=publisher,
-        title=title,
-        issue=issue,
-        variant=variant,
+        fields=fields,
     )
     order_item_payload = OrderItemCreate.model_validate(
         {
-            "publisher": publisher.name,
-            "title": title.name,
+            "publisher": fields.publisher_name,
+            "title": fields.title_name,
             "release_date": inventory_copy.release_date,
             "release_year": inventory_copy.release_year,
-            "issue_number": issue.issue_number,
-            "cover_name": variant.cover_name,
-            "printing": variant.printing,
-            "ratio": variant.ratio,
-            "variant_type": variant.variant_type,
-            "cover_artist": variant.cover_artist,
+            "issue_number": fields.issue_number,
+            "cover_name": fields.cover_name,
+            "printing": fields.printing,
+            "ratio": fields.ratio,
+            "variant_type": fields.variant_type,
+            "cover_artist": fields.cover_artist,
             "metadata_identity_key": inventory_copy.metadata_identity_key,
             "quantity": 1,
             "raw_item_price": inventory_copy.acquisition_cost,
@@ -200,10 +236,10 @@ def re_enrich_inventory_copy(
 
     source_item = AiDraftOrderItem.model_validate(
         {
-            "publisher": publisher.name,
-            "raw_publisher": publisher.name,
-            "title": title.name,
-            "raw_title": title.name,
+            "publisher": fields.publisher_name,
+            "raw_publisher": fields.publisher_name,
+            "title": fields.title_name,
+            "raw_title": fields.title_name,
             "release_date": (
                 inventory_copy.release_date.isoformat()
                 if inventory_copy.release_date is not None
@@ -226,13 +262,13 @@ def re_enrich_inventory_copy(
                 else None
             ),
             "received_at": inventory_copy.received_at,
-            "issue_number": issue.issue_number,
-            "raw_issue_number": issue.issue_number,
-            "cover_name": variant.cover_name,
-            "printing": variant.printing,
-            "ratio": variant.ratio,
-            "variant_type": variant.variant_type,
-            "cover_artist": variant.cover_artist,
+            "issue_number": fields.issue_number,
+            "raw_issue_number": fields.issue_number,
+            "cover_name": fields.cover_name,
+            "printing": fields.printing,
+            "ratio": fields.ratio,
+            "variant_type": fields.variant_type,
+            "cover_artist": fields.cover_artist,
             "quantity": 1,
             "raw_item_price": inventory_copy.acquisition_cost,
             "metadata_identity_key": inventory_copy.metadata_identity_key,
@@ -270,10 +306,7 @@ def re_enrich_inventory_copy(
         before_snapshot=before_snapshot,
         after_snapshot=_inventory_copy_snapshot(
             inventory_copy,
-            publisher=publisher,
-            title=title,
-            issue=issue,
-            variant=variant,
+            fields=fields,
         ),
         reason=reason or "Inventory metadata re-enriched deterministically.",
         actor_user_id=actor_user_id,

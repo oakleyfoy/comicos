@@ -8,6 +8,7 @@ the single supported path for manual catalog-issue inventory creation.
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -52,6 +53,39 @@ VARIANT_STATUS_RESOLVED = "RESOLVED"
 VARIANT_STATUS_UNKNOWN = "UNKNOWN"
 VARIANT_STATUS_PLACEHOLDER = "PLACEHOLDER"
 RECEIVED_VIA_ACQUISITION = "ACQUISITION_MANUAL"
+RECEIVED_VIA_PHOTO_IMPORT = "PHOTO_IMPORT"
+
+
+def create_received_catalog_copy(
+    session: Session,
+    *,
+    acquisition: Acquisition,
+    catalog_issue_id: int,
+    series_id: int | None,
+    issue_number: str | None,
+    catalog_variant_id: int | None = None,
+    variant_status: str = VARIANT_STATUS_RESOLVED,
+    source_image_url: str | None = None,
+    received_via: str = RECEIVED_VIA_ACQUISITION,
+    received_at: datetime | None = None,
+) -> InventoryCopy:
+    """Create one in-hand catalog copy on an acquisition (caller commits)."""
+    copy = _create_copy(
+        session,
+        acquisition=acquisition,
+        catalog_issue_id=catalog_issue_id,
+        series_id=series_id,
+        issue_number=issue_number,
+        variant_status=variant_status,
+    )
+    copy.catalog_variant_id = catalog_variant_id
+    copy.source_image_url = source_image_url
+    copy.received_via = received_via
+    copy.order_status = "received"
+    if received_at is not None:
+        copy.received_at = received_at
+    session.add(copy)
+    return copy
 
 
 def _identity_key(session: Session, catalog_issue_id: int) -> str | None:

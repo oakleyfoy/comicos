@@ -81,6 +81,79 @@ def fingerprint_catalog_image(session: Session, image_id: int, *, dry_run: bool 
     return row
 
 
+def _fingerprint_distance_and_confidence(
+    row: CatalogImageFingerprint,
+    *,
+    phash: str | None,
+    dhash: str | None,
+    ahash: str | None,
+) -> tuple[int, float] | None:
+    distances: list[int] = []
+    if phash and row.phash:
+        distances.append(hamming_distance(phash, row.phash))
+    if dhash and row.dhash:
+        distances.append(hamming_distance(dhash, row.dhash))
+    if ahash and row.ahash:
+        distances.append(hamming_distance(ahash, row.ahash))
+    if not distances:
+        return None
+    distance = min(distances)
+    return distance, hash_match_confidence(distance)
+
+
+def _fingerprint_rows_for_phash_prefix(session: Session, phash: str, *, prefix_len: int) -> list[CatalogImageFingerprint]:
+    if prefix_len <= 0:
+        return list(session.exec(select(CatalogImageFingerprint).where(CatalogImageFingerprint.phash != None)))  # noqa: E711
+    prefix = phash[:prefix_len]
+    return list(
+        session.exec(
+            select(CatalogImageFingerprint).where(
+                CatalogImageFingerprint.phash != None,  # noqa: E711
+                CatalogImageFingerprint.phash.startswith(prefix),
+            )
+        )
+    )
+
+
+def search_similar_catalog_fingerprints(
+    session: Session,
+    *,
+    phash: str | None = None,
+    dhash: str | None = None,
+    ahash: str | None = None,
+    limit: int = 10,
+) -> list[tuple[CatalogImageFingerprint, float, int]]:
+    """Nearest-neighbor catalog fingerprint search (one row per catalog issue, best image win)."""
+    if not phash and not dhash and not ahash:
+        return []
+    probe_phash = phash or ""
+    prefix_lengths = (16, 12, 8, 0) if probe_phash else (0,)
+    rows: list[CatalogImageFingerprint] = []
+    for prefix_len in prefix_lengths:
+        if probe_phash:
+            rows = _fingerprint_rows_for_phash_prefix(session, probe_phash, prefix_len=prefix_len)
+        else:
+            rows = list(session.exec(select(CatalogImageFingerprint)))
+        if len(rows) >= max(limit * 4, 40) or prefix_len == 0:
+            break
+
+    best_by_issue: dict[int, tuple[CatalogImageFingerprint, float, int]] = {}
+    for row in rows:
+        if row.issue_id is None:
+            continue
+        scored = _fingerprint_distance_and_confidence(row, phash=phash, dhash=dhash, ahash=ahash)
+        if scored is None:
+            continue
+        distance, confidence = scored
+        iid = int(row.issue_id)
+        prev = best_by_issue.get(iid)
+        if prev is None or confidence > prev[1]:
+            best_by_issue[iid] = (row, confidence, distance)
+
+    ranked = sorted(best_by_issue.values(), key=lambda item: (-item[1], item[2], int(item[0].image_id or 0)))
+    return ranked[: max(1, limit)]
+
+
 def find_similar_by_hash(
     session: Session,
     *,
@@ -89,20 +162,7 @@ def find_similar_by_hash(
     ahash: str | None = None,
     limit: int = 10,
 ) -> list[tuple[CatalogImageFingerprint, float]]:
-    rows = session.exec(select(CatalogImageFingerprint)).all()
-    scored: list[tuple[CatalogImageFingerprint, float]] = []
-    for row in rows:
-        distances = []
-        if phash and row.phash:
-            distances.append(hamming_distance(phash, row.phash))
-        if dhash and row.dhash:
-            distances.append(hamming_distance(dhash, row.dhash))
-        if ahash and row.ahash:
-            distances.append(hamming_distance(ahash, row.ahash))
-        if not distances:
-            continue
-        distance = min(distances)
-        confidence = hash_match_confidence(distance)
-        scored.append((row, confidence))
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return scored[: max(1, limit)]
+    similar = search_similar_catalog_fingerprints(
+        session, phash=phash, dhash=dhash, ahash=ahash, limit=limit
+    )
+    return [(row, confidence) for row, confidence, _distance in similar]

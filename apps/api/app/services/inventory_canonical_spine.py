@@ -1,0 +1,73 @@
+"""Shared catalog-spine joins + display expressions for inventory reads (post–Phase D).
+
+Legacy ``customer_order`` / ``order_item`` / ``variant`` / ``comic_issue`` tables
+are dropped in migration ``20260626_0200``. Inventory identity and provenance come
+from ``catalog_issue`` + ``acquisition`` and denormalized fields on ``inventory_copy``.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import func
+
+from app.models import (
+    Acquisition,
+    CatalogIssue,
+    CatalogPublisher,
+    CatalogSeries,
+    CatalogVariant,
+    InventoryCopy,
+)
+
+
+def title_expr():
+    return func.coalesce(CatalogSeries.name, "Unknown")
+
+
+def publisher_expr():
+    return func.coalesce(CatalogPublisher.name, "Unknown")
+
+
+def issue_number_expr():
+    return func.coalesce(CatalogIssue.issue_number, "")
+
+
+def cover_name_expr():
+    return func.coalesce(CatalogVariant.variant_name, InventoryCopy.variant_status)
+
+
+def retailer_expr():
+    return func.coalesce(
+        InventoryCopy.order_retailer,
+        Acquisition.seller_name,
+        "Manual Acquisition",
+    )
+
+
+def purchase_date_expr():
+    return func.coalesce(InventoryCopy.order_date, Acquisition.purchase_date)
+
+
+def source_type_expr():
+    return func.coalesce(InventoryCopy.order_source_type, Acquisition.acquisition_type)
+
+
+def order_item_id_expr():
+    return InventoryCopy.order_item_id
+
+
+def order_id_expr():
+    return InventoryCopy.order_item_id
+
+
+def order_item_quantity_expr():
+    return func.literal(1)
+
+
+def apply_inventory_spine_joins(stmt):
+    return (
+        stmt.join(CatalogIssue, InventoryCopy.catalog_issue_id == CatalogIssue.id, isouter=True)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id, isouter=True)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+        .join(CatalogVariant, InventoryCopy.catalog_variant_id == CatalogVariant.id, isouter=True)
+        .join(Acquisition, InventoryCopy.acquisition_id == Acquisition.id, isouter=True)
+    )

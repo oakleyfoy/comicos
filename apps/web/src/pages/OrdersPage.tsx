@@ -7,6 +7,10 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import {
+  LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE,
+  LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED,
+} from "../config/productFlags";
 
 const sortOptions: Array<{ label: string; value: OrderSortBy }> = [
   { label: "Order Date", value: "order_date" },
@@ -117,8 +121,9 @@ export function OrdersPage() {
       <PageHeader
         eyebrow="Order History"
         title="Purchase Ledger"
-        description="Review past acquisitions, allocation totals, and the purchase records backing your inventory."
+        description="Review past acquisitions and purchase records backing legacy inventory. New intake uses Add Comics, not new orders here."
         actions={
+          LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED ? (
           <>
             <Link
               to="/connected-retailers/import"
@@ -133,8 +138,22 @@ export function OrdersPage() {
               Add Order
             </Link>
           </>
+          ) : (
+            <Link
+              to="/add-comics/photo"
+              className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+            >
+              Add Comics
+            </Link>
+          )
         }
       />
+
+      {!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED ? (
+        <div className="mt-4">
+          <StatusBanner tone="info">{LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE}</StatusBanner>
+        </div>
+      ) : null}
 
       {isInitialLoad ? (
         <div className="mt-6">

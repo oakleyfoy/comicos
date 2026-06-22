@@ -116,6 +116,8 @@ class CanonicalCreator(SQLModel, table=True):
     is_active: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, default=True))
 
 
+# Legacy asset-ledger spine (customer_order / order_item / variant / comic_issue / comic_title).
+# Deprecated: catalog unification teardown drops these tables; use catalog_issue + acquisition provenance.
 class ComicTitle(SQLModel, table=True):
     __tablename__ = "comic_title"
 
@@ -222,8 +224,8 @@ class InventoryCopy(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
-    order_item_id: int | None = Field(default=None, foreign_key="order_item.id", nullable=True, index=True)
-    variant_id: int | None = Field(default=None, foreign_key="variant.id", nullable=True, index=True)
+    order_item_id: int | None = Field(default=None, nullable=True, index=True)
+    variant_id: int | None = Field(default=None, nullable=True, index=True)
     copy_number: int = Field(nullable=False)
     acquisition_cost: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
     acquisition_id: int | None = Field(
@@ -307,6 +309,21 @@ class InventoryCopy(SQLModel, table=True):
     acquisition_source_type: str | None = Field(default=None, max_length=40, nullable=True, index=True)
     acquisition_source_name: str | None = Field(default=None, max_length=255, nullable=True)
     acquisition_notes: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    # Financial provenance snapshot (unification Phase 4): copied from the legacy
+    # customer_order / order_item rows so purchase history survives a future
+    # teardown of those tables. Nullable + additive => reversible.
+    order_retailer: str | None = Field(default=None, max_length=255, nullable=True)
+    order_date: date | None = Field(default=None, nullable=True)
+    order_source_type: str | None = Field(default=None, max_length=64, nullable=True)
+    order_raw_item_price: Decimal | None = Field(
+        default=None, sa_column=Column(Numeric(12, 2), nullable=True)
+    )
+    order_shipping_paid: Decimal | None = Field(
+        default=None, sa_column=Column(Numeric(12, 2), nullable=True)
+    )
+    order_tax_paid: Decimal | None = Field(
+        default=None, sa_column=Column(Numeric(12, 2), nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

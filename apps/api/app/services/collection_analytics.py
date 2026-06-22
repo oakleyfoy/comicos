@@ -8,7 +8,12 @@ from typing import Any, Mapping, Sequence
 
 from sqlmodel import Session, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, Order, OrderItem, Publisher, User, Variant
+from app.models import ComicIssue, InventoryCopy, User
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    publisher_expr,
+    purchase_date_expr,
+)
 from app.schemas.collection_analytics import (
     CollectionAnalyticsSummary,
     CollectionCompositionAnalytics,
@@ -64,7 +69,7 @@ def percent_roll(numerator: int, denominator: int) -> PercentRollup:
 
 
 def collection_projection_stmt(*, user_id: int | None):
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.primary_cover_image_id,
@@ -75,17 +80,10 @@ def collection_projection_stmt(*, user_id: int | None):
             InventoryCopy.release_year,
             InventoryCopy.canonical_series_id,
             InventoryCopy.grade_status,
-            Order.order_date.label("order_date"),
+            purchase_date_expr().label("order_date"),
             ComicIssue.release_date.label("issue_release_date"),
-            Publisher.name.label("publisher_name"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+            publisher_expr().label("publisher_name"),
+        ).select_from(InventoryCopy)
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)

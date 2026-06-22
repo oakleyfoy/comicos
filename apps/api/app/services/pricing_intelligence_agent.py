@@ -11,16 +11,21 @@ from sqlmodel import Session, select
 
 from app.models import (
     AgentDefinition,
+    CatalogIssue,
     ComicIssue,
-    ComicTitle,
     InventoryCopy,
     InventoryFmvSnapshot,
     MarketFmvSnapshot,
     MarketTrendSnapshot,
     OrderItem,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    order_item_quantity_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.intelligence import IntelligenceRunResponse
 from app.services.agent_execution import complete_execution, fail_execution, start_execution
@@ -83,25 +88,22 @@ def _agent_id(session: Session) -> int:
 
 def _inventory_rows(session: Session, *, owner_user_id: int) -> list[_InventoryRow]:
     rows = session.exec(
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            ComicIssue.id.label("canonical_issue_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-            InventoryCopy.acquisition_cost.label("acquisition_cost"),
-            InventoryCopy.current_fmv.label("current_fmv"),
-            InventoryCopy.grade_status.label("grade_status"),
-            InventoryCopy.hold_status.label("hold_status"),
-            InventoryCopy.order_status.label("order_status"),
-            InventoryCopy.received_at.label("received_at"),
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id.label("inventory_copy_id"),
+                InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+                func.coalesce(ComicIssue.id, CatalogIssue.id).label("canonical_issue_id"),
+                title_expr().label("title"),
+                publisher_expr().label("publisher"),
+                issue_number_expr().label("issue_number"),
+                InventoryCopy.acquisition_cost.label("acquisition_cost"),
+                InventoryCopy.current_fmv.label("current_fmv"),
+                InventoryCopy.grade_status.label("grade_status"),
+                InventoryCopy.hold_status.label("hold_status"),
+                InventoryCopy.order_status.label("order_status"),
+                InventoryCopy.received_at.label("received_at"),
+            ).select_from(InventoryCopy)
         )
-        .select_from(InventoryCopy)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.user_id == owner_user_id)
         .order_by(InventoryCopy.id.asc())
     ).all()
@@ -250,19 +252,16 @@ def _find_market_trend(
 
 def _order_history_quantities(session: Session, *, owner_user_id: int) -> dict[tuple[str, str], int]:
     rows = session.exec(
-        select(
-            ComicTitle.name.label("title"),
-            ComicIssue.issue_number.label("issue_number"),
-            func.sum(OrderItem.quantity).label("total_quantity"),
+        apply_inventory_spine_joins(
+            select(
+                title_expr().label("title"),
+                issue_number_expr().label("issue_number"),
+                func.sum(order_item_quantity_expr()).label("total_quantity"),
+            ).select_from(InventoryCopy)
         )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
         .where(InventoryCopy.user_id == owner_user_id)
-        .group_by(ComicTitle.name, ComicIssue.issue_number)
-        .order_by(ComicTitle.name.asc(), ComicIssue.issue_number.asc())
+        .group_by(title_expr(), issue_number_expr())
+        .order_by(title_expr().asc(), issue_number_expr().asc())
     ).all()
     return {(str(row.title), str(row.issue_number)): int(row.total_quantity or 0) for row in rows}
 

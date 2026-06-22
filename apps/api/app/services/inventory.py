@@ -8,18 +8,20 @@ from sqlmodel import Session, select
 from app.models import (
     Acquisition,
     CatalogIssue,
-    CatalogPublisher,
-    CatalogSeries,
-    ComicIssue,
-    ComicTitle,
+    CatalogVariant,
     InventoryCopy,
     InventoryFmvSnapshot,
-    Order,
-    OrderItem,
     OrganizationMember,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    purchase_date_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
 )
 from app.services.organization_inventory_access import resolve_inventory_visibility
 from app.services.shared_inventory_service import assignment_metadata_for_inventory_ids
@@ -130,87 +132,86 @@ def _asset_state_case_expression():
     )
 
 
+# Canonical-spine joins + display expressions live in the shared module so every
+# read surface resolves identity/provenance identically. Local aliases keep the
+# call sites in this file unchanged.
+_title_expr = title_expr
+_publisher_expr = publisher_expr
+_issue_number_expr = issue_number_expr
+_retailer_expr = retailer_expr
+_purchase_date_expr = purchase_date_expr
+_apply_inventory_spine_joins = apply_inventory_spine_joins
+
+
 def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int, ...] | None = None):
     gain_loss_expr = gain_loss_expression().label("gain_loss")
     asset_state_expr = _asset_state_case_expression().label("asset_state")
     scope_ids = owner_user_ids if owner_user_ids is not None else (int(current_user.id),)
 
-    return (
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-            ComicIssue.id.label("canonical_issue_id"),
-            Variant.cover_name.label("cover_name"),
-            Variant.printing.label("printing"),
-            Variant.ratio.label("ratio"),
-            Variant.variant_type.label("variant_type"),
-            Variant.cover_artist.label("cover_artist"),
-            Order.retailer.label("retailer"),
-            Order.order_date.label("order_date"),
-            InventoryCopy.acquisition_cost.label("acquisition_cost"),
-            InventoryCopy.current_fmv.label("current_fmv"),
-            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            InventoryCopy.canonical_series_id.label("canonical_series_id"),
-            gain_loss_expr,
-            InventoryCopy.grade_status.label("grade_status"),
-            InventoryCopy.hold_status.label("hold_status"),
-            InventoryCopy.star_rating.label("star_rating"),
-            InventoryCopy.condition_notes.label("condition_notes"),
-            Order.order_date.label("purchase_date"),
-            InventoryCopy.release_date.label("release_date"),
-            InventoryCopy.release_year.label("release_year"),
-            InventoryCopy.release_status.label("release_status"),
-            InventoryCopy.order_status.label("order_status"),
-            InventoryCopy.expected_ship_date.label("expected_ship_date"),
-            InventoryCopy.received_at.label("received_at"),
-            InventoryCopy.source_image_url.label("source_image_url"),
-            InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
-            OrderItem.catalog_match_id.label("catalog_match_id"),
-            InventoryCopy.catalog_issue_id.label("catalog_issue_id"),
-            InventoryCopy.catalog_variant_id.label("catalog_variant_id"),
-            InventoryCopy.catalog_image_id.label("catalog_image_id"),
-            InventoryCopy.acquisition_source_type.label("acquisition_source_type"),
-            InventoryCopy.acquisition_source_name.label("acquisition_source_name"),
-            OrderItem.enrichment_status.label("enrichment_status"),
-            OrderItem.foc_date.label("foc_date"),
-            asset_state_expr,
-            case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
-        )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id.in_(scope_ids))
+    stmt = select(
+        InventoryCopy.id.label("inventory_copy_id"),
+        _title_expr().label("title"),
+        _publisher_expr().label("publisher"),
+        _issue_number_expr().label("issue_number"),
+        CatalogIssue.id.label("canonical_issue_id"),
+        CatalogVariant.variant_name.label("cover_name"),
+        CatalogVariant.printing.label("printing"),
+        CatalogVariant.ratio.label("ratio"),
+        CatalogVariant.format.label("variant_type"),
+        CatalogVariant.cover_artist.label("cover_artist"),
+        _retailer_expr().label("retailer"),
+        _purchase_date_expr().label("order_date"),
+        InventoryCopy.acquisition_cost.label("acquisition_cost"),
+        InventoryCopy.current_fmv.label("current_fmv"),
+        InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+        InventoryCopy.canonical_series_id.label("canonical_series_id"),
+        gain_loss_expr,
+        InventoryCopy.grade_status.label("grade_status"),
+        InventoryCopy.hold_status.label("hold_status"),
+        InventoryCopy.star_rating.label("star_rating"),
+        InventoryCopy.condition_notes.label("condition_notes"),
+        _purchase_date_expr().label("purchase_date"),
+        InventoryCopy.release_date.label("release_date"),
+        InventoryCopy.release_year.label("release_year"),
+        InventoryCopy.release_status.label("release_status"),
+        InventoryCopy.order_status.label("order_status"),
+        InventoryCopy.expected_ship_date.label("expected_ship_date"),
+        InventoryCopy.received_at.label("received_at"),
+        InventoryCopy.source_image_url.label("source_image_url"),
+        InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
+        InventoryCopy.catalog_issue_id.label("catalog_issue_id"),
+        InventoryCopy.catalog_variant_id.label("catalog_variant_id"),
+        InventoryCopy.catalog_image_id.label("catalog_image_id"),
+        InventoryCopy.acquisition_source_type.label("acquisition_source_type"),
+        InventoryCopy.acquisition_source_name.label("acquisition_source_name"),
+        InventoryCopy.created_at.label("row_created_at"),
+        asset_state_expr,
+        case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
     )
+    return _apply_inventory_spine_joins(stmt).where(InventoryCopy.user_id.in_(scope_ids))
 
 
 def build_inventory_detail_query(current_user: User):
     gain_loss_expr = gain_loss_expression().label("gain_loss")
     asset_state_expr = _asset_state_case_expression().label("asset_state")
 
-    # Outer joins so manually-added (P98) copies with no Order/Variant graph
-    # still resolve; catalog_master + acquisition provide the fallback identity.
-    return (
+    stmt = (
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.copy_number.label("copy_number"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            func.coalesce(ComicTitle.name, CatalogSeries.name, "Unknown").label("title"),
-            func.coalesce(Publisher.name, CatalogPublisher.name, "Unknown").label("publisher"),
-            func.coalesce(ComicIssue.issue_number, CatalogIssue.issue_number, "").label("issue_number"),
-            ComicIssue.id.label("canonical_issue_id"),
-            Variant.cover_name.label("cover_name"),
-            Variant.printing.label("printing"),
-            Variant.ratio.label("ratio"),
-            Variant.variant_type.label("variant_type"),
-            Variant.cover_artist.label("cover_artist"),
-            func.coalesce(Order.retailer, Acquisition.seller_name, "Manual Acquisition").label("retailer"),
-            func.coalesce(Order.order_date, Acquisition.purchase_date).label("order_date"),
-            func.coalesce(Order.source_type, Acquisition.acquisition_type).label("source_type"),
+            _title_expr().label("title"),
+            _publisher_expr().label("publisher"),
+            _issue_number_expr().label("issue_number"),
+            CatalogIssue.id.label("canonical_issue_id"),
+            CatalogVariant.variant_name.label("cover_name"),
+            CatalogVariant.printing.label("printing"),
+            CatalogVariant.ratio.label("ratio"),
+            CatalogVariant.format.label("variant_type"),
+            CatalogVariant.cover_artist.label("cover_artist"),
+            _retailer_expr().label("retailer"),
+            _purchase_date_expr().label("order_date"),
+            source_type_expr().label("source_type"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
@@ -220,10 +221,9 @@ def build_inventory_detail_query(current_user: User):
             InventoryCopy.hold_status.label("hold_status"),
             InventoryCopy.star_rating.label("star_rating"),
             InventoryCopy.condition_notes.label("condition_notes"),
-            Order.id.label("order_id"),
-            OrderItem.id.label("order_item_id"),
-            Variant.id.label("variant_id"),
-            func.coalesce(Order.order_date, Acquisition.purchase_date).label("purchase_date"),
+            InventoryCopy.order_item_id.label("order_item_id"),
+            InventoryCopy.variant_id.label("variant_id"),
+            _purchase_date_expr().label("purchase_date"),
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_year.label("release_year"),
             InventoryCopy.release_status.label("release_status"),
@@ -232,7 +232,6 @@ def build_inventory_detail_query(current_user: User):
             InventoryCopy.received_at.label("received_at"),
             InventoryCopy.source_image_url.label("source_image_url"),
             InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
-            OrderItem.catalog_match_id.label("catalog_match_id"),
             InventoryCopy.catalog_issue_id.label("catalog_issue_id"),
             InventoryCopy.catalog_variant_id.label("catalog_variant_id"),
             InventoryCopy.catalog_image_id.label("catalog_image_id"),
@@ -249,26 +248,12 @@ def build_inventory_detail_query(current_user: User):
                 + func.coalesce(Acquisition.shipping_paid, 0)
                 + func.coalesce(Acquisition.tax_paid, 0)
             ).label("acquisition_total"),
-            OrderItem.enrichment_status.label("enrichment_status"),
-            OrderItem.enrichment_confidence.label("enrichment_confidence"),
-            OrderItem.enrichment_notes.label("enrichment_notes"),
-            OrderItem.foc_date.label("foc_date"),
             asset_state_expr,
             case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
             InventoryCopy.created_at.label("created_at"),
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id, isouter=True)
-        .join(Order, OrderItem.order_id == Order.id, isouter=True)
-        .join(Variant, InventoryCopy.variant_id == Variant.id, isouter=True)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id, isouter=True)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id, isouter=True)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id, isouter=True)
-        .join(CatalogIssue, InventoryCopy.catalog_issue_id == CatalogIssue.id, isouter=True)
-        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id, isouter=True)
-        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
-        .join(Acquisition, InventoryCopy.acquisition_id == Acquisition.id, isouter=True)
-        .where(InventoryCopy.user_id == current_user.id)
     )
+    return _apply_inventory_spine_joins(stmt).where(InventoryCopy.user_id == current_user.id)
 
 
 def _merge_display_metadata(row_map: dict, metadata) -> None:
@@ -339,15 +324,15 @@ def apply_inventory_filters(
         search_term = f"%{search}%"
         stmt = stmt.where(
             or_(
-                ComicTitle.name.ilike(search_term),
-                Publisher.name.ilike(search_term),
-                ComicIssue.issue_number.ilike(search_term),
-                Variant.cover_name.ilike(search_term),
+                _title_expr().ilike(search_term),
+                _publisher_expr().ilike(search_term),
+                _issue_number_expr().ilike(search_term),
+                CatalogVariant.variant_name.ilike(search_term),
             )
         )
 
     if publisher:
-        stmt = stmt.where(Publisher.name == publisher)
+        stmt = stmt.where(_publisher_expr() == publisher)
 
     if hold_status:
         stmt = stmt.where(InventoryCopy.hold_status == hold_status)
@@ -390,9 +375,9 @@ def apply_inventory_sort(stmt, sort_by: str | None, sort_dir: str):
         raise HTTPException(status_code=400, detail="Invalid sort_by value")
 
     sort_column_map = {
-        "title": ComicTitle.name,
-        "publisher": Publisher.name,
-        "purchase_date": Order.order_date,
+        "title": _title_expr(),
+        "publisher": _publisher_expr(),
+        "purchase_date": _purchase_date_expr(),
         "acquisition_cost": InventoryCopy.acquisition_cost,
         "current_fmv": InventoryCopy.current_fmv,
         "gain_loss": case(
@@ -412,24 +397,16 @@ def apply_inventory_sort(stmt, sort_by: str | None, sort_dir: str):
 
 
 def build_portfolio_performance_query(current_user: User):
-    return (
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-            Variant.cover_name.label("cover_name"),
-            InventoryCopy.current_fmv.label("current_fmv"),
-            gain_loss_expression().label("gain_loss"),
-        )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == current_user.id)
+    stmt = select(
+        InventoryCopy.id.label("inventory_copy_id"),
+        _title_expr().label("title"),
+        _publisher_expr().label("publisher"),
+        _issue_number_expr().label("issue_number"),
+        CatalogVariant.variant_name.label("cover_name"),
+        InventoryCopy.current_fmv.label("current_fmv"),
+        gain_loss_expression().label("gain_loss"),
     )
+    return _apply_inventory_spine_joins(stmt).where(InventoryCopy.user_id == current_user.id)
 
 
 def find_duplicate_inventory_candidates(
@@ -461,12 +438,9 @@ def find_duplicate_inventory_candidates(
             InventoryCopy.created_at.label("created_at"),
             User.id.label("user_id"),
             User.email.label("user_email"),
-            Order.id.label("order_id"),
-            Order.retailer.label("retailer"),
-            Order.order_date.label("order_date"),
+            InventoryCopy.order_retailer.label("retailer"),
+            InventoryCopy.order_date.label("order_date"),
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
         .join(User, User.id == InventoryCopy.user_id, isouter=True)
         .where(InventoryCopy.metadata_identity_key.in_(duplicate_keys))
         .order_by(
@@ -507,7 +481,7 @@ def find_duplicate_inventory_candidates(
                         inventory_copy_id=row.inventory_copy_id,
                         user_id=row.user_id,
                         user_email=row.user_email,
-                        order_id=row.order_id,
+                        order_id=None,
                         retailer=row.retailer,
                         order_date=row.order_date,
                         acquisition_cost=str(row.acquisition_cost),
@@ -735,17 +709,9 @@ def list_inventory(
         release_calendar=release_calendar,
         asset_state=asset_state,
     )
-    total_stmt = (
-        select(func.count())
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (int(current_user.id),)))
-    )
+    total_stmt = _apply_inventory_spine_joins(
+        select(func.count()).select_from(InventoryCopy)
+    ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (int(current_user.id),)))
     total_stmt = apply_inventory_filters(
         total_stmt,
         search=search,
@@ -787,6 +753,13 @@ def list_inventory(
     for row in rows:
         row_map = dict(row._mapping)
         inv_pk = int(row_map["inventory_copy_id"])
+        # Catalog-only copies have no Order/Acquisition date; fall back to created_at
+        # so the required order_date stays populated.
+        row_created_at = row_map.pop("row_created_at", None)
+        if row_map.get("order_date") is None and row_created_at is not None:
+            row_map["order_date"] = (
+                row_created_at.date() if hasattr(row_created_at, "date") else row_created_at
+            )
         _apply_list_display_metadata(row_map)
         row_map["inventory_intelligence"] = intel_signals.get(inv_pk)
         row_map["ownership_state"] = intel_signals.get(inv_pk).ownership_state if intel_signals.get(inv_pk) else None

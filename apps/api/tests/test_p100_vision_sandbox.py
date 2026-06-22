@@ -73,8 +73,8 @@ def test_sandbox_skips_detections(tmp_path, monkeypatch) -> None:
     )
 
     with mock.patch(
-        "app.services.photo_import_vision_sandbox_service.read_comic_with_gpt_vision",
-        return_value=fake,
+        "app.services.photo_import_vision_sandbox_service.read_comics_with_gpt_vision",
+        return_value=[fake],
     ):
         with Session(engine) as session:
             from datetime import datetime, timezone

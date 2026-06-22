@@ -14,6 +14,8 @@ from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models import User
 from app.schemas.photo_import import (
+    PhotoImportAddAllResponse,
+    PhotoImportChooseMatchPayload,
     PhotoImportConfirmPayload,
     PhotoImportConfirmResponse,
     PhotoImportDetectedBookRead,
@@ -58,7 +60,10 @@ from app.services.photo_import_storage_service import resolve_photo_import_stora
 from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
 from app.services.photo_import_vision_read_api_service import vision_read_to_payload
 from app.services.photo_import_vision_read_actions_service import (
+    add_all_session_reads_to_inventory,
     add_vision_read_to_inventory,
+    choose_vision_read_match,
+    rematch_vision_read,
     reread_vision_read,
     update_vision_read_fields,
 )
@@ -354,19 +359,69 @@ def add_vision_read_to_inventory_endpoint(
     )
 
 
-@photo_import_router.post("/vision-read/{read_id}/reread", response_model=PhotoImportVisionReadPayload)
+@photo_import_router.post(
+    "/vision-read/{read_id}/reread", response_model=list[PhotoImportVisionReadPayload]
+)
 def reread_vision_read_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[PhotoImportVisionReadPayload]:
+    assert current_user.id is not None
+    rows = reread_vision_read(
+        session,
+        read_id=read_id,
+        owner_user_id=int(current_user.id),
+    )
+    return [vision_read_to_payload(r) for r in rows]
+
+
+@photo_import_router.post("/vision-read/{read_id}/rematch", response_model=PhotoImportVisionReadPayload)
+def rematch_vision_read_endpoint(
     read_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportVisionReadPayload:
     assert current_user.id is not None
-    row = reread_vision_read(
+    row = rematch_vision_read(session, read_id=read_id, owner_user_id=int(current_user.id))
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.post("/vision-read/{read_id}/choose-match", response_model=PhotoImportVisionReadPayload)
+def choose_vision_read_match_endpoint(
+    read_id: int,
+    payload: PhotoImportChooseMatchPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = choose_vision_read_match(
         session,
         read_id=read_id,
         owner_user_id=int(current_user.id),
+        catalog_issue_id=payload.catalog_issue_id,
     )
     return vision_read_to_payload(row)
+
+
+@photo_import_router.post("/sessions/{token}/add-all", response_model=PhotoImportAddAllResponse)
+def add_all_session_reads_endpoint(
+    token: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportAddAllResponse:
+    assert current_user.id is not None
+    results = add_all_session_reads_to_inventory(
+        session,
+        session_token=token,
+        owner_user_id=int(current_user.id),
+    )
+    total_copies = sum(r.created_count for r in results)
+    return PhotoImportAddAllResponse(
+        added_count=len(results),
+        total_copies=total_copies,
+        results=results,
+    )
 
 
 @photo_import_router.get("/admin/vision-sandbox/metrics", response_model=PhotoImportVisionSandboxMetricsRead)

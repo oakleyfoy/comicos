@@ -8,7 +8,8 @@ from datetime import date, datetime, timezone
 
 from sqlmodel import Session, select
 
-from app.models.asset_ledger import ComicIssue, ComicTitle, InventoryCopy, Order, OrderItem, Publisher, Variant
+from app.models.asset_ledger import InventoryCopy
+from app.services.inventory_canonical_spine import apply_inventory_spine_joins, publisher_expr, purchase_date_expr
 from app.models.p77_collector_analytics import (
     P77_ANALYTICS_SOURCE_VERSION,
     P77BudgetPerformanceSnapshot,
@@ -72,21 +73,21 @@ def _monthly_publisher_spend(session: Session, *, owner_user_id: int) -> list[P7
     today = date.today()
     period_start = date(today.year, today.month, 1)
     rows = session.exec(
-        select(OrderItem, Order, Publisher)
-        .join(Order, Order.id == OrderItem.order_id)
-        .join(Variant, Variant.id == OrderItem.variant_id)
-        .join(ComicIssue, ComicIssue.id == Variant.comic_issue_id)
-        .join(ComicTitle, ComicTitle.id == ComicIssue.comic_title_id)
-        .join(Publisher, Publisher.id == ComicTitle.publisher_id)
-        .where(Order.user_id == owner_user_id)
-        .where(Order.order_date >= period_start)
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.acquisition_cost,
+                publisher_expr().label("publisher_name"),
+            ).select_from(InventoryCopy)
+        )
+        .where(InventoryCopy.user_id == owner_user_id)
+        .where(purchase_date_expr() >= period_start)
     ).all()
     by_pub: dict[str, tuple[float, int]] = defaultdict(lambda: (0.0, 0))
-    for item, _order, pub in rows:
-        name = pub.name or "Unknown"
-        cost = float(item.all_in_unit_cost or 0) * int(item.quantity or 1)
+    for row in rows:
+        name = str(row.publisher_name or "Unknown")
+        cost = float(row.acquisition_cost or 0)
         spend, count = by_pub[name]
-        by_pub[name] = (spend + cost, count + int(item.quantity or 1))
+        by_pub[name] = (spend + cost, count + 1)
     return [
         P77BudgetCategorySpendRead(name=name, spend=round(spend, 2), purchase_count=count)
         for name, (spend, count) in sorted(by_pub.items(), key=lambda x: -x[1][0])

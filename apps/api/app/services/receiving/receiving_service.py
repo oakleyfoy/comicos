@@ -31,6 +31,7 @@ from app.models.receiving import (
     utc_now,
 )
 from app.services.cover_images import sha256_raw_bytes
+from app.services.legacy_customer_orders_policy import assert_legacy_customer_order_writes_allowed
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 from app.services.receiving_live_capture_service import (
     normalize_live_capture_source,
@@ -356,6 +357,9 @@ def assign_receiving_purchase(
     if not confirmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmed books are required before purchase assignment")
 
+    if payload.mode == "new":
+        assert_legacy_customer_order_writes_allowed()
+
     if payload.mode == "existing" and payload.existing_order_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="existing_order_id is required for existing purchase assignment")
     if payload.mode == "new" and payload.purchase_date is None:
@@ -556,6 +560,7 @@ def complete_receiving_session(
     owner_user_id: int,
     receiving_session_id: int,
 ) -> ReceivingCompletionSummaryRead:
+    assert_legacy_customer_order_writes_allowed()
     sess = _require_owner(session, owner_user_id=owner_user_id, receiving_session_id=receiving_session_id)
     _ensure_session_open(sess)
     confirmed = _confirmed_items(session, receiving_session_id)

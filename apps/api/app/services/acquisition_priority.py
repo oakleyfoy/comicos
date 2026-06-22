@@ -18,8 +18,8 @@ from app.models import (
     AcquisitionPriorityHistory,
     AcquisitionPriorityScenario,
     AcquisitionPrioritySnapshot,
+    CatalogIssue,
     ComicIssue,
-    ComicTitle,
     ConcentrationRiskSnapshot,
     GradingRecommendation,
     GradingRiskSnapshot,
@@ -27,15 +27,19 @@ from app.models import (
     InventoryLiquiditySnapshot,
     Listing,
     ListingIntelligenceSnapshot,
-    Order,
-    OrderItem,
     PortfolioExposureSnapshot,
     PortfolioLiquiditySnapshot,
     PortfolioRecommendation,
-    Publisher,
     SaleRecord,
     SaleRecordLineItem,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
 )
 from app.schemas.acquisition_priority import (
     AcquisitionPriorityDetailRead,
@@ -448,24 +452,17 @@ def _latest_scope_liquidity(session: Session, *, owner_user_id: int) -> Portfoli
 
 
 def _build_issue_members(session: Session, *, owner_user_id: int) -> list[_IssueMember]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy,
-            Order,
-            Publisher.name,
-            ComicTitle.name,
-            ComicIssue.issue_number,
-            ComicIssue.id,
-        )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == owner_user_id)
-        .order_by(col(InventoryCopy.id).asc())
-    )
+            publisher_expr().label("publisher_name"),
+            title_expr().label("title_name"),
+            issue_number_expr().label("issue_number"),
+            func.coalesce(ComicIssue.id, CatalogIssue.id).label("issue_id"),
+            source_type_expr().label("source_type"),
+            retailer_expr().label("retailer"),
+        ).select_from(InventoryCopy)
+    ).where(InventoryCopy.user_id == owner_user_id).order_by(col(InventoryCopy.id).asc())
     rows = session.exec(stmt).all()
     inv_ids = [int(inv.id or 0) for inv, *_ in rows if int(inv.id or 0)]
     liquidity_map = _latest_liquidity_map(session, owner_user_id=owner_user_id, inv_ids=inv_ids)
@@ -480,7 +477,7 @@ def _build_issue_members(session: Session, *, owner_user_id: int) -> list[_Issue
     }
 
     members: list[_IssueMember] = []
-    for inv, order_row, publisher_name, title_name, issue_number, issue_id in rows:
+    for inv, publisher_name, title_name, issue_number, issue_id, source_type, retailer in rows:
         inventory_item_id = int(inv.id or 0)
         if not inventory_item_id or issue_id is None:
             continue
@@ -498,7 +495,7 @@ def _build_issue_members(session: Session, *, owner_user_id: int) -> list[_Issue
         release_year = inv.release_year
         if release_year is None and inv.release_date is not None:
             release_year = inv.release_date.year
-        acquisition_source_label = f"{order_row.source_type or 'unknown'}:{order_row.retailer}"
+        acquisition_source_label = f"{source_type or 'unknown'}:{retailer}"
         members.append(
             _IssueMember(
                 inventory_item_id=inventory_item_id,
@@ -1522,9 +1519,10 @@ def inventory_acquisition_priority_teaser(
     inventory_item_id: int,
 ) -> InventoryAcquisitionPriorityTeaser | None:
     issue_id = session.exec(
-        select(ComicIssue.id)
-        .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-        .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
+        apply_inventory_spine_joins(
+            select(func.coalesce(ComicIssue.id, CatalogIssue.id))
+            .select_from(InventoryCopy)
+        )
         .where(
             InventoryCopy.user_id == owner_user_id,
             InventoryCopy.id == inventory_item_id,

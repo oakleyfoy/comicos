@@ -89,7 +89,19 @@ def _image_dimensions(image_bytes: bytes) -> tuple[int, int, str]:
     return int(width), int(height), mime
 
 
-def _parse_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _first_comic(payload: dict[str, Any]) -> dict[str, Any]:
+    """The shared prompt returns a comics[] array; this tool only wants one book."""
+    comics = payload.get("comics")
+    if isinstance(comics, list):
+        for item in comics:
+            if isinstance(item, dict):
+                return item
+        return {}
+    return payload
+
+
+def _parse_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
+    payload = _first_comic(raw_payload)
     issue_raw = payload.get("issue_number")
     issue: str | None = None
     if issue_raw is not None and str(issue_raw).strip().lower() not in {"", "null", "none", "n/a"}:

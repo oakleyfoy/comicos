@@ -25,6 +25,8 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.services.legacy_spine_availability import legacy_customer_order_table_exists
+
 from app.models import (
     DraftImport,
     InventoryCopy,
@@ -257,6 +259,8 @@ def _inventory_stats_for_order(
     owner_user_id: int,
     order_id: int,
 ) -> tuple[int, int]:
+    if not legacy_customer_order_table_exists(session):
+        return 0, 0
     copy_count = int(
         session.exec(
             select(func.count())
@@ -300,6 +304,8 @@ def _attach_inventory_to_default_portfolio(
     owner_user_id: int,
     order_id: int,
 ) -> int:
+    if not legacy_customer_order_table_exists(session):
+        return 0
     inventory_ids = list(
         session.scalars(
             select(InventoryCopy.id)

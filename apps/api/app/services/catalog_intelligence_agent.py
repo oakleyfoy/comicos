@@ -10,8 +10,6 @@ from sqlmodel import Session, select
 from app.models import (
     AgentDefinition,
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
-    ComicTitle,
     CoverImage,
     CoverImageMatchCandidate,
     CoverImageOcrCandidate,
@@ -23,9 +21,13 @@ from app.models import (
     DuplicateCluster,
     DuplicateClusterItem,
     InventoryCopy,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.intelligence import IntelligenceRunResponse
 from app.services.agent_execution import complete_execution, fail_execution, start_execution
@@ -71,24 +73,21 @@ def _agent_id(session: Session) -> int:
 
 def _inventory_rows(session: Session, *, owner_user_id: int) -> list[_InventoryRow]:
     rows = session.exec(
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            InventoryCopy.canonical_series_id.label("canonical_series_id"),
-            InventoryCopy.release_date.label("release_date"),
-            InventoryCopy.release_year.label("release_year"),
-            InventoryCopy.release_status.label("release_status"),
-            InventoryCopy.order_status.label("order_status"),
-            InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id.label("inventory_copy_id"),
+                title_expr().label("title"),
+                publisher_expr().label("publisher"),
+                issue_number_expr().label("issue_number"),
+                InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
+                InventoryCopy.canonical_series_id.label("canonical_series_id"),
+                InventoryCopy.release_date.label("release_date"),
+                InventoryCopy.release_year.label("release_year"),
+                InventoryCopy.release_status.label("release_status"),
+                InventoryCopy.order_status.label("order_status"),
+                InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
+            ).select_from(InventoryCopy)
         )
-        .select_from(InventoryCopy)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.user_id == owner_user_id)
         .order_by(InventoryCopy.id.asc())
     ).all()

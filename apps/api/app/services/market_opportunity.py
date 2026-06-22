@@ -9,11 +9,10 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
     InventoryCopy,
     MarketAcquisitionOpportunityEvidence,
     MarketAcquisitionOpportunityHistory,
@@ -24,7 +23,6 @@ from app.models import (
     MarketAcquisitionSignal,
     MarketAcquisitionSignalSnapshot,
     PortfolioLiquiditySnapshot,
-    Variant,
 )
 from app.services.market_feed import append_market_feed_event
 from app.schemas.market_opportunity import (
@@ -1161,16 +1159,14 @@ def inventory_market_opportunity_teaser(
     inventory_item_id: int,
 ) -> InventoryMarketAcquisitionOpportunityTeaser | None:
     issue_row = session.exec(
-        select(ComicIssue.id)
-        .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-        .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
-        .where(
+        select(InventoryCopy.catalog_issue_id).where(
             InventoryCopy.user_id == owner_user_id,
             InventoryCopy.id == inventory_item_id,
         )
     ).first()
     if issue_row is None:
         return None
+    catalog_issue_id = int(issue_row)
 
     opp_item = session.exec(
         select(MarketAcquisitionOpportunityItem)
@@ -1185,7 +1181,10 @@ def inventory_market_opportunity_teaser(
         )
         .where(
             MarketAcquisitionOpportunityItem.owner_user_id == owner_user_id,
-            MarketAcquisitionScore.canonical_comic_issue_id == int(issue_row),
+            or_(
+                MarketAcquisitionScore.catalog_issue_id == catalog_issue_id,
+                MarketAcquisitionScore.canonical_comic_issue_id == catalog_issue_id,
+            ),
         )
         .order_by(
             col(MarketAcquisitionOpportunityItem.snapshot_date).desc(),

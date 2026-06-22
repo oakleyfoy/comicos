@@ -52,10 +52,20 @@ export type PhotoImportSession = {
   vision_sandbox?: boolean;
 };
 
+export type PhotoImportCatalogAlternate = {
+  catalog_issue_id: number;
+  series: string | null;
+  issue_number: string | null;
+  publisher: string | null;
+  cover_url: string | null;
+  confidence: number | null;
+};
+
 export type PhotoImportVisionRead = {
   id: number;
   session_id: number;
   image_id: number;
+  detection_index?: number;
   publisher: string | null;
   series: string | null;
   issue_number: string | null;
@@ -71,7 +81,22 @@ export type PhotoImportVisionRead = {
   is_correct: boolean | null;
   feedback_notes: string | null;
   added_to_inventory?: boolean;
+  catalog_issue_id?: number | null;
+  catalog_variant_id?: number | null;
+  catalog_cover_url?: string | null;
+  match_method?: string | null;
+  match_confidence?: number | null;
+  catalog_series?: string | null;
+  catalog_issue_number?: string | null;
+  catalog_publisher?: string | null;
+  catalog_alternates?: PhotoImportCatalogAlternate[];
   created_at: string;
+};
+
+export type PhotoImportAddAllResult = {
+  added_count: number;
+  total_copies: number;
+  results: PhotoImportVisionReadInventoryResult[];
 };
 
 export type PhotoImportVisionReadUpdate = {
@@ -87,7 +112,7 @@ export type PhotoImportVisionReadUpdate = {
 
 export type PhotoImportVisionReadInventoryResult = {
   vision_read: PhotoImportVisionRead;
-  acquisition_id: number;
+  acquisition_id: number | null;
   created_count: number;
   inventory_copy_ids: number[];
 };
@@ -342,10 +367,33 @@ export async function addVisionReadToInventory(
   });
 }
 
-export async function rereadVisionRead(readId: number): Promise<PhotoImportVisionRead> {
+export async function rereadVisionRead(readId: number): Promise<PhotoImportVisionRead[]> {
   return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/reread`, {
     method: "POST",
   });
+}
+
+export async function rematchVisionRead(readId: number): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/rematch`, {
+    method: "POST",
+  });
+}
+
+export async function chooseVisionReadMatch(
+  readId: number,
+  catalogIssueId: number,
+): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/choose-match`, {
+    method: "POST",
+    body: JSON.stringify({ catalog_issue_id: catalogIssueId }),
+  });
+}
+
+export async function addAllSessionReads(sessionToken: string): Promise<PhotoImportAddAllResult> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/add-all`,
+    { method: "POST" },
+  );
 }
 
 export function originalImageUrl(sessionToken: string, imageId: number): string {

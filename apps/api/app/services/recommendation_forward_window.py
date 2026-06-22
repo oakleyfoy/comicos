@@ -7,7 +7,13 @@ from datetime import date, timedelta
 from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, Publisher, OrderItem, Variant
+from app.models import InventoryCopy
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
+)
 from app.models.release_intelligence import ReleaseIssue, ReleaseKeySignal, ReleaseSeries, ReleaseVariant
 from app.models.spec_intelligence import SpecRecommendation
 from app.services.foc_dates import days_until_foc, utc_today
@@ -94,12 +100,9 @@ def _is_number_one(issue_number: str) -> bool:
 
 def _owned_issue_keys(session: Session, *, owner_user_id: int) -> set[tuple[str, str, str]]:
     rows = session.exec(
-        select(Publisher.name, ComicTitle.name, ComicIssue.issue_number)
-        .join(ComicIssue, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-        .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
-        .where(InventoryCopy.user_id == owner_user_id)
+        apply_inventory_spine_joins(
+            select(publisher_expr(), title_expr(), issue_number_expr()).select_from(InventoryCopy)
+        ).where(InventoryCopy.user_id == owner_user_id)
     ).all()
     keys: set[tuple[str, str, str]] = set()
     for publisher, series_name, issue_number in rows:

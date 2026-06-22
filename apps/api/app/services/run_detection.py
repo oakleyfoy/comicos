@@ -24,6 +24,14 @@ from app.models import (
     User,
     Variant,
 )
+from app.services.catalog_registry_rows import load_catalog_registry_issue_rows
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
+)
+from app.services.legacy_spine_availability import legacy_comic_issue_table_exists
 from app.schemas.run_detection import (
     MissingIssueClassification,
     MissingIssueListRead,
@@ -167,29 +175,27 @@ def parse_issue_number_for_run_detection(value: str | None) -> ParsedIssueNumber
 
 
 def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list[InventoryRunRow]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.user_id.label("owner_user_id"),
             InventoryCopy.canonical_series_id.label("canonical_series_id"),
-            Publisher.name.label("publisher"),
-            ComicTitle.name.label("title"),
-            ComicIssue.issue_number.label("issue_number"),
+            publisher_expr().label("publisher"),
+            title_expr().label("title"),
+            issue_number_expr().label("issue_number"),
             InventoryCopy.release_status.label("release_status"),
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.received_at.label("received_at"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        ).select_from(InventoryCopy)
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)
-    stmt = stmt.order_by(InventoryCopy.user_id.asc(), Publisher.name.asc(), ComicTitle.name.asc(), InventoryCopy.id.asc())
+    stmt = stmt.order_by(
+        InventoryCopy.user_id.asc(),
+        publisher_expr().asc(),
+        title_expr().asc(),
+        InventoryCopy.id.asc(),
+    )
     rows = session.exec(stmt).all()
     return [
         InventoryRunRow(
@@ -209,6 +215,28 @@ def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list
 
 
 def _registry_issue_rows(session: Session) -> list[RegistryIssueRow]:
+    catalog_rows = load_catalog_registry_issue_rows(session)
+    if catalog_rows:
+        out: list[RegistryIssueRow] = []
+        for row in catalog_rows:
+            release_date = None
+            if row.cover_date:
+                try:
+                    release_date = date.fromisoformat(row.cover_date[:10])
+                except ValueError:
+                    release_date = None
+            out.append(
+                RegistryIssueRow(
+                    canonical_series_id=row.catalog_series_id,
+                    publisher=row.publisher,
+                    title=row.series,
+                    issue_number=row.issue_number,
+                    release_date=release_date,
+                )
+            )
+        return out
+    if not legacy_comic_issue_table_exists(session):
+        return []
     stmt = (
         select(
             CanonicalSeries.id.label("canonical_series_id"),
@@ -256,19 +284,17 @@ def _bucket_key_for_series(
 
 def _pending_canonical_series_flags(session: Session) -> dict[int, set[str]]:
     rows = session.exec(
-        select(
-            InventoryCopy.user_id,
-            InventoryCopy.canonical_series_id,
-            Publisher.name,
-            ComicTitle.name,
-            CanonicalIssueLinkSuggestion.id,
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.user_id,
+                InventoryCopy.canonical_series_id,
+                publisher_expr(),
+                title_expr(),
+                CanonicalIssueLinkSuggestion.id,
+            )
+            .select_from(CanonicalIssueLinkSuggestion)
+            .join(InventoryCopy, CanonicalIssueLinkSuggestion.inventory_copy_id == InventoryCopy.id)
         )
-        .select_from(CanonicalIssueLinkSuggestion)
-        .join(InventoryCopy, CanonicalIssueLinkSuggestion.inventory_copy_id == InventoryCopy.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(
             CanonicalIssueLinkSuggestion.review_state == "pending",
             CanonicalIssueLinkSuggestion.inventory_copy_id.is_not(None),

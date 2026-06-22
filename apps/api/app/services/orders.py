@@ -45,6 +45,9 @@ from app.services.order_states import (
     default_release_status,
     derive_asset_state,
 )
+from app.services.catalog_issue_link_service import resolve_catalog_issue_link
+from app.services.legacy_customer_orders_policy import assert_legacy_customer_order_writes_allowed
+from app.services.legacy_spine_availability import legacy_customer_order_table_exists
 
 CENT = Decimal("0.01")
 ONE_HUNDRED = Decimal("100")
@@ -255,10 +258,10 @@ def build_orders_base_query(current_user: User):
             Order.created_at.label("created_at"),
         )
         .join(OrderItem, OrderItem.order_id == Order.id)
-        .join(Variant, OrderItem.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .join(Variant, OrderItem.variant_id == Variant.id, isouter=True)
+        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id, isouter=True)
+        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id, isouter=True)
+        .join(Publisher, ComicTitle.publisher_id == Publisher.id, isouter=True)
         .where(Order.user_id == current_user.id)
         .group_by(
             Order.id,
@@ -325,6 +328,8 @@ def list_orders_for_user(
     sort_by: str | None,
     sort_dir: str,
 ) -> OrderListResponse:
+    if not legacy_customer_order_table_exists(session):
+        return OrderListResponse(page=page, page_size=page_size, total=0, items=[])
     filtered_stmt = apply_orders_filters(
         build_orders_base_query(current_user),
         retailer=retailer,
@@ -350,6 +355,8 @@ def get_order_detail_for_user(
     current_user: User,
     order_id: int,
 ) -> OrderDetailResponse:
+    if not legacy_customer_order_table_exists(session):
+        raise HTTPException(status_code=404, detail="Order not found")
     order = session.exec(
         select(Order).where(
             Order.id == order_id,
@@ -376,10 +383,10 @@ def get_order_detail_for_user(
             OrderItem.allocated_tax.label("allocated_tax"),
             OrderItem.all_in_unit_cost.label("all_in_unit_cost"),
         )
-        .join(Variant, OrderItem.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .join(Variant, OrderItem.variant_id == Variant.id, isouter=True)
+        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id, isouter=True)
+        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id, isouter=True)
+        .join(Publisher, ComicTitle.publisher_id == Publisher.id, isouter=True)
         .where(OrderItem.order_id == order_id)
         .order_by(OrderItem.id.asc())
     ).all()
@@ -472,6 +479,7 @@ def create_order_for_user_in_transaction(
     current_user: User,
     payload: OrderCreate,
 ) -> OrderCreateResponse:
+    assert_legacy_customer_order_writes_allowed()
     item_subtotals = [quantize_money(item.raw_item_price * item.quantity) for item in payload.items]
     shipping_allocations = allocate_by_subtotal(item_subtotals, payload.shipping_amount)
     tax_allocations = allocate_by_subtotal(item_subtotals, payload.tax_amount)
@@ -544,6 +552,15 @@ def create_order_for_user_in_transaction(
         session.add(order_item)
         session.flush()
 
+        # Link to the master catalog when confident so copies carry canonical identity.
+        catalog_link = resolve_catalog_issue_link(
+            session,
+            series=item.title,
+            issue_number=item.issue_number,
+            publisher=item.publisher,
+            barcode=getattr(item, "barcode", None),
+        )
+
         for copy_number in range(1, item.quantity + 1):
             inventory_copy = InventoryCopy(
                 user_id=current_user.id,
@@ -555,12 +572,22 @@ def create_order_for_user_in_transaction(
                     item.metadata_identity_key or build_order_item_metadata_identity_key(item)
                 ),
                 canonical_series_id=canonical_series.id,
+                catalog_issue_id=catalog_link.catalog_issue_id,
+                catalog_variant_id=catalog_link.catalog_variant_id,
                 release_date=item.release_date,
                 release_year=item.release_year,
                 release_status=release_status,
                 order_status=order_status,
                 expected_ship_date=expected_ship_date,
                 received_at=item.received_at,
+                # Provenance snapshot (unification Phase 4) so purchase history
+                # survives a future teardown of customer_order / order_item.
+                order_retailer=order.retailer,
+                order_date=order.order_date,
+                order_source_type=order.source_type,
+                order_raw_item_price=quantize_money(item.raw_item_price),
+                order_shipping_paid=allocated_shipping,
+                order_tax_paid=allocated_tax,
             )
             session.add(inventory_copy)
             total_copies_created += 1

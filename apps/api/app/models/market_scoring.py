@@ -95,6 +95,12 @@ class MarketAcquisitionScore(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+    catalog_issue_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_issue.id",
+        nullable=True,
+        index=True,
+    )
     owner_user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
     acquisition_score: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))
     portfolio_fit_score: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))

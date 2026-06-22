@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
@@ -34,6 +34,10 @@ from app.models import (
     SaleRecord,
     Listing,
     Variant,
+)
+from app.services.catalog_unification_issue_id import (
+    effective_catalog_issue_id,
+    resolve_legacy_comic_issue_id,
 )
 from app.schemas.grading_risk import (
     ConfidenceFactorSnapshotListResponse,
@@ -197,9 +201,10 @@ def _resolve_context(
     grading_candidate_id: int | None,
     inventory_item_id: int | None,
     canonical_comic_issue_id: int | None,
-) -> tuple[InventoryCopy, int, GradingCandidate | None, GradingRecommendation | None]:
+) -> tuple[InventoryCopy, int | None, int | None, GradingCandidate | None, GradingRecommendation | None]:
     recommendation: GradingRecommendation | None = None
     candidate: GradingCandidate | None = None
+    catalog_issue_id: int | None = None
     if recommendation_id is not None:
         recommendation = session.get(GradingRecommendation, recommendation_id)
         if recommendation is None or recommendation.owner_user_id != owner_user_id:
@@ -207,6 +212,7 @@ def _resolve_context(
         grading_candidate_id = recommendation.grading_candidate_id
         inventory_item_id = recommendation.inventory_item_id
         canonical_comic_issue_id = recommendation.canonical_comic_issue_id
+        catalog_issue_id = recommendation.catalog_issue_id
     if grading_candidate_id is not None:
         candidate = session.get(GradingCandidate, grading_candidate_id)
         if candidate is None or candidate.owner_user_id != owner_user_id:
@@ -214,14 +220,29 @@ def _resolve_context(
         inventory_item_id = candidate.inventory_item_id
         if canonical_comic_issue_id is None:
             canonical_comic_issue_id = candidate.canonical_comic_issue_id
+        if catalog_issue_id is None:
+            catalog_issue_id = candidate.catalog_issue_id
     if inventory_item_id is None:
         if canonical_comic_issue_id is None:
             raise HTTPException(status_code=400, detail="recommendation_id, grading_candidate_id, or inventory_item_id is required")
+        linked_catalog = effective_catalog_issue_id(
+            session,
+            catalog_issue_id=None,
+            canonical_comic_issue_id=canonical_comic_issue_id,
+            inventory_copy_id=None,
+        )
+        scope_filters = []
+        if linked_catalog is not None:
+            scope_filters.append(InventoryCopy.catalog_issue_id == linked_catalog)
+        scope_filters.append(
+            InventoryCopy.variant_id.in_(
+                select(Variant.id).where(Variant.comic_issue_id == canonical_comic_issue_id)
+            )
+        )
         inventory = session.exec(
             select(InventoryCopy)
-            .join(Variant, InventoryCopy.variant_id == Variant.id)
             .where(InventoryCopy.user_id == owner_user_id)
-            .where(Variant.comic_issue_id == canonical_comic_issue_id)
+            .where(or_(*scope_filters))
             .order_by(col(InventoryCopy.id).asc())
         ).first()
     else:
@@ -230,7 +251,17 @@ def _resolve_context(
             raise HTTPException(status_code=404, detail="inventory item not found")
     if inventory is None:
         raise HTTPException(status_code=404, detail="inventory item not found")
-    issue_id = int(session.exec(select(Variant.comic_issue_id).where(Variant.id == inventory.variant_id)).one())
+    catalog_issue_id = effective_catalog_issue_id(
+        session,
+        catalog_issue_id=catalog_issue_id or inventory.catalog_issue_id,
+        canonical_comic_issue_id=canonical_comic_issue_id,
+        inventory_copy_id=int(inventory.id or 0),
+    )
+    issue_id = resolve_legacy_comic_issue_id(
+        session,
+        inventory,
+        fallback_canonical_comic_issue_id=canonical_comic_issue_id,
+    )
     if candidate is None:
         candidate = session.exec(
             select(GradingCandidate)
@@ -246,7 +277,7 @@ def _resolve_context(
             .where(GradingRecommendation.recommendation_status == "ACTIVE")
             .order_by(col(GradingRecommendation.snapshot_date).desc(), col(GradingRecommendation.id).desc())
         ).first()
-    return inventory, issue_id, candidate, recommendation
+    return inventory, issue_id, catalog_issue_id, candidate, recommendation
 
 
 def _latest_liquidity_snapshot(session: Session, *, owner_user_id: int, inventory_item_id: int, issue_id: int) -> InventoryLiquiditySnapshot | None:
@@ -771,7 +802,7 @@ def generate_grading_risk(
     owner_user_id: int,
     payload: GradingRiskGeneratePayload,
 ) -> GradingRiskDetailRead:
-    inventory, issue_id, candidate, recommendation = _resolve_context(
+    inventory, issue_id, catalog_issue_id, candidate, recommendation = _resolve_context(
         session,
         owner_user_id=owner_user_id,
         recommendation_id=payload.recommendation_id,
@@ -943,6 +974,7 @@ def generate_grading_risk(
         grading_candidate_id=int(candidate.id or 0) if candidate is not None else None,
         inventory_item_id=int(inventory.id or 0),
         canonical_comic_issue_id=issue_id,
+        catalog_issue_id=catalog_issue_id,
         recommendation_id=int(recommendation.id or 0) if recommendation is not None else None,
         overall_risk_level=overall_risk_level,
         overall_confidence_level=overall_confidence_level,

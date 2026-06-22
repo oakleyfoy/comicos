@@ -13,7 +13,6 @@ from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
     GraderPerformanceSnapshot,
     GradingCandidate,
     GradingReconciliationEvidence,
@@ -30,8 +29,8 @@ from app.models import (
     MarketFmvSnapshot,
     MarketSaleRecord,
     SaleRecord,
-    Variant,
 )
+from app.services.catalog_unification_issue_id import resolve_legacy_comic_issue_id
 from app.schemas.grading_reconciliation import (
     GraderPerformanceSnapshotListResponse,
     GraderPerformanceSnapshotRead,
@@ -206,14 +205,14 @@ def _submission_context(
     inventory = session.get(InventoryCopy, item.inventory_item_id)
     if inventory is None or inventory.user_id != owner_user_id:
         raise HTTPException(status_code=404, detail="inventory item not found")
-    issue_id = int(
-        session.exec(
-            select(Variant.comic_issue_id)
-            .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-            .where(Variant.id == inventory.variant_id)
-        ).one()
+    issue_id = resolve_legacy_comic_issue_id(
+        session,
+        inventory,
+        fallback_canonical_comic_issue_id=candidate.canonical_comic_issue_id,
     )
-    return item, batch, candidate, inventory, issue_id
+    if issue_id is None:
+        raise HTTPException(status_code=404, detail="inventory item not found")
+    return item, batch, candidate, inventory, int(issue_id)
 
 
 def _latest_cost_snapshot(session: Session, batch_id: int) -> GradingSubmissionCostSnapshot | None:

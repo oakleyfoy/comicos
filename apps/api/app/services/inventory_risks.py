@@ -10,19 +10,19 @@ from sqlmodel import Session, select
 
 from app.models import (
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
-    ComicTitle,
     CoverImage,
     CoverImageMatchCandidate,
     CoverImageOcrQualityAnalysis,
     CoverImageOcrResult,
     CoverRelationshipConflict,
     InventoryCopy,
-    Order,
-    OrderItem,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.inventory_intelligence import KeyedCount
 from app.schemas.inventory_risks import (
@@ -71,7 +71,7 @@ class RiskProjectionRow:
 
 
 def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list[RiskProjectionRow]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.user_id.label("owner_user_id"),
@@ -82,17 +82,10 @@ def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_year.label("release_year"),
             InventoryCopy.grade_status.label("grade_status"),
-            Publisher.name.label("publisher"),
-            ComicTitle.name.label("title"),
-            ComicIssue.issue_number.label("issue_number"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+            publisher_expr().label("publisher"),
+            title_expr().label("title"),
+            issue_number_expr().label("issue_number"),
+        ).select_from(InventoryCopy)
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)

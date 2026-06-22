@@ -6,7 +6,12 @@ from dataclasses import dataclass, field
 
 from sqlmodel import Session, func, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, Publisher, Variant
+from app.models import InventoryCopy
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    publisher_expr,
+    title_expr,
+)
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
 from app.services.recommendation_data_driven_signals import (
     franchise_demand_bonus,
@@ -99,19 +104,19 @@ def publisher_strength_bonus(
 
 
 def build_owned_series_inventory_stats(session: Session, *, owner_user_id: int) -> OwnedSeriesInventoryStats:
+    pub_expr = publisher_expr()
+    title_e = title_expr()
     rows = session.exec(
-        select(
-            Publisher.name,
-            ComicTitle.name,
-            func.count(InventoryCopy.id),
-            func.avg(InventoryCopy.current_fmv),
+        apply_inventory_spine_joins(
+            select(
+                pub_expr,
+                title_e,
+                func.count(InventoryCopy.id),
+                func.avg(InventoryCopy.current_fmv),
+            ).select_from(InventoryCopy)
         )
-        .join(Variant, Variant.id == InventoryCopy.variant_id)
-        .join(ComicIssue, ComicIssue.id == Variant.comic_issue_id)
-        .join(ComicTitle, ComicTitle.id == ComicIssue.comic_title_id)
-        .join(Publisher, Publisher.id == ComicTitle.publisher_id)
         .where(InventoryCopy.user_id == owner_user_id)
-        .group_by(Publisher.name, ComicTitle.name)
+        .group_by(pub_expr, title_e)
     ).all()
     copies: dict[tuple[str, str], int] = {}
     avg_fmv: dict[tuple[str, str], float] = {}

@@ -40,6 +40,7 @@ class GradingRiskSnapshot(SQLModel, table=True):
     grading_candidate_id: int | None = Field(default=None, foreign_key="grading_candidate.id", nullable=True, index=True)
     inventory_item_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True, index=True)
     canonical_comic_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    catalog_issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
     recommendation_id: int | None = Field(default=None, foreign_key="grading_recommendation.id", nullable=True, index=True)
     overall_risk_level: str = Field(max_length=16, nullable=False, index=True)
     overall_confidence_level: str = Field(max_length=16, nullable=False, index=True)

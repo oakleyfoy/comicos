@@ -5,6 +5,10 @@ import { ApiError, apiClient, type OrderCreatePayload, type OrderItemPayload } f
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
+import {
+  LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE,
+  LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED,
+} from "../config/productFlags";
 
 interface OrderItemDraft {
   publisher: string;
@@ -214,6 +218,10 @@ export function OrderNewPage() {
     if (isSubmitting) {
       return;
     }
+    if (!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED) {
+      setError(LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE);
+      return;
+    }
 
     setError(null);
     setFormErrors(emptyFormErrors());
@@ -342,8 +350,28 @@ export function OrderNewPage() {
         }
       />
 
+      {!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED ? (
+        <div className="mx-auto mt-6 max-w-7xl">
+          <StatusBanner tone="warning">{LEGACY_CUSTOMER_ORDERS_RETIRED_MESSAGE}</StatusBanner>
+          <p className="mt-4 text-sm text-slate-400">
+            <Link to="/add-comics/photo" className="text-cyan-300 hover:text-cyan-200">
+              Add Comics
+            </Link>{" "}
+            for new inventory.{" "}
+            <Link to="/orders" className="text-cyan-300 hover:text-cyan-200">
+              Order history
+            </Link>{" "}
+            remains available for existing purchases.
+          </p>
+        </div>
+      ) : null}
+
       <div className="mx-auto max-w-7xl">
-        <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
+        <form
+          className="mt-6 space-y-6"
+          onSubmit={handleSubmit}
+          aria-disabled={!LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED}
+        >
           <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl shadow-black/20">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <label className="space-y-2">
@@ -656,7 +684,7 @@ export function OrderNewPage() {
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED}
                 className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? "Creating order..." : "Create order"}

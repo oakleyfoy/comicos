@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlmodel import Session, col, select
 
 from app.models import (
@@ -26,12 +26,10 @@ from app.models import (
     GradingRoiSnapshot,
     InventoryCopy,
     InventoryLiquiditySnapshot,
-    Order,
-    OrderItem,
     Portfolio,
     PortfolioItem,
-    Variant,
 )
+from app.services.inventory_canonical_spine import apply_inventory_spine_joins
 from app.schemas.duplicate_consolidation import (
     DuplicateClusterGeneratePayload,
     DuplicateClusterGenerateResponse,
@@ -261,22 +259,24 @@ def _load_owner_snapshots(session: Session, *, owner_user_id: int) -> list[_InvS
     for pi, pf in pi_rows:
         pis_by_inventory[int(pi.inventory_item_id)].add(int(pi.portfolio_id))
 
+    # Unify both spines: prefer the legacy comic_issue/variant identity, fall back
+    # to the master-catalog ids on the copy. Copies with neither (unidentified) can
+    # not be clustered, so they are skipped.
     stmt = (
-        select(
-            InventoryCopy,
-            ComicIssue.id,
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy,
+                func.coalesce(ComicIssue.id, InventoryCopy.catalog_issue_id).label("issue_id"),
+            ).select_from(InventoryCopy)
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
         .where(InventoryCopy.user_id == owner_user_id)
         .order_by(col(InventoryCopy.id).asc())
     )
     snaps: list[_InvSnap] = []
     for inv, issue_id in session.exec(stmt).all():
         iid = int(inv.id or 0)
-        if not iid:
+        variant_key = inv.variant_id if inv.variant_id is not None else inv.catalog_variant_id
+        if not iid or issue_id is None or variant_key is None:
             continue
         gs = str(inv.grade_status or "raw").lower()
         hold = str(inv.hold_status or "hold").lower()
@@ -285,7 +285,7 @@ def _load_owner_snapshots(session: Session, *, owner_user_id: int) -> list[_InvS
             _InvSnap(
                 inventory_item_id=iid,
                 canonical_comic_issue_id=int(issue_id),
-                variant_id=int(inv.variant_id),
+                variant_id=int(variant_key),
                 acquisition_cost=_money(inv.acquisition_cost),
                 current_fmv=_money(inv.current_fmv) if inv.current_fmv is not None else None,
                 grade_normalized=gs,

@@ -11,7 +11,19 @@ from datetime import date, datetime
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, Order, OrderItem, Publisher, Variant, User
+from app.models import InventoryCopy, User
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    order_id_expr,
+    order_item_id_expr,
+    order_item_quantity_expr,
+    publisher_expr,
+    purchase_date_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
+)
 from app.models.asset_ledger import utc_now
 from app.schemas.inventory import (
     BulkMarkInventoryReceivedItemResult,
@@ -80,34 +92,27 @@ class _PhysicalIntakeProjectionRow:
 
 
 def _physical_intake_rows(session: Session, *, owner_user_id: int | None) -> list[_PhysicalIntakeProjectionRow]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
-            OrderItem.id.label("order_item_id"),
-            Order.id.label("order_id"),
+            order_item_id_expr().label("order_item_id"),
+            order_id_expr().label("order_id"),
             InventoryCopy.user_id.label("owner_user_id"),
             InventoryCopy.primary_cover_image_id.label("primary_cover_image_id"),
-            OrderItem.quantity.label("order_item_quantity"),
-            Order.retailer.label("retailer"),
-            Order.source_type.label("source_type"),
-            Publisher.name.label("publisher"),
-            ComicTitle.name.label("title"),
-            ComicIssue.issue_number.label("issue_number"),
-            Order.order_date.label("purchase_date"),
+            order_item_quantity_expr().label("order_item_quantity"),
+            retailer_expr().label("retailer"),
+            source_type_expr().label("source_type"),
+            publisher_expr().label("publisher"),
+            title_expr().label("title"),
+            issue_number_expr().label("issue_number"),
+            purchase_date_expr().label("purchase_date"),
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_status.label("release_status"),
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.expected_ship_date.label("expected_ship_date"),
             InventoryCopy.received_at.label("received_at"),
             _asset_state_expression_labels().label("asset_state"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        ).select_from(InventoryCopy)
     )
     if owner_user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == owner_user_id)
@@ -116,8 +121,8 @@ def _physical_intake_rows(session: Session, *, owner_user_id: int | None) -> lis
     return [
         _PhysicalIntakeProjectionRow(
             inventory_copy_id=int(r.inventory_copy_id),
-            order_item_id=int(r.order_item_id),
-            order_id=int(r.order_id),
+            order_item_id=int(r.order_item_id) if r.order_item_id is not None else 0,
+            order_id=int(r.order_id) if r.order_id is not None else 0,
             order_item_quantity=int(r.order_item_quantity),
             owner_user_id=int(r.owner_user_id) if r.owner_user_id is not None else None,
             primary_cover_image_id=int(r.primary_cover_image_id) if r.primary_cover_image_id is not None else None,

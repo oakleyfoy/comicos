@@ -16,7 +16,6 @@ from sqlmodel import Session, col, select
 
 from app.models import (
     ComicIssue,
-    ComicTitle,
     ConcentrationRiskSnapshot,
     InventoryCopy,
     MarketAcquisitionNormalizedCandidate,
@@ -33,8 +32,12 @@ from app.models import (
     PortfolioMarketCouplingEvidence,
     PortfolioMarketCouplingHistory,
     PortfolioMarketCouplingSnapshot,
-    Publisher,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.services.market_feed import append_market_feed_event
 from app.schemas.portfolio_market_coupling import (
@@ -214,19 +217,17 @@ class _PortfolioLine:
 
 def _load_portfolio_lines(session: Session, *, owner_user_id: int) -> list[_PortfolioLine]:
     stmt = (
-        select(
-            PortfolioItem.id,
-            ComicIssue.id,
-            Publisher.name,
-            ComicTitle.name,
-            ComicIssue.issue_number,
+        apply_inventory_spine_joins(
+            select(
+                PortfolioItem.id,
+                func.coalesce(ComicIssue.id, InventoryCopy.catalog_issue_id),
+                publisher_expr(),
+                title_expr(),
+                issue_number_expr(),
+            )
+            .join(Portfolio, Portfolio.id == PortfolioItem.portfolio_id)
+            .join(InventoryCopy, InventoryCopy.id == PortfolioItem.inventory_item_id)
         )
-        .join(Portfolio, Portfolio.id == PortfolioItem.portfolio_id)
-        .join(InventoryCopy, InventoryCopy.id == PortfolioItem.inventory_item_id)
-        .join(Variant, Variant.id == InventoryCopy.variant_id)
-        .join(ComicIssue, ComicIssue.id == Variant.comic_issue_id)
-        .join(ComicTitle, ComicTitle.id == ComicIssue.comic_title_id)
-        .join(Publisher, Publisher.id == ComicTitle.publisher_id)
         .where(
             Portfolio.owner_user_id == owner_user_id,
             Portfolio.status == "ACTIVE",

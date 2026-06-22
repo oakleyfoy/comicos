@@ -39,10 +39,20 @@ class PhotoImportVisionSandboxStatusRead(BaseModel):
     hostname: str
 
 
+class PhotoImportCatalogAlternate(BaseModel):
+    catalog_issue_id: int
+    series: str | None = None
+    issue_number: str | None = None
+    publisher: str | None = None
+    cover_url: str | None = None
+    confidence: float | None = None
+
+
 class PhotoImportVisionReadPayload(BaseModel):
     id: int
     session_id: int
     image_id: int
+    detection_index: int = 0
     publisher: str | None
     series: str | None
     issue_number: str | None
@@ -58,6 +68,16 @@ class PhotoImportVisionReadPayload(BaseModel):
     is_correct: bool | None = None
     feedback_notes: str | None = None
     added_to_inventory: bool = False
+    # Master-catalog match for this book.
+    catalog_issue_id: int | None = None
+    catalog_variant_id: int | None = None
+    catalog_cover_url: str | None = None
+    match_method: str | None = None
+    match_confidence: float | None = None
+    catalog_series: str | None = None
+    catalog_issue_number: str | None = None
+    catalog_publisher: str | None = None
+    catalog_alternates: list[PhotoImportCatalogAlternate] = []
     created_at: datetime
 
 
@@ -81,9 +101,19 @@ class PhotoImportVisionReadUpdatePayload(BaseModel):
 
 class PhotoImportVisionReadInventoryResponse(BaseModel):
     vision_read: PhotoImportVisionReadPayload
-    acquisition_id: int
+    acquisition_id: int | None = None
     created_count: int
     inventory_copy_ids: list[int]
+
+
+class PhotoImportChooseMatchPayload(BaseModel):
+    catalog_issue_id: int
+
+
+class PhotoImportAddAllResponse(BaseModel):
+    added_count: int
+    total_copies: int
+    results: list[PhotoImportVisionReadInventoryResponse]
 
 
 class PhotoImportVisionSandboxMetricsRead(BaseModel):

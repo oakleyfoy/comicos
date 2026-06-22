@@ -15,7 +15,6 @@ from sqlmodel import Session, col, select
 
 from app.models import (
     ComicIssue,
-    ComicTitle,
     ConcentrationRiskEvidence,
     ConcentrationRiskFactor,
     ConcentrationRiskHistory,
@@ -26,17 +25,22 @@ from app.models import (
     InventoryLiquiditySnapshot,
     Listing,
     ListingIntelligenceSnapshot,
-    Order,
-    OrderItem,
     Portfolio,
     PortfolioAllocationSnapshot,
     PortfolioExposureSnapshot,
     PortfolioItem,
     PortfolioLiquiditySnapshot,
-    Publisher,
     SaleRecord,
     SaleRecordLineItem,
     Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
 )
 from app.schemas.concentration_risk import (
     ConcentrationRiskDetailRead,
@@ -396,28 +400,22 @@ def _latest_scope_support(
 
 
 def _scope_inventory_rows(session: Session, *, owner_user_id: int, portfolio_id: int | None) -> list[_CopyFact]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy,
-            Order,
-            Publisher.name,
-            ComicTitle.name,
-            ComicIssue.issue_number,
-            ComicIssue.id,
-            Variant.id,
+            source_type_expr().label("source_type"),
+            retailer_expr().label("retailer"),
+            publisher_expr(),
+            title_expr(),
+            issue_number_expr(),
+            func.coalesce(ComicIssue.id, InventoryCopy.catalog_issue_id),
+            func.coalesce(Variant.id, InventoryCopy.catalog_variant_id),
             Variant.variant_type,
             Variant.cover_name,
             Variant.ratio,
             Variant.printing,
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == owner_user_id)
-    )
+    ).where(InventoryCopy.user_id == owner_user_id)
     if portfolio_id is not None:
         stmt = stmt.join(
             PortfolioItem,
@@ -441,7 +439,7 @@ def _scope_inventory_rows(session: Session, *, owner_user_id: int, portfolio_id:
     }
 
     facts: list[_CopyFact] = []
-    for inv, ord_row, publisher_name, title_name, issue_number, issue_id, variant_id, variant_type, cover_name, ratio, printing in rows:
+    for inv, source_type, retailer, publisher_name, title_name, issue_number, issue_id, variant_id, variant_type, cover_name, ratio, printing in rows:
         iid = int(inv.id or 0)
         if not iid:
             continue
@@ -476,7 +474,7 @@ def _scope_inventory_rows(session: Session, *, owner_user_id: int, portfolio_id:
                 variant_family_key=_slug(f"{title_name}::{issue_number}::{variant_anchor}"),
                 grading_status_key=_slug(str(inv.grade_status or "unknown")),
                 liquidity_status_key=_slug(str(liq_status or "unknown")),
-                acquisition_source_key=_slug(f"{ord_row.source_type or 'unknown'}:{ord_row.retailer}"),
+                acquisition_source_key=_slug(f"{source_type or 'unknown'}:{retailer}"),
                 current_fmv=_money(inv.current_fmv) if inv.current_fmv is not None else None,
                 acquisition_cost=_money(inv.acquisition_cost),
                 has_duplicate_overlap=duplicate_bad,

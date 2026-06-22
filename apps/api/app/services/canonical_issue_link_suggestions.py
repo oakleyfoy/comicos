@@ -10,6 +10,8 @@ from sqlmodel import Session, select
 from app.models import (
     CanonicalIssueLinkSuggestion,
     CanonicalSeries,
+    CatalogIssue,
+    CatalogPublisher,
     ComicIssue,
     ComicTitle,
     CoverImage,
@@ -21,6 +23,15 @@ from app.models import (
     User,
     Variant,
 )
+from app.services.catalog_registry_rows import load_catalog_registry_issue_rows
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
+)
+from app.services.legacy_spine_availability import legacy_comic_issue_table_exists
+from sqlalchemy import func
 from app.schemas.canonical_issue_link_suggestions import (
     CanonicalIssueLinkSuggestionRead,
     CanonicalIssueSuggestionGenerateResponse,
@@ -145,6 +156,23 @@ def _load_issue_registry_rows(
     issue_number: str | None = None,
     publisher: str | None = None,
 ) -> list[IssueRegistryRow]:
+    catalog_rows = load_catalog_registry_issue_rows(
+        session, series=title, issue_number=issue_number, publisher=publisher
+    )
+    if catalog_rows:
+        return [
+            IssueRegistryRow(
+                canonical_issue_id=row.catalog_issue_id,
+                canonical_series_id=row.catalog_series_id,
+                canonical_publisher_id=None,
+                title=row.series,
+                publisher=row.publisher,
+                issue_number=row.issue_number,
+            )
+            for row in catalog_rows
+        ]
+    if not legacy_comic_issue_table_exists(session):
+        return []
     stmt = (
         select(
             ComicIssue.id,
@@ -190,19 +218,16 @@ def _load_inventory_issue_context(
     inventory_copy_id: int,
 ) -> IssueRegistryRow | None:
     row = session.exec(
-        select(
-            ComicIssue.id,
-            InventoryCopy.canonical_series_id,
-            Publisher.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
-        )
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.id == inventory_copy_id)
+        apply_inventory_spine_joins(
+            select(
+                CatalogIssue.id,
+                InventoryCopy.canonical_series_id,
+                CatalogPublisher.id,
+                title_expr(),
+                publisher_expr(),
+                issue_number_expr(),
+            ).select_from(InventoryCopy)
+        ).where(InventoryCopy.id == inventory_copy_id)
     ).first()
     if row is None:
         return None

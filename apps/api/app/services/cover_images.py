@@ -72,6 +72,12 @@ from app.schemas.cover_images import (
     OpsCoverDuplicateMember,
     OpsCoverImageRecentRow,
 )
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
+)
 from app.services.metadata_audits import record_metadata_audit
 from app.services.cover_link_decisions import (
     active_cover_link_decisions_for_pairs,
@@ -4157,17 +4163,14 @@ def _current_metadata_for_inventory_cover(
     if cover.inventory_copy_id is None:
         return None
     row = session.exec(
-        select(
-            InventoryCopy.id.label("inventory_copy_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
-        )
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.id == cover.inventory_copy_id)
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id.label("inventory_copy_id"),
+                title_expr().label("title"),
+                publisher_expr().label("publisher"),
+                issue_number_expr().label("issue_number"),
+            ).select_from(InventoryCopy)
+        ).where(InventoryCopy.id == cover.inventory_copy_id)
     ).first()
     if row is None:
         return None

@@ -9,13 +9,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
     AcquisitionPrioritySnapshot,
-    ComicIssue,
-    ComicTitle,
+    CatalogIssue,
+    CatalogPublisher,
+    CatalogSeries,
     ConcentrationRiskSnapshot,
     InventoryCopy,
     MarketAcquisitionNormalizedCandidate,
@@ -26,8 +27,6 @@ from app.models import (
     MarketAcquisitionScoreSnapshot,
     PortfolioExposureSnapshot,
     PortfolioLiquiditySnapshot,
-    Publisher,
-    Variant,
 )
 from app.services.market_feed import append_market_feed_event
 from app.schemas.market_scoring import (
@@ -224,18 +223,19 @@ def _resolve_issue_matches(
 
     issue_rows = list(
         session.exec(
-            select(ComicIssue, ComicTitle, Publisher)
-            .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-            .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-            .where(col(ComicIssue.issue_number).in_(issue_numbers))
-            .order_by(col(ComicIssue.id).asc())
+            select(CatalogIssue, CatalogSeries, CatalogPublisher)
+            .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
+            .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+            .where(col(CatalogIssue.issue_number).in_(issue_numbers))
+            .order_by(col(CatalogIssue.id).asc())
         ).all(),
     )
 
     issue_lookup: dict[tuple[str | None, str, str], list[_IssueMatch]] = {}
     for issue, title, publisher in issue_rows:
+        publisher_name = publisher.name if publisher is not None else ""
         key = (
-            deterministic_normalize_publisher(publisher.name),
+            deterministic_normalize_publisher(publisher_name),
             deterministic_normalize_title(title.name),
             str(issue.issue_number).strip(),
         )
@@ -243,7 +243,7 @@ def _resolve_issue_matches(
             _IssueMatch(
                 comic_issue_id=int(issue.id or 0),
                 title_name=str(title.name),
-                publisher_name=str(publisher.name),
+                publisher_name=publisher_name,
                 issue_number=str(issue.issue_number),
             )
         )
@@ -270,17 +270,19 @@ def _load_issue_counts(
         return {}
     rows = list(
         session.exec(
-            select(ComicIssue.id, func.count())
-            .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-            .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
+            select(InventoryCopy.catalog_issue_id, func.count())
             .where(
                 InventoryCopy.user_id == owner_user_id,
-                col(ComicIssue.id).in_(issue_ids),
+                col(InventoryCopy.catalog_issue_id).in_(issue_ids),
             )
-            .group_by(ComicIssue.id)
+            .group_by(InventoryCopy.catalog_issue_id)
         ).all(),
     )
-    return {int(issue_id): int(count) for issue_id, count in rows if issue_id is not None}
+    return {
+        int(issue_id): int(count)
+        for issue_id, count in rows
+        if issue_id is not None
+    }
 
 
 def _load_latest_acquisition_priority(
@@ -1315,21 +1317,22 @@ def inventory_market_acquisition_score_teaser(
     inventory_item_id: int,
 ) -> InventoryMarketAcquisitionScoreTeaser | None:
     issue_row = session.exec(
-        select(ComicIssue.id)
-        .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-        .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
-        .where(
+        select(InventoryCopy.catalog_issue_id).where(
             InventoryCopy.user_id == owner_user_id,
             InventoryCopy.id == inventory_item_id,
         )
     ).first()
     if issue_row is None:
         return None
+    catalog_issue_id = int(issue_row)
     score_row = session.exec(
         select(MarketAcquisitionScore)
         .where(
             MarketAcquisitionScore.owner_user_id == owner_user_id,
-            MarketAcquisitionScore.canonical_comic_issue_id == int(issue_row),
+            or_(
+                MarketAcquisitionScore.catalog_issue_id == catalog_issue_id,
+                MarketAcquisitionScore.canonical_comic_issue_id == catalog_issue_id,
+            ),
         )
         .order_by(
             col(MarketAcquisitionScore.snapshot_date).desc(),

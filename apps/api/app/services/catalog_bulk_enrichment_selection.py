@@ -5,7 +5,10 @@ from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models.catalog_master import CatalogImage, CatalogImageFingerprint, CatalogOcrMetadata
-from app.services.catalog_cover_harvest_service import resolve_catalog_image_local_path
+from app.services.catalog_cover_harvest_service import (
+    resolve_catalog_image_local_path,
+    resolve_catalog_image_local_path_fast,
+)
 
 READY_DOWNLOAD_STATUS = "ready"
 READY_IMAGE_TYPE = "cover"
@@ -70,9 +73,29 @@ def select_ready_covers_needing_fingerprint(
     )
     if after_image_id is not None:
         statement = statement.where(CatalogImage.id > after_image_id)
-    fetch_limit = max(limit * 5, limit)
-    candidates = list(session.exec(statement.limit(fetch_limit)).all())
-    return _filter_with_resolvable_local_path(session, candidates, limit)
+    selected: list[CatalogImage] = []
+    cursor = after_image_id or 0
+    page = max(min(limit * 2, 1000), 200)
+    while len(selected) < limit:
+        batch = list(
+            session.exec(
+                statement.where(CatalogImage.id > cursor).limit(page)
+            ).all()
+        )
+        if not batch:
+            break
+        for image in batch:
+            cursor = int(image.id or cursor)
+            if resolve_catalog_image_local_path_fast(image) is None and resolve_catalog_image_local_path(
+                session, image
+            ) is None:
+                continue
+            selected.append(image)
+            if len(selected) >= limit:
+                break
+        if len(batch) < page:
+            break
+    return selected
 
 
 def select_ready_covers_with_fingerprint(

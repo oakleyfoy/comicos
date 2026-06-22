@@ -1,64 +1,69 @@
 route,api_endpoint,status,failure_type,exception,missing_table,load_time_ms
-/collector-home,/api/v1/collector-home,200,OK,,,2663
-/daily-actions,/api/v1/daily-actions,200,OK,,,1705
-/daily-actions,/api/v1/daily-actions/summary,200,OK,,,1361
-/collector-command-center,/api/v1/collector-command-center,200,OK,,,3789
-/notifications,/api/v1/notifications,200,OK,,,2517
-/daily-briefing,/api/v1/briefings/daily,200,OK,,,1226
-/workflow-health,/api/v1/platform/workflow-health,200,OK,,,1398
-/pull-lists,/api/v1/pull-lists,200,OK,,,1277
-/foc-dashboard,/api/v1/foc-dashboard,200,OK,,,1641
-/purchase-budget,/api/v1/purchase-budget/summary,200,OK,,,1414
-/marketplace-opportunities,/api/v1/marketplace-acquisition/opportunities,200,OK,,,1248
-/discovery-feed,/api/v1/discovery/feed,200,OK,,,1352
-/future-pull-list,/api/v1/discovery/future-pull-list,200,OK,,,1189
-/dashboard,/portfolio-strategy-dashboard,200,OK,,,1211
-/dashboard/collection,/portfolio-strategy-dashboard,200,OK,,,1212
-/dashboard/market,/portfolio-strategy-dashboard,200,OK,,,1250
-/want-lists,/api/v1/want-lists,200,OK,,,1392
-/collection-gaps,/api/v1/collection-gaps/summary,200,OK,,,1292
-/collection-valuation-dashboard,/api/v1/collection-valuation/dashboard,200,OK,,,1316
-/key-issues,/api/v1/key-issues/dashboard,200,OK,,,1856
-/imports/email,/gmail/status,200,OK,,,1199
-/imports/email,/gmail/imports,200,OK,,,1202
-/orders/import,/imports,200,OK,,,1317
-/imports,/imports,200,OK,,,1311
-/storage-dashboard,/api/v1/storage/dashboard,200,OK,,,2399
-/storage-locations,/api/v1/storage/locations,200,OK,,,1238
-/storage-assignment,/api/v1/storage/dashboard,200,OK,,,2263
-/inventory-locator,/api/v1/storage/locator,200,OK,,,1073
-/storage-box-contents,/api/v1/storage/dashboard,200,OK,,,2365
-/storage-audit,/api/v1/storage/audits,200,OK,,,1208
-/grading-queue,/api/v1/grading-intelligence/queue,200,OK,,,1357
-/grading-intelligence,/api/v1/grading-intelligence/dashboard,200,OK,,,4073
-/grade-before-sell,/api/v1/grade-before-sell/summary,200,OK,,,1212
-/grade-before-sell,/api/v1/grade-before-sell,200,OK,,,1189
-/grading-platform,/api/v1/grading-platform/summary,200,OK,,,5479
-/grading-platform,/api/v1/grading-platform/health,200,OK,,,3328
-/grading-platform,/api/v1/grading-platform/validation,200,OK,,,2110
-/grading-platform,/api/v1/grading-platform/certification,200,OK,,,3112
-/sell-queue,/api/v1/sell-queue,200,OK,,,4591
-/listing-drafts,/api/v1/listing-drafts,200,OK,,,2387
-/listings,/api/v1/selling-dashboard,200,OK,,,2347
-/selling-analytics,/api/v1/selling-analytics,200,OK,,,1696
-/discovery-dashboard,/api/v1/discovery/dashboard,200,OK,,,4643
-/discovery-opportunities,/api/v1/discovery/personalized,200,OK,,,9120
-/discovery-watchlists,/api/v1/discovery/watchlists,200,OK,,,1199
-/discovery-alerts,/api/v1/discovery/alerts,200,OK,,,1262
-/release-intelligence,/api/v1/release-intelligence/dashboard,200,OK,,,3166
-/mobile-scan,/api/v1/mobile/scans,200,OK,,,1297
-/mobile-operations,/api/v1/mobile/operations,200,OK,,,1736
-/collector-assistant,(none),200,OK,,,0
-/portfolio-analytics,/api/v1/portfolio-analytics/latest,200,OK,,,1210
-/portfolio-analytics,/api/v1/collection-analytics/latest,200,OK,,,1179
-/portfolio-analytics,/api/v1/recommendation-performance/latest,200,OK,,,1169
-/portfolio-analytics,/api/v1/grading-analytics/latest,200,OK,,,1235
-/portfolio-analytics,/api/v1/investor-dashboard/latest,200,OK,,,1373
-/portfolio-analytics,/api/v1/market-pricing/snapshots/latest,200,OK,,,1205
-/recommendation-analytics,/api/v1/recommendation-feedback/dashboard,200,OK,,,2482
-/recommendation-analytics,/api/v1/recommendation-feedback/certification,200,OK,,,4136
-/discovery-analytics,/api/v1/discovery/analytics-dashboard,200,OK,,,2686
-/platform-certification,/api/v1/platform/certification,200,OK,,,1629
-/production-readiness,/api/v1/production-readiness/dashboard,200,OK,,,2130
-/collector-profile,/api/v1/collector-profile,200,OK,,,2442
-/collector-budget,/api/v1/collector-profile/budget,200,OK,,,1707
+/collector-home,/api/v1/collector-home,200,OK,,,4600
+/automation-center,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/daily-actions,/api/v1/daily-actions,200,OK,,,1193
+/daily-actions,/api/v1/daily-actions/summary,200,OK,,,1222
+/collector-command-center,/api/v1/collector-command-center,200,OK,,,1912
+/receiving,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/notifications,/api/v1/notifications,200,OK,,,1168
+/dashboard,/portfolio-strategy-dashboard,200,OK,,,1220
+/collection-gaps,/api/v1/collection-gaps/summary,200,OK,,,1201
+/dashboard/market,/portfolio-strategy-dashboard,200,OK,,,1228
+/fmv-intelligence,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/collection-valuation-dashboard,/api/v1/collection-valuation/dashboard,200,OK,,,1460
+/key-issues,/api/v1/key-issues/dashboard,200,OK,,,1975
+/add-comics/online-retail,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/add-comics/photo,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/add-comics/gpt-read,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/add-comics/manual,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/pull-lists,/api/v1/pull-lists,200,OK,,,2268
+/foc-dashboard,/api/v1/foc-dashboard,200,OK,,,2971
+/buy-opportunities,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/marketplace-monitoring,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/marketplace-command-center,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/future-pull-list,/api/v1/discovery/future-pull-list,200,OK,,,1637
+/storage-dashboard,/api/v1/storage/dashboard,200,OK,,,2567
+/storage-locations,/api/v1/storage/locations,200,OK,,,1600
+/inventory-locator,/api/v1/storage/locator,200,OK,,,1331
+/storage-audit,/api/v1/storage/audits,200,OK,,,1352
+/grading-queue,/api/v1/grading-intelligence/queue,200,OK,,,1194
+/grading-intelligence,/api/v1/grading-intelligence/dashboard,200,OK,,,4114
+/grade-before-sell,/api/v1/grade-before-sell/summary,200,OK,,,1211
+/grade-before-sell,/api/v1/grade-before-sell,200,OK,,,1213
+/sell-command-center,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/sell-candidates,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/market-pricing,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/listing-drafts,/api/v1/listing-drafts,200,OK,,,1202
+/listing-management,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/portfolio-analytics,/api/v1/portfolio-analytics/latest,200,OK,,,1221
+/portfolio-analytics,/api/v1/collection-analytics/latest,200,OK,,,1233
+/portfolio-analytics,/api/v1/recommendation-performance/latest,200,OK,,,1229
+/portfolio-analytics,/api/v1/grading-analytics/latest,200,OK,,,1292
+/portfolio-analytics,/api/v1/investor-dashboard/latest,200,OK,,,1207
+/portfolio-analytics,/api/v1/market-pricing/snapshots/latest,200,OK,,,1202
+/recommendation-analytics,/api/v1/recommendation-feedback/dashboard,200,OK,,,3121
+/recommendation-analytics,/api/v1/recommendation-feedback/certification,200,OK,,,4805
+/discovery-dashboard,/api/v1/discovery/dashboard,200,OK,,,4688
+/discovery-opportunities,/api/v1/discovery/personalized,200,OK,,,9172
+/discovery-watchlists,/api/v1/discovery/watchlists,200,OK,,,1330
+/discovery-alerts,/api/v1/discovery/alerts,200,OK,,,1243
+/release-lifecycle,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/discovery-analytics,/api/v1/discovery/analytics-dashboard,200,OK,,,2717
+/daily-briefing,/api/v1/briefings/daily,200,OK,,,1186
+/weekly-briefing,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/platform-certification,/api/v1/platform/certification,200,OK,,,1092
+/production-readiness,/api/v1/production-readiness/dashboard,200,OK,,,1320
+/collector-profile,/api/v1/collector-profile,200,OK,,,1779
+/collector-budget,/api/v1/collector-profile/budget,200,OK,,,1487
+/settings/account,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/connected-retailers,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/workflow-health,/api/v1/platform/workflow-health,200,OK,,,2208
+/universe,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/catalog-universe,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/catalog-universe/placeholders,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/imports/email,/gmail/status,200,OK,,,2233
+/imports/email,/gmail/imports,200,OK,,,2709
+/imports/guided,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0
+/imports,/imports,200,OK,,,1881
+/orders/import,/imports,200,OK,,,1320
+/settings/integrations,(unmapped),0,BAD_RESPONSE,no primary API mapping in route-page-primary-apis.json,,0

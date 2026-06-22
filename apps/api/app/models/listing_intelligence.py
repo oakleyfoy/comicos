@@ -35,6 +35,12 @@ class ListingIntelligenceSnapshot(SQLModel, table=True):
     listing_id: int = Field(foreign_key="listing.id", nullable=False)
     inventory_item_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True)
     canonical_comic_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True)
+    catalog_issue_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_issue.id",
+        nullable=True,
+        index=True,
+    )
     channel: str | None = Field(default=None, max_length=40, nullable=True)
     replay_key: str | None = Field(default=None, max_length=128, nullable=True)
 

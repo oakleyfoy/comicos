@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogImageFingerprint
-from app.services.catalog_fingerprint_service import fingerprint_image_path, hamming_distance, hash_match_confidence
+from app.services.catalog_fingerprint_service import (
+    fingerprint_image_path,
+    hamming_distance,
+    hash_match_confidence,
+    search_similar_catalog_fingerprints,
+)
+
+
+@dataclass(frozen=True)
+class FingerprintCatalogHit:
+    issue_id: int
+    score: float
+    confidence: float
+    min_hamming_distance: int
 
 
 def fingerprint_hashes_for_crop(crop_path: Path) -> tuple[str, str, str] | None:
@@ -56,3 +70,32 @@ def fingerprint_match_score_for_crop_path(
     if hashes is None:
         return 0.0
     return fingerprint_match_score_for_issue(session, crop_hashes=hashes, catalog_issue_id=catalog_issue_id)
+
+
+def search_catalog_fingerprint_hits_for_crop_path(
+    session: Session,
+    *,
+    crop_path: Path,
+    limit: int = 10,
+) -> list[FingerprintCatalogHit]:
+    """Global catalog fingerprint search for a photo crop (E1)."""
+    hashes = fingerprint_hashes_for_crop(crop_path)
+    if hashes is None:
+        return []
+    phash, dhash, ahash = hashes
+    similar = search_similar_catalog_fingerprints(
+        session, phash=phash, dhash=dhash, ahash=ahash, limit=limit
+    )
+    hits: list[FingerprintCatalogHit] = []
+    for _row, confidence, distance in similar:
+        if _row.issue_id is None:
+            continue
+        hits.append(
+            FingerprintCatalogHit(
+                issue_id=int(_row.issue_id),
+                score=round(confidence * 100.0, 2),
+                confidence=float(confidence),
+                min_hamming_distance=int(distance),
+            )
+        )
+    return hits

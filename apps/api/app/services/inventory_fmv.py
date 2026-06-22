@@ -13,14 +13,17 @@ from sqlmodel import Session, select
 from app.models import (
     CanonicalIssueLinkSuggestion,
     ComicIssue,
-    ComicTitle,
     InventoryCopy,
     MarketFmvCompReference,
     MarketFmvSnapshot,
     MarketTrendSnapshot,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.inventory_fmv import (
     InventoryFmvAttachmentRead,
@@ -100,27 +103,22 @@ def _projection_rows(
     owner_user_id: int | None = None,
     inventory_copy_id: int | None = None,
 ) -> list[_ProjectionRow]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
             InventoryCopy.canonical_series_id.label("canonical_series_id"),
             ComicIssue.id.label("canonical_issue_id"),
-            ComicTitle.name.label("title"),
-            Publisher.name.label("publisher"),
-            ComicIssue.issue_number.label("issue_number"),
+            title_expr().label("title"),
+            publisher_expr().label("publisher"),
+            issue_number_expr().label("issue_number"),
             InventoryCopy.grade_status.label("grade_status"),
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.release_status.label("release_status"),
             InventoryCopy.received_at.label("received_at"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
-        )
-        .select_from(InventoryCopy)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        ).select_from(InventoryCopy)
     )
     if owner_user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == owner_user_id)

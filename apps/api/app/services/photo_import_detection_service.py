@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
-from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.photo_import import (
     CAPTURE_MODE_SINGLE_COMIC,
     DETECTION_STATUS_CONFIRMED,
@@ -20,7 +17,7 @@ from app.models.photo_import import (
 from app.services.photo_import_candidate_cover_service import cover_urls_for_photo_import_candidates
 from app.services.photo_import_crop_service import crop_api_path, resolve_crop_abs_path
 from app.services.photo_import_learning_service import record_photo_import_confirmation
-from app.schemas.acquisition import AcquisitionCreatePayload, AddBooksItem, AddBooksPayload
+from app.schemas.acquisition import AddBooksItem, AddBooksPayload
 from app.schemas.photo_import import (
     PhotoImportCandidateDebugInfo,
     PhotoImportCandidateRead,
@@ -30,7 +27,7 @@ from app.schemas.photo_import import (
     PhotoImportDetectionCandidatesResponse,
 )
 from app.services.acquisition.acquisition_inventory_service import add_catalog_issues
-from app.services.acquisition.acquisition_service import create_acquisition
+from app.services.photo_import_acquisition_service import ensure_photo_import_session_acquisition
 from app.services.photo_import_candidate_service import (
     candidate_debug_info,
     catalog_candidate_matches_vision,
@@ -371,25 +368,6 @@ def confirm_detection(session: Session, *, owner_user_id: int, detection_id: int
     return detection_to_read(session, det)
 
 
-def _ensure_session_acquisition(session: Session, import_row: PhotoImportSession) -> int:
-    if import_row.acquisition_id:
-        return int(import_row.acquisition_id)
-    acq = create_acquisition(
-        session,
-        owner_user_id=int(import_row.user_id),
-        payload=AcquisitionCreatePayload(
-            acquisition_type=ACQUISITION_TYPE_OTHER,
-            purchase_date=date.today(),
-            seller_name="Photo Import",
-            notes="Photo Import session",
-        ),
-    )
-    import_row.acquisition_id = int(acq.id)
-    session.add(import_row)
-    session.commit()
-    return int(acq.id)
-
-
 def confirm_session_books(
     session: Session,
     *,
@@ -399,7 +377,9 @@ def confirm_session_books(
 ) -> PhotoImportConfirmResponse:
     import_row = get_session_by_token_or_404(session, token=token)
     assert_session_owner(import_row, owner_user_id=owner_user_id)
-    acquisition_id = _ensure_session_acquisition(session, import_row)
+    acquisition = ensure_photo_import_session_acquisition(session, import_row)
+    acquisition_id = int(acquisition.id or 0)
+    session.commit()
 
     items: list[AddBooksItem] = []
     for item in payload.items:

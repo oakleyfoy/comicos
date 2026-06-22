@@ -8,17 +8,15 @@ from sqlmodel import Session, select
 
 from app.models import (
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
-    ComicTitle,
     CoverImage,
     CoverImageOcrResult,
     CoverRelationshipConflict,
     InventoryCopy,
-    Order,
-    OrderItem,
-    Publisher,
     User,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    publisher_expr,
 )
 from app.schemas.inventory_intelligence import (
     InventoryCopyIntelligenceSignals,
@@ -112,7 +110,7 @@ def classify_inventory_health(
 
 
 def projection_stmt(*, user_id: int | None):
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.primary_cover_image_id,
@@ -122,15 +120,8 @@ def projection_stmt(*, user_id: int | None):
             InventoryCopy.release_date,
             InventoryCopy.release_year,
             InventoryCopy.grade_status,
-            Publisher.name.label("publisher_name"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+            publisher_expr().label("publisher_name"),
+        ).select_from(InventoryCopy)
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)

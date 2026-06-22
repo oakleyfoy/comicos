@@ -19,6 +19,7 @@ from app.models import (
     GradingCandidateSnapshot,
     InventoryCopy,
 )
+from app.services.catalog_unification_issue_id import effective_catalog_issue_id
 from app.schemas.grading_candidate import (
     GradingCandidateCreatePayload,
     GradingCandidateDashboardSummary,
@@ -324,6 +325,15 @@ def create_candidate(
         session, owner_user_id=owner_user_id, inventory_item_id=payload.inventory_item_id
     )
     _assert_canonical_issue_exists(session, payload.canonical_comic_issue_id)
+    inv = session.get(InventoryCopy, payload.inventory_item_id)
+    resolved_catalog_issue_id = effective_catalog_issue_id(
+        session,
+        catalog_issue_id=None,
+        canonical_comic_issue_id=payload.canonical_comic_issue_id,
+        inventory_copy_id=payload.inventory_item_id,
+    )
+    if inv is not None and inv.catalog_issue_id is not None and resolved_catalog_issue_id is None:
+        resolved_catalog_issue_id = int(inv.catalog_issue_id)
 
     if payload.target_grader.upper() not in _GRADER_VALUES:
         raise HTTPException(status_code=400, detail="invalid target_grader")
@@ -345,6 +355,7 @@ def create_candidate(
         owner_user_id=owner_user_id,
         inventory_item_id=payload.inventory_item_id,
         canonical_comic_issue_id=payload.canonical_comic_issue_id,
+        catalog_issue_id=resolved_catalog_issue_id,
         status="CANDIDATE",
         target_grader=payload.target_grader.upper(),
         target_grade=payload.target_grade.strip() if payload.target_grade else None,

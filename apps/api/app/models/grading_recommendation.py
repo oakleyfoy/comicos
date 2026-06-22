@@ -47,6 +47,7 @@ class GradingRecommendation(SQLModel, table=True):
     grading_candidate_id: int | None = Field(default=None, foreign_key="grading_candidate.id", nullable=True, index=True)
     inventory_item_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True, index=True)
     canonical_comic_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True, index=True)
+    catalog_issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True, index=True)
     recommended_action: str = Field(max_length=24, nullable=False, index=True)
     recommended_grader: str | None = Field(default=None, max_length=16, nullable=True, index=True)
     recommended_grade_target: str | None = Field(default=None, max_length=32, nullable=True, index=True)

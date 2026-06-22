@@ -13,15 +13,14 @@ from sqlmodel import Session, select
 from app.models import (
     CanonicalIssueLinkSuggestion,
     CanonicalSeries,
-    ComicIssue,
-    ComicTitle,
+    CatalogIssue,
+    CatalogPublisher,
+    CatalogSeries,
     InventoryCopy,
     MarketSaleMatchSuggestion,
     MarketSaleNormalizationIssue,
     MarketSaleRecord,
     MarketSource,
-    Publisher,
-    Variant,
 )
 from app.schemas.market_sale_match_suggestions import (
     MarketSaleMatchSuggestionConfidenceBucket,
@@ -288,32 +287,37 @@ def _load_canonical_issue_rows(
 ) -> list[_IssueRegistryRow]:
     stmt = (
         select(
-            ComicIssue.id,
+            CatalogIssue.id,
             CanonicalSeries.id,
-            Publisher.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
+            CatalogPublisher.id,
+            CatalogSeries.name,
+            CatalogPublisher.name,
+            CatalogIssue.issue_number,
         )
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
         .join(
             CanonicalSeries,
             and_(
-                CanonicalSeries.canonical_title == ComicTitle.name,
-                CanonicalSeries.canonical_publisher == Publisher.name,
+                CanonicalSeries.canonical_title == CatalogSeries.name,
+                CanonicalSeries.canonical_publisher == CatalogPublisher.name,
             ),
             isouter=True,
         )
     )
     if title is not None:
-        stmt = stmt.where(ComicTitle.name == title)
+        stmt = stmt.where(CatalogSeries.name == title)
     if issue_number is not None:
-        stmt = stmt.where(ComicIssue.issue_number == issue_number)
+        stmt = stmt.where(CatalogIssue.issue_number == issue_number)
     if publisher is not None:
-        stmt = stmt.where(Publisher.name == publisher)
+        stmt = stmt.where(CatalogPublisher.name == publisher)
     rows = session.exec(
-        stmt.order_by(Publisher.name.asc(), ComicTitle.name.asc(), ComicIssue.issue_number.asc(), ComicIssue.id.asc())
+        stmt.order_by(
+            CatalogPublisher.name.asc(),
+            CatalogSeries.name.asc(),
+            CatalogIssue.issue_number.asc(),
+            CatalogIssue.id.asc(),
+        )
     ).all()
     return [
         _IssueRegistryRow(
@@ -341,16 +345,15 @@ def _load_inventory_rows(
             InventoryCopy.id,
             InventoryCopy.metadata_identity_key,
             InventoryCopy.canonical_series_id,
-            ComicIssue.id,
-            Publisher.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
+            CatalogIssue.id,
+            CatalogPublisher.id,
+            CatalogSeries.name,
+            CatalogPublisher.name,
+            CatalogIssue.issue_number,
         )
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        .join(CatalogIssue, InventoryCopy.catalog_issue_id == CatalogIssue.id, isouter=True)
+        .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id, isouter=True)
+        .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
     )
     if prefix_only:
         stmt = stmt.where(InventoryCopy.metadata_identity_key.like(f"{identity_key}%"))

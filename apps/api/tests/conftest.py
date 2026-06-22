@@ -34,6 +34,11 @@ from app.tasks import queue as rq_queue_module
 
 
 @pytest.fixture(autouse=True)
+def enable_legacy_customer_order_writes_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED", "1")
+
+
+@pytest.fixture(autouse=True)
 def disable_import_locg_hydrate_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("IMPORT_LOCG_HYDRATE", "0")
 

@@ -5,17 +5,13 @@ from __future__ import annotations
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
-from app.models import (
-    ComicIssue,
-    ComicTitle,
-    CoverImage,
-    CoverImageDerivative,
-    CoverImageLinkDecision,
-    InventoryCopy,
-    OrderItem,
-    Publisher,
-    User,
-    Variant,
+from app.models import CoverImage, CoverImageDerivative, CoverImageLinkDecision, InventoryCopy, User
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    cover_name_expr,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.cover_relationship_graph import (
     CoverRelationshipGraphEdge,
@@ -50,21 +46,15 @@ def _load_inventory_metadata_map(
 ) -> dict[int, CoverRelationshipGraphInventoryMetadata]:
     if not inventory_copy_ids:
         return {}
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
-            Variant.cover_name,
-        )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.id.in_(inventory_copy_ids))
-    )
+            title_expr(),
+            publisher_expr(),
+            issue_number_expr(),
+            cover_name_expr(),
+        ).select_from(InventoryCopy)
+    ).where(InventoryCopy.id.in_(inventory_copy_ids))
     if restrict_to_user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == restrict_to_user_id)
     rows = session.exec(stmt).all()

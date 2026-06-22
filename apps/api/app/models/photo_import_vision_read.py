@@ -41,4 +41,14 @@ class PhotoImportVisionRead(SQLModel, table=True):
 
     added_to_inventory: bool = Field(default=False, nullable=False)
 
+    # Multi-book: position of this book within its photo (0-based).
+    detection_index: int = Field(default=0, nullable=False)
+
+    # Master-catalog match for this book (filled by photo_import_catalog_match_service).
+    catalog_issue_id: int | None = Field(default=None, nullable=True, index=True)
+    catalog_variant_id: int | None = Field(default=None, nullable=True)
+    catalog_cover_url: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    match_confidence: float | None = Field(default=None, nullable=True)
+    match_method: str | None = Field(default=None, max_length=16, nullable=True)
+
     created_at: datetime = Field(default_factory=utc_now, nullable=False)

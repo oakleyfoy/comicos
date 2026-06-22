@@ -14,8 +14,6 @@ from sqlmodel import Session, select
 
 from app.models import (
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
-    ComicTitle,
     CoverImage,
     CoverImageLinkDecision,
     CoverImageMatchCandidate,
@@ -24,11 +22,14 @@ from app.models import (
     DuplicateCandidateReview,
     InventoryCopy,
     OcrReplayItem,
-    Order,
-    OrderItem,
-    Publisher,
     RelationshipReplayItem,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    purchase_date_expr,
+    title_expr,
 )
 from app.schemas.collection_timeline import (
     CollectionTimelineEvent,
@@ -213,9 +214,7 @@ def _group_timeline_events(
 
 def _order_date_scalar(session: Session, inventory_copy_id: int) -> date_cls | datetime | None:
     return session.exec(
-        select(Order.order_date)
-        .join(OrderItem, OrderItem.order_id == Order.id)
-        .join(InventoryCopy, InventoryCopy.order_item_id == OrderItem.id)
+        apply_inventory_spine_joins(select(purchase_date_expr()))
         .where(InventoryCopy.id == inventory_copy_id)
         .limit(1),
     ).one_or_none()
@@ -242,20 +241,14 @@ def timeline_events_for_scope(
     resolved_limit = max(1, min(int(limit), MAX_TIMELINE_EVENTS))
     scope_token = "owner" if scope_user_id is not None else "ops_global"
 
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy,
-            Order.order_date,
-            ComicTitle.name.label("series_title"),
-            ComicIssue.issue_number,
-            Publisher.name,
+            purchase_date_expr(),
+            title_expr().label("series_title"),
+            issue_number_expr(),
+            publisher_expr(),
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
     )
     if scope_user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == int(scope_user_id))

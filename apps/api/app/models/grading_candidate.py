@@ -32,9 +32,9 @@ class GradingCandidate(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
     inventory_item_id: int = Field(foreign_key="inventory_copy.id", nullable=False, index=True)
-    canonical_comic_issue_id: int | None = Field(
+    catalog_issue_id: int | None = Field(
         default=None,
-        foreign_key="comic_issue.id",
+        foreign_key="catalog_issue.id",
         nullable=True,
         index=True,
     )

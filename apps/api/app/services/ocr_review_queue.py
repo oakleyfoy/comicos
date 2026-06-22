@@ -13,6 +13,7 @@ from sqlalchemy import and_, case as sa_case, or_
 from sqlmodel import Session, select
 
 from app.models import (
+    CatalogPublisher,
     ComicIssue,
     ComicTitle,
     CoverImage,
@@ -25,9 +26,11 @@ from app.models import (
     InventoryCopy,
     OcrBatch,
     OcrReplayRun,
+    Publisher,
     User,
     Variant,
 )
+from app.services.inventory_canonical_spine import apply_inventory_spine_joins
 from app.schemas.ocr_review_queue import (
     BulkIdsPayload,
     BulkMutationResult,
@@ -140,10 +143,13 @@ def _confidence_numeric_predicate(column: Any, bucket: Literal["high", "medium",
 def _apply_publisher_filter(stmt: Any, publisher_id: int | None) -> Any:
     if publisher_id is None:
         return stmt
-    stmt = stmt.join(Variant, InventoryCopy.variant_id == Variant.id).join(
-        ComicIssue, Variant.comic_issue_id == ComicIssue.id
-    ).join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-    return stmt.where(ComicTitle.publisher_id == publisher_id)
+    stmt = apply_inventory_spine_joins(stmt)
+    return stmt.where(
+        or_(
+            Publisher.id == publisher_id,
+            CatalogPublisher.id == publisher_id,
+        )
+    )
 
 
 @dataclass

@@ -36,6 +36,12 @@ class InventoryLiquiditySnapshot(SQLModel, table=True):
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
     inventory_item_id: int | None = Field(default=None, foreign_key="inventory_copy.id", nullable=True)
     canonical_comic_issue_id: int | None = Field(default=None, foreign_key="comic_issue.id", nullable=True)
+    catalog_issue_id: int | None = Field(
+        default=None,
+        foreign_key="catalog_issue.id",
+        nullable=True,
+        index=True,
+    )
     channel: str | None = Field(default=None, max_length=40, nullable=True)
     liquidity_status: str = Field(max_length=24, nullable=False, index=True)
     days_on_market_median: Decimal | None = Field(default=None, sa_column=Column(Numeric(10, 2), nullable=True))

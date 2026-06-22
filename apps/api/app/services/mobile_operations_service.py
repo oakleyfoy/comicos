@@ -81,13 +81,11 @@ def _get_intake_session(session: Session, *, owner_user_id: int, session_id: int
 
 
 def _pending_copies_for_order(session: Session, *, owner_user_id: int, order_id: int) -> list[InventoryCopy]:
+    order_item_ids = select(OrderItem.id).where(OrderItem.order_id == order_id)
     copies = session.exec(
         select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .where(Order.id == order_id)
-        .where(Order.user_id == owner_user_id)
         .where(InventoryCopy.user_id == owner_user_id)
+        .where(InventoryCopy.order_item_id.in_(order_item_ids))
         .order_by(InventoryCopy.id.asc())
     ).all()
     return [c for c in copies if c.order_status in PENDING_ORDER_STATUSES]
@@ -160,8 +158,7 @@ def _create_manual_intake_order(
     response = create_order_for_user_in_transaction(session, current_user=current_user, payload=payload)
     copy = session.exec(
         select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == response.order_id)
+        .where(InventoryCopy.order_item_id.in_(select(OrderItem.id).where(OrderItem.order_id == response.order_id)))
         .where(InventoryCopy.user_id == int(current_user.id or 0))
         .order_by(InventoryCopy.id.desc())
     ).first()

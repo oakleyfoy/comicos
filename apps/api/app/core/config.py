@@ -131,6 +131,11 @@ class Settings(BaseSettings):
         default="ComicOS-CatalogImporter/1.0 (+https://comic-os.local; catalog-ingest)",
         alias="CATALOG_IMPORT_USER_AGENT",
     )
+    # B1: when false, block new customer_order / order_item materialization (reads stay enabled).
+    legacy_customer_orders_writes_enabled: bool = Field(
+        default=False,
+        alias="LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED",
+    )
     locg_import_enabled: bool = Field(default=True, alias="LOCG_IMPORT_ENABLED")
     gcd_import_enabled: bool = Field(default=True, alias="GCD_IMPORT_ENABLED")
     comicvine_api_key: str = Field(default="", alias="COMICVINE_API_KEY")

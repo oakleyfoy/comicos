@@ -77,8 +77,8 @@ def test_sandbox_does_not_call_catalog_scoring(tmp_path, monkeypatch) -> None:
     )
 
     with mock.patch(
-        "app.services.photo_import_vision_sandbox_service.read_comic_with_gpt_vision",
-        return_value=fake,
+        "app.services.photo_import_vision_sandbox_service.read_comics_with_gpt_vision",
+        return_value=[fake],
     ):
         with mock.patch(
             "app.services.photo_import_candidate_service.generate_scored_candidates",
@@ -169,7 +169,9 @@ def test_vision_read_api_returns_gpt_fields(tmp_path, monkeypatch) -> None:
         assert body["series"] == "Preacher"
         assert body["issue_number"] == "58"
         assert body["possible_alternates"] == ["Preacher (1995)"]
-        assert "catalog" not in str(body).lower()
+        # Multi-book payloads expose catalog match fields; unmatched reads carry nulls.
+        assert body["catalog_issue_id"] is None
+        assert body["match_method"] is None
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()

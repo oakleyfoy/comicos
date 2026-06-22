@@ -8,7 +8,16 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models import ComicIssue, ComicTitle, InventoryCopy, Order, OrderItem, Publisher, User, Variant
+from app.models import InventoryCopy, OrderItem, User
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    purchase_date_expr,
+    retailer_expr,
+    source_type_expr,
+    title_expr,
+)
 from app.schemas.inventory_intelligence import KeyedCount
 from app.schemas.order_arrival_intelligence import (
     OrderArrivalCalendarCell,
@@ -79,31 +88,24 @@ class OrderArrivalProjectionRow:
 
 
 def _inventory_arrival_projection_rows(session: Session, *, user_id: int | None) -> list[OrderArrivalProjectionRow]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.user_id.label("owner_user_id"),
-            Order.retailer.label("retailer"),
-            Order.source_type.label("source_type"),
-            Publisher.name.label("publisher"),
-            ComicTitle.name.label("title"),
-            ComicIssue.issue_number.label("issue_number"),
+            retailer_expr().label("retailer"),
+            source_type_expr().label("source_type"),
+            publisher_expr().label("publisher"),
+            title_expr().label("title"),
+            issue_number_expr().label("issue_number"),
             OrderItem.quantity.label("order_item_quantity"),
-            Order.order_date.label("purchase_date"),
+            purchase_date_expr().label("purchase_date"),
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_status.label("release_status"),
             InventoryCopy.order_status.label("order_status"),
             InventoryCopy.expected_ship_date.label("expected_ship_date"),
             InventoryCopy.received_at.label("received_at"),
             _asset_state_expression_labels().label("asset_state"),
-        )
-        .select_from(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
+        ).select_from(InventoryCopy)
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)
@@ -118,7 +120,7 @@ def _inventory_arrival_projection_rows(session: Session, *, user_id: int | None)
             publisher=str(row.publisher),
             title=str(row.title),
             issue_number=str(row.issue_number),
-            order_item_quantity=int(row.order_item_quantity),
+            order_item_quantity=int(row.order_item_quantity or 1),
             purchase_date=row.purchase_date,
             release_date=row.release_date,
             release_status=str(row.release_status),

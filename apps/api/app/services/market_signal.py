@@ -8,11 +8,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.models import (
-    ComicIssue,
     InventoryCopy,
     MarketAcquisitionScore,
     MarketAcquisitionScoreEvidence,
@@ -21,7 +20,6 @@ from app.models import (
     MarketAcquisitionSignalEvidence,
     MarketAcquisitionSignalHistory,
     MarketAcquisitionSignalSnapshot,
-    Variant,
 )
 from app.services.market_feed import append_market_feed_event
 from app.schemas.market_signal import (
@@ -1093,22 +1091,23 @@ def inventory_market_signal_teaser(
     inventory_item_id: int,
 ) -> InventoryMarketAcquisitionSignalTeaser | None:
     issue_id = session.exec(
-        select(ComicIssue.id)
-        .join(Variant, Variant.comic_issue_id == ComicIssue.id)
-        .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
-        .where(
+        select(InventoryCopy.catalog_issue_id).where(
             InventoryCopy.user_id == owner_user_id,
             InventoryCopy.id == inventory_item_id,
         )
     ).first()
     if issue_id is None:
         return None
+    catalog_issue_id = int(issue_id)
     signal_row = session.exec(
         select(MarketAcquisitionSignal)
         .join(MarketAcquisitionScore, MarketAcquisitionSignal.scored_candidate_id == MarketAcquisitionScore.id)
         .where(
             MarketAcquisitionSignal.owner_user_id == owner_user_id,
-            MarketAcquisitionScore.canonical_comic_issue_id == int(issue_id),
+            or_(
+                MarketAcquisitionScore.catalog_issue_id == catalog_issue_id,
+                MarketAcquisitionScore.canonical_comic_issue_id == catalog_issue_id,
+            ),
         )
         .order_by(
             col(MarketAcquisitionSignal.snapshot_date).desc(),

@@ -7,14 +7,13 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.models import (
-    ComicIssue,
-    ComicTitle,
-    InventoryCopy,
-    MarketplaceListingDraft,
-    MarketplaceListingProjection,
-    Publisher,
-    Variant,
+from app.models import InventoryCopy, MarketplaceListingDraft, MarketplaceListingProjection
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    cover_name_expr,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.services.marketplace_registry import get_marketplace_definition
 
@@ -46,19 +45,17 @@ def normalize_listing_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _public_inventory_snapshot(session: Session, *, inventory_item_id: int) -> dict[str, Any]:
     row = session.exec(
-        select(
-            InventoryCopy.id,
-            ComicTitle.name,
-            Publisher.name,
-            ComicIssue.issue_number,
-            Variant.cover_name,
-            InventoryCopy.grade_status,
-            InventoryCopy.release_year,
+        apply_inventory_spine_joins(
+            select(
+                InventoryCopy.id,
+                title_expr(),
+                publisher_expr(),
+                issue_number_expr(),
+                cover_name_expr(),
+                InventoryCopy.grade_status,
+                InventoryCopy.release_year,
+            ).select_from(InventoryCopy)
         )
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
         .where(InventoryCopy.id == inventory_item_id)
     ).first()
     if row is None:

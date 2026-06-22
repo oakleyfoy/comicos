@@ -15,7 +15,6 @@ from sqlmodel import Session, col, select
 
 from app.models import (
     ComicIssue,
-    ComicTitle,
     GradingRecommendation,
     GradingRiskSnapshot,
     InventoryCopy,
@@ -23,9 +22,6 @@ from app.models import (
     Listing,
     ListingIntelligenceSnapshot,
     MarketSaleRecord,
-    Order,
-    OrderItem,
-    Publisher,
     Portfolio,
     PortfolioAllocationSnapshot,
     PortfolioExposureSnapshot,
@@ -37,7 +33,12 @@ from app.models import (
     PortfolioLiquiditySnapshot,
     SaleRecord,
     SaleRecordLineItem,
-    Variant,
+)
+from app.services.inventory_canonical_spine import (
+    apply_inventory_spine_joins,
+    issue_number_expr,
+    publisher_expr,
+    title_expr,
 )
 from app.schemas.portfolio_recommendation import (
     InventoryPortfolioRecommendationTeaser,
@@ -159,23 +160,15 @@ class _ItemFact:
 
 
 def _scope_inventory_rows(session: Session, *, owner_user_id: int, portfolio_id: int | None) -> list[_ItemFact]:
-    stmt = (
+    stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy,
-            Order,
-            Publisher.name,
-            ComicTitle.name,
-            ComicIssue.issue_number,
-            ComicIssue.id,
+            publisher_expr(),
+            title_expr(),
+            issue_number_expr(),
+            func.coalesce(ComicIssue.id, InventoryCopy.catalog_issue_id),
         )
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id)
-        .join(Publisher, ComicTitle.publisher_id == Publisher.id)
-        .where(InventoryCopy.user_id == owner_user_id)
-    )
+    ).where(InventoryCopy.user_id == owner_user_id)
     if portfolio_id is not None:
         stmt = stmt.join(
             PortfolioItem,
@@ -187,7 +180,7 @@ def _scope_inventory_rows(session: Session, *, owner_user_id: int, portfolio_id:
         )
     stmt = stmt.order_by(col(InventoryCopy.id).asc())
     facts: list[_ItemFact] = []
-    for inv, _ord_row, publisher_name, comic_title_name, issue_number, issue_id in session.exec(stmt).all():
+    for inv, publisher_name, comic_title_name, issue_number, issue_id in session.exec(stmt).all():
         iid = int(inv.id or 0)
         if not iid:
             continue

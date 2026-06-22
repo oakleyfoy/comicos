@@ -86,8 +86,24 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
     )
 
 
-def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSandboxReadResult:
-    """Call OpenAI vision on the full uploaded image; no catalog or OCR."""
+def _extract_comics_payloads(parsed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize the model output into a list of per-book dicts.
+
+    Multi-book schema returns ``{"comics": [...]}``. For back-compat we also accept
+    a single top-level object (older single-comic schema) and wrap it.
+    """
+    comics = parsed.get("comics")
+    if isinstance(comics, list):
+        books = [item for item in comics if isinstance(item, dict)]
+        return books
+    # Back-compat: a single flat object.
+    if any(parsed.get(key) for key in ("series", "publisher", "issue_number", "issue_title")):
+        return [parsed]
+    return []
+
+
+def read_comics_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> list[VisionSandboxReadResult]:
+    """Call OpenAI vision once and return one result per distinct comic in the photo."""
     settings = get_settings()
     if not settings.openai_api_key:
         raise RecognitionConfigError("OpenAI API key is not configured (settings.openai_api_key is empty)")
@@ -105,18 +121,32 @@ def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSa
         api_key=settings.openai_api_key,
         log_context=f"photo_import image_id={image_id}",
     )
-    result = _parse_sandbox_payload(parsed)
-    result.raw_response = {"parsed": parsed, "openai_response": api_payload, "model_used": model_used}
-    result.raw_response_text = api_raw_text
+    raw_response = {"parsed": parsed, "openai_response": api_payload, "model_used": model_used}
+    books = _extract_comics_payloads(parsed)
+    results: list[VisionSandboxReadResult] = []
+    for book in books:
+        result = _parse_sandbox_payload(book)
+        result.raw_response = raw_response
+        result.raw_response_text = api_raw_text
+        results.append(result)
     logger.info(
-        "photo_import.vision_sandbox.response image_id=%s model_used=%s series=%r issue=%r confidence=%.2f",
+        "photo_import.vision_sandbox.response image_id=%s model_used=%s books=%d",
         image_id,
         model_used,
-        result.series,
-        result.issue_number,
-        result.confidence,
+        len(results),
     )
-    return result
+    return results
+
+
+def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSandboxReadResult:
+    """Single-book read (back-compat): returns the first detected comic.
+
+    Raises if the model found no comic in the image.
+    """
+    results = read_comics_with_gpt_vision(image_bytes, image_id=image_id)
+    if not results:
+        raise RecognitionConfigError("GPT vision returned no comics for this image")
+    return results[0]
 
 
 def persist_vision_read(
@@ -125,10 +155,13 @@ def persist_vision_read(
     session_id: int,
     image_id: int,
     result: VisionSandboxReadResult,
+    detection_index: int = 0,
+    run_match: bool = True,
 ) -> PhotoImportVisionRead:
     row = PhotoImportVisionRead(
         session_id=session_id,
         image_id=image_id,
+        detection_index=detection_index,
         publisher=result.publisher[:256] or None,
         series=result.series[:512] or None,
         issue_number=result.issue_number[:64] if result.issue_number else None,
@@ -144,32 +177,55 @@ def persist_vision_read(
         raw_response_text=result.raw_response_text,
     )
     session.add(row)
+    session.flush()
+    if run_match:
+        # Local import avoids a circular import at module load.
+        from app.services.photo_import_catalog_match_service import match_and_apply
+
+        match_and_apply(session, row)
     session.commit()
     session.refresh(row)
     return row
 
 
-def run_vision_sandbox_for_image(session: Session, *, image_id: int) -> PhotoImportVisionRead | None:
+def run_vision_sandbox_for_image(session: Session, *, image_id: int) -> list[PhotoImportVisionRead]:
+    """Read every comic in the photo, clear any prior reads, and persist + match each."""
     image = session.get(PhotoImportImage, image_id)
     if image is None:
         logger.warning("photo_import.vision_sandbox.image_missing image_id=%s", image_id)
-        return None
+        return []
     path = resolve_photo_import_storage_path(image.storage_path, image_id=image_id)
     if not path.is_file():
         logger.error("photo_import.vision_sandbox.file_missing image_id=%s path=%s", image_id, path)
-        return None
+        return []
     raw = path.read_bytes()
     try:
-        result = read_comic_with_gpt_vision(raw, image_id=image_id)
+        results = read_comics_with_gpt_vision(raw, image_id=image_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("photo_import.vision_sandbox.failed image_id=%s error=%s", image_id, exc)
         raise
-    return persist_vision_read(
-        session,
-        session_id=int(image.session_id),
-        image_id=image_id,
-        result=result,
-    )
+
+    # Clear-and-rebuild: drop any existing reads for this photo first.
+    existing = session.exec(
+        select(PhotoImportVisionRead).where(PhotoImportVisionRead.image_id == image_id)
+    ).all()
+    for old in existing:
+        session.delete(old)
+    if existing:
+        session.commit()
+
+    rows: list[PhotoImportVisionRead] = []
+    for idx, result in enumerate(results):
+        rows.append(
+            persist_vision_read(
+                session,
+                session_id=int(image.session_id),
+                image_id=image_id,
+                result=result,
+                detection_index=idx,
+            )
+        )
+    return rows
 
 
 def latest_vision_read_for_image(session: Session, *, image_id: int) -> PhotoImportVisionRead | None:
@@ -213,13 +269,13 @@ def backfill_missing_vision_reads_for_session(session: Session, *, session_id: i
         if image.status not in {IMAGE_STATUS_PROCESSED, IMAGE_STATUS_FAILED, IMAGE_STATUS_UPLOADED}:
             continue
         try:
-            run_vision_sandbox_for_image(session, image_id=image_id)
+            rows = run_vision_sandbox_for_image(session, image_id=image_id)
             image = session.get(PhotoImportImage, image_id)
             if image is not None:
                 image.status = IMAGE_STATUS_PROCESSED
                 session.add(image)
                 session.commit()
-            created += 1
+            created += len(rows)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "photo_import.vision_read.backfill_failed image_id=%s error=%s",

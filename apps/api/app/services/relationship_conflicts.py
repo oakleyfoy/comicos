@@ -180,15 +180,17 @@ def _cover_inventory_issue_tokens(
     if not cover_ids:
         return {}
     rows = session.exec(
-        select(CoverImage.id, ComicIssue.id)
+        select(CoverImage.id, InventoryCopy.catalog_issue_id)
         .join(InventoryCopy, CoverImage.inventory_copy_id == InventoryCopy.id)
-        .join(Variant, InventoryCopy.variant_id == Variant.id)
-        .join(ComicIssue, Variant.comic_issue_id == ComicIssue.id)
-        .where(CoverImage.id.in_(sorted(cover_ids)))
+        .where(
+            CoverImage.id.in_(sorted(cover_ids)),
+            InventoryCopy.catalog_issue_id.is_not(None),
+        )
     ).all()
     out: dict[int, set[str]] = defaultdict(set)
     for cover_id, issue_id in rows:
-        out[int(cover_id)].add(f"issue:{int(issue_id)}")
+        if issue_id is not None:
+            out[int(cover_id)].add(f"issue:{int(issue_id)}")
     return dict(out)
 
 

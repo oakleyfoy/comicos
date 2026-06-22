@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from app.models import CanonicalSeries, ComicIssue, ComicTitle, InventoryCopy, Publisher, Variant
 from app.models.release_intelligence import ReleaseIssue, ReleaseSeries
+from app.services.inventory_canonical_spine import apply_inventory_spine_joins, publisher_expr, title_expr
 from app.services.lunar_issue_identity import normalize_lunar_issue_number
 from app.services.metadata_aliases import (
     STATIC_PUBLISHER_ALIAS_MAP,
@@ -163,12 +164,27 @@ def _lookup_prior_inventory_issues(
         .where(func.lower(ComicTitle.name) == series_key)
     )
     if owner_user_id is not None:
-        stmt = (
-            stmt.join(Variant, Variant.comic_issue_id == ComicIssue.id)
-            .join(InventoryCopy, InventoryCopy.variant_id == Variant.id)
-            .where(InventoryCopy.user_id == owner_user_id)
+        stmt = apply_inventory_spine_joins(
+            select(publisher_expr(), func.count()).select_from(InventoryCopy)
+        ).where(
+            func.lower(title_expr()) == series_key,
+            InventoryCopy.user_id == owner_user_id,
         )
-    rows = session.exec(stmt.group_by(Publisher.name).order_by(func.count().desc())).all()
+        rows = session.exec(stmt.group_by(publisher_expr()).order_by(func.count().desc())).all()
+    else:
+        from sqlalchemy import func
+
+        from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
+
+        rows = session.exec(
+            select(CatalogPublisher.name, func.count())
+            .select_from(CatalogIssue)
+            .join(CatalogSeries, CatalogIssue.series_id == CatalogSeries.id)
+            .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
+            .where(func.lower(CatalogSeries.name) == series_key)
+            .group_by(CatalogPublisher.name)
+            .order_by(func.count().desc())
+        ).all()
     if not rows:
         return None
     publisher, count = rows[0]
