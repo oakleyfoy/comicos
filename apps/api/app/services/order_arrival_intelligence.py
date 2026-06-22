@@ -8,10 +8,11 @@ from typing import Any
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models import InventoryCopy, OrderItem, User
+from app.models import InventoryCopy, User
 from app.services.inventory_canonical_spine import (
     apply_inventory_spine_joins,
     issue_number_expr,
+    order_item_quantity_expr,
     publisher_expr,
     purchase_date_expr,
     retailer_expr,
@@ -97,7 +98,7 @@ def _inventory_arrival_projection_rows(session: Session, *, user_id: int | None)
             publisher_expr().label("publisher"),
             title_expr().label("title"),
             issue_number_expr().label("issue_number"),
-            OrderItem.quantity.label("order_item_quantity"),
+            order_item_quantity_expr().label("order_item_quantity"),
             purchase_date_expr().label("purchase_date"),
             InventoryCopy.release_date.label("release_date"),
             InventoryCopy.release_status.label("release_status"),

@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from app.models import (
     CanonicalIssueLinkSuggestion,
-    ComicIssue,
+    CatalogIssue,
     InventoryCopy,
     MarketFmvCompReference,
     MarketFmvSnapshot,
@@ -107,8 +107,8 @@ def _projection_rows(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
             InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
-            InventoryCopy.canonical_series_id.label("canonical_series_id"),
-            ComicIssue.id.label("canonical_issue_id"),
+            InventoryCopy.catalog_issue_id.label("catalog_issue_id"),
+            CatalogIssue.id.label("canonical_issue_id"),
             title_expr().label("title"),
             publisher_expr().label("publisher"),
             issue_number_expr().label("issue_number"),

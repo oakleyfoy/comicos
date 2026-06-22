@@ -7,7 +7,7 @@ from ``catalog_issue`` + ``acquisition`` and denormalized fields on ``inventory_
 
 from __future__ import annotations
 
-from sqlalchemy import func
+from sqlalchemy import func, literal
 
 from app.models import (
     Acquisition,
@@ -60,7 +60,7 @@ def order_id_expr():
 
 
 def order_item_quantity_expr():
-    return func.literal(1)
+    return literal(1)
 
 
 def apply_inventory_spine_joins(stmt):
