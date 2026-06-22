@@ -196,7 +196,7 @@ describe("PhotoImportReviewPage", () => {
       makeRead({
         match_method: "none",
         catalog_issue_id: null,
-        raw_response: { comicvine_ondemand_attempted: true, comicvine_ondemand_result: "no_volume" },
+        raw_response: { comicvine_ondemand_attempted: true, comicvine_ondemand_result: "unavailable" },
       }),
     ]);
     vi.spyOn(photoImport, "updateVisionRead").mockImplementation(async () =>

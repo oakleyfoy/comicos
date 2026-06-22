@@ -236,7 +236,17 @@ export function RetailerOrderDetailPage() {
         if (maybeDone) {
           applyConfirmedOrderState(maybeDone);
         } else {
-          setError(confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.");
+          const legacyRetired =
+            confirmError instanceof ApiError &&
+            confirmError.status === 410 &&
+            confirmError.message.toLowerCase().includes("legacy customer orders");
+          setError(
+            legacyRetired
+              ? "Add to portfolio is blocked by a server setting (legacy order retirement). Deploy the latest API or ask ops to enable retailer portfolio adds."
+              : confirmError instanceof ApiError
+                ? confirmError.message
+                : "Unable to confirm retailer order.",
+          );
         }
       }
     } finally {

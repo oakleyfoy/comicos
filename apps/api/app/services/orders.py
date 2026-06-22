@@ -478,8 +478,11 @@ def create_order_for_user_in_transaction(
     session: Session,
     current_user: User,
     payload: OrderCreate,
+    *,
+    bypass_legacy_write_retirement: bool = False,
 ) -> OrderCreateResponse:
-    assert_legacy_customer_order_writes_allowed()
+    if not bypass_legacy_write_retirement:
+        assert_legacy_customer_order_writes_allowed()
     item_subtotals = [quantize_money(item.raw_item_price * item.quantity) for item in payload.items]
     shipping_allocations = allocate_by_subtotal(item_subtotals, payload.shipping_amount)
     tax_allocations = allocate_by_subtotal(item_subtotals, payload.tax_amount)

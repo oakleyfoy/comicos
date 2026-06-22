@@ -771,6 +771,8 @@ def confirm_import_for_user(
     session: Session,
     current_user: User,
     import_id: int,
+    *,
+    bypass_legacy_write_retirement: bool = False,
 ) -> DraftImportConfirmResponse:
     draft_import = get_import_for_user_or_404(session, current_user, import_id)
     if draft_import.status == "discarded":
@@ -820,6 +822,7 @@ def confirm_import_for_user(
             session=session,
             current_user=current_user,
             payload=order_payload,
+            bypass_legacy_write_retirement=bypass_legacy_write_retirement,
         )
         draft_cover_count_before_carryover = len(
             session.exec(

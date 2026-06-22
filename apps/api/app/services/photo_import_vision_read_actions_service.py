@@ -209,8 +209,8 @@ def validate_comicvine_ondemand_vision_read(
     if outcome == "imported":
         match_and_apply(session, row)
         _mark_ondemand_attempt(row, "imported")
-    elif outcome == "no_volume":
-        _mark_ondemand_attempt(row, "no_volume")
+    elif outcome in ("no_volume", "unavailable", "failed"):
+        _mark_ondemand_attempt(row, outcome)
     session.add(row)
     session.commit()
     session.refresh(row)

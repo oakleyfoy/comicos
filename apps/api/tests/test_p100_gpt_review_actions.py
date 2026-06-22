@@ -326,3 +326,32 @@ def test_validate_ondemand_calls_comicvine_import(
     )
     assert res.status_code == 200, res.text
     assert imported == [int(read.id)]
+
+
+def test_validate_ondemand_marks_unavailable_when_comicvine_disabled(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = register_and_login(client, "gpt-review-cv-unavail@example.com")
+    created = _start_session(client, token)
+    read = _seed_read(
+        session,
+        session_token=created["session_token"],
+        series="Superman: Reborn",
+        issue_number="1",
+        year="2017",
+        match_method="none",
+    )
+
+    monkeypatch.setattr(
+        "app.services.photo_import_comicvine_ondemand_service.run_comicvine_ondemand_import",
+        lambda *a, **k: "unavailable",
+    )
+
+    res = client.post(
+        f"/api/v1/photo-import/vision-read/{read.id}/validate-ondemand",
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["raw_response"]["comicvine_ondemand_result"] == "unavailable"
+    assert body["catalog_issue_id"] is None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -345,6 +346,27 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
         .where(OrderItem.order_id == body["linked_order_id"])
     ).all()
     assert len(copies_after) == EXPECTED_TOTAL_QUANTITY
+
+
+def test_confirm_retailer_order_works_when_legacy_customer_order_writes_disabled(
+    client, session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retailer Add to portfolio must not use the retired manual-order write gate."""
+    monkeypatch.setenv("LEGACY_CUSTOMER_ORDERS_WRITES_ENABLED", "0")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    token = register_and_login(client, "midtown-legacy-off@example.com")
+    account = _create_account(client, session, token, "midtown-legacy-off@example.com")
+    _seed_midtown_order_4272232(session, account=account, order_id=9004272299)
+
+    confirmed = client.post("/api/v1/retailer-orders/9004272299/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    body = confirmed.json()
+    assert body["review_status"] == "confirmed"
+    assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
+    assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
 
 
 def test_inventory_detail_exposes_display_metadata_after_retailer_import(client, session) -> None:

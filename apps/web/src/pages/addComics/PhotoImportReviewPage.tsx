@@ -106,15 +106,41 @@ function catalogSearchCompleted(read: PhotoImportVisionRead): boolean {
   return read.match_method != null && read.match_method !== "";
 }
 
+function ondemandComicvineResult(read: PhotoImportVisionRead): string | null {
+  const raw = read.raw_response;
+  if (!raw || raw.comicvine_ondemand_attempted !== true) {
+    return null;
+  }
+  const result = raw.comicvine_ondemand_result;
+  return typeof result === "string" ? result : null;
+}
+
 function ondemandComicvineMissed(read: PhotoImportVisionRead): boolean {
   if (read.catalog_issue_id != null || read.added_to_inventory) {
     return false;
   }
-  const raw = read.raw_response;
-  if (!raw) {
+  const result = ondemandComicvineResult(read);
+  if (!result) {
     return false;
   }
-  return raw.comicvine_ondemand_attempted === true && raw.comicvine_ondemand_result === "no_volume";
+  if (result === "imported") {
+    return read.catalog_issue_id == null;
+  }
+  return result === "no_volume" || result === "unavailable" || result === "failed";
+}
+
+function noticeForOndemandMiss(read: PhotoImportVisionRead): string {
+  const result = ondemandComicvineResult(read);
+  if (result === "unavailable") {
+    return "Validate on demand is unavailable — ComicVine API key is not configured on the server. Add COMICVINE_API_KEY on Render, or use Add to inventory with placeholder cover.";
+  }
+  if (result === "failed") {
+    return "ComicVine lookup failed (network or rate limit). Try again in a minute, or add with a placeholder cover.";
+  }
+  if (result === "imported") {
+    return "ComicVine data was imported but this issue still did not match. Edit fields and Find in catalog again, or add with a placeholder cover.";
+  }
+  return "ComicVine did not find a matching volume. Use Add to inventory with placeholder cover if you still want the book in your collection.";
 }
 
 export function PhotoImportReviewPage(): JSX.Element {
@@ -234,7 +260,7 @@ export function PhotoImportReviewPage(): JSX.Element {
           next.delete(read.id);
           return next;
         });
-        setNotice("Validate on demand did not find a catalog match. Use Add to inventory with placeholder cover if you still want the book in your collection.");
+        setNotice(noticeForOndemandMiss(updated));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validate on demand failed");

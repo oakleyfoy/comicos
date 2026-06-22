@@ -573,7 +573,9 @@ def materialize_retailer_order_inventory(
     # enrichment is intentionally deferred to phase 2 so slow external lookups can
     # never block inventory creation or the confirm response.
     with _stage_timer("order_inventory_create", order_number=order_number):
-        confirm_result = confirm_import_for_user(session, user, int(draft.id))
+        confirm_result = confirm_import_for_user(
+            session, user, int(draft.id), bypass_legacy_write_retirement=True
+        )
 
     with _stage_timer("portfolio_creation", order_number=order_number):
         portfolio_added = _attach_inventory_to_default_portfolio(

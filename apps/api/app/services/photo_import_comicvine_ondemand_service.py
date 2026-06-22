@@ -119,6 +119,47 @@ def _ondemand_already_finalized(read: PhotoImportVisionRead) -> bool:
     return bool((read.raw_response or {}).get("comicvine_ondemand_attempted"))
 
 
+def _find_comicvine_volume_id(
+    importer: Any,
+    read: PhotoImportVisionRead,
+) -> int | None:
+    series = (read.series or "").strip()
+    issue_number = (read.issue_number or "").strip()
+    year = _parse_year(read.year)
+    publisher = (read.publisher or "").strip()
+
+    queries: list[str] = []
+    if series:
+        queries.append(series)
+        if ":" in series:
+            head = series.split(":", 1)[0].strip()
+            if head and head != series:
+                queries.append(head)
+        if publisher:
+            queries.append(f"{series} {publisher}")
+
+    seen: set[str] = set()
+    for query in queries:
+        key = query.strip().casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        try:
+            candidates = importer.search_volumes(query, limit=30)
+        except Exception:
+            logger.exception("photo_import.ondemand.search_failed read_id=%s query=%r", read.id, query)
+            continue
+        volume_id = select_comicvine_volume_id(
+            candidates,
+            series=series,
+            issue_number=issue_number,
+            year=year,
+        )
+        if volume_id is not None:
+            return volume_id
+    return None
+
+
 def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead) -> OnDemandOutcome:
     """Search ComicVine and import one volume for this read. Does not rematch."""
     series = (read.series or "").strip()
@@ -133,17 +174,11 @@ def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead)
         return "unavailable"
 
     try:
-        candidates = importer.search_volumes(series, limit=30)
+        volume_id = _find_comicvine_volume_id(importer, read)
     except Exception:
         logger.exception("photo_import.ondemand.search_failed read_id=%s series=%r", read.id, series)
         return "failed"
 
-    volume_id = select_comicvine_volume_id(
-        candidates,
-        series=series,
-        issue_number=issue_number,
-        year=_parse_year(read.year),
-    )
     if volume_id is None:
         logger.info(
             "photo_import.ondemand.no_volume read_id=%s series=%r issue=%s year=%s candidates=%d",
@@ -151,7 +186,7 @@ def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead)
             series,
             issue_number,
             read.year,
-            len(candidates),
+            0,
         )
         return "no_volume"
 
@@ -193,7 +228,10 @@ def try_comicvine_ondemand_for_read(session: Session, read: PhotoImportVisionRea
         _mark_ondemand_attempt(read, "no_volume")
         session.add(read)
         return False
-    # unavailable / failed — leave unmarked so a later retry can run
+    if outcome in ("unavailable", "failed"):
+        _mark_ondemand_attempt(read, outcome)
+        session.add(read)
+    # leave unmarked only for unexpected paths
     return False
 
 
