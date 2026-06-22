@@ -371,6 +371,22 @@ class ComicVineCatalogImporter:
     def _volume_api_path(self, *, series_name: str | None) -> str:
         return "search/" if series_name else "volumes/"
 
+    def search_volumes(self, query: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        """Search ComicVine volumes by name; returns lightweight rows (id/name/year/publisher/count)."""
+        if not (query or "").strip():
+            return []
+        payload = self._get(
+            "search/",
+            params={
+                "query": query.strip(),
+                "resources": "volume",
+                "limit": limit,
+                "field_list": "id,name,start_year,publisher,count_of_issues,resource_type",
+            },
+        )
+        rows = payload_results(payload)
+        return [row for row in rows if row.get("resource_type") in (None, "volume")]
+
     def _fetch_volume_page(
         self,
         *,
@@ -416,7 +432,19 @@ class ComicVineCatalogImporter:
         publisher_filter: str | None,
         strict_publisher: bool,
         job,
+        min_start_year: int | None = None,
     ) -> None:
+        if min_start_year is not None:
+            start_year_raw = row.get("start_year")
+            try:
+                start_year_int = int(start_year_raw) if start_year_raw is not None else None
+            except (TypeError, ValueError):
+                start_year_int = None
+            if start_year_int is None or start_year_int < min_start_year:
+                stats.skipped_quality_gate += 1
+                if job is not None:
+                    record_skipped(session, job)
+                return
         publisher_name = (row.get("publisher") or {}).get("name") if isinstance(row.get("publisher"), dict) else "Unknown"
         publisher_name = publisher_name or "Unknown"
         series_title = str(row.get("name") or "")
@@ -489,6 +517,7 @@ class ComicVineCatalogImporter:
         strict_publisher: bool = False,
         job=None,
         cursor_scope: dict[str, Any] | None = None,
+        min_start_year: int | None = None,
     ) -> ComicVineImportStats:
         stats = ComicVineImportStats()
         stats.publisher_quality_summary = _empty_publisher_quality_summary()
@@ -538,6 +567,7 @@ class ComicVineCatalogImporter:
                         publisher_filter=publisher_filter,
                         strict_publisher=strict_publisher,
                         job=job,
+                        min_start_year=min_start_year,
                     )
                 except Exception as exc:
                     msg = f"volume:{row.get('id')}: {exc}"
@@ -945,6 +975,7 @@ class ComicVineCatalogImporter:
         series_name: str | None = None,
         strict_publisher: bool = False,
         import_issues: bool = False,
+        min_start_year: int | None = None,
     ) -> ComicVineImportStats:
         missing = self.initialize_or_explain()
         if missing:
@@ -957,6 +988,9 @@ class ComicVineCatalogImporter:
             import_issues=import_issues,
             allow_international_editions=self.allow_international_editions,
         )
+        if min_start_year is not None:
+            # Keep modern runs on their own resume cursor, separate from full pulls.
+            scope = {**scope, "min_start_year": int(min_start_year)}
         volume_job = resume_scoped_job(session, source="COMICVINE", job_type=VOLUME_JOB_TYPE, scope=scope) if resume else None
         cursor_offset = offset
         if volume_job is None:
@@ -988,6 +1022,7 @@ class ComicVineCatalogImporter:
             strict_publisher=strict_publisher,
             job=volume_job,
             cursor_scope=scope,
+            min_start_year=min_start_year,
         )
         stats.volume_job_id = int(volume_job.id or 0)
         stats.imported_series = len(stats.imported_series_ids)

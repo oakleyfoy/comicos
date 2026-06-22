@@ -122,6 +122,35 @@ def test_strict_publisher_skips_still_count_as_candidates_seen(
     assert stats.accepted_volumes == 1
 
 
+def test_min_start_year_skips_older_volumes(
+    monkeypatch: pytest.MonkeyPatch, importer: ComicVineCatalogImporter
+) -> None:
+    def fake_fetch(
+        self,
+        *,
+        offset: int,
+        page_limit: int,
+        publisher_filter: str | None,
+        series_name: str | None,
+    ) -> dict:
+        return {
+            "results": [
+                {"id": 1, "name": "Old Series", "start_year": 1998, "publisher": {"name": "Marvel"}},
+                {"id": 2, "name": "Modern Series", "start_year": 2019, "publisher": {"name": "Marvel"}},
+                {"id": 3, "name": "No Year Series", "start_year": None, "publisher": {"name": "Marvel"}},
+            ]
+        }
+
+    monkeypatch.setattr(ComicVineCatalogImporter, "_fetch_volume_page", fake_fetch)
+    session = MagicMock()
+    stats = importer.import_volumes(session, offset=0, limit=10, min_start_year=2010)
+
+    # All three counted as seen; only the 2019 volume is accepted.
+    assert stats.total_candidates_seen == 3
+    assert stats.accepted_volumes == 1
+    assert stats.skipped_quality_gate >= 2
+
+
 def test_resume_starts_at_saved_final_offset(monkeypatch: pytest.MonkeyPatch, importer: ComicVineCatalogImporter) -> None:
     seen_offsets: list[int] = []
 

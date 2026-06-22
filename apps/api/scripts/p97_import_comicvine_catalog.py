@@ -23,6 +23,7 @@ def _print_run_config(args: argparse.Namespace) -> None:
         "publisher": args.publisher,
         "series_name": args.series_name,
         "strict_publisher": args.strict_publisher,
+        "min_start_year": args.min_start_year,
         "limit": args.limit,
         "import_issues": args.import_issues,
         "resume": args.resume,
@@ -127,6 +128,12 @@ def main() -> int:
         help="Allow international license publishers and regional editions (default: English/US-first gate)",
     )
     parser.add_argument(
+        "--min-start-year",
+        type=int,
+        default=None,
+        help="Only import volumes whose series start_year >= this (client-side filter while paginating). Use for modern backfills, e.g. --min-start-year 2010",
+    )
+    parser.add_argument(
         "--sleep-seconds",
         type=float,
         default=None,
@@ -162,6 +169,7 @@ def main() -> int:
             series_name=args.series_name,
             strict_publisher=args.strict_publisher,
             import_issues=args.import_issues,
+            min_start_year=args.min_start_year,
         )
     print(f"volume_job_id={stats.volume_job_id}")
     print(f"api_pages_fetched={stats.api_pages_fetched}")
