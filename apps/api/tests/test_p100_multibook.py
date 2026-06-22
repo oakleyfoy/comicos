@@ -21,18 +21,37 @@ from app.services.photo_import_vision_sandbox_service import (
 from test_inventory import auth_headers, register_and_login
 
 
-def _seed_catalog(session: Session) -> CatalogIssue:
-    pub = CatalogPublisher(name="Marvel", normalized_name="marvel")
+def _seed_catalog_title(
+    session: Session,
+    *,
+    publisher_name: str,
+    series_name: str,
+    issue_number: str,
+) -> CatalogIssue:
+    pub = CatalogPublisher(name=publisher_name, normalized_name=publisher_name.lower())
     session.add(pub)
     session.flush()
-    ser = CatalogSeries(publisher_id=pub.id, name="Amazing Spider-Man", normalized_name="amazing spider-man")
+    ser = CatalogSeries(
+        publisher_id=pub.id,
+        name=series_name,
+        normalized_name=series_name.lower(),
+    )
     session.add(ser)
     session.flush()
-    iss = CatalogIssue(series_id=ser.id, publisher_id=pub.id, issue_number="300", normalized_issue_number="300")
+    iss = CatalogIssue(
+        series_id=ser.id,
+        publisher_id=pub.id,
+        issue_number=issue_number,
+        normalized_issue_number=issue_number,
+    )
     session.add(iss)
     session.commit()
     session.refresh(iss)
     return iss
+
+
+def _seed_catalog(session: Session) -> CatalogIssue:
+    return _seed_catalog_title(session, publisher_name="Marvel", series_name="Amazing Spider-Man", issue_number="300")
 
 
 def _fake(series: str, issue: str, **extra) -> VisionSandboxReadResult:
@@ -184,8 +203,26 @@ def _seed_read(session: Session, *, session_token: str, **fields) -> PhotoImport
 def test_add_all_session_reads(client: TestClient, session: Session) -> None:
     token = register_and_login(client, "mb-addall@example.com")
     created = client.post("/api/v1/photo-import/sessions", headers=auth_headers(token)).json()
-    _seed_read(session, session_token=created["session_token"], series="Saga", issue_number="1", publisher="Image")
-    _seed_read(session, session_token=created["session_token"], series="Paper Girls", issue_number="1", publisher="Image")
+    saga = _seed_catalog_title(session, publisher_name="Image", series_name="Saga", issue_number="1")
+    paper = _seed_catalog_title(session, publisher_name="Image", series_name="Paper Girls", issue_number="1")
+    _seed_read(
+        session,
+        session_token=created["session_token"],
+        series="Saga",
+        issue_number="1",
+        publisher="Image",
+        catalog_issue_id=int(saga.id),
+        match_method="text",
+    )
+    _seed_read(
+        session,
+        session_token=created["session_token"],
+        series="Paper Girls",
+        issue_number="1",
+        publisher="Image",
+        catalog_issue_id=int(paper.id),
+        match_method="text",
+    )
 
     res = client.post(
         f"/api/v1/photo-import/sessions/{created['session_token']}/add-all",
