@@ -18,6 +18,16 @@ from app.services.photo_import_vision_sandbox_service import run_vision_sandbox_
 logger = logging.getLogger(__name__)
 
 
+def run_photo_import_image_processing(image_id: int) -> None:
+    """Background worker entrypoint (opens its own DB session)."""
+    from app.db.session import get_engine
+
+    try:
+        with Session(get_engine()) as session:
+            process_photo_import_image(session, image_id=image_id)
+    except Exception:
+        logger.exception("photo_import.processing.background_failed image_id=%s", image_id)
+
 def process_photo_import_image(session: Session, *, image_id: int) -> None:
     """Run pure GPT vision on each uploaded photo (no catalog detections/candidates)."""
     image = session.get(PhotoImportImage, image_id)

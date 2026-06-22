@@ -63,6 +63,26 @@ function EditField({
   );
 }
 
+function catalogDisagreesWithGpt(read: PhotoImportVisionRead): boolean {
+  if (read.catalog_issue_id == null || !read.series?.trim() || !read.catalog_series?.trim()) {
+    return false;
+  }
+  const gpt = read.series.trim().toLowerCase();
+  const cat = read.catalog_series.trim().toLowerCase();
+  return gpt !== cat && !gpt.includes(cat) && !cat.includes(gpt);
+}
+
+function displayTitleForRead(read: PhotoImportVisionRead): string {
+  const matched = read.catalog_issue_id != null;
+  if (!matched) {
+    return `${read.series ?? "Unknown"} ${read.issue_number ? `#${read.issue_number}` : ""}`.trim();
+  }
+  if (catalogDisagreesWithGpt(read)) {
+    return `${read.series ?? "Unknown"} #${read.issue_number ?? read.catalog_issue_number ?? "?"}`;
+  }
+  return `${read.catalog_series ?? read.series ?? "Unknown"} #${read.catalog_issue_number ?? read.issue_number ?? "?"}`;
+}
+
 function groupByImage(reads: PhotoImportVisionRead[]): { imageId: number; books: PhotoImportVisionRead[] }[] {
   const order: number[] = [];
   const map = new Map<number, PhotoImportVisionRead[]>();
@@ -346,9 +366,7 @@ export function PhotoImportReviewPage(): JSX.Element {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="truncate text-sm font-semibold text-slate-900">
-                                  {matched
-                                    ? `${read.catalog_series ?? read.series ?? "Unknown"} #${read.catalog_issue_number ?? read.issue_number ?? "?"}`
-                                    : `${read.series ?? "Unknown"} ${read.issue_number ? `#${read.issue_number}` : ""}`}
+                                  {displayTitleForRead(read)}
                                 </p>
                                 {read.added_to_inventory ? (
                                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">

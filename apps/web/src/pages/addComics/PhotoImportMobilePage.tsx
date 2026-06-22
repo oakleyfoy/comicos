@@ -64,9 +64,11 @@ export function PhotoImportMobilePage(): JSX.Element {
       await uploadPhotoImportImages(token, batch);
       await refresh();
       if (captureMode === "single_comic") {
-        setLastCaptureMessage("Captured — take next comic");
+        setLastCaptureMessage("Saved — GPT is analyzing this cover (usually under a minute).");
       } else {
-        setLastCaptureMessage(`Uploaded ${batch.length} photo${batch.length === 1 ? "" : "s"}`);
+        setLastCaptureMessage(
+          `Uploaded ${batch.length} photo${batch.length === 1 ? "" : "s"} — analyzing in the background.`,
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");

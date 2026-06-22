@@ -6,7 +6,7 @@ import logging
 import os
 import socket
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
@@ -55,6 +55,7 @@ from app.services.photo_import_session_service import (
     session_to_read,
     assert_session_owner,
 )
+from app.services.photo_import_processing_service import run_photo_import_image_processing
 from app.services.photo_import_upload_service import upload_session_images
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
@@ -67,6 +68,7 @@ from app.services.photo_import_vision_read_actions_service import (
     reread_vision_read,
     update_vision_read_fields,
 )
+from app.services.photo_import_catalog_match_service import rematch_stale_automatic_catalog_link
 from app.services.photo_import_vision_sandbox_service import (
     backfill_missing_vision_reads_for_session,
     latest_vision_read_for_image,
@@ -152,10 +154,14 @@ def complete_session_endpoint(
 @photo_import_router.post("/sessions/{token}/images", response_model=list[PhotoImportImageRead])
 async def upload_images_endpoint(
     token: str,
+    background_tasks: BackgroundTasks,
     images: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ) -> list[PhotoImportImageRead]:
-    return await upload_session_images(session, token=token, files=images)
+    saved, pending_ids = await upload_session_images(session, token=token, files=images)
+    for image_id in pending_ids:
+        background_tasks.add_task(run_photo_import_image_processing, image_id)
+    return saved
 
 
 @photo_import_router.get("/sessions/{token}/detections", response_model=list[PhotoImportDetectedBookRead])
@@ -299,6 +305,8 @@ def list_session_vision_reads_endpoint(
     session_id = int(import_row.id or 0)
     backfill_missing_vision_reads_for_session(session, session_id=session_id)
     rows = vision_reads_for_session(session, session_id=session_id)
+    for row in rows:
+        rematch_stale_automatic_catalog_link(session, row)
     return [vision_read_to_payload(r) for r in rows]
 
 

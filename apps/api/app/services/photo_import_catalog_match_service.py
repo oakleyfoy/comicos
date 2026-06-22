@@ -355,6 +355,40 @@ def match_and_apply(session: Session, read: PhotoImportVisionRead) -> CatalogMat
     return match
 
 
+def rematch_stale_automatic_catalog_link(session: Session, read: PhotoImportVisionRead) -> bool:
+    """Re-run matching when a barcode/fingerprint hit disagrees with GPT fields (e.g. after logic fixes)."""
+    if read.match_method not in ("upc", "fingerprint") or read.catalog_issue_id is None:
+        return False
+    if not _vision_has_identity(read):
+        return False
+    identity = (read.raw_response or {}).get("catalog_identity") or {}
+    current = CatalogMatchResult(
+        catalog_issue_id=read.catalog_issue_id,
+        catalog_variant_id=read.catalog_variant_id,
+        cover_url=read.catalog_cover_url,
+        method=read.match_method or "none",
+        confidence=read.match_confidence,
+        series=identity.get("series") or read.series,
+        issue_number=identity.get("issue_number") or read.issue_number,
+        publisher=identity.get("publisher") or read.publisher,
+    )
+    if _match_aligns_with_vision(read, current):
+        return False
+    match = match_read_to_catalog(session, read)
+    apply_match_to_read(read, match)
+    session.add(read)
+    session.commit()
+    session.refresh(read)
+    logger.info(
+        "photo_import.catalog_match rematch_stale read_id=%s old_issue=%s new_issue=%s method=%s",
+        read.id,
+        current.catalog_issue_id,
+        match.catalog_issue_id,
+        match.method,
+    )
+    return True
+
+
 def choose_match_for_read(
     session: Session, read: PhotoImportVisionRead, *, catalog_issue_id: int
 ) -> CatalogMatchResult:

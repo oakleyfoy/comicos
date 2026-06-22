@@ -54,7 +54,8 @@ async def upload_session_images(
     *,
     token: str,
     files: list[UploadFile],
-) -> list[PhotoImportImageRead]:
+    defer_gpt_processing: bool = True,
+) -> tuple[list[PhotoImportImageRead], list[int]]:
     if len(files) > MAX_BATCH_FILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -63,6 +64,7 @@ async def upload_session_images(
     import_row = get_session_by_token_or_404(session, token=token)
     activate_session(session, import_row)
     saved: list[PhotoImportImageRead] = []
+    pending_image_ids: list[int] = []
     for upload in files:
         if not upload.content_type or not upload.content_type.startswith("image/"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only image uploads are allowed")
@@ -108,22 +110,26 @@ async def upload_session_images(
             resolved.is_file(),
         )
         logger.info(
-            "photo_import.upload.process image_id=%s session_id=%s vision_sandbox=%s",
+            "photo_import.upload.process image_id=%s session_id=%s vision_sandbox=%s defer=%s",
             row.id,
             import_row.id,
             photo_import_vision_sandbox_enabled(),
+            defer_gpt_processing,
         )
-        try:
-            from app.services.photo_import_processing_service import process_photo_import_image
+        if defer_gpt_processing:
+            pending_image_ids.append(int(row.id or 0))
+        else:
+            try:
+                from app.services.photo_import_processing_service import process_photo_import_image
 
-            process_photo_import_image(session, image_id=int(row.id or 0))
-            session.refresh(row)
-        except Exception:
-            row.status = IMAGE_STATUS_FAILED
-            session.add(row)
-            session.commit()
-            session.refresh(row)
+                process_photo_import_image(session, image_id=int(row.id or 0))
+                session.refresh(row)
+            except Exception:
+                row.status = IMAGE_STATUS_FAILED
+                session.add(row)
+                session.commit()
+                session.refresh(row)
         saved.append(image_to_read(row))
 
     refresh_session_counts(session, session_id=int(import_row.id or 0))
-    return saved
+    return saved, pending_image_ids
