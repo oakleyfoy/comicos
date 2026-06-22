@@ -100,10 +100,13 @@ describe("PhotoImportReviewPage", () => {
     expect(screen.getByText(/Photo 1 — 2 books found/i)).toBeInTheDocument();
   });
 
-  it("adds a book to inventory", async () => {
+  it("adds a matched book to collection", async () => {
+    vi.spyOn(photoImport, "listSessionVisionReads").mockResolvedValue([
+      makeRead({ catalog_issue_id: 500, match_method: "text", catalog_series: "Falcon", catalog_issue_number: "1" }),
+    ]);
     const update = vi.spyOn(photoImport, "updateVisionRead").mockResolvedValue(makeRead());
     const add = vi.spyOn(photoImport, "addVisionReadToInventory").mockResolvedValue({
-      vision_read: makeRead({ added_to_inventory: true }),
+      vision_read: makeRead({ added_to_inventory: true, catalog_issue_id: 500, match_method: "text" }),
       acquisition_id: null,
       created_count: 1,
       inventory_copy_ids: [42],
@@ -111,10 +114,33 @@ describe("PhotoImportReviewPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByDisplayValue("Falcon")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add to inventory$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add to collection$/i }));
     await waitFor(() => expect(add).toHaveBeenCalledWith(10));
     expect(update).toHaveBeenCalled();
     expect(await screen.findByText(/Added to your collection \(1 copy\)/i)).toBeInTheDocument();
+  });
+
+  it("adds without catalog cover after Find in catalog misses", async () => {
+    const catalogMatch = vi.spyOn(photoImport, "catalogMatchVisionRead").mockResolvedValue(
+      makeRead({ match_method: "none", catalog_issue_id: null }),
+    );
+    const update = vi.spyOn(photoImport, "updateVisionRead").mockImplementation(async () =>
+      makeRead({ match_method: "none" }),
+    );
+    const add = vi.spyOn(photoImport, "addVisionReadToInventory").mockResolvedValue({
+      vision_read: makeRead({ added_to_inventory: true, match_method: "none" }),
+      acquisition_id: null,
+      created_count: 1,
+      inventory_copy_ids: [42],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByDisplayValue("Falcon")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Find in catalog$/i }));
+    await waitFor(() => expect(catalogMatch).toHaveBeenCalledWith(10));
+    fireEvent.click(await screen.findByRole("button", { name: /Add without catalog cover/i }));
+    await waitFor(() => expect(add).toHaveBeenCalledWith(10));
+    expect(update).toHaveBeenCalled();
   });
 
   it("adds all books in the session", async () => {

@@ -129,6 +129,7 @@ export function PhotoImportMobilePage(): JSX.Element {
         setActiveImageId(last.id);
         setGptReady(false);
       }
+      setLastCaptureMessage("Photo saved — GPT is reading (usually a few seconds).");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {

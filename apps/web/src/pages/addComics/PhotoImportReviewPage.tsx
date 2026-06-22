@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   addAllSessionReads,
   addVisionReadToInventory,
+  catalogMatchVisionRead,
   chooseVisionReadMatch,
   getPhotoImportSession,
   listSessionVisionReads,
@@ -101,6 +102,10 @@ function groupByImage(reads: PhotoImportVisionRead[]): { imageId: number; books:
   }));
 }
 
+function catalogSearchCompleted(read: PhotoImportVisionRead): boolean {
+  return read.match_method != null && read.match_method !== "";
+}
+
 export function PhotoImportReviewPage(): JSX.Element {
   const { token = "" } = useParams<{ token: string }>();
   const [reads, setReads] = useState<PhotoImportVisionRead[]>([]);
@@ -143,7 +148,7 @@ export function PhotoImportReviewPage(): JSX.Element {
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), 5000);
+    const id = window.setInterval(() => void load(), 2000);
     return () => window.clearInterval(id);
   }, [load]);
 
@@ -173,6 +178,25 @@ export function PhotoImportReviewPage(): JSX.Element {
       setNotice("Saved changes and refreshed catalog match.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save changes");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const findInCatalog = async (read: PhotoImportVisionRead) => {
+    setBusyId(read.id);
+    setNotice(null);
+    try {
+      await updateVisionRead(read.id, { ...drafts[read.id] });
+      const updated = await catalogMatchVisionRead(read.id);
+      applyRead(updated);
+      if (updated.catalog_issue_id != null) {
+        setNotice("Found a catalog match.");
+      } else {
+        setNotice("No catalog match — we checked our database and ComicVine. You can add without a cover.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Catalog search failed");
     } finally {
       setBusyId(null);
     }
@@ -262,8 +286,9 @@ export function PhotoImportReviewPage(): JSX.Element {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Add Comics</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Phone Photo Import — GPT review</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Each photo is read by GPT, which finds every comic it can see and matches each to our catalog.
-          Review what it found, fix anything, then add to your collection.
+          GPT reads each photo first (publisher, series, issue, year, barcode). When the fields look right, click{" "}
+          <strong className="font-medium">Find in catalog</strong> — we search our database, then ComicVine once if needed.
+          Add to your collection with a cover when matched, or without a catalog cover if not.
         </p>
 
         {error ? (
@@ -336,6 +361,7 @@ export function PhotoImportReviewPage(): JSX.Element {
                     {photo.books.map((read) => {
                       const draft = drafts[read.id] ?? draftFromRead(read);
                       const matched = read.catalog_issue_id != null;
+                      const searched = catalogSearchCompleted(read);
                       const confidencePct =
                         read.confidence != null ? `${Math.round(read.confidence * 100)}%` : null;
                       const busy = busyId === read.id;
@@ -346,22 +372,24 @@ export function PhotoImportReviewPage(): JSX.Element {
                           data-testid={`book-card-${read.id}`}
                         >
                           <div className="flex gap-4">
-                            <div className="w-24 shrink-0">
-                              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                {matched ? "Our cover" : "No match"}
-                              </span>
-                              {read.catalog_cover_url ? (
-                                <img
-                                  src={read.catalog_cover_url}
-                                  alt="Catalog cover"
-                                  className="mt-1 w-24 rounded-lg border border-slate-200 object-cover"
-                                />
-                              ) : (
-                                <div className="mt-1 flex h-32 w-24 items-center justify-center rounded-lg border border-dashed border-slate-300 text-center text-[11px] text-slate-400">
-                                  No catalog cover
-                                </div>
-                              )}
-                            </div>
+                            {matched ? (
+                              <div className="w-24 shrink-0">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  Catalog cover
+                                </span>
+                                {read.catalog_cover_url ? (
+                                  <img
+                                    src={read.catalog_cover_url}
+                                    alt="Catalog cover"
+                                    className="mt-1 w-24 rounded-lg border border-slate-200 object-cover"
+                                  />
+                                ) : (
+                                  <div className="mt-1 flex h-32 w-24 items-center justify-center rounded-lg border border-dashed border-slate-300 text-center text-[11px] text-slate-400">
+                                    No cover image
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
@@ -376,9 +404,13 @@ export function PhotoImportReviewPage(): JSX.Element {
                                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
                                     Catalog match ({read.match_method})
                                   </span>
-                                ) : (
+                                ) : searched ? (
                                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                                    No catalog match
+                                    Not in catalog
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                    GPT verified
                                   </span>
                                 )}
                               </div>
@@ -420,6 +452,13 @@ export function PhotoImportReviewPage(): JSX.Element {
                                 <p className="mt-3 whitespace-pre-wrap text-xs text-slate-600">{read.reasoning}</p>
                               ) : null}
 
+                              {searched && !matched && !read.added_to_inventory ? (
+                                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                  Not in our catalog (database + ComicVine). You can still add this copy without a
+                                  catalog cover.
+                                </p>
+                              ) : null}
+
                               <div className="mt-4 flex flex-wrap gap-2">
                                 <button
                                   type="button"
@@ -429,14 +468,36 @@ export function PhotoImportReviewPage(): JSX.Element {
                                 >
                                   Save changes
                                 </button>
-                                <button
-                                  type="button"
-                                  disabled={busy || read.added_to_inventory}
-                                  className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
-                                  onClick={() => void addToInventory(read)}
-                                >
-                                  {read.added_to_inventory ? "Added to inventory" : "Add to inventory"}
-                                </button>
+                                {!read.added_to_inventory && !matched ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+                                    onClick={() => void findInCatalog(read)}
+                                  >
+                                    {busy ? "Searching…" : "Find in catalog"}
+                                  </button>
+                                ) : null}
+                                {matched && !read.added_to_inventory ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                                    onClick={() => void addToInventory(read)}
+                                  >
+                                    Add to collection
+                                  </button>
+                                ) : null}
+                                {searched && !matched && !read.added_to_inventory ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                                    onClick={() => void addToInventory(read)}
+                                  >
+                                    Add without catalog cover
+                                  </button>
+                                ) : null}
                                 {read.is_correct == null ? (
                                   <>
                                     <button
