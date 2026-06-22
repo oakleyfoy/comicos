@@ -57,6 +57,15 @@ def _vision_has_identity(read: PhotoImportVisionRead) -> bool:
     return bool((read.series or "").strip() and (read.issue_number or "").strip())
 
 
+def _parse_year(value: str | None) -> int | None:
+    if not (value or "").strip():
+        return None
+    import re
+
+    match = re.search(r"(19|20)\d{2}", value)
+    return int(match.group(0)) if match else None
+
+
 def _match_aligns_with_vision(read: PhotoImportVisionRead, match: CatalogMatchResult) -> bool:
     if match.catalog_issue_id is None:
         return False
@@ -171,6 +180,7 @@ def _text_match(
     series: str | None,
     issue_number: str | None,
     publisher: str | None,
+    year: str | None = None,
 ) -> CatalogMatchResult:
     if not (series or "").strip():
         return CatalogMatchResult()
@@ -181,6 +191,7 @@ def _text_match(
         publisher=publisher,
         limit=_MAX_ALTERNATES,
         publisher_strict=False,
+        year=year,
     )
     if not candidates:
         return CatalogMatchResult()
@@ -196,6 +207,17 @@ def _text_match(
         for c in candidates
     ]
     top = alternates[0]
+
+    # Wrong-era guard: if GPT gave a year and the top candidate's series started
+    # in a clearly different era, don't assert a confident match (avoids showing a
+    # same-name but wrong cover, e.g. The Falcon 1983 for Falcon 2017). Keep the
+    # off-era issues as alternates so the user can still pick one.
+    gpt_year = _parse_year(year)
+    if gpt_year is not None:
+        top_start_year = candidates[0].series_start_year
+        if top_start_year is not None and abs(int(top_start_year) - gpt_year) >= 5:
+            return CatalogMatchResult(method="none", alternates=alternates)
+
     return CatalogMatchResult(
         catalog_issue_id=top.catalog_issue_id,
         catalog_variant_id=None,
@@ -270,7 +292,11 @@ def _fingerprint_match(session: Session, crop_path: Path) -> CatalogMatchResult 
 def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> CatalogMatchResult:
     """Resolve catalog match: trust barcode/fingerprint only when they agree with GPT series/issue."""
     text = _text_match(
-        session, series=read.series, issue_number=read.issue_number, publisher=read.publisher
+        session,
+        series=read.series,
+        issue_number=read.issue_number,
+        publisher=read.publisher,
+        year=read.year,
     )
     demoted: list[CatalogMatchAlternate] = []
 
@@ -311,9 +337,17 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
         return text
 
     # GPT identified the book but nothing in the catalog aligns. Do not surface a
-    # conflicting barcode/fingerprint cover; keep those as alternates only.
+    # conflicting barcode/fingerprint cover; keep those (and any wrong-era text
+    # candidates) as alternates only so the user can still pick one.
+    fallback_alternates: list[CatalogMatchAlternate] = list(demoted)
+    seen_ids = {a.catalog_issue_id for a in fallback_alternates}
+    for alt in text.alternates:
+        if alt.catalog_issue_id not in seen_ids:
+            fallback_alternates.append(alt)
+            seen_ids.add(alt.catalog_issue_id)
+
     if demoted and _vision_has_identity(read):
-        return CatalogMatchResult(method="none", alternates=demoted[:_MAX_ALTERNATES])
+        return CatalogMatchResult(method="none", alternates=fallback_alternates[:_MAX_ALTERNATES])
 
     if demoted:
         first = demoted[0]
@@ -328,6 +362,9 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
             publisher=first.publisher,
             alternates=demoted[1:_MAX_ALTERNATES],
         )
+
+    if fallback_alternates:
+        return CatalogMatchResult(method="none", alternates=fallback_alternates[:_MAX_ALTERNATES])
     return CatalogMatchResult()
 
 

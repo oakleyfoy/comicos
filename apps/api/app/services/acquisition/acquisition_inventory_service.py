@@ -88,6 +88,49 @@ def create_received_catalog_copy(
     return copy
 
 
+def create_received_placeholder_copy(
+    session: Session,
+    *,
+    acquisition: Acquisition,
+    title: str,
+    issue_number: str | None,
+    publisher: str | None,
+    source_image_url: str | None = None,
+    received_via: str = RECEIVED_VIA_ACQUISITION,
+    received_at: datetime | None = None,
+) -> InventoryCopy:
+    """Create an in-hand copy for a book not in the catalog (placeholder identity)."""
+    placeholder = AcquisitionPlaceholderIssue(
+        acquisition_id=int(acquisition.id or 0),
+        user_id=int(acquisition.user_id or 0),
+        title=title.strip(),
+        issue_number=(issue_number or "").strip(),
+        publisher=(publisher or None),
+        quantity=1,
+        catalog_status=CATALOG_STATUS_PLACEHOLDER,
+    )
+    session.add(placeholder)
+    session.flush()
+
+    copy = _create_copy(
+        session,
+        acquisition=acquisition,
+        catalog_issue_id=None,
+        series_id=None,
+        issue_number=(issue_number or "").strip() or None,
+        variant_status=VARIANT_STATUS_PLACEHOLDER,
+        placeholder_issue_id=int(placeholder.id or 0),
+    )
+    copy.source_image_url = source_image_url
+    copy.received_via = received_via
+    copy.order_status = "received"
+    copy.acquisition_notes = f"Placeholder: {title} #{placeholder.issue_number}".strip()
+    if received_at is not None:
+        copy.received_at = received_at
+    session.add(copy)
+    return copy
+
+
 def _identity_key(session: Session, catalog_issue_id: int) -> str | None:
     identity = load_catalog_issue_identity(session, catalog_issue_id)
     if identity is None:

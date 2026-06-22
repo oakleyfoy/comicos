@@ -108,3 +108,92 @@ def test_text_match_ignores_publisher_label_mismatch(session: Session) -> None:
     match = match_read_to_catalog(session, read)
     assert match.catalog_issue_id == issue.id
     assert match.method == "text"
+
+
+def test_wrong_era_same_name_is_not_a_confident_match(session: Session) -> None:
+    # Catalog only has the 1983 "The Falcon"; the user's book is Falcon (2017).
+    publisher = CatalogPublisher(name="Marvel", normalized_name="marvel")
+    session.add(publisher)
+    session.flush()
+    series = CatalogSeries(
+        name="The Falcon",
+        normalized_name="falcon",
+        publisher_id=publisher.id,
+        start_year=1983,
+    )
+    session.add(series)
+    session.flush()
+    old_issue = CatalogIssue(
+        id=7200,
+        series_id=series.id,
+        publisher_id=publisher.id,
+        issue_number="1",
+        normalized_issue_number="1",
+    )
+    session.add(old_issue)
+    session.commit()
+
+    read = PhotoImportVisionRead(
+        session_id=1,
+        image_id=1,
+        publisher="Marvel Comics",
+        series="Falcon",
+        issue_number="1",
+        issue_title="Take Flight",
+        year="2017",
+        barcode="",
+        confidence=0.97,
+        reasoning="",
+        raw_response={},
+    )
+    session.add(read)
+    session.flush()
+
+    match = match_read_to_catalog(session, read)
+    # No confident catalog match (avoids showing the 1983 cover for a 2017 book)...
+    assert match.catalog_issue_id is None
+    # ...but the off-era issue stays available as an alternate the user can pick.
+    assert any(alt.catalog_issue_id == old_issue.id for alt in match.alternates)
+
+
+def test_same_era_same_name_still_matches(session: Session) -> None:
+    publisher = CatalogPublisher(name="Marvel", normalized_name="marvel")
+    session.add(publisher)
+    session.flush()
+    series = CatalogSeries(
+        name="The Falcon",
+        normalized_name="falcon",
+        publisher_id=publisher.id,
+        start_year=1983,
+    )
+    session.add(series)
+    session.flush()
+    issue = CatalogIssue(
+        id=7300,
+        series_id=series.id,
+        publisher_id=publisher.id,
+        issue_number="1",
+        normalized_issue_number="1",
+    )
+    session.add(issue)
+    session.commit()
+
+    read = PhotoImportVisionRead(
+        session_id=1,
+        image_id=1,
+        publisher="Marvel",
+        series="Falcon",
+        issue_number="1",
+        issue_title="",
+        year="1983",
+        barcode="",
+        confidence=0.9,
+        reasoning="",
+        raw_response={},
+    )
+    session.add(read)
+    session.flush()
+
+    match = match_read_to_catalog(session, read)
+    assert match.catalog_issue_id == issue.id
+    assert match.method == "text"

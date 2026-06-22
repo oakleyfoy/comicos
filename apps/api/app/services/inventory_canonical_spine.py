@@ -17,18 +17,19 @@ from app.models import (
     CatalogVariant,
     InventoryCopy,
 )
+from app.models.acquisition import AcquisitionPlaceholderIssue
 
 
 def title_expr():
-    return func.coalesce(CatalogSeries.name, "Unknown")
+    return func.coalesce(CatalogSeries.name, AcquisitionPlaceholderIssue.title, "Unknown")
 
 
 def publisher_expr():
-    return func.coalesce(CatalogPublisher.name, "Unknown")
+    return func.coalesce(CatalogPublisher.name, AcquisitionPlaceholderIssue.publisher, "Unknown")
 
 
 def issue_number_expr():
-    return func.coalesce(CatalogIssue.issue_number, "")
+    return func.coalesce(CatalogIssue.issue_number, AcquisitionPlaceholderIssue.issue_number, "")
 
 
 def cover_name_expr():
@@ -70,4 +71,9 @@ def apply_inventory_spine_joins(stmt):
         .join(CatalogPublisher, CatalogSeries.publisher_id == CatalogPublisher.id, isouter=True)
         .join(CatalogVariant, InventoryCopy.catalog_variant_id == CatalogVariant.id, isouter=True)
         .join(Acquisition, InventoryCopy.acquisition_id == Acquisition.id, isouter=True)
+        .join(
+            AcquisitionPlaceholderIssue,
+            InventoryCopy.placeholder_issue_id == AcquisitionPlaceholderIssue.id,
+            isouter=True,
+        )
     )

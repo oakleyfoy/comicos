@@ -133,6 +133,47 @@ def test_add_vision_read_to_inventory_creates_copy(client: TestClient, session: 
     assert item["publisher"] == "Marvel"
 
 
+def test_add_unmatched_read_creates_placeholder_copy(client: TestClient, session: Session) -> None:
+    # Book not in the master catalog: should still be addable as a placeholder
+    # using GPT's read, and show GPT's identity in the grid (no catalog cover).
+    token = register_and_login(client, "gpt-review-placeholder@example.com")
+    created = _start_session(client, token)
+    read = _seed_read(
+        session,
+        session_token=created["session_token"],
+        publisher="Marvel Comics",
+        series="Falcon",
+        issue_number="1",
+        year="2017",
+        issue_title="Take Flight",
+        confidence=0.97,
+        catalog_issue_id=None,
+    )
+
+    res = client.post(
+        f"/api/v1/photo-import/vision-read/{read.id}/add-to-inventory",
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["created_count"] == 1
+
+    copy = session.get(InventoryCopy, body["inventory_copy_ids"][0])
+    assert copy is not None
+    assert copy.catalog_issue_id is None
+    assert copy.placeholder_issue_id is not None
+    assert copy.received_via == "PHOTO_IMPORT"
+
+    grid = client.get("/inventory?page=1&page_size=50", headers=auth_headers(token))
+    assert grid.status_code == 200, grid.text
+    grid_body = grid.json()
+    assert grid_body["total"] == 1
+    item = grid_body["items"][0]
+    assert item["title"] == "Falcon"
+    assert item["issue_number"] == "1"
+    assert item["publisher"] == "Marvel Comics"
+
+
 def test_add_to_inventory_is_idempotent_per_read(client: TestClient, session: Session) -> None:
     token = register_and_login(client, "gpt-review-dupe@example.com")
     created = _start_session(client, token)

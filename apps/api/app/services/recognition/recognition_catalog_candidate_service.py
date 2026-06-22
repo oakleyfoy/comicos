@@ -126,6 +126,7 @@ def _search_match_score(
     issue_token: str | None,
     alpha_tokens: list[str],
     publisher_filter: str | None,
+    year_value: int | None = None,
 ) -> float:
     """Higher score = better match. Exact series + issue number rank first."""
     score = 0.0
@@ -158,6 +159,17 @@ def _search_match_score(
         for token in year_tokens:
             if int(token) == int(series_row.start_year):
                 score += 200.0
+
+    # Explicit GPT year disambiguates same-named series from different eras.
+    if year_value is not None and series_row.start_year is not None:
+        gap = abs(int(year_value) - int(series_row.start_year))
+        if gap == 0:
+            score += 400.0
+        elif gap <= 1:
+            score += 200.0
+        elif gap >= 5:
+            # Penalize a wrong-era series (e.g. 1983 "The Falcon" for a 2017 book).
+            score -= 250.0 + min(gap, 50) * 5.0
 
     return score
 
@@ -216,6 +228,7 @@ def search_catalog_candidates(
     catalog_issue_id: int | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
     publisher_strict: bool = True,
+    year: str | None = None,
 ) -> list[RecognitionCatalogCandidateRead]:
     limit = max(1, min(int(limit), 100))
 
@@ -268,6 +281,12 @@ def search_catalog_candidates(
     # Over-fetch then rank by match quality (exact series + issue first), then series year for disambiguation.
     rows = session.exec(statement.limit(limit * 8)).all()
 
+    year_value: int | None = None
+    if (year or "").strip():
+        ymatch = re.search(r"(19|20)\d{2}", year)
+        if ymatch:
+            year_value = int(ymatch.group(0))
+
     scored_rows: list[tuple[float, CatalogIssue, CatalogSeries, CatalogPublisher | None]] = []
     for issue, series_row, publisher_row in rows:
         if issue.id is None:
@@ -279,6 +298,7 @@ def search_catalog_candidates(
             issue_token=issue_token,
             alpha_tokens=alpha_tokens,
             publisher_filter=publisher,
+            year_value=year_value,
         )
         scored_rows.append((match_score, issue, series_row, publisher_row))
 
