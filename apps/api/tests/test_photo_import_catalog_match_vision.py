@@ -70,3 +70,41 @@ def test_barcode_demoted_when_it_conflicts_with_gpt_vision(session: Session) -> 
     assert match.catalog_issue_id == right.id
     assert match.method == "text"
     assert any(alt.catalog_issue_id == wrong.id for alt in match.alternates)
+
+
+def test_text_match_ignores_publisher_label_mismatch(session: Session) -> None:
+    # GPT says "Vertigo"; catalog stores Preacher under "DC Comics".
+    publisher = CatalogPublisher(name="DC Comics", normalized_name="dc comics")
+    session.add(publisher)
+    session.flush()
+    series = CatalogSeries(name="Preacher", normalized_name="preacher", publisher_id=publisher.id)
+    session.add(series)
+    session.flush()
+    issue = CatalogIssue(
+        id=7100,
+        series_id=series.id,
+        publisher_id=publisher.id,
+        issue_number="58",
+        normalized_issue_number="58",
+    )
+    session.add(issue)
+    session.commit()
+
+    read = PhotoImportVisionRead(
+        session_id=1,
+        image_id=1,
+        publisher="Vertigo",
+        series="Preacher",
+        issue_number="58",
+        issue_title="",
+        barcode="",
+        confidence=0.6,
+        reasoning="",
+        raw_response={},
+    )
+    session.add(read)
+    session.flush()
+
+    match = match_read_to_catalog(session, read)
+    assert match.catalog_issue_id == issue.id
+    assert match.method == "text"

@@ -215,6 +215,7 @@ def search_catalog_candidates(
     publisher: str | None = None,
     catalog_issue_id: int | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
+    publisher_strict: bool = True,
 ) -> list[RecognitionCatalogCandidateRead]:
     limit = max(1, min(int(limit), 100))
 
@@ -259,7 +260,7 @@ def search_catalog_candidates(
     elif phrase_clause is not None:
         statement = statement.where(phrase_clause)
 
-    if (publisher or "").strip():
+    if (publisher or "").strip() and publisher_strict:
         statement = statement.where(func.lower(func.coalesce(CatalogPublisher.name, "")).like(f"%{publisher.strip().lower()}%"))
     if issue_token is not None:
         statement = statement.where(CatalogIssue.normalized_issue_number == normalize_issue_number(issue_token))

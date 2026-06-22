@@ -180,6 +180,7 @@ def _text_match(
         issue_number=issue_number,
         publisher=publisher,
         limit=_MAX_ALTERNATES,
+        publisher_strict=False,
     )
     if not candidates:
         return CatalogMatchResult()
@@ -308,6 +309,11 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
             if alt.catalog_issue_id != text.catalog_issue_id:
                 _prepend_alternates(text, alt)
         return text
+
+    # GPT identified the book but nothing in the catalog aligns. Do not surface a
+    # conflicting barcode/fingerprint cover; keep those as alternates only.
+    if demoted and _vision_has_identity(read):
+        return CatalogMatchResult(method="none", alternates=demoted[:_MAX_ALTERNATES])
 
     if demoted:
         first = demoted[0]
