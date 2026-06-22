@@ -156,6 +156,16 @@ class PhotoImportImageRead(BaseModel):
     created_at: datetime
 
 
+class PhotoImportImageVerificationRead(BaseModel):
+    image_id: int
+    image_status: str
+    reads: list["PhotoImportVisionReadPayload"]
+
+
+class PhotoImportCatalogMatchBatchPayload(BaseModel):
+    read_ids: list[int] = Field(default_factory=list, min_length=1)
+
+
 class PhotoImportDetectedBookRead(BaseModel):
     id: int
     session_id: int
@@ -271,5 +281,6 @@ class PhotoImportBulkIdsPayload(BaseModel):
     detected_book_ids: list[int]
 
 
+PhotoImportImageVerificationRead.model_rebuild()
 PhotoImportDetectedBookRead.model_rebuild()
 PhotoImportDetectionCandidatesResponse.model_rebuild()

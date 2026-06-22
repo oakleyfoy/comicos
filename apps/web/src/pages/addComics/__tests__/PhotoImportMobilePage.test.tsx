@@ -43,7 +43,7 @@ describe("PhotoImportMobilePage", () => {
   it("defaults to one comic per photo with primary capture button", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "Add Comics From Your Phone" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Take Next Comic Photo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Take comic photo" })).toBeInTheDocument();
     expect(screen.getByText(/One Comic Per Photo/i)).toBeInTheDocument();
     expect(screen.getByText(/Recommended/i)).toBeInTheDocument();
   });
@@ -57,6 +57,19 @@ describe("PhotoImportMobilePage", () => {
   });
 
   it("shows captured message after upload in single-comic mode", async () => {
+    vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
+      {
+        id: 99,
+        session_id: 1,
+        original_filename: "roll.jpg",
+        mime_type: "image/jpeg",
+        file_size: 1,
+        width: null,
+        height: null,
+        status: "uploaded",
+        created_at: "2026-06-17T00:00:00Z",
+      },
+    ]);
     renderPage();
     const gallery = screen.getByTestId("photo-import-gallery-input") as HTMLInputElement;
     const file = new File(["pixels"], "roll.jpg", { type: "image/jpeg" });
@@ -64,12 +77,12 @@ describe("PhotoImportMobilePage", () => {
     await waitFor(() => {
       expect(photoImport.uploadPhotoImportImages).toHaveBeenCalledWith("test-token-123", [file]);
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Captured — take next comic");
+    expect(await screen.findByText(/GPT is reading/i)).toBeInTheDocument();
   });
 
   it("can switch to experimental group mode", async () => {
     renderPage();
-    const groupLabel = screen.getByText(/Experimental group photo detection/i);
+    const groupLabel = screen.getByText(/Multiple comics in one photo/i);
     fireEvent.click(groupLabel.closest("label")!);
     await waitFor(() => {
       expect(photoImport.heartbeatPhotoImportSession).toHaveBeenCalledWith("test-token-123", {

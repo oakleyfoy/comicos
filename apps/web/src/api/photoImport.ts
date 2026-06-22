@@ -151,6 +151,12 @@ export type PhotoImportImage = {
   created_at: string;
 };
 
+export type PhotoImportImageVerification = {
+  image_id: number;
+  image_status: string;
+  reads: PhotoImportVisionRead[];
+};
+
 export type PhotoImportCandidate = {
   id: number;
   detected_book_id: number;
@@ -377,6 +383,34 @@ export async function rematchVisionRead(readId: number): Promise<PhotoImportVisi
   return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/rematch`, {
     method: "POST",
   });
+}
+
+export async function catalogMatchVisionRead(readId: number): Promise<PhotoImportVisionRead> {
+  return requestPhotoImport(`/api/v1/photo-import/vision-read/${readId}/catalog-match`, {
+    method: "POST",
+  });
+}
+
+export async function catalogMatchVisionReads(
+  sessionToken: string,
+  readIds: number[],
+): Promise<PhotoImportVisionRead[]> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/catalog-match`,
+    {
+      method: "POST",
+      body: JSON.stringify({ read_ids: readIds }),
+    },
+  );
+}
+
+export async function getPhotoImportImageVerification(
+  sessionToken: string,
+  imageId: number,
+): Promise<PhotoImportImageVerification> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(sessionToken)}/images/${imageId}/verification`,
+  );
 }
 
 export async function chooseVisionReadMatch(

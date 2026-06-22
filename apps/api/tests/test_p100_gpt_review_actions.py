@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlmodel import Session, select
@@ -255,3 +256,41 @@ def test_reread_overwrites_read(client: TestClient, session: Session, tmp_path, 
     assert len(body) == 1
     assert body[0]["series"] == "Batman"
     assert body[0]["issue_number"] == "404"
+
+
+def test_catalog_match_calls_ondemand_when_local_catalog_misses(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = register_and_login(client, "gpt-review-cv-fallback@example.com")
+    created = _start_session(client, token)
+    read = _seed_read(
+        session,
+        session_token=created["session_token"],
+        publisher="Marvel",
+        series="Falcon",
+        issue_number="1",
+        year="2017",
+        confidence=0.95,
+        catalog_issue_id=None,
+    )
+    calls: list[int] = []
+
+    def fake_ondemand(session: Session, row: PhotoImportVisionRead) -> bool:
+        calls.append(int(row.id or 0))
+        row.catalog_issue_id = 99901
+        row.match_method = "text"
+        session.add(row)
+        return True
+
+    monkeypatch.setattr(
+        "app.services.photo_import_comicvine_ondemand_service.try_comicvine_ondemand_for_read",
+        fake_ondemand,
+    )
+
+    res = client.post(
+        f"/api/v1/photo-import/vision-read/{read.id}/catalog-match",
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 200, res.text
+    assert calls == [int(read.id)]
+    assert res.json()["catalog_issue_id"] == 99901

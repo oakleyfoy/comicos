@@ -2,12 +2,34 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import {
+  addVisionReadToInventory,
+  catalogMatchVisionReads,
+  getPhotoImportImageVerification,
   getPhotoImportSession,
   heartbeatPhotoImportSession,
+  rereadVisionRead,
   uploadPhotoImportImages,
   type PhotoImportCaptureMode,
+  type PhotoImportImageVerification,
   type PhotoImportSession,
+  type PhotoImportVisionRead,
 } from "../../api/photoImport";
+
+function formatReadSummary(read: PhotoImportVisionRead): string {
+  const series = read.series?.trim() || "Unknown series";
+  const num = read.issue_number?.trim() ? ` #${read.issue_number.trim()}` : "";
+  return `${series}${num}`;
+}
+
+function ReadField({ label, value }: { label: string; value: string | null | undefined }) {
+  const text = (value ?? "").trim() || "—";
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="text-sm text-slate-100">{text}</dd>
+    </div>
+  );
+}
 
 export function PhotoImportMobilePage(): JSX.Element {
   const { token = "" } = useParams();
@@ -17,7 +39,12 @@ export function PhotoImportMobilePage(): JSX.Element {
   const [captureMode, setCaptureMode] = useState<PhotoImportCaptureMode>("single_comic");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [lastCaptureMessage, setLastCaptureMessage] = useState<string | null>(null);
+  const [activeImageId, setActiveImageId] = useState<number | null>(null);
+  const [verification, setVerification] = useState<PhotoImportImageVerification | null>(null);
+  const [gptReady, setGptReady] = useState(false);
+  const [selectedReadIds, setSelectedReadIds] = useState<Set<number>>(new Set());
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [actionReadId, setActionReadId] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -40,6 +67,40 @@ export function PhotoImportMobilePage(): JSX.Element {
       .catch(() => refresh());
   }, [token, refresh]);
 
+  useEffect(() => {
+    if (!token || activeImageId == null) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const v = await getPhotoImportImageVerification(token, activeImageId);
+        if (cancelled) return;
+        setVerification(v);
+        const done =
+          v.reads.length > 0 &&
+          (v.image_status === "processed" || v.image_status === "failed");
+        if (done) {
+          setGptReady(v.image_status === "processed" && v.reads.length > 0);
+          setSelectedReadIds(new Set(v.reads.map((r) => r.id)));
+        }
+      } catch {
+        /* still processing */
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 800);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [token, activeImageId]);
+
+  const resetVerification = () => {
+    setActiveImageId(null);
+    setVerification(null);
+    setGptReady(false);
+    setSelectedReadIds(new Set());
+  };
+
   const setMode = async (mode: PhotoImportCaptureMode) => {
     if (!token || uploading) return;
     setCaptureMode(mode);
@@ -59,16 +120,14 @@ export function PhotoImportMobilePage(): JSX.Element {
     const batch = Array.from(files).slice(0, limit);
     setUploading(true);
     setError(null);
-    setLastCaptureMessage(null);
+    resetVerification();
     try {
-      await uploadPhotoImportImages(token, batch);
+      const saved = await uploadPhotoImportImages(token, batch);
       await refresh();
-      if (captureMode === "single_comic") {
-        setLastCaptureMessage("Saved — GPT is analyzing this cover (usually under a minute).");
-      } else {
-        setLastCaptureMessage(
-          `Uploaded ${batch.length} photo${batch.length === 1 ? "" : "s"} — analyzing in the background.`,
-        );
+      const last = saved[saved.length - 1];
+      if (last?.id) {
+        setActiveImageId(last.id);
+        setGptReady(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -78,7 +137,85 @@ export function PhotoImportMobilePage(): JSX.Element {
     }
   };
 
+  const toggleRead = (readId: number) => {
+    setSelectedReadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(readId)) next.delete(readId);
+      else next.add(readId);
+      return next;
+    });
+  };
+
+  const runCatalogMatch = async () => {
+    if (!token || selectedReadIds.size === 0) return;
+    setCatalogBusy(true);
+    setError(null);
+    try {
+      const updated = await catalogMatchVisionReads(token, [...selectedReadIds]);
+      setVerification((prev) => {
+        if (!prev) return prev;
+        const byId = new Map(updated.map((r) => [r.id, r]));
+        return {
+          ...prev,
+          reads: prev.reads.map((r) => byId.get(r.id) ?? r),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Catalog match failed");
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const rereadPhoto = async () => {
+    const first = verification?.reads[0];
+    if (!first) return;
+    setActionReadId(first.id);
+    setError(null);
+    try {
+      const rows = await rereadVisionRead(first.id);
+      setVerification((prev) =>
+        prev
+          ? {
+              ...prev,
+              reads: rows,
+            }
+          : prev,
+      );
+      setSelectedReadIds(new Set(rows.map((r) => r.id)));
+      setGptReady(rows.length > 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-read failed");
+    } finally {
+      setActionReadId(null);
+    }
+  };
+
+  const adoptUnmatched = async (readId: number) => {
+    setActionReadId(readId);
+    setError(null);
+    try {
+      await addVisionReadToInventory(readId);
+      setVerification((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          reads: prev.reads.map((r) =>
+            r.id === readId ? { ...r, added_to_inventory: true } : r,
+          ),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add to collection");
+    } finally {
+      setActionReadId(null);
+    }
+  };
+
   const singleComic = captureMode === "single_comic";
+  const captureReady = gptReady && !uploading;
+  const reads = verification?.reads ?? [];
+  const gptPending = activeImageId != null && !gptReady && !uploading;
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
@@ -86,8 +223,8 @@ export function PhotoImportMobilePage(): JSX.Element {
       <h1 className="mt-2 text-xl font-semibold">Add Comics From Your Phone</h1>
       <p className="mt-2 text-sm text-slate-400">
         {singleComic
-          ? "Photograph one comic cover at a time for the most reliable matches."
-          : "Experimental: try to detect multiple comics in one group photo."}
+          ? "Snap one comic — GPT reads it in a few seconds. Match our catalog when you are ready."
+          : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>
 
       <fieldset className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -116,30 +253,158 @@ export function PhotoImportMobilePage(): JSX.Element {
             onChange={() => void setMode("group")}
           />
           <span>
-            <span className="block text-sm font-semibold text-slate-100">Experimental group photo detection</span>
-            <span className="mt-0.5 block text-xs text-slate-500">Multiple comics in one shot — beta only</span>
+            <span className="block text-sm font-semibold text-slate-100">Multiple comics in one photo</span>
+            <span className="mt-0.5 block text-xs text-slate-500">Up to 4+ books — GPT reads each row</span>
           </span>
         </label>
       </fieldset>
 
       {session ? (
-        <p className="mt-4 text-sm text-emerald-300/90">
-          Session connected · Photos: {session.uploaded_photo_count} · Ready for review:{" "}
-          {session.detected_book_count}
+        <p className="mt-4 text-sm text-slate-400">
+          Session connected · Photos: {session.uploaded_photo_count}
         </p>
       ) : (
         <p className="mt-4 text-sm text-slate-500">Connecting to session…</p>
       )}
-      {lastCaptureMessage ? (
-        <p className="mt-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-200" role="status">
-          {lastCaptureMessage}
+
+      {gptPending ? (
+        <p className="mt-3 text-sm text-amber-200/90" role="status">
+          GPT is reading this photo…
         </p>
       ) : null}
+      {captureReady ? (
+        <p
+          className="mt-3 rounded-lg bg-emerald-600/25 px-3 py-2 text-sm font-semibold text-emerald-200"
+          role="status"
+        >
+          Verified — review below, then scan the next comic.
+        </p>
+      ) : null}
+
+      {reads.length > 0 ? (
+        <section className="mt-6 space-y-4" aria-label="GPT verification">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-200">What GPT read</h2>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={catalogBusy || actionReadId != null}
+                onClick={() => void rereadPhoto()}
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                Re-read photo
+              </button>
+              <button
+                type="button"
+                disabled={catalogBusy || selectedReadIds.size === 0}
+                onClick={() => void runCatalogMatch()}
+                className="rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+              >
+                {catalogBusy ? "Matching…" : "Find in catalog"}
+              </button>
+            </div>
+          </div>
+
+          {reads.map((read) => {
+            const matched = read.catalog_issue_id != null;
+            const searched = read.match_method != null && read.match_method !== "";
+            const noMatch = searched && !matched;
+            const busy = actionReadId === read.id;
+            return (
+              <article key={read.id} className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={selectedReadIds.has(read.id)}
+                    onChange={() => toggleRead(read.id)}
+                    aria-label={`Select ${formatReadSummary(read)} for catalog match`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white">{formatReadSummary(read)}</p>
+                    {read.confidence != null ? (
+                      <p className="text-xs text-slate-500">
+                        GPT confidence {Math.round(read.confidence * 100)}%
+                      </p>
+                    ) : null}
+                    <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                      <ReadField label="Publisher" value={read.publisher} />
+                      <ReadField label="Series" value={read.series} />
+                      <ReadField label="Issue #" value={read.issue_number} />
+                      <ReadField label="Title" value={read.issue_title} />
+                      <ReadField label="Year" value={read.year} />
+                      <ReadField label="Barcode" value={read.barcode} />
+                    </dl>
+
+                    {matched ? (
+                      <div className="mt-4 rounded-lg border border-emerald-800/60 bg-emerald-950/40 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">
+                          Catalog match
+                        </p>
+                        <div className="mt-2 flex gap-3">
+                          {read.catalog_cover_url ? (
+                            <img
+                              src={read.catalog_cover_url}
+                              alt=""
+                              className="h-24 w-16 shrink-0 rounded border border-slate-700 object-cover"
+                            />
+                          ) : null}
+                          <div className="text-sm text-slate-200">
+                            <p>{read.catalog_series ?? read.series}</p>
+                            <p className="text-slate-400">
+                              #{read.catalog_issue_number ?? read.issue_number} ·{" "}
+                              {read.catalog_publisher ?? read.publisher}
+                            </p>
+                            {read.added_to_inventory ? (
+                              <p className="mt-1 text-xs text-emerald-300">In your collection</p>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="mt-2 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                                onClick={() => void adoptUnmatched(read.id)}
+                              >
+                                Add to collection
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {noMatch && !read.added_to_inventory ? (
+                      <div className="mt-4 rounded-lg border border-amber-800/50 bg-amber-950/30 p-3 text-sm text-amber-100">
+                        <p>Not in our catalog (we checked ComicVine too).</p>
+                        <p className="mt-1 text-xs text-amber-200/80">
+                          Add it to your collection without a catalog cover?
+                        </p>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="mt-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          onClick={() => void adoptUnmatched(read.id)}
+                        >
+                          Yes, add it
+                        </button>
+                      </div>
+                    ) : null}
+                    {read.added_to_inventory && !matched ? (
+                      <p className="mt-3 text-xs text-emerald-300">Added to your collection (no catalog cover).</p>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      ) : null}
+
       {error ? (
         <p role="alert" className="mt-4 rounded-lg bg-rose-500/20 px-3 py-2 text-sm text-rose-200">
           {error}
         </p>
       ) : null}
+
       <input
         ref={cameraInputRef}
         data-testid="photo-import-camera-input"
@@ -163,34 +428,42 @@ export function PhotoImportMobilePage(): JSX.Element {
           <button
             type="button"
             disabled={uploading || !token}
-            onClick={() => cameraInputRef.current?.click()}
-            className="rounded-xl bg-sky-600 py-4 text-base font-semibold disabled:opacity-50"
+            onClick={() => {
+              resetVerification();
+              cameraInputRef.current?.click();
+            }}
+            className={`rounded-xl py-4 text-base font-semibold disabled:opacity-50 ${
+              captureReady ? "bg-emerald-600 hover:bg-emerald-500" : "bg-sky-600 hover:bg-sky-500"
+            }`}
           >
-            {uploading ? "Uploading…" : "Take Next Comic Photo"}
+            {uploading ? "Uploading…" : captureReady ? "Scan next comic" : "Take comic photo"}
           </button>
         ) : (
           <button
             type="button"
             disabled={uploading || !token}
-            onClick={() => cameraInputRef.current?.click()}
-            className="rounded-xl bg-sky-600 py-3 text-sm font-semibold disabled:opacity-50"
+            onClick={() => {
+              resetVerification();
+              cameraInputRef.current?.click();
+            }}
+            className={`rounded-xl py-3 text-sm font-semibold disabled:opacity-50 ${
+              captureReady ? "bg-emerald-600" : "bg-sky-600"
+            }`}
           >
-            {uploading ? "Uploading…" : "Take Photo"}
+            {uploading ? "Uploading…" : "Take photo"}
           </button>
         )}
         <button
           type="button"
           disabled={uploading || !token}
-          onClick={() => galleryInputRef.current?.click()}
+          onClick={() => {
+            resetVerification();
+            galleryInputRef.current?.click();
+          }}
           className="rounded-xl border border-slate-600 bg-slate-900 py-3 text-sm font-semibold disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : singleComic ? "Choose One Photo From Library" : "Upload From Photos"}
+          {uploading ? "Uploading…" : singleComic ? "Choose one photo" : "Upload from library"}
         </button>
-        <p className="text-center text-xs text-slate-500">
-          {singleComic
-            ? "One cover per upload. Keep shooting — each photo adds another comic to your session."
-            : "Use Upload From Photos for camera roll. Up to 10 photos per batch."}
-        </p>
       </div>
     </div>
   );

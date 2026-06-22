@@ -151,6 +151,59 @@ def reread_vision_read(
     return rows
 
 
+def _catalog_match_with_ondemand_fallback(session: Session, read: PhotoImportVisionRead) -> None:
+    """Local catalog match first; if missing, one ComicVine on-demand import + rematch."""
+    match_and_apply(session, read)
+    if read.catalog_issue_id is None:
+        from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
+
+        try_comicvine_ondemand_for_read(session, read)
+
+
+def catalog_match_vision_read(
+    session: Session,
+    *,
+    read_id: int,
+    owner_user_id: int,
+) -> PhotoImportVisionRead:
+    """Match GPT to local catalog, then ComicVine on-demand once if still unmatched."""
+    row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
+    _catalog_match_with_ondemand_fallback(session, row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def catalog_match_session_reads(
+    session: Session,
+    *,
+    session_token: str,
+    owner_user_id: int,
+    read_ids: list[int],
+) -> list[PhotoImportVisionRead]:
+    from app.models.photo_import import PhotoImportSession
+    from sqlmodel import select
+
+    import_row = session.exec(
+        select(PhotoImportSession).where(PhotoImportSession.session_token == session_token)
+    ).first()
+    if import_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    assert_session_owner(import_row, owner_user_id=owner_user_id)
+
+    updated: list[PhotoImportVisionRead] = []
+    for read_id in read_ids:
+        row = session.get(PhotoImportVisionRead, int(read_id))
+        if row is None or int(row.session_id) != int(import_row.id or 0):
+            continue
+        _catalog_match_with_ondemand_fallback(session, row)
+        updated.append(row)
+    session.commit()
+    for row in updated:
+        session.refresh(row)
+    return updated
+
+
 def rematch_vision_read(
     session: Session,
     *,
@@ -158,16 +211,7 @@ def rematch_vision_read(
     owner_user_id: int,
 ) -> PhotoImportVisionRead:
     """Re-run the catalog match for a read (e.g. after editing series/issue/barcode)."""
-    row, _ = _load_owned_read(session, read_id=read_id, owner_user_id=owner_user_id)
-    from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
-
-    try_comicvine_ondemand_for_read(session, row)
-    if row.catalog_issue_id is None:
-        match_and_apply(session, row)
-    session.add(row)
-    session.commit()
-    session.refresh(row)
-    return row
+    return catalog_match_vision_read(session, read_id=read_id, owner_user_id=owner_user_id)
 
 
 def choose_vision_read_match(

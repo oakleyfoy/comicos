@@ -223,9 +223,20 @@ def run_vision_sandbox_for_image(session: Session, *, image_id: int) -> list[Pho
                 image_id=image_id,
                 result=result,
                 detection_index=idx,
+                run_match=False,
             )
         )
     return rows
+
+
+def vision_reads_for_image(session: Session, *, image_id: int) -> list[PhotoImportVisionRead]:
+    return list(
+        session.exec(
+            select(PhotoImportVisionRead)
+            .where(PhotoImportVisionRead.image_id == image_id)
+            .order_by(PhotoImportVisionRead.detection_index.asc(), PhotoImportVisionRead.id.asc())
+        ).all()
+    )
 
 
 def latest_vision_read_for_image(session: Session, *, image_id: int) -> PhotoImportVisionRead | None:

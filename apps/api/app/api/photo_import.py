@@ -16,11 +16,13 @@ from app.models import User
 from app.schemas.photo_import import (
     PhotoImportAddAllResponse,
     PhotoImportChooseMatchPayload,
+    PhotoImportCatalogMatchBatchPayload,
     PhotoImportConfirmPayload,
     PhotoImportConfirmResponse,
     PhotoImportDetectedBookRead,
     PhotoImportHeartbeatPayload,
     PhotoImportImageRead,
+    PhotoImportImageVerificationRead,
     PhotoImportCandidateRead,
     PhotoImportDetectionCandidatesResponse,
     PhotoImportSelectCandidatePayload,
@@ -63,16 +65,18 @@ from app.services.photo_import_vision_read_api_service import vision_read_to_pay
 from app.services.photo_import_vision_read_actions_service import (
     add_all_session_reads_to_inventory,
     add_vision_read_to_inventory,
+    catalog_match_session_reads,
+    catalog_match_vision_read,
     choose_vision_read_match,
     rematch_vision_read,
     reread_vision_read,
     update_vision_read_fields,
 )
 from app.services.photo_import_catalog_match_service import rematch_stale_automatic_catalog_link
-from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
 from app.services.photo_import_vision_sandbox_service import (
     backfill_missing_vision_reads_for_session,
     latest_vision_read_for_image,
+    vision_reads_for_image,
     vision_reads_for_session,
 )
 
@@ -308,8 +312,60 @@ def list_session_vision_reads_endpoint(
     rows = vision_reads_for_session(session, session_id=session_id)
     for row in rows:
         rematch_stale_automatic_catalog_link(session, row)
-        try_comicvine_ondemand_for_read(session, row)
     session.commit()
+    return [vision_read_to_payload(r) for r in rows]
+
+
+@photo_import_router.get(
+    "/sessions/{token}/images/{image_id}/verification",
+    response_model=PhotoImportImageVerificationRead,
+)
+def get_image_verification_endpoint(
+    token: str,
+    image_id: int,
+    session: Session = Depends(get_session),
+) -> PhotoImportImageVerificationRead:
+    """GPT-only verification state for one upload (no catalog matching)."""
+    import_row = get_session_by_token_or_404(session, token=token)
+    image = session.get(PhotoImportImage, image_id)
+    if image is None or int(image.session_id) != int(import_row.id or 0):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo import image not found")
+    rows = vision_reads_for_image(session, image_id=image_id)
+    return PhotoImportImageVerificationRead(
+        image_id=image_id,
+        image_status=str(image.status),
+        reads=[vision_read_to_payload(r) for r in rows],
+    )
+
+
+@photo_import_router.post("/vision-read/{read_id}/catalog-match", response_model=PhotoImportVisionReadPayload)
+def catalog_match_vision_read_endpoint(
+    read_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportVisionReadPayload:
+    assert current_user.id is not None
+    row = catalog_match_vision_read(session, read_id=read_id, owner_user_id=int(current_user.id))
+    return vision_read_to_payload(row)
+
+
+@photo_import_router.post(
+    "/sessions/{token}/catalog-match",
+    response_model=list[PhotoImportVisionReadPayload],
+)
+def catalog_match_batch_endpoint(
+    token: str,
+    payload: PhotoImportCatalogMatchBatchPayload,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[PhotoImportVisionReadPayload]:
+    assert current_user.id is not None
+    rows = catalog_match_session_reads(
+        session,
+        session_token=token,
+        owner_user_id=int(current_user.id),
+        read_ids=payload.read_ids,
+    )
     return [vision_read_to_payload(r) for r in rows]
 
 
