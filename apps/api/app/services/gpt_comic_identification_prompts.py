@@ -56,15 +56,16 @@ COMIC_IDENTIFICATION_QUICK_SYSTEM = (
     '{"comics":[{"publisher":"","series":"","issue_number":null,"issue_title":"","year":"",'
     '"barcode":"","confidence":0,"reasoning":""}]} '
     "Use a comics array with one entry per distinct cover (one element for a single comic). "
-    "Read publisher, series, issue number, year, and barcode when visible on the PRINTED cover. "
-    "Ignore bags, glare, and retailer stamps on plastic—not part of the printed cover. "
-    "Ignore price stickers, handwritten store marks, and dot-matrix price tags; never treat "
-    "sticker numbers as the issue number. "
-    "issue_number must be the comic's printed issue number (examples: 4, 104, 1/2)—use null "
-    "if the issue box is missing, covered, or unreadable. Do not default to 1 unless the "
-    "printed cover clearly shows issue #1. "
-    "If you inferred the issue from art or context rather than reading the box, keep confidence "
-    "at or below 0.6 and say so in reasoning. "
+    "Read publisher, series, issue number, year, and barcode for every cover. "
+    "ALWAYS return your best issue_number — this is the most important field. First read the "
+    "printed issue number from the cover (corner box, spine, or near the logo). If the number "
+    "is small, stylized, or partly covered, infer the issue from the cover art, creator credits, "
+    "story-arc/part text, and cover date. Only use null if you truly cannot pick any issue. "
+    "issue_number must be a comic issue identifier only (examples: 4, 104, 1/2, 976) — never a "
+    "story-arc name, subtitle, or price. "
+    "Ignore bags, glare, retailer stamps on plastic, price stickers, and handwritten store "
+    "marks — they are not the issue number and not part of the printed cover. "
+    "Do not blindly default to 1; only return 1 when the cover is actually issue #1. "
     "Keep reasoning to one short sentence. Do not reference any external catalog."
 )
 
