@@ -129,6 +129,20 @@ def normalize_upc(raw: str) -> str:
     return re.sub(r"[\s\-]", "", (raw or "").strip())
 
 
+def upc_check_digit_valid(raw: str) -> bool:
+    """True when normalized UPC-A (12) or EAN-13 passes the standard check digit."""
+    digits = normalize_upc(raw)
+    if not digits.isdigit():
+        return False
+    if len(digits) == 12:
+        digits = "0" + digits
+    if len(digits) != 13:
+        return False
+    total = sum(int(ch) * (1 if idx % 2 == 0 else 3) for idx, ch in enumerate(digits[:12]))
+    check = (10 - (total % 10)) % 10
+    return check == int(digits[12])
+
+
 def merge_external_ids(existing: dict | None, source: str, external_id: str | int) -> dict:
     payload = dict(existing or {})
     bucket = dict(payload.get(source) or {})

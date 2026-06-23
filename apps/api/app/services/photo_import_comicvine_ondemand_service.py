@@ -22,6 +22,7 @@ from app.services.catalog_ingestion_service import (
     normalize_series_name,
     normalize_upc,
     series_names_compatible,
+    upc_check_digit_valid,
 )
 from app.services.catalog_publisher_registry import is_international_publisher
 
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 OnDemandOutcome = Literal["imported", "no_volume", "unavailable", "failed"]
 
 _MAX_YEAR_GAP = 4
+
+
+_YEAR_IN_PARENS = re.compile(r"\(\s*(19|20)\d{2}\s*\)")
 
 
 @dataclass(frozen=True)
@@ -118,9 +122,14 @@ def _score_volume(row: dict[str, Any], *, series: str, issue_number: str | None,
         return None
 
     if norm_cand == norm_target:
-        score = 1000.0
+        score = 950.0
     elif series_names_compatible(norm_target, norm_cand):
-        score = 600.0
+        score = 920.0
+        # Prefer volume titles that include a start year when GPT gave a cover year.
+        if year is not None and _YEAR_IN_PARENS.search(name):
+            sy = _volume_start_year(row)
+            if sy is not None and abs(sy - year) <= 2:
+                score += 120.0
     else:
         return None
 
@@ -200,7 +209,7 @@ def _find_comicvine_volume_id_via_barcode(
     read: PhotoImportVisionRead,
 ) -> int | None:
     normalized = normalize_upc(read.barcode or "")
-    if len(normalized) < 11:
+    if len(normalized) < 11 or not upc_check_digit_valid(normalized):
         return None
     try:
         rows = importer.search_issues_by_barcode(read.barcode or "")
@@ -270,7 +279,7 @@ def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead)
     """Search ComicVine and import one volume for this read. Does not rematch."""
     series = (read.series or "").strip()
     issue_number = (read.issue_number or "").strip()
-    has_barcode = len(normalize_upc(read.barcode or "")) >= 11
+    has_barcode = upc_check_digit_valid(normalize_upc(read.barcode or ""))
     if (not series or not issue_number) and not has_barcode:
         return ComicvineOndemandImportResult("unavailable")
 

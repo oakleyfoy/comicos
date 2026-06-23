@@ -16,6 +16,13 @@ from app.services.photo_import_issue_number import normalize_photo_issue_number
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.comic_vision_read_mode import ComicVisionReadMode, normalize_vision_read_mode, resolve_vision_profile
 from app.services.gpt_comic_vision_client import call_comic_vision
+from app.services.photo_import_barcode_vision import (
+    barcode_needs_focus_pass,
+    crop_upc_region_bytes,
+    parse_barcode_focus_payload,
+    sanitize_vision_barcode,
+)
+from app.services.photo_import_upc_barcode_decoder import decode_upc_from_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +113,7 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
         variant_description=_as_str(payload.get("variant_description")),
         year=_as_str(payload.get("year")),
         cover_date=_as_str(payload.get("cover_date")),
-        barcode=_as_str(payload.get("barcode")),
+        barcode=sanitize_vision_barcode(_as_str(payload.get("barcode"))),
         confidence=confidence,
         reasoning=reasoning,
         possible_alternates=_as_str_list(payload.get("possible_alternates")),
@@ -158,6 +165,39 @@ def _focused_issue_number_read(
         parsed.get("issue_number"), confidence=confidence, reasoning=reasoning
     )
     return issue, confidence, reasoning
+
+
+def _focused_barcode_read(
+    image_bytes: bytes,
+    *,
+    image_id: int,
+    model: str,
+    api_key: str,
+    max_image_side_px: int,
+) -> tuple[str, float, str]:
+    """Second pass: cropped lower-left UPC region, high detail, digits-only."""
+    from app.services.gpt_comic_identification_prompts import (
+        COMIC_BARCODE_FOCUS_SYSTEM,
+        COMIC_BARCODE_FOCUS_USER,
+    )
+
+    crop_bytes = crop_upc_region_bytes(image_bytes)
+    side = max(int(max_image_side_px), 2560)
+    try:
+        parsed, _payload, _raw, _model_used = call_comic_vision(
+            crop_bytes,
+            model=model,
+            api_key=api_key,
+            log_context=f"photo_import barcode_focus image_id={image_id}",
+            system=COMIC_BARCODE_FOCUS_SYSTEM,
+            user=COMIC_BARCODE_FOCUS_USER,
+            image_detail="high",
+            max_image_side_px=side,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("photo_import.barcode_focus_failed image_id=%s", image_id, exc_info=True)
+        return "", 0.0, ""
+    return parse_barcode_focus_payload(parsed)
 
 
 def _extract_comics_payloads(parsed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -255,6 +295,59 @@ def read_comics_with_gpt_vision(
                 result.series,
                 focus_issue,
                 focus_conf,
+            )
+
+    # Prefer 1D scan on UPC crop over GPT digits; GPT barcode vision only if scan misses.
+    for result in results:
+        decoded = decode_upc_from_image_bytes(image_bytes)
+        if decoded is not None:
+            code, source = decoded
+            result.barcode = code
+            note = f"Barcode scan ({source})"
+            result.reasoning = (
+                f"{result.reasoning} {note}".strip() if result.reasoning else note
+            )
+            logger.info(
+                "photo_import.barcode_decoder_recovered image_id=%s barcode=%s source=%s",
+                image_id,
+                code,
+                source,
+            )
+            continue
+        if not barcode_needs_focus_pass(result.barcode):
+            continue
+        if result.barcode:
+            result.barcode = ""
+            logger.info(
+                "photo_import.barcode_cleared_invalid image_id=%s (GPT digits failed check digit)",
+                image_id,
+            )
+        code, bc_conf, bc_reason = _focused_barcode_read(
+            image_bytes,
+            image_id=image_id,
+            model=model,
+            api_key=settings.openai_api_key,
+            max_image_side_px=int(profile["max_image_side_px"]),
+        )
+        if code:
+            result.barcode = code
+            if bc_reason:
+                result.reasoning = (
+                    f"{result.reasoning} Barcode re-read: {bc_reason}".strip()
+                    if result.reasoning
+                    else bc_reason
+                )
+            logger.info(
+                "photo_import.barcode_focus_recovered image_id=%s barcode=%s conf=%.2f",
+                image_id,
+                code,
+                bc_conf,
+            )
+        elif result.barcode:
+            result.barcode = ""
+            logger.info(
+                "photo_import.barcode_cleared_invalid image_id=%s (failed check digit after main read)",
+                image_id,
             )
 
     logger.info(

@@ -18,7 +18,13 @@ from sqlmodel import Session, select
 from app.models.catalog_master import CatalogIssue, CatalogSeries, CatalogUpc
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
-from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc, series_names_compatible
+from app.services.catalog_ingestion_service import (
+    normalize_issue_number,
+    normalize_series_name,
+    normalize_upc,
+    series_names_compatible,
+    upc_check_digit_valid,
+)
 from app.services.photo_import_crop_service import resolve_crop_abs_path
 from app.services.photo_import_fingerprint_service import search_catalog_fingerprint_hits_for_crop_path
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
@@ -44,6 +50,8 @@ def normalized_read_barcode(read: PhotoImportVisionRead) -> str:
 def barcode_read_trustworthy_for_upc(read: PhotoImportVisionRead) -> bool:
     code = normalized_read_barcode(read)
     if len(code) < BARCODE_TRUST_MIN_NORMALIZED_LEN:
+        return False
+    if not upc_check_digit_valid(code):
         return False
     if not _vision_has_identity(read):
         return True
@@ -178,7 +186,7 @@ def _upc_match(session: Session, barcode: str | None) -> CatalogMatchResult | No
     if not barcode or not barcode.strip():
         return None
     normalized = normalize_upc(barcode)
-    if not normalized:
+    if not normalized or not upc_check_digit_valid(normalized):
         return None
     row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first()
     if row is None or row.issue_id is None:
@@ -203,6 +211,7 @@ def _text_match(
     issue_number: str | None,
     publisher: str | None,
     year: str | None = None,
+    issue_title: str | None = None,
 ) -> CatalogMatchResult:
     if not (series or "").strip():
         return CatalogMatchResult()
@@ -214,6 +223,7 @@ def _text_match(
         limit=_MAX_ALTERNATES,
         publisher_strict=False,
         year=year,
+        issue_title=issue_title,
     )
     if not candidates:
         return CatalogMatchResult()
@@ -236,8 +246,15 @@ def _text_match(
     # off-era issues as alternates so the user can still pick one.
     gpt_year = _parse_year(year)
     if gpt_year is not None:
+        top_issue = session.get(CatalogIssue, int(top.catalog_issue_id))
+        top_cover_year = (
+            int(top_issue.cover_date.year)
+            if top_issue is not None and top_issue.cover_date is not None
+            else None
+        )
         top_start_year = candidates[0].series_start_year
-        if top_start_year is not None and abs(int(top_start_year) - gpt_year) >= 5:
+        era_year = top_cover_year if top_cover_year is not None else top_start_year
+        if era_year is not None and abs(int(era_year) - gpt_year) >= 5:
             return CatalogMatchResult(method="none", alternates=alternates)
 
     return CatalogMatchResult(
@@ -319,6 +336,7 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
         issue_number=read.issue_number,
         publisher=read.publisher,
         year=read.year,
+        issue_title=read.issue_title,
     )
     demoted: list[CatalogMatchAlternate] = []
 
@@ -518,11 +536,31 @@ def match_and_apply(session: Session, read: PhotoImportVisionRead) -> CatalogMat
 
 
 def rematch_stale_automatic_catalog_link(session: Session, read: PhotoImportVisionRead) -> bool:
-    """Re-run matching when a barcode/fingerprint hit disagrees with GPT fields (e.g. after logic fixes)."""
-    if read.match_method not in ("upc", "fingerprint") or read.catalog_issue_id is None:
+    """Re-run matching when an automatic hit disagrees with GPT fields (e.g. after logic fixes)."""
+    if read.catalog_issue_id is None:
+        return False
+    if read.match_method not in ("upc", "fingerprint", "text"):
         return False
     if not _vision_has_identity(read):
         return False
+    if read.match_method == "text":
+        old_issue_id = read.catalog_issue_id
+        match = match_read_to_catalog(session, read)
+        if match.catalog_issue_id == old_issue_id and match.method == read.match_method:
+            return False
+        apply_match_to_read(read, match)
+        _enrich_read_from_matched_catalog(session, read)
+        session.add(read)
+        session.commit()
+        session.refresh(read)
+        logger.info(
+            "photo_import.catalog_match rematch_text read_id=%s old_issue=%s new_issue=%s method=%s",
+            read.id,
+            old_issue_id,
+            match.catalog_issue_id,
+            match.method,
+        )
+        return True
     identity = (read.raw_response or {}).get("catalog_identity") or {}
     current = CatalogMatchResult(
         catalog_issue_id=read.catalog_issue_id,

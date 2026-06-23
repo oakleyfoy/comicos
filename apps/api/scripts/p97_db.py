@@ -64,6 +64,21 @@ def explain_database_url_error(url: str) -> str | None:
             "DATABASE_URL still looks like a placeholder. Paste your real Render Postgres URL, "
             "or omit --database-url and rely on apps/api/.env after ensure_p97_env_loaded()."
         )
+    try:
+        from sqlalchemy.engine.url import make_url
+
+        parsed = make_url(text)
+        if not (parsed.username or "").strip():
+            return (
+                "DATABASE_URL is missing the database username (pg8000 error: connect() missing 'user'). "
+                "Use postgresql+pg8000://USER:PASSWORD@HOST:PORT/DATABASE — copy user and password from "
+                "Render Postgres credentials. If the password contains @ # : / or %, URL-encode it."
+            )
+    except Exception:
+        return (
+            "DATABASE_URL could not be parsed. Use postgresql+pg8000://user:pass@host:5432/dbname "
+            "with no stray quotes or line breaks."
+        )
     return None
 
 

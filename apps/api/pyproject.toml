@@ -16,6 +16,8 @@ dependencies = [
   "fastapi>=0.115,<1.0",
   "httpx>=0.27,<1.0",
   "passlib>=1.7,<2.0",
+  "numpy>=2.0,<3.0",
+  "opencv-contrib-python-headless>=4.10,<4.13",
   "pg8000>=1.31,<2.0",
   "pillow>=11.0,<12.0",
   "playwright>=1.49,<2.0",
@@ -33,6 +35,7 @@ dev = [
   "fakeredis>=2.26,<4.0",
   "httpx>=0.27,<1.0",
   "pytest>=8.3,<9.0",
+  "python-barcode>=0.15,<0.16",
   "ruff>=0.6,<1.0"
 ]
 

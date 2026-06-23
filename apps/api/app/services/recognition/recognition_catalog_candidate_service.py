@@ -118,6 +118,28 @@ def _catalog_phrase_search_clause(phrase: str):
     )
 
 
+def _issue_title_match_score(issue: CatalogIssue, issue_title: str | None) -> float:
+    if not (issue_title or "").strip() or not (issue.title or "").strip():
+        return 0.0
+    want = normalize_import_title(issue_title)
+    have = normalize_import_title(str(issue.title))
+    if not want or not have:
+        return 0.0
+    if want == have:
+        return 900.0
+    if want in have or have in want:
+        return 450.0
+    return 0.0
+
+
+def _issue_cover_year(issue: CatalogIssue) -> int | None:
+    if issue.cover_date is not None:
+        return int(issue.cover_date.year)
+    if issue.release_date is not None:
+        return int(issue.release_date.year)
+    return None
+
+
 def _search_match_score(
     *,
     issue: CatalogIssue,
@@ -127,6 +149,7 @@ def _search_match_score(
     alpha_tokens: list[str],
     publisher_filter: str | None,
     year_value: int | None = None,
+    issue_title: str | None = None,
 ) -> float:
     """Higher score = better match. Exact series + issue number rank first."""
     score = 0.0
@@ -154,6 +177,8 @@ def _search_match_score(
         if publisher_filter.strip().lower() in (publisher_row.name or "").lower():
             score += 100.0
 
+    score += _issue_title_match_score(issue, issue_title)
+
     year_tokens = [t for t in alpha_tokens if _looks_like_year(t)]
     if year_tokens and series_row.start_year is not None:
         for token in year_tokens:
@@ -170,8 +195,51 @@ def _search_match_score(
         elif gap >= 5:
             # Penalize a wrong-era series (e.g. 1983 "The Falcon" for a 2017 book).
             score -= 250.0 + min(gap, 50) * 5.0
+    elif year_value is not None and series_row.start_year is None:
+        cover_year = _issue_cover_year(issue)
+        if cover_year is not None:
+            gap = abs(int(year_value) - cover_year)
+            if gap == 0:
+                score += 350.0
+            elif gap <= 1:
+                score += 175.0
+            elif gap >= 5:
+                score -= 250.0 + min(gap, 50) * 5.0
+        else:
+            score -= 120.0
+
+    if year_value is not None:
+        cover_year = _issue_cover_year(issue)
+        if cover_year is not None:
+            gap = abs(int(year_value) - cover_year)
+            if gap == 0:
+                score += 300.0
+            elif gap <= 1:
+                score += 120.0
+            elif gap >= 5:
+                score -= 200.0 + min(gap, 40) * 4.0
 
     return score
+
+
+def _catalog_year_distance(
+    *,
+    issue: CatalogIssue,
+    series_row: CatalogSeries,
+    year_value: int | None,
+) -> int:
+    """Sort key: prefer candidates closest to the GPT/catalog year (lower is better)."""
+    if year_value is None:
+        if series_row.start_year is not None:
+            return -int(series_row.start_year)
+        return 0
+    distances: list[int] = []
+    cover_year = _issue_cover_year(issue)
+    if cover_year is not None:
+        distances.append(abs(cover_year - year_value))
+    if series_row.start_year is not None:
+        distances.append(abs(int(series_row.start_year) - year_value))
+    return min(distances) if distances else 5000
 
 
 def nearby_issues(
@@ -229,6 +297,7 @@ def search_catalog_candidates(
     limit: int = DEFAULT_CANDIDATE_LIMIT,
     publisher_strict: bool = True,
     year: str | None = None,
+    issue_title: str | None = None,
 ) -> list[RecognitionCatalogCandidateRead]:
     limit = max(1, min(int(limit), 100))
 
@@ -299,13 +368,14 @@ def search_catalog_candidates(
             alpha_tokens=alpha_tokens,
             publisher_filter=publisher,
             year_value=year_value,
+            issue_title=issue_title,
         )
         scored_rows.append((match_score, issue, series_row, publisher_row))
 
     scored_rows.sort(
         key=lambda row: (
             -row[0],
-            row[2].start_year if row[2].start_year is not None else 9999,
+            _catalog_year_distance(issue=row[1], series_row=row[2], year_value=year_value),
             row[2].name.lower(),
             _issue_numeric_value(row[1].issue_number) if _issue_numeric_value(row[1].issue_number) is not None else 10**9,
             int(row[1].id or 0),

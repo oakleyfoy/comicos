@@ -29,6 +29,9 @@ COMIC_IDENTIFICATION_SYSTEM = (
     "3) Use the UPC/barcode as supporting evidence—do not guess the issue from random digit "
     "substrings, but a Marvel/DC 5-digit UPC supplement often encodes the issue; if barcode and "
     "cover art conflict, trust the cover and note it in reasoning. "
+    "Barcode rules: read the UPC-A digit string from the price box when visible. Return digits only "
+    "(no spaces). Do NOT guess digits — if you cannot read the full code, leave barcode empty. "
+    "US comics usually start with 7 (761941…). Never return a made-up barcode. "
     "4) ALWAYS return your single best issue_number. Use null ONLY when it is genuinely impossible "
     "to pick any issue, and then list at least two possible_alternates. "
     "issue_number must be a comic issue identifier only (examples: 4, 104, 1/2, 976) — never a "
@@ -58,6 +61,7 @@ COMIC_IDENTIFICATION_QUICK_SYSTEM = (
     '"barcode":"","confidence":0,"reasoning":""}]} '
     "Use a comics array with one entry per distinct cover (one element for a single comic). "
     "Read publisher, series, issue number, year, and barcode for every cover. "
+    "For barcode: digits only; leave empty unless the full UPC is legible — never guess. "
     "issue_number is the most important field: READ the actual printed number on the cover "
     "(usually a small number in a corner box, near the logo, on the spine, or beside the price/date). "
     "Look carefully — the number is often small. "
@@ -93,6 +97,22 @@ COMIC_ISSUE_FOCUS_SYSTEM = (
     "story-arc name, subtitle, or price. Ignore price stickers and store stamps. "
     "ALWAYS give your single best issue_number; use null only if it is truly impossible to tell. "
     "Keep reasoning to one short sentence."
+)
+
+
+COMIC_BARCODE_FOCUS_SYSTEM = (
+    "You read UPC-A barcodes on comic book covers. You receive a cropped photo of the "
+    "lower-left area where the price/UPC box is printed. "
+    'Return JSON only: {"barcode":"","confidence":0,"reasoning":""}. '
+    "barcode must be ONLY the digits of the UPC-A (typically 12 digits; US comics often "
+    "start with 7). Include every digit you can read in order. "
+    "Do NOT guess or invent digits — if any digit is unclear, return barcode as empty string. "
+    "Ignore price stickers, handwritten marks, and glare. "
+    "confidence is 0–1 for how sure you are about the full digit string."
+)
+
+COMIC_BARCODE_FOCUS_USER = (
+    "Read the UPC/barcode digits from this comic cover crop. Return the JSON object only."
 )
 
 
