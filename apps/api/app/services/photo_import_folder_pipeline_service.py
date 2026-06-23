@@ -62,14 +62,30 @@ def folder_queue_status(session: Session, *, import_row: PhotoImportSession) -> 
 
 
 def _post_process_image_reads(session: Session, *, image_id: int, owner_user_id: int) -> None:
+    from app.services.photo_import_comicvine_ondemand_service import try_comicvine_ondemand_for_read
+
     reads = session.exec(
         select(PhotoImportVisionRead).where(PhotoImportVisionRead.image_id == image_id)
     ).all()
     for read in reads:
         try:
-            catalog_match_vision_read(session, read_id=int(read.id or 0), owner_user_id=owner_user_id)
+            matched = catalog_match_vision_read(
+                session, read_id=int(read.id or 0), owner_user_id=owner_user_id
+            )
         except Exception:
             logger.warning("folder_pipeline catalog_match failed read_id=%s", read.id, exc_info=True)
+            continue
+        # Not in the local catalog: pull the volume from ComicVine and re-match immediately.
+        # No-op without COMICVINE_API_KEY; idempotent (marks each read attempted once).
+        if matched.catalog_issue_id is None:
+            try:
+                try_comicvine_ondemand_for_read(session, matched)
+                session.commit()
+            except Exception:
+                logger.warning(
+                    "folder_pipeline comicvine_ondemand failed read_id=%s", read.id, exc_info=True
+                )
+                session.rollback()
 
 
 def _run_image_pipeline(image_id: int, owner_user_id: int, session_token: str) -> None:

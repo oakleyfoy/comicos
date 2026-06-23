@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from typing import Any, Literal
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
@@ -22,6 +23,11 @@ logger = logging.getLogger(__name__)
 OnDemandOutcome = Literal["imported", "no_volume", "unavailable", "failed"]
 
 _MAX_YEAR_GAP = 4
+
+# Background backfill: cap ComicVine work per pass and avoid duplicate threads per session.
+_MAX_ONDEMAND_PER_PASS = 8
+_inflight_sessions: set[int] = set()
+_inflight_lock = threading.Lock()
 
 
 def _parse_year(value: str | None) -> int | None:
@@ -239,3 +245,57 @@ def backfill_comicvine_ondemand_for_reads(session: Session, reads: list[PhotoImp
     for read in reads:
         try_comicvine_ondemand_for_read(session, read)
     session.commit()
+
+
+def _run_session_backfill_thread(session_id: int) -> None:
+    """Background worker: pull ComicVine for unmatched reads in a session, bounded per pass."""
+    from app.db.session import get_engine
+
+    try:
+        from app.services.comicvine_catalog_importer import ComicVineCatalogImporter
+
+        if ComicVineCatalogImporter().initialize_or_explain():
+            return  # No COMICVINE_API_KEY configured — nothing to do.
+
+        with Session(get_engine()) as session:
+            reads = session.exec(
+                select(PhotoImportVisionRead).where(
+                    PhotoImportVisionRead.session_id == session_id
+                )
+            ).all()
+            processed = 0
+            for read in reads:
+                if processed >= _MAX_ONDEMAND_PER_PASS:
+                    break
+                if read.catalog_issue_id is not None or _ondemand_already_finalized(read):
+                    continue
+                processed += 1
+                try:
+                    try_comicvine_ondemand_for_read(session, read)
+                    session.commit()
+                except Exception:
+                    logger.warning(
+                        "photo_import.ondemand.backfill_failed read_id=%s", read.id, exc_info=True
+                    )
+                    session.rollback()
+    except Exception:
+        logger.exception("photo_import.ondemand.backfill_thread_failed session_id=%s", session_id)
+    finally:
+        with _inflight_lock:
+            _inflight_sessions.discard(session_id)
+
+
+def kick_comicvine_ondemand_backfill(*, session_id: int) -> bool:
+    """Start a background ComicVine pull for a session's unmatched reads (no-op if already running)."""
+    with _inflight_lock:
+        if session_id in _inflight_sessions:
+            return False
+        _inflight_sessions.add(session_id)
+    thread = threading.Thread(
+        target=_run_session_backfill_thread,
+        args=(session_id,),
+        name=f"cv-ondemand-{session_id}",
+        daemon=True,
+    )
+    thread.start()
+    return True

@@ -380,6 +380,15 @@ def list_session_vision_reads_endpoint(
     for row in rows:
         rematch_stale_automatic_catalog_link(session, row)
     session.commit()
+    # For reads with no local catalog match, pull the volume from ComicVine in the background
+    # and re-match. Bounded + de-duplicated per session, so polling this endpoint progressively
+    # fills in matches without blocking the response. No-op without COMICVINE_API_KEY.
+    if any(r.catalog_issue_id is None for r in rows):
+        from app.services.photo_import_comicvine_ondemand_service import (
+            kick_comicvine_ondemand_backfill,
+        )
+
+        kick_comicvine_ondemand_backfill(session_id=session_id)
     return [vision_read_to_payload(r) for r in rows]
 
 
