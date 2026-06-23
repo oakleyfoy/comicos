@@ -142,6 +142,22 @@ export type PhotoImportCaptureMode = "single_comic" | "group";
 /** Desktop folder pipeline + phone drop box (scan QR once). */
 export const PHOTO_IMPORT_FOLDER_SOURCE = "folder_import";
 
+/** Desktop GPT review route (optional exceptions-only mode for folder import). */
+export function photoImportReviewPath(
+  sessionToken: string,
+  options?: { exceptionsOnly?: boolean; fromFolder?: boolean },
+): string {
+  const params = new URLSearchParams();
+  if (options?.exceptionsOnly) params.set("exceptions", "1");
+  if (options?.fromFolder) params.set("from", "folder");
+  const query = params.toString();
+  return `/add-comics/photo/session/${encodeURIComponent(sessionToken)}${query ? `?${query}` : ""}`;
+}
+
+export function isPhotoImportVisionReadException(read: PhotoImportVisionRead): boolean {
+  return !read.added_to_inventory;
+}
+
 export type PhotoImportFolderQueueStatus = {
   pending_uploads: number;
   processing: number;

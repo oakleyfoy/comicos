@@ -7,6 +7,7 @@ import {
   getPhotoImportSession,
   mobilePhotoImportUrl,
   PHOTO_IMPORT_FOLDER_SOURCE,
+  photoImportReviewPath,
   processPhotoImportFolderPending,
   resetPhotoImportFolderVision,
   qrCodeUrlForLink,
@@ -19,14 +20,6 @@ import { PageHeader } from "../../components/PageHeader";
 import { StatusBanner } from "../../components/StatusBanner";
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic)$/i;
-
-function photoImportDesktopReviewPath(session: PhotoImportSession): string {
-  try {
-    return new URL(session.desktop_review_url, window.location.origin).pathname;
-  } catch {
-    return `/add-comics/photo/session/${session.session_token}`;
-  }
-}
 
 type DirHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterableIterator<FileSystemHandle>;
@@ -292,7 +285,14 @@ export function AddComicsImportFolderPage(): JSX.Element {
               </button>
               <button
                 type="button"
-                onClick={() => navigate(photoImportDesktopReviewPath(session))}
+                onClick={() =>
+                  navigate(
+                    photoImportReviewPath(session.session_token, {
+                      exceptionsOnly: true,
+                      fromFolder: true,
+                    }),
+                  )
+                }
                 className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
               >
                 Review exceptions

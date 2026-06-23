@@ -66,3 +66,11 @@ describe("AddComicsImportFolderPage", () => {
     expect(localStorage.getItem("comicos.importFolder.sessionToken")).toBe("folder-tok");
   });
 });
+
+describe("photoImportReviewPath", () => {
+  it("builds exceptions review URL for folder import", () => {
+    expect(
+      photoImport.photoImportReviewPath("folder-tok", { exceptionsOnly: true, fromFolder: true }),
+    ).toBe("/add-comics/photo/session/folder-tok?exceptions=1&from=folder");
+  });
+});

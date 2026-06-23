@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import {
   addAllSessionReads,
@@ -8,8 +8,10 @@ import {
   catalogMatchVisionRead,
   chooseVisionReadMatch,
   getPhotoImportSession,
+  isPhotoImportVisionReadException,
   listSessionVisionReads,
   originalImageUrl,
+  PHOTO_IMPORT_FOLDER_SOURCE,
   rereadVisionRead,
   updateVisionRead,
   validateComicvineOnDemand,
@@ -162,6 +164,9 @@ function noticeForOndemandMiss(read: PhotoImportVisionRead): string {
 
 export function PhotoImportReviewPage(): JSX.Element {
   const { token = "" } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const exceptionsOnly = searchParams.get("exceptions") === "1";
+  const fromFolderHint = searchParams.get("from") === "folder";
   const [reads, setReads] = useState<PhotoImportVisionRead[]>([]);
   const [sessionInfo, setSessionInfo] = useState<PhotoImportSession | null>(null);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
@@ -377,20 +382,38 @@ export function PhotoImportReviewPage(): JSX.Element {
   };
 
   const uploadedCount = sessionInfo?.uploaded_photo_count ?? 0;
-  const photos = groupByImage(reads);
-  const waitingForGpt = uploadedCount > photos.length;
-  const pendingCount = reads.filter((r) => !r.added_to_inventory).length;
+  const fromFolder = fromFolderHint || sessionInfo?.source_device === PHOTO_IMPORT_FOLDER_SOURCE;
+  const displayReads = exceptionsOnly ? reads.filter(isPhotoImportVisionReadException) : reads;
+  const photos = groupByImage(displayReads);
+  const waitingForGpt = !exceptionsOnly && uploadedCount > photos.length;
+  const pendingCount = displayReads.filter((r) => !r.added_to_inventory).length;
 
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl px-4 py-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Add Comics</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Phone Photo Import — GPT review</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          GPT reads each photo first. Save field edits if needed, then <strong className="font-medium">Find in catalog</strong>{" "}
-          (local database). If there is no good match, use <strong className="font-medium">Validate on demand</strong> to pull the
-          series from ComicVine, then add to your collection.
-        </p>
+        {fromFolder && exceptionsOnly ? (
+          <>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-900">Import folder — review exceptions</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Books that were not added to your collection automatically (no match, low confidence, or you skipped
+              them). Fix fields, validate on ComicVine if needed, then add to collection.
+            </p>
+            <Link to="/add-comics/import-folder" className="mt-3 inline-block text-sm text-cyan-700 hover:underline">
+              ← Back to import folder
+            </Link>
+          </>
+        ) : (
+          <>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-900">Phone Photo Import — GPT review</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              GPT reads each photo first. Save field edits if needed, then{" "}
+              <strong className="font-medium">Find in catalog</strong> (local database). If there is no good match, use{" "}
+              <strong className="font-medium">Validate on demand</strong> to pull the series from ComicVine, then add to
+              your collection.
+            </p>
+          </>
+        )}
 
         {error ? (
           <p role="alert" className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -412,15 +435,19 @@ export function PhotoImportReviewPage(): JSX.Element {
               {bulkBusy ? "Adding…" : `Add all to collection (${pendingCount})`}
             </button>
             <span className="text-sm text-slate-500">
-              {photos.length} photo{photos.length === 1 ? "" : "s"} · {reads.length} book
-              {reads.length === 1 ? "" : "s"} found
+              {photos.length} photo{photos.length === 1 ? "" : "s"} · {displayReads.length} book
+              {displayReads.length === 1 ? "" : "s"} found
             </span>
           </div>
         ) : null}
 
         {photos.length === 0 ? (
           <div className="mt-8 space-y-2 text-slate-600">
-            {uploadedCount > 0 && waitingForGpt ? (
+            {exceptionsOnly ? (
+              <p className="font-medium text-slate-800">
+                No exceptions — every book from this session is already in your collection (or nothing was read yet).
+              </p>
+            ) : uploadedCount > 0 && waitingForGpt ? (
               <>
                 <p className="font-medium text-slate-800">Reading your photos with GPT…</p>
                 <p className="text-sm">
