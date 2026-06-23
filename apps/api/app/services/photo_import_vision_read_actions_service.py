@@ -205,12 +205,14 @@ def validate_comicvine_ondemand_vision_read(
     raw.pop("comicvine_ondemand_result", None)
     row.raw_response = raw
 
-    outcome = run_comicvine_ondemand_import(session, row)
-    if outcome == "imported":
-        match_and_apply(session, row)
+    result = run_comicvine_ondemand_import(session, row)
+    if result.outcome == "imported":
+        from app.services.photo_import_catalog_match_service import rematch_after_comicvine_import
+
+        rematch_after_comicvine_import(session, row, catalog_series_id=result.catalog_series_id)
         _mark_ondemand_attempt(row, "imported")
-    elif outcome in ("no_volume", "unavailable", "failed"):
-        _mark_ondemand_attempt(row, outcome)
+    elif result.outcome in ("no_volume", "unavailable", "failed"):
+        _mark_ondemand_attempt(row, result.outcome)
     session.add(row)
     session.commit()
     session.refresh(row)

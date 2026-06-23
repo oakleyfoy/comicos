@@ -311,9 +311,11 @@ def test_validate_ondemand_calls_comicvine_import(
     )
     imported: list[int] = []
 
-    def fake_run(session: Session, row: PhotoImportVisionRead) -> str:
+    from app.services.photo_import_comicvine_ondemand_service import ComicvineOndemandImportResult
+
+    def fake_run(session: Session, row: PhotoImportVisionRead) -> ComicvineOndemandImportResult:
         imported.append(int(row.id or 0))
-        return "imported"
+        return ComicvineOndemandImportResult("imported", catalog_series_id=None)
 
     monkeypatch.setattr(
         "app.services.photo_import_comicvine_ondemand_service.run_comicvine_ondemand_import",
@@ -342,9 +344,11 @@ def test_validate_ondemand_marks_unavailable_when_comicvine_disabled(
         match_method="none",
     )
 
+    from app.services.photo_import_comicvine_ondemand_service import ComicvineOndemandImportResult
+
     monkeypatch.setattr(
         "app.services.photo_import_comicvine_ondemand_service.run_comicvine_ondemand_import",
-        lambda *a, **k: "unavailable",
+        lambda *a, **k: ComicvineOndemandImportResult("unavailable"),
     )
 
     res = client.post(

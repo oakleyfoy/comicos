@@ -43,6 +43,23 @@ function draftFromRead(read: PhotoImportVisionRead): Draft {
   };
 }
 
+function mergeDraftFromRead(prev: Draft | undefined, read: PhotoImportVisionRead): Draft {
+  const merged = draftFromRead(read);
+  if (!prev) {
+    return merged;
+  }
+  return {
+    publisher: prev.publisher || merged.publisher,
+    series: prev.series || merged.series,
+    issue_number: prev.issue_number || merged.issue_number,
+    issue_title: prev.issue_title || merged.issue_title,
+    variant_description: prev.variant_description || merged.variant_description,
+    year: prev.year || merged.year,
+    cover_date: prev.cover_date || merged.cover_date,
+    barcode: prev.barcode || merged.barcode,
+  };
+}
+
 function EditField({
   label,
   value,
@@ -162,6 +179,8 @@ export function PhotoImportReviewPage(): JSX.Element {
         if (!knownReadIds.current.has(row.id)) {
           next[row.id] = draftFromRead(row);
           knownReadIds.current.add(row.id);
+        } else {
+          next[row.id] = mergeDraftFromRead(next[row.id], row);
         }
       }
       return next;
@@ -192,6 +211,7 @@ export function PhotoImportReviewPage(): JSX.Element {
 
   const applyRead = (updated: PhotoImportVisionRead) => {
     setReads((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setDrafts((d) => ({ ...d, [updated.id]: mergeDraftFromRead(d[updated.id], updated) }));
   };
 
   const replacePhotoReads = (imageId: number, rows: PhotoImportVisionRead[]) => {

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from sqlmodel import Session, select
@@ -23,6 +24,12 @@ logger = logging.getLogger(__name__)
 OnDemandOutcome = Literal["imported", "no_volume", "unavailable", "failed"]
 
 _MAX_YEAR_GAP = 4
+
+
+@dataclass(frozen=True)
+class ComicvineOndemandImportResult:
+    outcome: OnDemandOutcome
+    catalog_series_id: int | None = None
 
 # Background backfill: cap ComicVine work per pass and avoid duplicate threads per session.
 _MAX_ONDEMAND_PER_PASS = 8
@@ -166,24 +173,24 @@ def _find_comicvine_volume_id(
     return None
 
 
-def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead) -> OnDemandOutcome:
+def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead) -> ComicvineOndemandImportResult:
     """Search ComicVine and import one volume for this read. Does not rematch."""
     series = (read.series or "").strip()
     issue_number = (read.issue_number or "").strip()
     if not series or not issue_number:
-        return "unavailable"
+        return ComicvineOndemandImportResult("unavailable")
 
     from app.services.comicvine_catalog_importer import ComicVineCatalogImporter
 
     importer = ComicVineCatalogImporter()
     if importer.initialize_or_explain():
-        return "unavailable"
+        return ComicvineOndemandImportResult("unavailable")
 
     try:
         volume_id = _find_comicvine_volume_id(importer, read)
     except Exception:
         logger.exception("photo_import.ondemand.search_failed read_id=%s series=%r", read.id, series)
-        return "failed"
+        return ComicvineOndemandImportResult("failed")
 
     if volume_id is None:
         logger.info(
@@ -194,25 +201,26 @@ def run_comicvine_ondemand_import(session: Session, read: PhotoImportVisionRead)
             read.year,
             0,
         )
-        return "no_volume"
+        return ComicvineOndemandImportResult("no_volume")
 
     try:
         stats = importer.import_single_volume(session, comicvine_volume_id=volume_id, import_issues=True)
     except Exception:
         logger.exception("photo_import.ondemand.import_failed read_id=%s volume_id=%s", read.id, volume_id)
-        return "failed"
+        return ComicvineOndemandImportResult("failed")
 
     if stats.throttled or (stats.failures and stats.created_issues == 0 and stats.updated_issues == 0):
-        return "failed"
+        return ComicvineOndemandImportResult("failed")
 
+    catalog_series_id = int(stats.imported_series_ids[0]) if stats.imported_series_ids else None
     logger.info(
-        "photo_import.ondemand.imported read_id=%s volume_id=%s series_created=%s issues_created=%s",
+        "photo_import.ondemand.imported read_id=%s volume_id=%s series_id=%s issues_created=%s",
         read.id,
         volume_id,
-        stats.series_created,
+        catalog_series_id,
         stats.created_issues,
     )
-    return "imported"
+    return ComicvineOndemandImportResult("imported", catalog_series_id=catalog_series_id)
 
 
 def try_comicvine_ondemand_for_read(session: Session, read: PhotoImportVisionRead) -> bool:
@@ -222,20 +230,20 @@ def try_comicvine_ondemand_for_read(session: Session, read: PhotoImportVisionRea
     if _ondemand_already_finalized(read):
         return False
 
-    outcome = run_comicvine_ondemand_import(session, read)
-    if outcome == "imported":
-        from app.services.photo_import_catalog_match_service import match_and_apply
+    result = run_comicvine_ondemand_import(session, read)
+    if result.outcome == "imported":
+        from app.services.photo_import_catalog_match_service import rematch_after_comicvine_import
 
-        match_and_apply(session, read)
+        rematch_after_comicvine_import(session, read, catalog_series_id=result.catalog_series_id)
         _mark_ondemand_attempt(read, "imported")
         session.add(read)
         return read.catalog_issue_id is not None
-    if outcome == "no_volume":
+    if result.outcome == "no_volume":
         _mark_ondemand_attempt(read, "no_volume")
         session.add(read)
         return False
-    if outcome in ("unavailable", "failed"):
-        _mark_ondemand_attempt(read, outcome)
+    if result.outcome in ("unavailable", "failed"):
+        _mark_ondemand_attempt(read, result.outcome)
         session.add(read)
     # leave unmarked only for unexpected paths
     return False

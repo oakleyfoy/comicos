@@ -15,7 +15,7 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
-from app.models.catalog_master import CatalogUpc
+from app.models.catalog_master import CatalogIssue, CatalogSeries, CatalogUpc
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc
@@ -368,6 +368,91 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
     return CatalogMatchResult()
 
 
+def _enrich_read_from_matched_catalog(session: Session, read: PhotoImportVisionRead) -> None:
+    """Fill empty GPT fields from the linked catalog issue (ComicVine import metadata)."""
+    if read.catalog_issue_id is None:
+        return
+    issue = session.get(CatalogIssue, int(read.catalog_issue_id))
+    if issue is None:
+        return
+    series = session.get(CatalogSeries, issue.series_id) if issue.series_id else None
+    identity = load_catalog_issue_identity(session, int(read.catalog_issue_id))
+
+    if identity and identity.cover_image_url:
+        read.catalog_cover_url = identity.cover_image_url
+    if not (read.issue_title or "").strip() and (issue.title or "").strip():
+        read.issue_title = str(issue.title).strip()[:512]
+    if not (read.year or "").strip():
+        if issue.cover_date is not None:
+            read.year = str(issue.cover_date.year)
+        elif issue.release_date is not None:
+            read.year = str(issue.release_date.year)
+        elif series is not None and series.start_year is not None:
+            read.year = str(series.start_year)
+    if not (read.cover_date or "").strip() and issue.cover_date is not None:
+        read.cover_date = issue.cover_date.isoformat()[:32]
+    if identity is not None:
+        if not (read.publisher or "").strip() and identity.publisher:
+            read.publisher = identity.publisher[:256]
+        if not (read.series or "").strip() and identity.series:
+            read.series = identity.series[:512]
+
+
+def _match_issue_in_catalog_series(
+    session: Session,
+    read: PhotoImportVisionRead,
+    *,
+    catalog_series_id: int,
+) -> CatalogMatchResult | None:
+    """Pin match to an issue inside a specific series (e.g. volume just imported from ComicVine)."""
+    norm = normalize_issue_number((read.issue_number or "").strip())
+    if not norm:
+        return None
+    issue = session.exec(
+        select(CatalogIssue)
+        .where(CatalogIssue.series_id == int(catalog_series_id))
+        .where(CatalogIssue.normalized_issue_number == norm)
+    ).first()
+    if issue is None or issue.id is None:
+        return None
+    identity = load_catalog_issue_identity(session, int(issue.id))
+    if identity is None:
+        return None
+    return CatalogMatchResult(
+        catalog_issue_id=int(issue.id),
+        catalog_variant_id=None,
+        cover_url=identity.cover_image_url,
+        method="comicvine_import",
+        confidence=0.95,
+        series=identity.series,
+        issue_number=identity.issue_number,
+        publisher=identity.publisher,
+        alternates=[],
+    )
+
+
+def rematch_after_comicvine_import(
+    session: Session,
+    read: PhotoImportVisionRead,
+    *,
+    catalog_series_id: int | None,
+) -> CatalogMatchResult:
+    """Prefer the issue from the volume we just imported; fall back to global text match."""
+    if catalog_series_id is not None:
+        preferred = _match_issue_in_catalog_series(session, read, catalog_series_id=catalog_series_id)
+        if preferred is not None and preferred.catalog_issue_id is not None:
+            apply_match_to_read(read, preferred)
+            _enrich_read_from_matched_catalog(session, read)
+            logger.info(
+                "photo_import.catalog_match ondemand_series read_id=%s series_id=%s issue_id=%s",
+                read.id,
+                catalog_series_id,
+                preferred.catalog_issue_id,
+            )
+            return preferred
+    return match_and_apply(session, read)
+
+
 def apply_match_to_read(read: PhotoImportVisionRead, match: CatalogMatchResult) -> None:
     """Write a match result onto a read row (does not commit)."""
     read.catalog_issue_id = match.catalog_issue_id
@@ -388,6 +473,7 @@ def apply_match_to_read(read: PhotoImportVisionRead, match: CatalogMatchResult) 
 def match_and_apply(session: Session, read: PhotoImportVisionRead) -> CatalogMatchResult:
     match = match_read_to_catalog(session, read)
     apply_match_to_read(read, match)
+    _enrich_read_from_matched_catalog(session, read)
     logger.info(
         "photo_import.catalog_match read_id=%s method=%s catalog_issue_id=%s confidence=%s",
         read.id,
@@ -462,4 +548,5 @@ def choose_match_for_read(
         alternates=[a for a in existing_alternates if a.catalog_issue_id != catalog_issue_id],
     )
     apply_match_to_read(read, result)
+    _enrich_read_from_matched_catalog(session, read)
     return result
