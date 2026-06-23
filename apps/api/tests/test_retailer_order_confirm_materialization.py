@@ -348,6 +348,37 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
     assert len(copies_after) == EXPECTED_TOTAL_QUANTITY
 
 
+def test_confirm_retailer_order_materializes_via_acquisition_when_legacy_spine_absent(
+    client, session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production DBs without customer_order must still create inventory on confirm."""
+    from app.services import retailer_order_materialization as materialization_module
+
+    monkeypatch.setattr(
+        materialization_module,
+        "legacy_customer_order_table_exists",
+        lambda _session: False,
+    )
+
+    token = register_and_login(client, "midtown-unified-spine@example.com")
+    account = _create_account(client, session, token, "midtown-unified@example.com")
+    _seed_midtown_order_4272232(session, account=account, order_id=9004272288)
+
+    confirmed = client.post("/api/v1/retailer-orders/9004272288/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    body = confirmed.json()
+    assert body["review_status"] == "confirmed"
+    assert body["linked_order_id"] is None
+    assert body["linked_acquisition_id"] is not None
+    assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
+    assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
+
+    copies = session.exec(
+        select(InventoryCopy).where(InventoryCopy.acquisition_id == body["linked_acquisition_id"])
+    ).all()
+    assert len(copies) == EXPECTED_TOTAL_QUANTITY
+
+
 def test_confirm_retailer_order_works_when_legacy_customer_order_writes_disabled(
     client, session, monkeypatch: pytest.MonkeyPatch
 ) -> None:

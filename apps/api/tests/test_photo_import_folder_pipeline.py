@@ -107,3 +107,36 @@ def test_folder_process_pending_starts_uploaded_images(client: TestClient, sessi
     assert payload["started_image_ids"] == [int(img.id or 0)]
     assert payload["queue"]["processing"] == 1
     assert started == [int(img.id or 0)]
+
+
+def test_folder_reset_vision_requeues_processed_images(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "folder-reset@example.com")
+    created = _folder_session(client, token)
+    import_row = session.exec(
+        select(PhotoImportSession).where(PhotoImportSession.session_token == created["session_token"])
+    ).one()
+    user_id = int(import_row.user_id)
+    session_id = int(import_row.id or 0)
+    img = _add_image(session, session_id=session_id, user_id=user_id, status=IMAGE_STATUS_PROCESSED)
+    session.add(
+        PhotoImportVisionRead(
+            session_id=session_id,
+            image_id=int(img.id or 0),
+            series="Test",
+            issue_number="1",
+            added_to_inventory=False,
+        )
+    )
+    session.commit()
+
+    res = client.post(
+        f"/api/v1/photo-import/sessions/{created['session_token']}/folder-reset-vision",
+        headers=auth_headers(token),
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["images_reset"] == 1
+    assert body["queue"]["pending_uploads"] == 1
+    session.refresh(img)
+    assert img.status == IMAGE_STATUS_UPLOADED
+    assert session.exec(select(PhotoImportVisionRead).where(PhotoImportVisionRead.image_id == img.id)).all() == []

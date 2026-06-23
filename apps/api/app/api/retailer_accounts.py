@@ -155,6 +155,9 @@ def _serialize_order(
     quality_summary = build_retailer_order_quality_summary(session, order=order, items=items)
     raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
     linked_order_id = materialization.order_id if materialization else raw.get("comicos_linked_order_id")
+    linked_acquisition_id = (
+        materialization.acquisition_id if materialization else raw.get("comicos_linked_acquisition_id")
+    )
     linked_import_id = materialization.import_id if materialization else raw.get("comicos_linked_import_id")
     inventory_copies_created = (
         materialization.inventory_copies_created if materialization else raw.get("comicos_inventory_copies_created")
@@ -192,6 +195,7 @@ def _serialize_order(
         price_count=quality_summary["price_count"],
         release_date_count=quality_summary["release_date_count"],
         linked_order_id=int(linked_order_id) if linked_order_id is not None else None,
+        linked_acquisition_id=int(linked_acquisition_id) if linked_acquisition_id is not None else None,
         linked_import_id=int(linked_import_id) if linked_import_id is not None else None,
         inventory_copies_created=int(inventory_copies_created) if inventory_copies_created is not None else None,
         total_ordered_quantity=int(total_ordered_quantity) if total_ordered_quantity is not None else None,

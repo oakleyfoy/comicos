@@ -53,11 +53,18 @@ COMIC_IDENTIFICATION_USER = (
 
 COMIC_IDENTIFICATION_QUICK_SYSTEM = (
     "You identify comic books from cover photos. Return JSON only: "
-    '{"comics":[{"publisher":"","series":"","issue_number":"","issue_title":"","year":"",'
+    '{"comics":[{"publisher":"","series":"","issue_number":null,"issue_title":"","year":"",'
     '"barcode":"","confidence":0,"reasoning":""}]} '
     "Use a comics array with one entry per distinct cover (one element for a single comic). "
-    "Read publisher, series, issue number, year, and barcode when visible. "
+    "Read publisher, series, issue number, year, and barcode when visible on the PRINTED cover. "
     "Ignore bags, glare, and retailer stamps on plastic—not part of the printed cover. "
+    "Ignore price stickers, handwritten store marks, and dot-matrix price tags; never treat "
+    "sticker numbers as the issue number. "
+    "issue_number must be the comic's printed issue number (examples: 4, 104, 1/2)—use null "
+    "if the issue box is missing, covered, or unreadable. Do not default to 1 unless the "
+    "printed cover clearly shows issue #1. "
+    "If you inferred the issue from art or context rather than reading the box, keep confidence "
+    "at or below 0.6 and say so in reasoning. "
     "Keep reasoning to one short sentence. Do not reference any external catalog."
 )
 

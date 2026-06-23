@@ -114,6 +114,7 @@ class RetailerOrderSnapshotRead(BaseModel):
     price_count: int = 0
     release_date_count: int = 0
     linked_order_id: int | None = None
+    linked_acquisition_id: int | None = None
     linked_import_id: int | None = None
     inventory_copies_created: int | None = None
     total_ordered_quantity: int | None = None

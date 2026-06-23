@@ -8,6 +8,7 @@ import {
   mobilePhotoImportUrl,
   PHOTO_IMPORT_FOLDER_SOURCE,
   processPhotoImportFolderPending,
+  resetPhotoImportFolderVision,
   qrCodeUrlForLink,
   uploadPhotoImportImages,
   type PhotoImportFolderQueueStatus,
@@ -41,6 +42,7 @@ export function AddComicsImportFolderPage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [folderLabel, setFolderLabel] = useState<string | null>(null);
   const [localIngestBusy, setLocalIngestBusy] = useState(false);
+  const [visionResetBusy, setVisionResetBusy] = useState(false);
   const dirHandleRef = useRef<DirHandle | null>(null);
   const seenLocalFilesRef = useRef<Set<string>>(new Set());
   const workerBusyRef = useRef(false);
@@ -94,6 +96,23 @@ export function AddComicsImportFolderPage(): JSX.Element {
       workerBusyRef.current = false;
     }
   }, []);
+
+  const rerunAccurateVision = useCallback(async () => {
+    if (!session?.session_token) return;
+    setVisionResetBusy(true);
+    setError(null);
+    try {
+      const result = await resetPhotoImportFolderVision(session.session_token);
+      await refreshSession(session.session_token);
+      if (result.images_reset > 0) {
+        await runPipelineTick(session.session_token);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset GPT reads");
+    } finally {
+      setVisionResetBusy(false);
+    }
+  }, [session?.session_token, refreshSession, runPipelineTick]);
 
   const ingestLocalFolder = useCallback(async () => {
     if (!session?.session_token || !dirHandleRef.current) return;
@@ -258,11 +277,19 @@ export function AddComicsImportFolderPage(): JSX.Element {
               </StatusBanner>
             ) : (
               <p className="mt-4 text-sm text-slate-400">
-                Keep this tab open while you photograph. ComicOS runs GPT, local catalog match, and adds matched books to
-                your collection automatically.
+                Keep this tab open while you photograph. ComicOS runs accurate GPT vision, local catalog match, and adds
+                matched books to your collection automatically.
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={visionResetBusy || !session}
+                onClick={() => void rerunAccurateVision()}
+                className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 disabled:opacity-50"
+              >
+                {visionResetBusy ? "Resetting…" : "Re-run GPT on all photos"}
+              </button>
               <button
                 type="button"
                 onClick={() => navigate(photoImportDesktopReviewPath(session))}

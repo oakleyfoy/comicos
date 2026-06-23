@@ -172,8 +172,6 @@ def _lookup_prior_inventory_issues(
         )
         rows = session.exec(stmt.group_by(publisher_expr()).order_by(func.count().desc())).all()
     else:
-        from sqlalchemy import func
-
         from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
 
         rows = session.exec(

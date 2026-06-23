@@ -27,6 +27,7 @@ from app.schemas.photo_import import (
     PhotoImportCandidateRead,
     PhotoImportDetectionCandidatesResponse,
     PhotoImportProcessPendingResponse,
+    PhotoImportFolderVisionResetResponse,
     PhotoImportSelectCandidatePayload,
     PhotoImportSessionCreatePayload,
     PhotoImportSessionRead,
@@ -63,6 +64,7 @@ from app.services.comic_vision_read_mode import normalize_vision_read_mode
 from app.services.photo_import_folder_pipeline_service import (
     folder_queue_status,
     kick_folder_process_pending,
+    reset_folder_session_vision_for_rerun,
 )
 from app.services.photo_import_upload_service import upload_session_images
 from app.services.photo_import_vision_stream_service import iter_vision_read_sse
@@ -159,6 +161,28 @@ def folder_process_pending_endpoint(
         owner_user_id=int(current_user.id),
         limit=limit,
     )
+
+
+@photo_import_router.post(
+    "/sessions/{token}/folder-reset-vision",
+    response_model=PhotoImportFolderVisionResetResponse,
+)
+def folder_reset_vision_endpoint(
+    token: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> PhotoImportFolderVisionResetResponse:
+    """Clear bad GPT reads and mark photos uploaded again for accurate folder re-processing."""
+    assert current_user.id is not None
+    import_row = get_session_by_token_or_404(session, token=token)
+    assert_session_owner(import_row, owner_user_id=int(current_user.id))
+    reset_count = reset_folder_session_vision_for_rerun(
+        session,
+        token=token,
+        owner_user_id=int(current_user.id),
+    )
+    queue = folder_queue_status(session, import_row=import_row)
+    return PhotoImportFolderVisionResetResponse(images_reset=reset_count, queue=queue)
 
 
 @photo_import_router.get("/sessions/{token}", response_model=PhotoImportSessionRead)

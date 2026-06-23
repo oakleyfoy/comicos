@@ -106,15 +106,39 @@ def _as_str_list(value: Any) -> list[str]:
     return out
 
 
+from app.services.photo_import_issue_number import normalize_photo_issue_number
+
+
 def parse_vision_identification(payload: dict[str, Any]) -> VisionIdentification:
-    issue_raw = payload.get("issue_number")
-    issue = None if issue_raw is None else _as_str(issue_raw)
-    if issue is not None and issue.lower() in {"", "null", "none", "?", "n/a"}:
-        issue = None
+    reasoning = _as_str(payload.get("uncertainty_reason") or payload.get("reasoning"))
     try:
         confidence = float(payload.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    issue_raw = payload.get("issue_number")
+    issue = None
+    if issue_raw is not None:
+        text = _as_str(issue_raw)
+        if text.lower() not in {"", "null", "none", "?", "n/a"}:
+            sanitized = normalize_photo_issue_number(text)
+            if sanitized == "1" and confidence <= 0.05:
+                lowered = reasoning.lower()
+                if not any(
+                    token in lowered
+                    for token in (
+                        "issue 1",
+                        "issue #1",
+                        "#1",
+                        "number 1",
+                        "first issue",
+                        "issue one",
+                        "no. 1",
+                        "no 1",
+                    )
+                ):
+                    sanitized = None
+            issue = sanitized
     return VisionIdentification(
         publisher=_as_str(payload.get("publisher")),
         series_title=_as_str(payload.get("series_title")),
@@ -126,8 +150,8 @@ def parse_vision_identification(payload: dict[str, Any]) -> VisionIdentification
         visible_logo_text=_as_str(payload.get("visible_logo_text")),
         visible_issue_box_text=_as_str(payload.get("visible_issue_box_text")),
         visible_cover_text=_as_str(payload.get("visible_cover_text")),
-        confidence=max(0.0, min(1.0, confidence)),
-        uncertainty_reason=_as_str(payload.get("uncertainty_reason")),
+        confidence=confidence,
+        uncertainty_reason=reasoning,
         top_identification_reasons=_as_str_list(payload.get("top_identification_reasons")),
         possible_alternates=_as_str_list(payload.get("possible_alternates")),
         raw=payload if isinstance(payload, dict) else {},

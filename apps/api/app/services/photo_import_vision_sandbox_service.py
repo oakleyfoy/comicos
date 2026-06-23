@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.models.photo_import import PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
 from app.services.photo_import_ai_recognition_service import RecognitionConfigError
+from app.services.photo_import_issue_number import normalize_photo_issue_number
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.comic_vision_read_mode import ComicVisionReadMode, normalize_vision_read_mode, resolve_vision_profile
 from app.services.gpt_comic_vision_client import call_comic_vision
@@ -62,15 +63,52 @@ def _as_str(value: Any) -> str:
     return str(value).strip()
 
 
+def _finalize_parsed_issue_number(
+    issue_raw: Any,
+    *,
+    confidence: float,
+    reasoning: str,
+) -> str | None:
+    """Sanitize GPT issue numbers and drop untrusted default #1 at zero confidence."""
+    if issue_raw is None:
+        return None
+    text = str(issue_raw).strip()
+    if text.lower() in {"", "null", "none", "n/a", "?"}:
+        return None
+    issue = normalize_photo_issue_number(text)
+    if not issue:
+        return None
+    if issue == "1" and confidence <= 0.05:
+        lowered = reasoning.lower()
+        if not any(
+            token in lowered
+            for token in (
+                "issue 1",
+                "issue #1",
+                "#1",
+                "number 1",
+                "first issue",
+                "issue one",
+                "no. 1",
+                "no 1",
+            )
+        ):
+            return None
+    return issue
+
+
 def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
-    issue_raw = payload.get("issue_number")
-    issue: str | None = None
-    if issue_raw is not None and str(issue_raw).strip().lower() not in {"", "null", "none", "n/a"}:
-        issue = _as_str(issue_raw)
+    reasoning = _as_str(payload.get("reasoning"))
     try:
         confidence = float(payload.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    issue = _finalize_parsed_issue_number(
+        payload.get("issue_number"),
+        confidence=confidence,
+        reasoning=reasoning,
+    )
     return VisionSandboxReadResult(
         publisher=_as_str(payload.get("publisher")),
         series=_as_str(payload.get("series")),
@@ -80,8 +118,8 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
         year=_as_str(payload.get("year")),
         cover_date=_as_str(payload.get("cover_date")),
         barcode=_as_str(payload.get("barcode")),
-        confidence=max(0.0, min(1.0, confidence)),
-        reasoning=_as_str(payload.get("reasoning")),
+        confidence=confidence,
+        reasoning=reasoning,
         possible_alternates=_as_str_list(payload.get("possible_alternates")),
         raw_response=payload,
         raw_response_text="",

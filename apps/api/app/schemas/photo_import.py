@@ -296,6 +296,11 @@ class PhotoImportProcessPendingResponse(BaseModel):
     queue: PhotoImportFolderQueueStatusRead
 
 
+class PhotoImportFolderVisionResetResponse(BaseModel):
+    images_reset: int
+    queue: PhotoImportFolderQueueStatusRead
+
+
 PhotoImportImageVerificationRead.model_rebuild()
 PhotoImportDetectedBookRead.model_rebuild()
 PhotoImportDetectionCandidatesResponse.model_rebuild()

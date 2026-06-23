@@ -295,6 +295,15 @@ export function processPhotoImportFolderPending(
   );
 }
 
+export function resetPhotoImportFolderVision(
+  token: string,
+): Promise<{ images_reset: number; queue: PhotoImportFolderQueueStatus }> {
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(token)}/folder-reset-vision`,
+    { method: "POST" },
+  );
+}
+
 export function heartbeatPhotoImportSession(
   token: string,
   options?: { sourceDevice?: string; captureMode?: PhotoImportCaptureMode },

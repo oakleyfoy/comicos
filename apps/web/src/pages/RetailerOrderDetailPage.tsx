@@ -94,7 +94,7 @@ function orderReviewStatusKey(status: string | null | undefined): string {
 }
 
 function retailerOrderIsConfirmed(order: RetailerOrderSnapshotRead): boolean {
-  if (order.linked_order_id != null) {
+  if (order.linked_order_id != null || order.linked_acquisition_id != null) {
     return true;
   }
   return orderReviewStatusKey(order.review_status) === "confirmed";
@@ -171,10 +171,10 @@ export function RetailerOrderDetailPage() {
   function applyConfirmedOrderState(next: RetailerOrderSnapshotRead): void {
     setOrder(next);
     const copies = inventoryCopyCount(next);
-    if (next.linked_order_id && copies > 0) {
+    if (copies > 0 && (next.linked_order_id != null || next.linked_acquisition_id != null || retailerOrderIsConfirmed(next))) {
       setConfirmStats({
         inventoryCopies: copies,
-        linkedOrderId: next.linked_order_id,
+        linkedOrderId: next.linked_order_id ?? next.linked_acquisition_id ?? 0,
         retailer: next.retailer,
       });
       setSuccess(
@@ -198,7 +198,7 @@ export function RetailerOrderDetailPage() {
       }
       try {
         const refreshed = await apiClient.getRetailerOrder(retailerOrderId);
-        if (retailerOrderIsConfirmed(refreshed) && refreshed.linked_order_id != null) {
+        if (retailerOrderIsConfirmed(refreshed) && inventoryCopyCount(refreshed) > 0) {
           return refreshed;
         }
       } catch {
@@ -243,9 +243,11 @@ export function RetailerOrderDetailPage() {
           setError(
             legacyRetired
               ? "Add to portfolio is blocked by a server setting (legacy order retirement). Deploy the latest API or ask ops to enable retailer portfolio adds."
-              : confirmError instanceof ApiError
-                ? confirmError.message
-                : "Unable to confirm retailer order.",
+              : confirmError instanceof ApiError && confirmError.status === 500
+                ? "Add to portfolio failed on the server (often the production DB no longer has legacy order tables). Run or deploy the latest ComicOS API with retailer acquisition materialization, then try again."
+                : confirmError instanceof ApiError
+                  ? confirmError.message
+                  : "Unable to confirm retailer order.",
           );
         }
       }

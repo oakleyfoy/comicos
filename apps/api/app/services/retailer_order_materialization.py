@@ -28,6 +28,7 @@ from sqlmodel import Session, select
 from app.services.legacy_spine_availability import legacy_customer_order_table_exists
 
 from app.models import (
+    Acquisition,
     DraftImport,
     InventoryCopy,
     Order,
@@ -38,6 +39,16 @@ from app.models import (
     RetailerOrderSnapshot,
     User,
 )
+from app.models.acquisition import ACQUISITION_STATUS_OPEN, ACQUISITION_TYPE_LCS
+from app.schemas.ai import ParseOrderResponse
+from app.services.acquisition.acquisition_cost_allocation_service import quantize_money
+from app.services.acquisition.acquisition_inventory_service import (
+    RECEIVED_VIA_RETAILER_ORDER,
+    create_received_catalog_copy,
+    create_received_placeholder_copy,
+)
+from app.services.acquisition.acquisition_service import recompute_actual_book_count
+from app.services.catalog_issue_link_service import resolve_catalog_issue_link
 from app.services.imports import confirm_import_for_user
 from app.services.retailer_draft_import_prep import prepare_draft_import_for_retailer_confirm
 from app.services.retailer_order_catalog_enrichment import (
@@ -202,11 +213,12 @@ def _stage_timer(stage: str, *, order_number: str):
 
 @dataclass(frozen=True)
 class RetailerOrderMaterializationResult:
-    order_id: int
     inventory_copies_created: int
     total_ordered_quantity: int
     portfolio_items_added: int
     import_id: int | None
+    order_id: int | None = None
+    acquisition_id: int | None = None
     line_debug: tuple[dict, ...] = ()
     enrichment_summary: dict | None = None
 
@@ -251,6 +263,459 @@ def _linked_order_id(order: RetailerOrderSnapshot) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _linked_acquisition_id(order: RetailerOrderSnapshot) -> int | None:
+    raw = order.raw_snapshot_json or {}
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("comicos_linked_acquisition_id")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _inventory_stats_for_acquisition(
+    session: Session,
+    *,
+    owner_user_id: int,
+    acquisition_id: int,
+) -> tuple[int, int]:
+    copy_count = int(
+        session.exec(
+            select(func.count())
+            .select_from(InventoryCopy)
+            .where(
+                InventoryCopy.acquisition_id == acquisition_id,
+                InventoryCopy.user_id == owner_user_id,
+            )
+        ).one()
+    )
+    return copy_count, copy_count
+
+
+def _attach_inventory_ids_to_default_portfolio(
+    session: Session,
+    *,
+    owner_user_id: int,
+    inventory_ids: list[int],
+) -> int:
+    if not inventory_ids:
+        return 0
+    portfolio = _ensure_default_portfolio(session, owner_user_id=owner_user_id)
+    portfolio_id = int(portfolio.id or 0)
+    added = 0
+    for inventory_id in inventory_ids:
+        existing = session.exec(
+            select(PortfolioItem).where(
+                PortfolioItem.portfolio_id == portfolio_id,
+                PortfolioItem.inventory_item_id == inventory_id,
+                PortfolioItem.removed_at.is_(None),
+            )
+        ).first()
+        if existing is not None:
+            continue
+        session.add(
+            PortfolioItem(
+                portfolio_id=portfolio_id,
+                inventory_item_id=inventory_id,
+                allocation_role="holding",
+            )
+        )
+        added += 1
+    if added:
+        session.flush()
+    return added
+
+
+def _attach_acquisition_inventory_to_default_portfolio(
+    session: Session,
+    *,
+    owner_user_id: int,
+    acquisition_id: int,
+) -> int:
+    inventory_ids = list(
+        session.scalars(
+            select(InventoryCopy.id)
+            .where(
+                InventoryCopy.acquisition_id == acquisition_id,
+                InventoryCopy.user_id == owner_user_id,
+            )
+            .order_by(InventoryCopy.id.asc())
+        ).all()
+    )
+    return _attach_inventory_ids_to_default_portfolio(
+        session, owner_user_id=owner_user_id, inventory_ids=inventory_ids
+    )
+
+
+def _mark_retailer_draft_confirmed_without_legacy_order(
+    session: Session,
+    *,
+    draft: DraftImport,
+    owner_user_id: int,
+    total_copies_created: int,
+    total_items: int,
+) -> None:
+    draft.status = "confirmed"
+    draft.linked_order_id = None
+    draft.updated_at = utc_now()
+    session.add(draft)
+    from app.services.p92_guided_import_service import record_import_health_event
+
+    record_import_health_event(
+        session,
+        owner_user_id=owner_user_id,
+        event_type="import_confirmed",
+        draft_import_id=int(draft.id or 0),
+        payload={
+            "total_items": total_items,
+            "total_copies_created": total_copies_created,
+            "materialization_mode": "acquisition",
+        },
+    )
+
+
+def _seller_label_for_retailer_order(*, account, order: RetailerOrderSnapshot) -> str:
+    display = getattr(account, "display_name", None)
+    if isinstance(display, str) and display.strip():
+        return display.strip()
+    retailer = (order.retailer or "").strip()
+    return retailer or "Retailer"
+
+
+def _create_retailer_order_acquisition(
+    session: Session,
+    *,
+    owner_user_id: int,
+    order: RetailerOrderSnapshot,
+    account,
+    expected_qty: int,
+) -> Acquisition:
+    acquisition = Acquisition(
+        user_id=owner_user_id,
+        acquisition_type=ACQUISITION_TYPE_LCS,
+        purchase_date=order.order_date,
+        seller_name=_seller_label_for_retailer_order(account=account, order=order),
+        total_paid=quantize_money(order.order_total or 0),
+        expected_book_count=expected_qty,
+        status=ACQUISITION_STATUS_OPEN,
+        notes=f"Retailer order #{order.retailer_order_number}",
+    )
+    session.add(acquisition)
+    session.flush()
+    return acquisition
+
+
+def _materialize_copies_on_acquisition(
+    session: Session,
+    *,
+    acquisition: Acquisition,
+    order: RetailerOrderSnapshot,
+    account,
+    item_snapshots: list[RetailerOrderItemSnapshot],
+    draft_items: list,
+) -> tuple[list[int], tuple[dict, ...]]:
+    """Create inventory copies on an acquisition (unified spine, no customer_order)."""
+    owner_user_id = int(acquisition.user_id or 0)
+    retailer_key = (order.retailer or account.retailer or "").strip() or None
+    inventory_ids: list[int] = []
+    lines: list[dict] = []
+    for index, snapshot in enumerate(item_snapshots):
+        draft_item = draft_items[index] if index < len(draft_items) else None
+        title = (snapshot.title or "").strip() or "Unknown Title"
+        publisher = (snapshot.publisher or "").strip() or None
+        issue_number = (snapshot.issue_number or "").strip() or None
+        unit_price = snapshot.unit_price
+        if draft_item is not None:
+            title = (getattr(draft_item, "title", None) or title).strip() or title
+            publisher = (getattr(draft_item, "publisher", None) or publisher) or publisher
+            issue_number = (getattr(draft_item, "issue_number", None) or issue_number) or issue_number
+            if getattr(draft_item, "raw_item_price", None) is not None:
+                unit_price = draft_item.raw_item_price
+        qty = int(snapshot.quantity or 0)
+        line_copy_ids: list[int] = []
+        catalog_link = resolve_catalog_issue_link(
+            session,
+            series=title,
+            issue_number=issue_number,
+            publisher=publisher,
+        )
+        image_url = snapshot.image_url or snapshot.thumbnail_url
+        if draft_item is not None:
+            image_url = (
+                getattr(draft_item, "cover_thumbnail_url", None)
+                or getattr(draft_item, "cover_image_url", None)
+                or image_url
+            )
+        unit_cost = quantize_money(unit_price or 0)
+        for _ in range(qty):
+            if catalog_link.catalog_issue_id is not None:
+                copy = create_received_catalog_copy(
+                    session,
+                    acquisition=acquisition,
+                    catalog_issue_id=int(catalog_link.catalog_issue_id),
+                    series_id=None,
+                    issue_number=issue_number,
+                    catalog_variant_id=catalog_link.catalog_variant_id,
+                    source_image_url=image_url,
+                    received_via=RECEIVED_VIA_RETAILER_ORDER,
+                )
+            else:
+                copy = create_received_placeholder_copy(
+                    session,
+                    acquisition=acquisition,
+                    title=title,
+                    issue_number=issue_number,
+                    publisher=publisher,
+                    source_image_url=image_url,
+                    received_via=RECEIVED_VIA_RETAILER_ORDER,
+                )
+            copy.order_retailer = retailer_key
+            copy.order_date = order.order_date
+            copy.order_source_type = "retailer_account"
+            copy.order_raw_item_price = unit_cost
+            copy.acquisition_cost = unit_cost
+            session.add(copy)
+            session.flush()
+            copy_id = int(copy.id or 0)
+            line_copy_ids.append(copy_id)
+            inventory_ids.append(copy_id)
+        lines.append(
+            {
+                "title": snapshot.title,
+                "parsed_qty": qty,
+                "order_item_qty": qty,
+                "copies_created": len(line_copy_ids),
+                "retailer_item_id": snapshot.retailer_item_id,
+            }
+        )
+        logger.info(
+            "retailer_materialize_acquisition line title=%r parsed_qty=%s copies_created=%s",
+            snapshot.title,
+            qty,
+            len(line_copy_ids),
+        )
+    recompute_actual_book_count(session, acquisition)
+    return inventory_ids, tuple(lines)
+
+
+def _finalize_existing_acquisition(
+    session: Session,
+    *,
+    owner_user_id: int,
+    order: RetailerOrderSnapshot,
+    acquisition_id: int,
+    import_id: int | None = None,
+    item_snapshots: list[RetailerOrderItemSnapshot] | None = None,
+) -> RetailerOrderMaterializationResult:
+    if item_snapshots is None:
+        item_snapshots = list_retailer_order_item_snapshots(session, order_snapshot_id=int(order.id or 0))
+    logger.info(
+        "retailer_confirm idempotent_recovery order=%s linked_acquisition_id=%s",
+        order.retailer_order_number,
+        acquisition_id,
+    )
+    portfolio_added = _attach_acquisition_inventory_to_default_portfolio(
+        session,
+        owner_user_id=owner_user_id,
+        acquisition_id=acquisition_id,
+    )
+    copies, total_qty = _inventory_stats_for_acquisition(
+        session, owner_user_id=owner_user_id, acquisition_id=acquisition_id
+    )
+    existing_raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
+    line_debug_raw = existing_raw.get("comicos_materialization_line_debug")
+    line_debug: tuple[dict, ...] = tuple(line_debug_raw) if isinstance(line_debug_raw, list) else ()
+    enrichment_summary = existing_raw.get("comicos_enrichment_summary")
+    if not isinstance(enrichment_summary, dict):
+        enrichment_summary = None
+    _persist_materialization_on_snapshot(
+        session,
+        order=order,
+        order_id=None,
+        acquisition_id=acquisition_id,
+        import_id=import_id,
+        portfolio_items_added=portfolio_added,
+        line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
+    )
+    raw = dict(order.raw_snapshot_json or {})
+    raw["comicos_inventory_copies_created"] = copies
+    raw["comicos_total_ordered_quantity"] = total_qty
+    order.raw_snapshot_json = raw
+    session.add(order)
+    session.commit()
+    return RetailerOrderMaterializationResult(
+        order_id=None,
+        acquisition_id=acquisition_id,
+        inventory_copies_created=copies,
+        total_ordered_quantity=total_qty,
+        portfolio_items_added=portfolio_added,
+        import_id=import_id,
+        line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
+    )
+
+
+def _materialize_retailer_order_inventory_acquisition(
+    session: Session,
+    *,
+    owner_user_id: int,
+    order: RetailerOrderSnapshot,
+    account,
+    item_snapshots: list[RetailerOrderItemSnapshot],
+) -> RetailerOrderMaterializationResult:
+    expected_qty = _expected_quantity_from_snapshots(item_snapshots)
+    order_number = order.retailer_order_number
+
+    existing_acquisition_id = _linked_acquisition_id(order)
+    if existing_acquisition_id is not None:
+        linked = session.get(Acquisition, existing_acquisition_id)
+        if linked is not None and linked.user_id == owner_user_id:
+            existing_draft = _find_import_for_retailer_order(
+                session,
+                owner_user_id=owner_user_id,
+                retailer_order_number=order.retailer_order_number,
+            )
+            import_id = int(existing_draft.id) if existing_draft is not None else None
+            return _finalize_existing_acquisition(
+                session,
+                owner_user_id=owner_user_id,
+                order=order,
+                acquisition_id=existing_acquisition_id,
+                import_id=import_id,
+                item_snapshots=item_snapshots,
+            )
+
+    existing_draft = _find_import_for_retailer_order(
+        session,
+        owner_user_id=owner_user_id,
+        retailer_order_number=order.retailer_order_number,
+    )
+    if existing_draft is not None and existing_draft.status == "confirmed":
+        acq_id = _linked_acquisition_id(order)
+        if acq_id is not None:
+            return _finalize_existing_acquisition(
+                session,
+                owner_user_id=owner_user_id,
+                order=order,
+                acquisition_id=acq_id,
+                import_id=int(existing_draft.id or 0),
+                item_snapshots=item_snapshots,
+            )
+
+    with _stage_timer("draft_sync", order_number=order_number):
+        draft = sync_isolated_draft_import_for_retailer_order(
+            session,
+            account=account,
+            order=order,
+            item_snapshots=item_snapshots,
+        )
+    if draft.id is None:
+        raise HTTPException(status_code=422, detail="Retailer import draft could not be created.")
+
+    if draft.status == "confirmed":
+        acq_id = _linked_acquisition_id(order)
+        if acq_id is not None:
+            return _finalize_existing_acquisition(
+                session,
+                owner_user_id=owner_user_id,
+                order=order,
+                acquisition_id=acq_id,
+                import_id=int(draft.id),
+                item_snapshots=item_snapshots,
+            )
+
+    with _stage_timer("draft_prepare", order_number=order_number):
+        prepare_draft_import_for_retailer_confirm(session, draft)
+
+    payload = ParseOrderResponse.model_validate(draft.parsed_payload_json or {})
+    draft_items = list(payload.items)
+
+    with _stage_timer("acquisition_inventory_create", order_number=order_number):
+        acquisition = _create_retailer_order_acquisition(
+            session,
+            owner_user_id=owner_user_id,
+            order=order,
+            account=account,
+            expected_qty=expected_qty,
+        )
+        inventory_ids, line_debug = _materialize_copies_on_acquisition(
+            session,
+            acquisition=acquisition,
+            order=order,
+            account=account,
+            item_snapshots=item_snapshots,
+            draft_items=draft_items,
+        )
+
+    copies = len(inventory_ids)
+    total_qty = copies
+    _validate_materialized_quantities(
+        item_snapshots=item_snapshots,
+        copy_count=copies,
+        total_qty=total_qty,
+        line_debug=line_debug,
+    )
+    if copies != expected_qty:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Expected {expected_qty} inventory copies for order {order_number}, got {copies}.",
+        )
+
+    with _stage_timer("portfolio_creation", order_number=order_number):
+        portfolio_added = _attach_inventory_ids_to_default_portfolio(
+            session,
+            owner_user_id=owner_user_id,
+            inventory_ids=inventory_ids,
+        )
+
+    _mark_retailer_draft_confirmed_without_legacy_order(
+        session,
+        draft=draft,
+        owner_user_id=owner_user_id,
+        total_copies_created=copies,
+        total_items=len(item_snapshots),
+    )
+
+    enrichment_summary = {
+        **_pending_enrichment_summary(len(item_snapshots)),
+        "status": "skipped_unified_spine",
+        "message": "Catalog enrichment for retailer orders requires the legacy order spine.",
+    }
+    acquisition_id = int(acquisition.id or 0)
+    _persist_materialization_on_snapshot(
+        session,
+        order=order,
+        order_id=None,
+        acquisition_id=acquisition_id,
+        import_id=int(draft.id),
+        portfolio_items_added=portfolio_added,
+        line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
+    )
+    raw = dict(order.raw_snapshot_json or {})
+    raw["comicos_inventory_copies_created"] = copies
+    raw["comicos_total_ordered_quantity"] = total_qty
+    order.raw_snapshot_json = raw
+    session.add(order)
+    with _stage_timer("commit", order_number=order_number):
+        session.commit()
+
+    return RetailerOrderMaterializationResult(
+        order_id=None,
+        acquisition_id=acquisition_id,
+        inventory_copies_created=copies,
+        total_ordered_quantity=total_qty,
+        portfolio_items_added=portfolio_added,
+        import_id=int(draft.id),
+        line_debug=line_debug,
+        enrichment_summary=enrichment_summary,
+    )
 
 
 def _inventory_stats_for_order(
@@ -314,32 +779,9 @@ def _attach_inventory_to_default_portfolio(
             .order_by(InventoryCopy.id.asc())
         ).all()
     )
-    if not inventory_ids:
-        return 0
-    portfolio = _ensure_default_portfolio(session, owner_user_id=owner_user_id)
-    portfolio_id = int(portfolio.id or 0)
-    added = 0
-    for inventory_id in inventory_ids:
-        existing = session.exec(
-            select(PortfolioItem).where(
-                PortfolioItem.portfolio_id == portfolio_id,
-                PortfolioItem.inventory_item_id == inventory_id,
-                PortfolioItem.removed_at.is_(None),
-            )
-        ).first()
-        if existing is not None:
-            continue
-        session.add(
-            PortfolioItem(
-                portfolio_id=portfolio_id,
-                inventory_item_id=inventory_id,
-                allocation_role="holding",
-            )
-        )
-        added += 1
-    if added:
-        session.flush()
-    return added
+    return _attach_inventory_ids_to_default_portfolio(
+        session, owner_user_id=owner_user_id, inventory_ids=inventory_ids
+    )
 
 
 def _expected_quantity_from_snapshots(item_snapshots: list[RetailerOrderItemSnapshot]) -> int:
@@ -419,14 +861,18 @@ def _persist_materialization_on_snapshot(
     session: Session,
     *,
     order: RetailerOrderSnapshot,
-    order_id: int,
     import_id: int | None,
     portfolio_items_added: int,
+    order_id: int | None = None,
+    acquisition_id: int | None = None,
     line_debug: tuple[dict, ...] = (),
     enrichment_summary: dict | None = None,
 ) -> None:
     raw = dict(order.raw_snapshot_json or {})
-    raw["comicos_linked_order_id"] = int(order_id)
+    if order_id is not None:
+        raw["comicos_linked_order_id"] = int(order_id)
+    if acquisition_id is not None:
+        raw["comicos_linked_acquisition_id"] = int(acquisition_id)
     if import_id is not None:
         raw["comicos_linked_import_id"] = int(import_id)
     raw["comicos_materialized_at"] = utc_now().isoformat()
@@ -505,6 +951,15 @@ def materialize_retailer_order_inventory(
 ) -> RetailerOrderMaterializationResult:
     """Create or reuse order/inventory from a retailer snapshot."""
     item_snapshots = list_retailer_order_item_snapshots(session, order_snapshot_id=int(order.id or 0))
+    if not legacy_customer_order_table_exists(session):
+        return _materialize_retailer_order_inventory_acquisition(
+            session,
+            owner_user_id=owner_user_id,
+            order=order,
+            account=account,
+            item_snapshots=item_snapshots,
+        )
+
     expected_qty = _expected_quantity_from_snapshots(item_snapshots)
 
     existing_order_id = _linked_order_id(order)

@@ -395,6 +395,7 @@ export interface RetailerOrderSnapshotRead {
   price_count: number;
   release_date_count: number;
   linked_order_id?: number | null;
+  linked_acquisition_id?: number | null;
   linked_import_id?: number | null;
   inventory_copies_created?: number | null;
   total_ordered_quantity?: number | null;

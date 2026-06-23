@@ -106,3 +106,48 @@ def test_sandbox_skips_detections(tmp_path, monkeypatch) -> None:
             assert reads[0].series == "Falcon"
 
     get_settings.cache_clear()
+
+
+def test_parse_sandbox_rejects_subtitle_as_issue_number() -> None:
+    from app.services.photo_import_vision_sandbox_service import _parse_sandbox_payload
+
+    row = _parse_sandbox_payload(
+        {
+            "publisher": "Marvel",
+            "series": "The Initiative",
+            "issue_number": "The Initiative",
+            "confidence": 0.8,
+            "reasoning": "Cover art",
+        }
+    )
+    assert row.issue_number is None
+
+
+def test_parse_sandbox_drops_untrusted_issue_one_at_zero_confidence() -> None:
+    from app.services.photo_import_vision_sandbox_service import _parse_sandbox_payload
+
+    row = _parse_sandbox_payload(
+        {
+            "publisher": "DC",
+            "series": "Superman",
+            "issue_number": "1",
+            "confidence": 0,
+            "reasoning": "Green price sticker visible",
+        }
+    )
+    assert row.issue_number is None
+
+
+def test_parse_sandbox_keeps_issue_one_when_reasoning_confirms() -> None:
+    from app.services.photo_import_vision_sandbox_service import _parse_sandbox_payload
+
+    row = _parse_sandbox_payload(
+        {
+            "publisher": "DC",
+            "series": "Justice League",
+            "issue_number": "1",
+            "confidence": 0,
+            "reasoning": "Printed issue #1 in the corner box",
+        }
+    )
+    assert row.issue_number == "1"

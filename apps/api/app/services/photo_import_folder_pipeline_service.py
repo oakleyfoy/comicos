@@ -23,9 +23,12 @@ from app.services.photo_import_vision_read_actions_service import (
     catalog_match_vision_read,
 )
 
+from app.services.comic_vision_read_mode import ComicVisionReadMode
+
 logger = logging.getLogger(__name__)
 
 FOLDER_IMPORT_SOURCE_DEVICE = "folder_import"
+FOLDER_VISION_MODE = ComicVisionReadMode.ACCURATE
 MAX_KICK_PER_REQUEST = 3
 
 
@@ -74,7 +77,7 @@ def _run_image_pipeline(image_id: int, owner_user_id: int, session_token: str) -
     from app.services.photo_import_processing_service import run_photo_import_image_processing
 
     try:
-        run_photo_import_image_processing(image_id, vision_mode="quick")
+        run_photo_import_image_processing(image_id, vision_mode=FOLDER_VISION_MODE.value)
         with Session(get_engine()) as bg_session:
             _post_process_image_reads(bg_session, image_id=image_id, owner_user_id=owner_user_id)
             import_row = get_session_by_token_or_404(bg_session, token=session_token)
@@ -143,3 +146,47 @@ def kick_folder_process_pending(
     refresh_session_counts(session, session_id=session_id)
     status = folder_queue_status(session, import_row=import_row)
     return PhotoImportProcessPendingResponse(started_image_ids=started, queue=status)
+
+
+def reset_folder_session_vision_for_rerun(
+    session: Session,
+    *,
+    token: str,
+    owner_user_id: int,
+) -> int:
+    """Drop GPT reads and re-queue photos so folder pipeline runs vision again (e.g. after quick mis-reads)."""
+    import_row = get_session_by_token_or_404(session, token=token)
+    if (import_row.source_device or "").strip() != FOLDER_IMPORT_SOURCE_DEVICE:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vision reset is only for folder-import sessions.",
+        )
+    session_id = int(import_row.id or 0)
+    images = session.exec(select(PhotoImportImage).where(PhotoImportImage.session_id == session_id)).all()
+    reset_count = 0
+    for image in images:
+        if image.status == IMAGE_STATUS_PROCESSING:
+            continue
+        reads = session.exec(
+            select(PhotoImportVisionRead).where(PhotoImportVisionRead.image_id == int(image.id or 0))
+        ).all()
+        if any(getattr(r, "added_to_inventory", False) for r in reads):
+            continue
+        for read in reads:
+            session.delete(read)
+        if reads or image.status in {IMAGE_STATUS_PROCESSED, IMAGE_STATUS_FAILED}:
+            image.status = IMAGE_STATUS_UPLOADED
+            session.add(image)
+            reset_count += 1
+    if reset_count:
+        session.commit()
+        refresh_session_counts(session, session_id=session_id)
+    logger.info(
+        "folder_pipeline vision_reset session_id=%s owner=%s images_reset=%s",
+        session_id,
+        owner_user_id,
+        reset_count,
+    )
+    return reset_count
