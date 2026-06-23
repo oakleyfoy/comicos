@@ -88,6 +88,27 @@ def normalize_series_name(name: str) -> str:
     return collapsed
 
 
+def _is_year_token(token: str) -> bool:
+    return bool(re.fullmatch(r"(19|20)\d{2}", token))
+
+
+def series_names_compatible(vision_norm: str, catalog_norm: str) -> bool:
+    """True when normalized names are the same run (not e.g. superman vs superman batman)."""
+    if not vision_norm or not catalog_norm:
+        return False
+    if vision_norm == catalog_norm:
+        return True
+    v_parts = vision_norm.split()
+    c_parts = catalog_norm.split()
+    if len(c_parts) > len(v_parts) and c_parts[: len(v_parts)] == v_parts:
+        extra = c_parts[len(v_parts) :]
+        return bool(extra) and all(_is_year_token(t) for t in extra)
+    if len(v_parts) > len(c_parts) and v_parts[: len(c_parts)] == c_parts:
+        extra = v_parts[len(c_parts) :]
+        return bool(extra) and all(_is_year_token(t) for t in extra)
+    return False
+
+
 def normalize_issue_number(raw: str) -> str:
     text = (raw or "").strip().lower()
     if not text:

@@ -21,6 +21,7 @@ from app.services.catalog_ingestion_service import (
     normalize_issue_number,
     normalize_series_name,
     normalize_upc,
+    series_names_compatible,
 )
 from app.services.catalog_publisher_registry import is_international_publisher
 
@@ -118,7 +119,7 @@ def _score_volume(row: dict[str, Any], *, series: str, issue_number: str | None,
 
     if norm_cand == norm_target:
         score = 1000.0
-    elif norm_cand.startswith(norm_target) or norm_target.startswith(norm_cand):
+    elif series_names_compatible(norm_target, norm_cand):
         score = 600.0
     else:
         return None

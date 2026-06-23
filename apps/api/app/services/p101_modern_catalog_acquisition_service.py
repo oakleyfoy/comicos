@@ -240,11 +240,13 @@ def build_p101_queue(
     return result
 
 
-def build_p101_runbook_plan(*, repo_root: str = r"C:\comic-os-p41-feed") -> P101RunbookPlan:
-    api = f"{repo_root}\\apps\\api"
+def build_p101_runbook_plan(*, api_root: str | None = None) -> P101RunbookPlan:
+    api = (api_root or r"C:\comic-os-p41-feed\apps\api").rstrip("\\/")
     ps: list[str] = [
         f"Set-Location {api}",
-        '$db = $env:DATABASE_URL  # set before running: $env:DATABASE_URL = "postgresql+..."',
+        "# Real URL required (or leave unset to use apps/api/.env):",
+        '# $env:DATABASE_URL = "postgresql+pg8000://USER:PASS@HOST/dbname"',
+        '$db = $env:DATABASE_URL  # optional if .env has DATABASE_URL',
         "",
         "# --- Phase 0: Audit (read-only) ---",
         "python scripts/p101_modern_catalog_audit.py --database-url $db",
@@ -260,12 +262,12 @@ def build_p101_runbook_plan(*, repo_root: str = r"C:\comic-os-p41-feed") -> P101
         "python scripts/p97_build_volume_issue_import_queue.py --database-url $db",
         "python scripts/p101_modern_catalog_runbook.py --database-url $db queue-preview",
         "",
-        "# --- Phase 4: Bulk modern volumes by publisher (optional; complements queue) ---",
+        "# --- Phase 4: Bulk modern volumes by publisher (optional; uses DATABASE_URL / .env) ---",
         "# Dry-run one publisher first:",
-        'python scripts/p97_import_comicvine_catalog.py --database-url $db --publisher "Marvel" '
+        'python scripts/p97_import_comicvine_catalog.py --publisher "Marvel" '
         f"--min-start-year {P101_YEAR_MIN} --import-issues --limit 20 --dry-run",
         "# Live resume loop (one publisher at a time):",
-        'python scripts/p97_import_comicvine_catalog.py --database-url $db --publisher "Marvel" '
+        'python scripts/p97_import_comicvine_catalog.py --publisher "Marvel" '
         f'--min-start-year {P101_YEAR_MIN} --strict-publisher --import-issues --resume --limit 100 --sleep-seconds 1',
         "",
         "# --- Phase 5: Import from queue — DRY-RUN first ---",

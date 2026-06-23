@@ -46,3 +46,12 @@ def test_rebirth_hint_year_picks_2016_superman() -> None:
     ]
     vid = select_comicvine_volume_id(candidates, series="Superman", issue_number="19", year=2017)
     assert vid == 11
+
+
+def test_superman_does_not_match_superman_batman_volume() -> None:
+    candidates = [
+        {"id": 99, "name": "Superman/Batman", "start_year": 2003, "publisher": {"name": "DC Comics"}, "count_of_issues": 100},
+        {"id": 11, "name": "Superman", "start_year": 2016, "publisher": {"name": "DC Comics"}, "count_of_issues": 45},
+    ]
+    vid = select_comicvine_volume_id(candidates, series="Superman", issue_number="39", year=2018)
+    assert vid == 11

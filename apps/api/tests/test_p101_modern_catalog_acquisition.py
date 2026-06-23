@@ -29,8 +29,9 @@ def test_is_p101_modern_universe_volume() -> None:
 
 
 def test_runbook_plan_includes_dry_run_before_live() -> None:
-    plan = build_p101_runbook_plan(repo_root=r"C:\comic-os-p41-feed")
+    plan = build_p101_runbook_plan(api_root=r"C:\comic-os-p41-feed\apps\api")
     text = "\n".join(plan.powershell_commands)
+    assert "apps\\apps\\api" not in text
     assert "queue-preview" in text
     assert "--dry-run" in text
     assert "p97_import_volume_issue_queue.py" in text

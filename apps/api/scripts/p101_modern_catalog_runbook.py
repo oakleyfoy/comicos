@@ -35,7 +35,12 @@ from app.services.p101_modern_catalog_audit_service import (  # noqa: E402
     audit_report_to_json,
     build_modern_catalog_audit_report,
 )
-from p97_db import describe_database_url, get_p97_engine, resolve_p97_database_url  # noqa: E402
+from p97_db import (  # noqa: E402
+    describe_database_url,
+    explain_database_url_error,
+    get_p97_engine,
+    resolve_p97_database_url,
+)
 
 
 def _fmt(n: int) -> str:
@@ -148,9 +153,8 @@ def cmd_queue_build(session: Session, *, apply: bool, refresh_complete: bool, to
     return 0
 
 
-def cmd_plan(*, write_ps1: bool, as_json: bool, repo_root: str | None) -> int:
-    root = repo_root or str(API_ROOT.parent)
-    plan = build_p101_runbook_plan(repo_root=root)
+def cmd_plan(*, write_ps1: bool, as_json: bool) -> int:
+    plan = build_p101_runbook_plan(api_root=str(API_ROOT))
     payload = runbook_plan_to_json(plan)
     out_dir = API_ROOT / "data" / "p101"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -184,31 +188,48 @@ def cmd_plan(*, write_ps1: bool, as_json: bool, repo_root: str | None) -> int:
 
 
 def main() -> int:
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--database-url",
+        default=None,
+        help="Postgres URL (optional if DATABASE_URL is in apps/api/.env)",
+    )
+    shared.add_argument("--json", action="store_true")
+
     parser = argparse.ArgumentParser(description="P101 modern catalog acquisition runbook")
-    parser.add_argument("--database-url", default=None)
-    parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("audit", help="Same as p101_modern_catalog_audit.py")
+    sub.add_parser("audit", parents=[shared], help="Same as p101_modern_catalog_audit.py")
 
-    p_preview = sub.add_parser("queue-preview", help="Dry-run: modern gap volumes (no queue writes)")
+    p_preview = sub.add_parser(
+        "queue-preview",
+        parents=[shared],
+        help="Dry-run: modern gap volumes (no queue writes)",
+    )
     p_preview.add_argument("--top", type=int, default=50)
 
-    p_build = sub.add_parser("queue-build", help="Preview by default; pass --apply to run p97 queue build")
+    p_build = sub.add_parser(
+        "queue-build",
+        parents=[shared],
+        help="Preview by default; pass --apply to run p97 queue build",
+    )
     p_build.add_argument("--apply", action="store_true", help="Call p97_build_volume_issue_import_queue")
     p_build.add_argument("--refresh-complete", action="store_true")
     p_build.add_argument("--top", type=int, default=50)
 
-    p_plan = sub.add_parser("plan", help="Emit PowerShell import plan (dry-run steps first)")
+    p_plan = sub.add_parser("plan", parents=[shared], help="Emit PowerShell import plan (dry-run steps first)")
     p_plan.add_argument("--write-ps1", action="store_true", help="Write data/p101/modern_catalog_runbook.ps1")
-    p_plan.add_argument("--repo-root", default=None, help="Repo root for paths in generated PS1")
 
     args = parser.parse_args()
 
     if args.command == "plan":
-        return cmd_plan(write_ps1=bool(args.write_ps1), as_json=bool(args.json), repo_root=args.repo_root)
+        return cmd_plan(write_ps1=bool(args.write_ps1), as_json=bool(args.json))
 
     database_url = resolve_p97_database_url(args.database_url)
+    url_error = explain_database_url_error(database_url)
+    if url_error:
+        print(f"ERROR: {url_error}", file=sys.stderr)
+        return 2
     engine = get_p97_engine(database_url)
     db_label = describe_database_url(database_url)
     with Session(engine) as session:

@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 from app.models.catalog_master import CatalogIssue, CatalogSeries, CatalogUpc
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage
 from app.models.photo_import_vision_read import PhotoImportVisionRead
-from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc
+from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc, series_names_compatible
 from app.services.photo_import_crop_service import resolve_crop_abs_path
 from app.services.photo_import_fingerprint_service import search_catalog_fingerprint_hits_for_crop_path
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
@@ -64,9 +64,7 @@ def _series_aligns(vision_series: str | None, catalog_series: str | None) -> boo
         return False
     left = normalize_series_name(vision_series)
     right = normalize_series_name(catalog_series)
-    if left == right:
-        return True
-    return left in right or right in left
+    return series_names_compatible(left, right)
 
 
 def _issue_aligns(vision_issue: str | None, catalog_issue: str | None) -> bool:
