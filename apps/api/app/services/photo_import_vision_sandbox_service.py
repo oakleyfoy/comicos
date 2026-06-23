@@ -69,31 +69,20 @@ def _finalize_parsed_issue_number(
     confidence: float,
     reasoning: str,
 ) -> str | None:
-    """Sanitize GPT issue numbers and drop untrusted default #1 at zero confidence."""
+    """Normalize a GPT issue number, returning None only when it is clearly not an issue.
+
+    We deliberately keep the model's value (including #1) here: dropping low-confidence
+    reads turned legitimate issue numbers into blanks. Noise like story-arc subtitles and
+    price stickers is filtered by ``normalize_photo_issue_number`` and the vision prompts.
+    """
     if issue_raw is None:
         return None
     text = str(issue_raw).strip()
-    if text.lower() in {"", "null", "none", "n/a", "?"}:
+    if text.lower() in {"", "null", "none", "n/a", "?", "unknown"}:
         return None
     issue = normalize_photo_issue_number(text)
     if not issue:
         return None
-    if issue == "1" and confidence <= 0.05:
-        lowered = reasoning.lower()
-        if not any(
-            token in lowered
-            for token in (
-                "issue 1",
-                "issue #1",
-                "#1",
-                "number 1",
-                "first issue",
-                "issue one",
-                "no. 1",
-                "no 1",
-            )
-        ):
-            return None
     return issue
 
 
@@ -124,6 +113,51 @@ def _parse_sandbox_payload(payload: dict[str, Any]) -> VisionSandboxReadResult:
         raw_response=payload,
         raw_response_text="",
     )
+
+
+def _focused_issue_number_read(
+    image_bytes: bytes,
+    *,
+    image_id: int,
+    series: str,
+    publisher: str,
+    model: str,
+    api_key: str,
+    max_image_side_px: int,
+) -> tuple[str | None, float, str]:
+    """Second pass that asks the model only for the issue number of a known series.
+
+    Used when the primary read returns a blank issue number. Failures are swallowed so
+    this never breaks the main flow.
+    """
+    from app.services.gpt_comic_identification_prompts import (
+        COMIC_ISSUE_FOCUS_SYSTEM,
+        build_issue_focus_user,
+    )
+
+    try:
+        parsed, _payload, _raw, _model_used = call_comic_vision(
+            image_bytes,
+            model=model,
+            api_key=api_key,
+            log_context=f"photo_import issue_focus image_id={image_id}",
+            system=COMIC_ISSUE_FOCUS_SYSTEM,
+            user=build_issue_focus_user(series, publisher),
+            image_detail="high",
+            max_image_side_px=max_image_side_px,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("photo_import.issue_focus_failed image_id=%s", image_id, exc_info=True)
+        return None, 0.0, ""
+    reasoning = _as_str(parsed.get("reasoning"))
+    try:
+        confidence = max(0.0, min(1.0, float(parsed.get("confidence") or 0.0)))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    issue = _finalize_parsed_issue_number(
+        parsed.get("issue_number"), confidence=confidence, reasoning=reasoning
+    )
+    return issue, confidence, reasoning
 
 
 def _extract_comics_payloads(parsed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -186,6 +220,39 @@ def read_comics_with_gpt_vision(
         result.raw_response = raw_response
         result.raw_response_text = api_raw_text
         results.append(result)
+
+    # Second pass: when the first read identified a series but no issue number, re-read the
+    # image with a focused prompt whose only job is to find the issue number ("read longer").
+    for result in results:
+        if result.issue_number or not result.series:
+            continue
+        focus_issue, focus_conf, focus_reason = _focused_issue_number_read(
+            image_bytes,
+            image_id=image_id,
+            series=result.series,
+            publisher=result.publisher,
+            model=model,
+            api_key=settings.openai_api_key,
+            max_image_side_px=int(profile["max_image_side_px"]),
+        )
+        if focus_issue:
+            result.issue_number = focus_issue
+            if focus_conf and (not result.confidence or focus_conf > result.confidence):
+                result.confidence = focus_conf
+            if focus_reason:
+                result.reasoning = (
+                    f"{result.reasoning} Issue re-read: {focus_reason}".strip()
+                    if result.reasoning
+                    else focus_reason
+                )
+            logger.info(
+                "photo_import.issue_focus_recovered image_id=%s series=%s issue=%s conf=%.2f",
+                image_id,
+                result.series,
+                focus_issue,
+                focus_conf,
+            )
+
     logger.info(
         "photo_import.vision_sandbox.response image_id=%s model_used=%s books=%d",
         image_id,

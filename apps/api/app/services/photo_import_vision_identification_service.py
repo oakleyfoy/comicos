@@ -120,25 +120,10 @@ def parse_vision_identification(payload: dict[str, Any]) -> VisionIdentification
     issue = None
     if issue_raw is not None:
         text = _as_str(issue_raw)
-        if text.lower() not in {"", "null", "none", "?", "n/a"}:
-            sanitized = normalize_photo_issue_number(text)
-            if sanitized == "1" and confidence <= 0.05:
-                lowered = reasoning.lower()
-                if not any(
-                    token in lowered
-                    for token in (
-                        "issue 1",
-                        "issue #1",
-                        "#1",
-                        "number 1",
-                        "first issue",
-                        "issue one",
-                        "no. 1",
-                        "no 1",
-                    )
-                ):
-                    sanitized = None
-            issue = sanitized
+        if text.lower() not in {"", "null", "none", "?", "n/a", "unknown"}:
+            # Keep the model's issue number (including #1); blanking low-confidence reads
+            # turned valid issues into empty fields. Noise is filtered by normalization.
+            issue = normalize_photo_issue_number(text)
     return VisionIdentification(
         publisher=_as_str(payload.get("publisher")),
         series_title=_as_str(payload.get("series_title")),

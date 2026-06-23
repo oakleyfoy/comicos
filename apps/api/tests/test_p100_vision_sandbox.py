@@ -123,9 +123,11 @@ def test_parse_sandbox_rejects_subtitle_as_issue_number() -> None:
     assert row.issue_number is None
 
 
-def test_parse_sandbox_drops_untrusted_issue_one_at_zero_confidence() -> None:
+def test_parse_sandbox_keeps_issue_number_even_at_zero_confidence() -> None:
     from app.services.photo_import_vision_sandbox_service import _parse_sandbox_payload
 
+    # We no longer blank low-confidence issue numbers: dropping them turned valid reads
+    # into empty fields. Sticker/noise filtering is handled by the prompts instead.
     row = _parse_sandbox_payload(
         {
             "publisher": "DC",
@@ -135,7 +137,7 @@ def test_parse_sandbox_drops_untrusted_issue_one_at_zero_confidence() -> None:
             "reasoning": "Green price sticker visible",
         }
     )
-    assert row.issue_number is None
+    assert row.issue_number == "1"
 
 
 def test_parse_sandbox_keeps_issue_one_when_reasoning_confirms() -> None:

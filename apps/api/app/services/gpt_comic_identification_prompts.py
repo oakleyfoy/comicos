@@ -21,25 +21,26 @@ COMIC_IDENTIFICATION_SYSTEM = (
     '"cover_date":"","variant_description":"","barcode":"","confidence":0,'
     '"reasoning":"","possible_alternates":[]}]} '
     "Always use the comics array even when there is exactly one comic (one element). "
-    "Issue number rules (important): "
-    "1) Read the issue number from the cover when printed. "
-    "2) If the number box is missing or covered, identify the issue from iconic cover art, "
-    "creator credits, and cover date (match the artwork to the known published issue). "
-    "3) Use the UPC/barcode as supporting evidence only—do not guess issue number from "
-    "random digit substrings. For DC/Vertigo-style extended codes, the issue is not always "
-    "a simple slice of the barcode; if barcode interpretation conflicts with cover art, "
-    "trust the cover identification and explain the conflict in reasoning. "
-    "4) Provide your best issue_number when you can justify it; use null only if you "
-    "cannot pick one issue (then list possible_alternates). "
-    "Do not default to #1 unless the cover is clearly issue #1. "
+    "Issue number rules (THE ISSUE NUMBER IS THE MOST IMPORTANT FIELD — always work it out): "
+    "1) Read the printed issue number from the cover (corner box, near the logo, or on the spine). "
+    "2) If the number box is small, stylized, partly covered, or missing, INFER the issue from "
+    "iconic cover art, creator credits, cover date, and the story-arc/part text (match the artwork "
+    "to the known published issue). "
+    "3) Use the UPC/barcode as supporting evidence—do not guess the issue from random digit "
+    "substrings, but a Marvel/DC 5-digit UPC supplement often encodes the issue; if barcode and "
+    "cover art conflict, trust the cover and note it in reasoning. "
+    "4) ALWAYS return your single best issue_number. Use null ONLY when it is genuinely impossible "
+    "to pick any issue, and then list at least two possible_alternates. "
+    "issue_number must be a comic issue identifier only (examples: 4, 104, 1/2, 976) — never a "
+    "story-arc name, subtitle, or price. Do not default to #1 unless the cover is actually issue #1. "
     "Do not reference or require any external ComicOS catalog. "
-    "Confidence calibration (be honest, do not inflate): "
+    "Confidence calibration (honest, but do not collapse to zero): "
     "confidence is 0–1 for series AND issue together, PER BOOK. "
-    "If the issue number is clearly PRINTED on the cover, confidence may be high. "
-    "If you INFERRED the issue from cover art, creator, or barcode rather than reading it, "
-    "set confidence to at most 0.6 and include at least two possible_alternates (other "
-    "plausible issues for this cover). Never claim 1.0/100% unless the printed issue number "
-    "is unambiguously legible. Reflect any barcode-vs-cover conflict by lowering confidence. "
+    "If you can name the series, confidence is at least 0.3; never return 0 for a book you identified. "
+    "If the issue number is clearly PRINTED and legible, confidence may be high (0.85–0.97). "
+    "If you INFERRED the issue from cover art, creator, or barcode rather than reading it, set "
+    "confidence around 0.4–0.6 and include at least two possible_alternates. "
+    "Reserve 1.0 for an unambiguously legible printed issue number. "
     "Smaller or partially-occluded books in a group are less legible—lower their confidence accordingly."
 )
 
@@ -72,3 +73,28 @@ COMIC_IDENTIFICATION_QUICK_SYSTEM = (
 COMIC_IDENTIFICATION_QUICK_USER = (
     "What comic(s) are in this photo? Return the JSON comics array only."
 )
+
+# Focused second pass: used only when the first read could not produce an issue number.
+# The series is already known; the model's sole job is to extract the issue number.
+COMIC_ISSUE_FOCUS_SYSTEM = (
+    "You are a comic-book issue-number specialist. You receive ONE comic cover photo and the "
+    "series that has already been identified. Your ONLY job is to determine the issue number. "
+    "Look hard at the issue-number box (often a small number near the logo or in a corner), the "
+    "spine, the indicia/credits, the cover date, the price box, the story-arc/part text, and the "
+    "UPC/barcode supplement. Also match the cover ART to the specific published issue of this series. "
+    'Return JSON only: {"issue_number":"","confidence":0,"reasoning":""}. '
+    "issue_number must be a comic issue identifier only (examples: 1, 4, 104, 1/2, 976) — never a "
+    "story-arc name, subtitle, or price. Ignore price stickers and store stamps. "
+    "ALWAYS give your single best issue_number; use null only if it is truly impossible to tell. "
+    "Keep reasoning to one short sentence."
+)
+
+
+def build_issue_focus_user(series: str, publisher: str = "") -> str:
+    series_label = series.strip() or "this comic"
+    publisher_label = publisher.strip()
+    pub_hint = f" published by {publisher_label}" if publisher_label else ""
+    return (
+        f"This cover is from the series '{series_label}'{pub_hint}. "
+        "What is the issue number of this exact comic? Return the JSON object only."
+    )
