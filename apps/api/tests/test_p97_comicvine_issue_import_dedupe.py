@@ -127,7 +127,7 @@ def test_superman_duplicate_volume_search_issue_job_terminates(monkeypatch: pyte
         chunk = rows[start:end]
         return {"results": chunk}
 
-    def fake_process(self, session, stats, row, *, publisher_filter, strict_publisher, job):  # noqa: ANN001
+    def fake_process(self, session, stats, row, *, publisher_filter, strict_publisher, job, min_start_year=None):  # noqa: ANN001
         stats.total_candidates_seen += 1
         stats.accepted_volumes += 1
         vid = str(row["id"])

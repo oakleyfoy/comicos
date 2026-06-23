@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import time
@@ -10,7 +11,40 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError, PendingRollbackError
 from sqlmodel import Session, select
+
+# How many times a single page of volumes is retried after the database connection
+# drops mid-import before we abort the (resumable) run.
+_MAX_DB_RECONNECT_ATTEMPTS = 5
+
+
+class _CatalogConnectionLost(Exception):
+    """Internal signal: the database connection dropped and the session is unusable."""
+
+
+def _is_db_connection_error(exc: BaseException | None) -> bool:
+    """True if the exception (or any cause in its chain) is a dropped DB connection."""
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, (InterfaceError, OperationalError, PendingRollbackError)):
+            return True
+        if isinstance(cur, DBAPIError) and getattr(cur, "connection_invalidated", False):
+            return True
+        name = type(cur).__name__.lower()
+        if "interfaceerror" in name or "operationalerror" in name:
+            return True
+        message = str(cur).lower()
+        if "network error" in message:
+            return True
+        if "connection" in message and any(
+            token in message for token in ("closed", "reset", "lost", "broken", "terminat")
+        ):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 from app.core.config import get_settings
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
@@ -506,6 +540,38 @@ class ComicVineCatalogImporter:
         if job is not None:
             record_created(session, job)
 
+    def _safe_record_volume_failure(
+        self,
+        session: Session,
+        job,
+        row: dict[str, Any] | None,
+        message: str,
+        *,
+        error_type: str = "import",
+    ) -> None:
+        """Record a failed row, recovering the session if the failure left it unusable."""
+        external_id = str(row.get("id")) if row else None
+        try:
+            record_failed(
+                session,
+                job,
+                source="COMICVINE",
+                external_id=external_id,
+                record_type="volume",
+                error_type=error_type,
+                error_message=message,
+                raw_payload=row,
+            )
+        except Exception:  # noqa: BLE001
+            LOGGER.warning(
+                "comicvine import: could not persist failure record (rolling back)",
+                exc_info=True,
+            )
+            try:
+                session.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+
     def import_volumes(
         self,
         session: Session,
@@ -542,53 +608,92 @@ class ComicVineCatalogImporter:
             except Exception as exc:
                 stats.failures.append(str(exc))
                 if job is not None:
-                    record_failed(
-                        session,
-                        job,
-                        source="COMICVINE",
-                        external_id=None,
-                        record_type="volume",
-                        error_type="http",
-                        error_message=str(exc),
-                    )
+                    if _is_db_connection_error(exc):
+                        try:
+                            session.rollback()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    else:
+                        self._safe_record_volume_failure(
+                            session,
+                            job,
+                            None,
+                            str(exc),
+                            error_type="http",
+                        )
                 break
             page_rows = self._volume_rows_from_payload(payload, series_name=series_name)
             if not page_rows:
                 break
             stats.api_pages_fetched += 1
             fetch_limit = clamp_page_limit(page_limit, path=api_path)
-            for row in page_rows:
+
+            # Process and commit this page, retrying with a fresh DB connection if the
+            # database connection drops mid-flush. The cursor only advances after a
+            # successful commit, so a retry safely reprocesses the same (idempotent) page.
+            page_snapshot = copy.deepcopy(stats)
+            attempt = 0
+            while True:
                 try:
-                    stats.total_candidates_seen += 1
-                    self._process_volume_row(
-                        session,
-                        stats,
-                        row,
-                        publisher_filter=publisher_filter,
-                        strict_publisher=strict_publisher,
-                        job=job,
-                        min_start_year=min_start_year,
-                    )
-                except Exception as exc:
-                    msg = f"volume:{row.get('id')}: {exc}"
-                    stats.failures.append(msg)
+                    for row in page_rows:
+                        try:
+                            stats.total_candidates_seen += 1
+                            self._process_volume_row(
+                                session,
+                                stats,
+                                row,
+                                publisher_filter=publisher_filter,
+                                strict_publisher=strict_publisher,
+                                job=job,
+                                min_start_year=min_start_year,
+                            )
+                        except Exception as exc:
+                            if _is_db_connection_error(exc):
+                                raise _CatalogConnectionLost(str(exc)) from exc
+                            msg = f"volume:{row.get('id')}: {exc}"
+                            stats.failures.append(msg)
+                            if job is not None:
+                                self._safe_record_volume_failure(session, job, row, msg)
+                    next_offset = current_offset + len(page_rows)
                     if job is not None:
-                        record_failed(
-                            session,
-                            job,
-                            source="COMICVINE",
-                            external_id=str(row.get("id")),
-                            record_type="volume",
-                            error_type="import",
-                            error_message=msg,
-                            raw_payload=row,
+                        update_cursor(session, job, {"offset": next_offset, **cursor_extra})
+                    if not self.dry_run:
+                        session.commit()
+                    current_offset = next_offset
+                    stats.final_offset = current_offset
+                    break
+                except Exception as exc:
+                    if not isinstance(exc, _CatalogConnectionLost) and not _is_db_connection_error(exc):
+                        raise
+                    attempt += 1
+                    try:
+                        session.rollback()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    # Revert page-local stat mutations so the retry does not double count.
+                    stats.__dict__.update(copy.deepcopy(page_snapshot).__dict__)
+                    if attempt > _MAX_DB_RECONNECT_ATTEMPTS:
+                        LOGGER.error(
+                            "comicvine import: database connection lost; giving up after %d "
+                            "attempts at offset=%s. Re-run with --resume to continue.",
+                            attempt,
+                            current_offset,
                         )
-            current_offset += len(page_rows)
-            stats.final_offset = current_offset
-            if job is not None:
-                update_cursor(session, job, {"offset": current_offset, **cursor_extra})
-            if not self.dry_run:
-                session.commit()
+                        stats.failures.append(f"db_connection_lost:{exc}")
+                        stats.processed = stats.total_candidates_seen
+                        stats.imported_series = len(stats.imported_series_ids)
+                        return stats
+                    backoff = min(60.0, 2.0 ** attempt)
+                    LOGGER.warning(
+                        "comicvine import: database connection lost at offset=%s; reconnecting "
+                        "and retrying page in %.0fs (attempt %d/%d)",
+                        current_offset,
+                        backoff,
+                        attempt,
+                        _MAX_DB_RECONNECT_ATTEMPTS,
+                    )
+                    time.sleep(backoff)
+
             if len(page_rows) < fetch_limit:
                 break
 

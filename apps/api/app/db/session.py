@@ -27,10 +27,20 @@ def get_engine():
         else {}
     )
 
+    is_sqlite = settings.database_url.startswith("sqlite")
+    engine_kwargs: dict[str, object] = {
+        "connect_args": connect_args,
+        "pool_pre_ping": True,
+    }
+    if not is_sqlite:
+        # Long-running jobs (overnight catalog imports) can hold a connection that the
+        # server/network silently drops. Recycle connections proactively so we hand out
+        # fresh ones; pool_pre_ping still validates at checkout.
+        engine_kwargs["pool_recycle"] = 1800
+
     return create_engine(
         settings.database_url,
-        connect_args=connect_args,
-        pool_pre_ping=True,
+        **engine_kwargs,
     )
 
 
