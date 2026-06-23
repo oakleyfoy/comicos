@@ -221,10 +221,14 @@ def read_comics_with_gpt_vision(
         result.raw_response_text = api_raw_text
         results.append(result)
 
-    # Second pass: when the first read identified a series but no issue number, re-read the
-    # image with a focused prompt whose only job is to find the issue number ("read longer").
+    # Second pass: when the first read identified a series but the issue number is missing
+    # or low-confidence, re-read the image with a focused, high-detail prompt whose only job
+    # is to find the issue number ("read longer").
     for result in results:
-        if result.issue_number or not result.series:
+        if not result.series:
+            continue
+        needs_focus = (not result.issue_number) or (result.confidence <= 0.35)
+        if not needs_focus:
             continue
         focus_issue, focus_conf, focus_reason = _focused_issue_number_read(
             image_bytes,
@@ -235,9 +239,9 @@ def read_comics_with_gpt_vision(
             api_key=settings.openai_api_key,
             max_image_side_px=int(profile["max_image_side_px"]),
         )
-        if focus_issue:
+        if focus_issue and (not result.issue_number or focus_conf > result.confidence):
             result.issue_number = focus_issue
-            if focus_conf and (not result.confidence or focus_conf > result.confidence):
+            if focus_conf and focus_conf > result.confidence:
                 result.confidence = focus_conf
             if focus_reason:
                 result.reasoning = (

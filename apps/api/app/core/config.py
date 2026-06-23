@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         description="Slower, detailed re-read model (defaults to PHOTO_IMPORT_VISION_SANDBOX_MODEL)",
     )
     photo_import_quick_max_image_side_px: int = Field(
-        default=1280,
+        default=2048,
         alias="PHOTO_IMPORT_QUICK_MAX_IMAGE_SIDE_PX",
     )
     photo_import_accurate_max_image_side_px: int = Field(
@@ -65,9 +65,9 @@ class Settings(BaseSettings):
         alias="PHOTO_IMPORT_ACCURATE_MAX_IMAGE_SIDE_PX",
     )
     photo_import_quick_image_detail: str = Field(
-        default="low",
+        default="high",
         alias="PHOTO_IMPORT_QUICK_IMAGE_DETAIL",
-        description="OpenAI image detail for quick reads: low | auto | high",
+        description="OpenAI image detail for quick reads: low | auto | high (high lets the model read small printed issue numbers)",
     )
     photo_import_accurate_image_detail: str = Field(
         default="high",
