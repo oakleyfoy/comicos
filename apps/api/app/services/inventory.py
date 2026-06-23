@@ -328,6 +328,9 @@ def apply_inventory_filters(
                 _publisher_expr().ilike(search_term),
                 _issue_number_expr().ilike(search_term),
                 CatalogVariant.variant_name.ilike(search_term),
+                _retailer_expr().ilike(search_term),
+                Acquisition.seller_name.ilike(search_term),
+                Acquisition.notes.ilike(search_term),
             )
         )
 
