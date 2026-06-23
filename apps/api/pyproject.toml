@@ -16,8 +16,8 @@ dependencies = [
   "fastapi>=0.115,<1.0",
   "httpx>=0.27,<1.0",
   "passlib>=1.7,<2.0",
-  "numpy>=2.0,<3.0",
-  "opencv-contrib-python-headless>=4.10,<4.13",
+  "numpy>=2.0,<3.0; platform_machine != 'ARM64' or sys_platform != 'win32'",
+  "opencv-contrib-python-headless>=4.10,<4.13; platform_machine != 'ARM64' or sys_platform != 'win32'",
   "pg8000>=1.31,<2.0",
   "pillow>=11.0,<12.0",
   "playwright>=1.49,<2.0",
@@ -31,6 +31,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+barcode = [
+  "numpy>=2.0,<3.0",
+  "opencv-contrib-python-headless>=4.10,<4.13",
+]
 dev = [
   "fakeredis>=2.26,<4.0",
   "httpx>=0.27,<1.0",
