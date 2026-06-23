@@ -118,3 +118,32 @@ def comicvine_issue_dates_from_row(row: dict[str, Any]) -> tuple[date | None, da
     if release_date is None:
         release_date = parse_comicvine_date(row.get("date_added"))
     return cover_date, store_date, release_date
+
+
+def comicvine_volume_id_from_issue_row(row: dict[str, Any]) -> int | None:
+    volume = row.get("volume")
+    if isinstance(volume, dict):
+        raw = volume.get("id")
+    else:
+        raw = volume
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def comicvine_barcodes_from_issue_row(row: dict[str, Any]) -> list[str]:
+    """Extract UPC/barcode strings from a ComicVine issue list/detail row."""
+    raw = row.get("barcode")
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        parts = [str(item).strip() for item in raw if str(item).strip()]
+    else:
+        text = str(raw).strip()
+        if not text:
+            return []
+        parts = [segment.strip() for segment in text.replace(";", ",").split(",") if segment.strip()]
+    return parts

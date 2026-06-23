@@ -28,3 +28,21 @@ def test_falcon_without_the_matches_the_falcon() -> None:
     ]
     vid = select_comicvine_volume_id(candidates, series="The Falcon", issue_number="1", year=2017)
     assert vid == 104938
+
+
+def test_prefers_modern_justice_league_when_year_missing() -> None:
+    candidates = [
+        {"id": 1, "name": "Justice League", "start_year": 1960, "publisher": {"name": "DC Comics"}, "count_of_issues": 200},
+        {"id": 2, "name": "Justice League", "start_year": 2016, "publisher": {"name": "DC Comics"}, "count_of_issues": 50},
+    ]
+    vid = select_comicvine_volume_id(candidates, series="Justice League", issue_number="11", year=None)
+    assert vid == 2
+
+
+def test_rebirth_hint_year_picks_2016_superman() -> None:
+    candidates = [
+        {"id": 10, "name": "Superman", "start_year": 1987, "publisher": {"name": "DC Comics"}, "count_of_issues": 100},
+        {"id": 11, "name": "Superman", "start_year": 2016, "publisher": {"name": "DC Comics"}, "count_of_issues": 45},
+    ]
+    vid = select_comicvine_volume_id(candidates, series="Superman", issue_number="19", year=2017)
+    assert vid == 11

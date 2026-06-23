@@ -72,6 +72,38 @@ def test_barcode_demoted_when_it_conflicts_with_gpt_vision(session: Session) -> 
     assert any(alt.catalog_issue_id == wrong.id for alt in match.alternates)
 
 
+def test_barcode_wins_when_high_confidence_despite_gpt_conflict(session: Session) -> None:
+    wrong = _seed_issue(session, issue_id=7001, series_name="Beautiful Stories for Ugly Children", issue_number="11")
+    session.add(
+        CatalogUpc(
+            issue_id=wrong.id,
+            upc="76194120401705811",
+            normalized_upc="76194120401705811",
+            source="test",
+        )
+    )
+    session.commit()
+
+    read = PhotoImportVisionRead(
+        session_id=1,
+        image_id=1,
+        publisher="Vertigo",
+        series="Preacher",
+        issue_number="58",
+        issue_title="",
+        barcode="761941204017 05811",
+        confidence=0.92,
+        reasoning="GPT misread issue; barcode clear",
+        raw_response={},
+    )
+    session.add(read)
+    session.flush()
+
+    match = match_read_to_catalog(session, read)
+    assert match.catalog_issue_id == wrong.id
+    assert match.method == "upc"
+
+
 def test_text_match_ignores_publisher_label_mismatch(session: Session) -> None:
     # GPT says "Vertigo"; catalog stores Preacher under "DC Comics".
     publisher = CatalogPublisher(name="DC Comics", normalized_name="dc comics")

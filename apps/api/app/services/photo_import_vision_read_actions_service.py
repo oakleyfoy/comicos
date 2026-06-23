@@ -207,9 +207,18 @@ def validate_comicvine_ondemand_vision_read(
 
     result = run_comicvine_ondemand_import(session, row)
     if result.outcome == "imported":
-        from app.services.photo_import_catalog_match_service import rematch_after_comicvine_import
+        from app.services.photo_import_catalog_match_service import (
+            match_and_apply,
+            normalized_read_barcode,
+            rematch_after_comicvine_import,
+        )
 
-        rematch_after_comicvine_import(session, row, catalog_series_id=result.catalog_series_id)
+        if normalized_read_barcode(row):
+            match_and_apply(session, row)
+            if row.catalog_issue_id is None:
+                rematch_after_comicvine_import(session, row, catalog_series_id=result.catalog_series_id)
+        else:
+            rematch_after_comicvine_import(session, row, catalog_series_id=result.catalog_series_id)
         _mark_ondemand_attempt(row, "imported")
     elif result.outcome in ("no_volume", "unavailable", "failed"):
         _mark_ondemand_attempt(row, result.outcome)

@@ -60,7 +60,9 @@ from app.services.comicvine_api_response import (
     ComicVineApiError,
     clamp_page_limit,
     comicvine_best_cover_url,
+    comicvine_barcodes_from_issue_row,
     comicvine_issue_dates_from_row,
+    comicvine_volume_id_from_issue_row,
     parse_comicvine_payload,
     payload_results,
 )
@@ -88,12 +90,15 @@ from app.services.catalog_publisher_registry import (
     is_primary_us_publisher,
 )
 from app.services.catalog_ingestion_service import (
+    comicvine_catalog_series_name,
     normalize_issue_number,
     normalize_series_name,
+    normalize_upc,
     upsert_image,
     upsert_issue,
     upsert_publisher,
     upsert_series,
+    upsert_upc,
     upsert_variant,
 )
 
@@ -529,7 +534,7 @@ class ComicVineCatalogImporter:
         publisher = upsert_publisher(session, name=publisher_name, source="COMICVINE", external_id=row.get("id"))
         series = upsert_series(
             session,
-            name=str(row.get("name") or "Unknown"),
+            name=comicvine_catalog_series_name(row),
             publisher_id=int(publisher.id or 0),
             source="COMICVINE",
             external_id=row.get("id"),
@@ -702,6 +707,31 @@ class ComicVineCatalogImporter:
         stats.publisher_distribution = publisher_distribution_for_series(session, stats.imported_series_ids)
         return stats
 
+    def search_issues_by_barcode(self, barcode: str, *, limit: int = 5) -> list[dict[str, Any]]:
+        """ComicVine issues/ filter by barcode (used for photo-import on-demand)."""
+        normalized = normalize_upc(barcode)
+        if not normalized:
+            return []
+        page_limit = clamp_page_limit(limit, path="issues/")
+        params = {
+            "offset": 0,
+            "limit": page_limit,
+            "filter": f"barcode:{normalized}",
+            "field_list": "id,issue_number,name,volume,cover_date,store_date,barcode,image",
+        }
+        try:
+            payload = self._get("issues/", params=params)
+        except ComicVineThrottleError:
+            raise
+        except Exception:
+            LOGGER.exception("comicvine search_issues_by_barcode failed barcode=%r", normalized)
+            return []
+        return payload_results(payload)
+
+    @staticmethod
+    def volume_id_from_issue_api_row(row: dict[str, Any]) -> int | None:
+        return comicvine_volume_id_from_issue_row(row)
+
     def import_issues_for_volume(
         self,
         session: Session,
@@ -718,7 +748,7 @@ class ComicVineCatalogImporter:
             "offset": offset,
             "limit": page_limit,
             "filter": f"volume:{volume_id}",
-            "field_list": "id,issue_number,name,cover_date,store_date,date_added,description,image",
+            "field_list": "id,issue_number,name,cover_date,store_date,date_added,description,image,barcode",
         }
         try:
             payload = self._get("issues/", params=params)
@@ -778,6 +808,17 @@ class ComicVineCatalogImporter:
                     if job is not None:
                         record_updated(session, job)
                 variant = upsert_variant(session, issue_id=int(issue.id or 0), source="COMICVINE", variant_name="Standard")
+                for raw_barcode in comicvine_barcodes_from_issue_row(row):
+                    if normalize_upc(raw_barcode):
+                        upsert_upc(
+                            session,
+                            raw_upc=raw_barcode,
+                            issue_id=int(issue.id or 0),
+                            variant_id=int(variant.id or 0),
+                            source="COMICVINE",
+                            confidence=Decimal("0.85"),
+                            barcode_type="upc",
+                        )
                 cover_url = comicvine_best_cover_url(row.get("image"))
                 if not cover_url:
                     stats.cover_images_skipped_no_url += 1
@@ -962,7 +1003,7 @@ class ComicVineCatalogImporter:
         publisher_name = (
             publisher_obj.get("name") if isinstance(publisher_obj, dict) else None
         ) or "Unknown"
-        series_title = str(detail.get("name") or "Unknown")
+        series_title = comicvine_catalog_series_name(detail)
         stats.processed = 1
         stats.total_candidates_seen = 1
         stats.accepted_volumes = 1

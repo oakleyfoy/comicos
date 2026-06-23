@@ -1,9 +1,9 @@
 """Match a GPT vision read to the master catalog (multi-book photo import).
 
 Per-book matching uses **barcode**, then **cover fingerprint** (when a per-book crop
-exists), then scored **text** search over ``catalog_issue / catalog_series /
-catalog_publisher``. The chosen match + its cover URL are written onto the read; the
-remaining candidates are kept as alternates so the reviewer can switch the match manually.
+exists), then scored **text** search. A catalog UPC hit wins over conflicting GPT
+series/issue when the read includes a trustworthy barcode (long normalized UPC and
+high GPT confidence, or barcode-only identity).
 """
 
 from __future__ import annotations
@@ -31,6 +31,30 @@ from app.services.recognition.recognition_catalog_candidate_service import searc
 logger = logging.getLogger(__name__)
 
 _MAX_ALTERNATES = 6
+# When GPT returns a long UPC and sufficient overall confidence, trust catalog UPC over
+# conflicting series/issue text (barcode is ground truth for which physical copy this is).
+BARCODE_TRUST_MIN_GPT_CONFIDENCE = 0.75
+BARCODE_TRUST_MIN_NORMALIZED_LEN = 11
+
+
+def normalized_read_barcode(read: PhotoImportVisionRead) -> str:
+    return normalize_upc(read.barcode or "")
+
+
+def barcode_read_trustworthy_for_upc(read: PhotoImportVisionRead) -> bool:
+    code = normalized_read_barcode(read)
+    if len(code) < BARCODE_TRUST_MIN_NORMALIZED_LEN:
+        return False
+    if not _vision_has_identity(read):
+        return True
+    conf = read.confidence
+    if conf is None:
+        return False
+    return float(conf) >= BARCODE_TRUST_MIN_GPT_CONFIDENCE
+
+
+def should_trust_upc_over_vision_conflict(read: PhotoImportVisionRead) -> bool:
+    return bool(normalized_read_barcode(read)) and barcode_read_trustworthy_for_upc(read)
 
 
 def _series_aligns(vision_series: str | None, catalog_series: str | None) -> bool:
@@ -302,7 +326,18 @@ def match_read_to_catalog(session: Session, read: PhotoImportVisionRead) -> Cata
 
     upc = _upc_match(session, read.barcode)
     if upc is not None and upc.catalog_issue_id is not None:
-        if _match_aligns_with_vision(read, upc):
+        if _match_aligns_with_vision(read, upc) or should_trust_upc_over_vision_conflict(read):
+            if should_trust_upc_over_vision_conflict(read) and not _match_aligns_with_vision(read, upc):
+                logger.info(
+                    "photo_import.catalog_match upc_trusted_over_vision read_id=%s catalog_issue_id=%s "
+                    "vision=%s #%s barcode=%s confidence=%s",
+                    read.id,
+                    upc.catalog_issue_id,
+                    read.series,
+                    read.issue_number,
+                    normalized_read_barcode(read),
+                    read.confidence,
+                )
             return _merge_text_alternates(upc, text)
         logger.info(
             "photo_import.catalog_match upc_rejected read_id=%s catalog_issue_id=%s vision=%s #%s",

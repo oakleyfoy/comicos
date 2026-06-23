@@ -22,6 +22,60 @@ _ISSUE_FRACTION = re.compile(r"^(\d+)\s*/\s*(\d+)$")
 _LEADING_ARTICLE = re.compile(r"^(the|a|an)\s+")
 
 
+_YEAR_IN_PARENS = re.compile(r"\(\s*(19|20)\d{2}\s*\)")
+
+
+def comicvine_catalog_series_name(volume_metadata: dict[str, Any]) -> str:
+    """Distinct catalog series name per ComicVine volume (avoids merging 1960 vs 2016 runs)."""
+    name = str(volume_metadata.get("name") or "Unknown").strip()
+    start_year = volume_metadata.get("start_year")
+    if start_year is None:
+        return name
+    try:
+        year_int = int(start_year)
+    except (TypeError, ValueError):
+        return name
+    if _YEAR_IN_PARENS.search(name):
+        return name
+    return f"{name} ({year_int})"
+
+
+def catalog_series_id_for_comicvine_volume(
+    session: Session,
+    *,
+    volume_id: int,
+    publisher_id: int | None = None,
+    prefer_start_year: int | None = None,
+) -> int | None:
+    """Resolve catalog series row linked to a ComicVine volume id (newest / closest year if ambiguous)."""
+    statement = select(CatalogSeries)
+    if publisher_id is not None:
+        statement = statement.where(CatalogSeries.publisher_id == publisher_id)
+    vol_key = str(volume_id)
+    matches: list[CatalogSeries] = []
+    for row in session.exec(statement):
+        bucket = (row.external_source_ids or {}).get("COMICVINE") or {}
+        if isinstance(bucket, dict) and vol_key in bucket:
+            matches.append(row)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        sid = matches[0].id
+        return int(sid) if sid is not None else None
+
+    def sort_key(series: CatalogSeries) -> tuple[int, int]:
+        sy = series.start_year
+        if sy is None:
+            sy = 0
+        if prefer_start_year is not None:
+            return (abs(int(sy) - prefer_start_year), -int(sy))
+        return (0, -int(sy))
+
+    matches.sort(key=sort_key)
+    sid = matches[0].id
+    return int(sid) if sid is not None else None
+
+
 def normalize_series_name(name: str) -> str:
     """Lowercase series key: trim, collapse punctuation/spaces, drop leading the/a/an."""
     cleaned = _NON_ALNUM.sub(" ", (name or "").lower()).strip()
