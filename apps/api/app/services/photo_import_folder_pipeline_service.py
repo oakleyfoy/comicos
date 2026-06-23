@@ -156,13 +156,14 @@ def reset_folder_session_vision_for_rerun(
 ) -> int:
     """Drop GPT reads and re-queue photos so folder pipeline runs vision again (e.g. after quick mis-reads)."""
     import_row = get_session_by_token_or_404(session, token=token)
+    # This endpoint is only reached from the desktop folder page and is owner-scoped, so
+    # treat the session as a folder-import session. Older/reused sessions may predate the
+    # source_device tagging; self-heal the tag instead of rejecting the re-run.
     if (import_row.source_device or "").strip() != FOLDER_IMPORT_SOURCE_DEVICE:
-        from fastapi import HTTPException, status
-
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Vision reset is only for folder-import sessions.",
-        )
+        import_row.source_device = FOLDER_IMPORT_SOURCE_DEVICE
+        session.add(import_row)
+        session.commit()
+        session.refresh(import_row)
     session_id = int(import_row.id or 0)
     images = session.exec(select(PhotoImportImage).where(PhotoImportImage.session_id == session_id)).all()
     reset_count = 0
