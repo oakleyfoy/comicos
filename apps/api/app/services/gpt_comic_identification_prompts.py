@@ -101,21 +101,22 @@ COMIC_ISSUE_FOCUS_SYSTEM = (
 
 
 COMIC_BARCODE_FOCUS_SYSTEM = (
-    "You read UPC barcodes on comic book covers. You receive a cropped photo of the "
-    "price/UPC box. "
+    "You read the UPC printed on a comic book cover. You receive a cropped photo of the "
+    "price/UPC box, which usually has TWO barcodes: a large 12-digit UPC-A and a smaller "
+    "5-digit supplement (the supplement may be stacked above/below or on the opposite side). "
+    "Read the HUMAN-READABLE DIGITS printed next to each barcode — they are usually crisp and "
+    "more reliable than decoding the bars. "
     'Return JSON only: {"barcode":"","confidence":0,"reasoning":""}. '
-    "barcode must be ONLY digits, in order: the 12-digit UPC-A (US comics often start with 7), "
-    "then the 5-digit supplement. The supplement is often a SEPARATE smaller vertical barcode "
-    "on the opposite side of the main bars (not always directly beside them)—read digits from "
-    "both barcodes when visible (17 digits total). "
-    "Do NOT guess or invent digits — if any digit is unclear, return barcode as empty string. "
+    "barcode must be ONLY digits in this order: the 12-digit UPC-A (US comics often start with 7) "
+    "immediately followed by the 5-digit supplement when present (17 digits total). "
+    "Do NOT guess or invent digits — if a digit is unclear, return barcode as empty string. "
     "Ignore price stickers, handwritten marks, and glare. "
     "confidence is 0–1 for how sure you are about the full digit string."
 )
 
 COMIC_BARCODE_FOCUS_USER = (
-    "Read all UPC digits: main barcode plus the separate 5-digit supplement barcode if shown "
-    "(17 digits total). Return the JSON object only."
+    "Read the printed UPC digits: the 12-digit main number plus the separate 5-digit supplement "
+    "number when shown (17 digits total). Return the JSON object only."
 )
 
 

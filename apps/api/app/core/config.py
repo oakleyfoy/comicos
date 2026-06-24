@@ -78,6 +78,16 @@ class Settings(BaseSettings):
         alias="GPT_COMIC_READ_MODEL",
         description="OpenAI vision model for the standalone GPT Comic Read tool (reasoning model preferred)",
     )
+    photo_import_barcode_read_model: str = Field(
+        default="gpt-4o",
+        alias="PHOTO_IMPORT_BARCODE_READ_MODEL",
+        description="Fast OpenAI vision model for reading printed UPC digits (not a slow reasoning model)",
+    )
+    photo_import_barcode_read_timeout_seconds: float = Field(
+        default=45.0,
+        alias="PHOTO_IMPORT_BARCODE_READ_TIMEOUT_SECONDS",
+        description="Hard timeout for the barcode digit-read vision call so the scan never hangs",
+    )
     redis_url: str = "redis://localhost:6379/0"
     frontend_url: str = "http://127.0.0.1:5173"
     cors_origins_raw: str = Field(

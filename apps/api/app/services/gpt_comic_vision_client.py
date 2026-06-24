@@ -99,14 +99,14 @@ def _build_body(
     return body
 
 
-def _post(model: str, body: dict[str, Any], *, api_key: str) -> str:
+def _post(model: str, body: dict[str, Any], *, api_key: str, timeout_seconds: float = 180.0) -> str:
     req = urllib.request.Request(
         OPENAI_CHAT_URL,
         data=json.dumps(body).encode("utf-8"),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
+    with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
         return resp.read().decode("utf-8")
 
 
@@ -129,6 +129,7 @@ def call_comic_vision(
     user: str | None = None,
     image_detail: str = "high",
     max_image_side_px: int | None = None,
+    timeout_seconds: float = 180.0,
 ) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """Return (parsed_json, openai_payload, raw_text, model_used)."""
     from app.services.gpt_comic_identification_prompts import (
@@ -155,7 +156,7 @@ def call_comic_vision(
     )
     started = time.monotonic()
     try:
-        api_raw_text = _post(model, body, api_key=api_key)
+        api_raw_text = _post(model, body, api_key=api_key, timeout_seconds=timeout_seconds)
     except urllib.error.HTTPError as exc:
         if exc.code in {400, 403, 404} and model != FALLBACK_MODEL:
             logger.warning(
@@ -168,7 +169,7 @@ def call_comic_vision(
             model_used = FALLBACK_MODEL
             body["model"] = FALLBACK_MODEL
             try:
-                api_raw_text = _post(FALLBACK_MODEL, body, api_key=api_key)
+                api_raw_text = _post(FALLBACK_MODEL, body, api_key=api_key, timeout_seconds=timeout_seconds)
             except urllib.error.URLError as exc2:  # noqa: BLE001
                 raise ComicVisionError(f"OpenAI request failed (fallback): {exc2}") from exc2
         else:

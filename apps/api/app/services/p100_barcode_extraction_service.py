@@ -158,17 +158,20 @@ def _gpt_barcode_fallback(
 
     crop_bytes = crop_barcode_primary_bytes(image_bytes) if wide_crop else crop_upc_region_bytes(image_bytes)
     crop_used = "barcode_primary_wide" if wide_crop else ("bottom_left" if crop_bytes != image_bytes else "full")
-    logger.info("p100.barcode_extraction.gpt_fallback crop=%s", crop_used)
+    model = settings.photo_import_barcode_read_model or "gpt-4o"
+    timeout_seconds = float(settings.photo_import_barcode_read_timeout_seconds or 45.0)
+    logger.info("p100.barcode_extraction.gpt_fallback crop=%s model=%s timeout=%.0f", crop_used, model, timeout_seconds)
     try:
         parsed, _payload, _raw, _model = call_comic_vision(
             crop_bytes,
-            model=settings.gpt_comic_read_model,
+            model=model,
             api_key=settings.openai_api_key,
             log_context=log_context,
             system=COMIC_BARCODE_FOCUS_SYSTEM,
             user=COMIC_BARCODE_FOCUS_USER,
             image_detail="high",
-            max_image_side_px=2560,
+            max_image_side_px=2048,
+            timeout_seconds=timeout_seconds,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("p100.barcode_extraction.gpt_fallback_fail error=%s", exc)
