@@ -155,8 +155,9 @@ def identify_and_persist_barcode_primary(
         session.add(image)
         session.commit()
         raise BarcodeIdentifyError(
-            f"Base UPC detected ({base}). Include the 5-digit extension in the photo, "
-            "or switch to “No barcode — cover photo”."
+            f"Read the main UPC ({base}) but not the 5-digit supplement. DC/Marvel boxes use a "
+            "second small barcode (often on the opposite side of the main bars)—include both in "
+            "one photo, or switch to “No barcode — cover photo”."
         )
 
     local = _local_catalog_hit(session, normalized)

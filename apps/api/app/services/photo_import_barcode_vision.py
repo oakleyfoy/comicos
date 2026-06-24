@@ -36,6 +36,32 @@ def barcode_needs_focus_pass(raw: str | None) -> bool:
     return not sanitize_vision_barcode(raw)
 
 
+def crop_barcode_primary_bytes(image_bytes: bytes) -> bytes:
+    """Full-width lower crop for barcode-only phone photos (main UPC + supplement on opposite sides)."""
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img = img.convert("RGB")
+            w, h = img.size
+            top = max(0, int(h * 0.35))
+            crop = img.crop((0, top, w, h))
+            cw, ch = crop.size
+            target = 2048
+            longest = max(cw, ch)
+            if longest < target and longest > 0:
+                scale = target / float(longest)
+                crop = crop.resize(
+                    (max(1, int(cw * scale)), max(1, int(ch * scale))),
+                    Image.Resampling.LANCZOS,
+                )
+            out = io.BytesIO()
+            crop.save(out, format="JPEG", quality=92, optimize=True)
+            return out.getvalue()
+    except Exception:
+        return image_bytes
+
+
 def crop_upc_region_bytes(image_bytes: bytes) -> bytes:
     """Crop lower-left where UPC boxes usually appear; upscale small crops for legibility."""
     try:

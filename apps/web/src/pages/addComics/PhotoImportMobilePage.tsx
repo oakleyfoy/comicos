@@ -275,7 +275,7 @@ export function PhotoImportMobilePage(): JSX.Element {
           ? "Shoot one comic per photo. Your computer runs GPT and adds books to your collection — no review on this phone."
           : singleComic
             ? useBarcodeScan
-              ? "Fill the frame with the UPC bars and the 5-digit box to the right when printed — we look up the full code (no GPT)."
+              ? "Frame the whole UPC box: main barcode plus the smaller 5-digit barcode (often on the opposite side). Both must be in one photo."
               : "No barcode on the book? Snap the cover — GPT reads title, series, and issue."
             : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>
@@ -330,7 +330,7 @@ export function PhotoImportMobilePage(): JSX.Element {
             />
             <span>
               <span className="block text-sm font-semibold text-slate-100">Scan barcode</span>
-              <span className="mt-0.5 block text-xs text-emerald-400/90">Recommended — one close-up UPC photo</span>
+              <span className="mt-0.5 block text-xs text-emerald-400/90">Recommended — both barcodes in one shot</span>
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 has-[:checked]:border-amber-500/80 has-[:checked]:ring-1 has-[:checked]:ring-amber-500/30">

@@ -135,6 +135,21 @@ def _try_backends_on_pil(
     return None
 
 
+def collect_raw_upc_candidates_from_pil(pil: Image.Image) -> list[str]:
+    """All 1D decode strings from one image (no merge)."""
+    opencv_fn = _decode_opencv_bgr if _opencv_available() else None
+    pyzbar_fn = _decode_pyzbar_pil if _pyzbar_available() else None
+    if opencv_fn is None and pyzbar_fn is None:
+        return []
+    candidates: list[str] = []
+    for processed in _preprocess_pil_variants(pil):
+        if opencv_fn is not None:
+            candidates.extend(opencv_fn(_bgr_from_pil(processed)))
+        if pyzbar_fn is not None:
+            candidates.extend(pyzbar_fn(processed))
+    return candidates
+
+
 def decode_upc_from_image_bytes(image_bytes: bytes) -> tuple[str, str] | None:
     """Return (normalized_upc, source_tag) or None if no valid UPC decoded."""
     if not image_bytes:
@@ -149,15 +164,15 @@ def decode_upc_from_image_bytes(image_bytes: bytes) -> tuple[str, str] | None:
     opencv_fn = _decode_opencv_bgr if use_opencv else None
     pyzbar_fn = _decode_pyzbar_pil if use_pyzbar else None
 
+    all_candidates: list[str] = []
     for region_label, blob in _image_byte_variants(image_bytes):
         try:
             pil = _pil_from_bytes(blob)
         except Exception:  # noqa: BLE001
             continue
-        hit = _try_backends_on_pil(pil, opencv_fn=opencv_fn, pyzbar_fn=pyzbar_fn)
-        if hit is not None:
-            code, detail = hit
-            source = f"{detail}@{region_label}"
-            logger.info("photo_import.upc_decoder hit source=%s barcode=%s", source, code)
-            return code, source
+        all_candidates.extend(collect_raw_upc_candidates_from_pil(pil))
+    code = _collect_valid_upc(all_candidates)
+    if code:
+        logger.info("photo_import.upc_decoder hit barcode=%s candidates=%d", code, len(all_candidates))
+        return code, "merged:all_regions"
     return None
