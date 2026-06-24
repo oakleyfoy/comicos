@@ -11,6 +11,7 @@ import {
   rereadVisionRead,
   streamPhotoImportVision,
   uploadPhotoImportImages,
+  uploadPhotoImportBarcodeCompanion,
   type PhotoImportCaptureMode,
   type PhotoImportImageVerification,
   type PhotoImportSession,
@@ -37,6 +38,7 @@ export function PhotoImportMobilePage(): JSX.Element {
   const { token = "" } = useParams();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [session, setSession] = useState<PhotoImportSession | null>(null);
   const [captureMode, setCaptureMode] = useState<PhotoImportCaptureMode>("single_comic");
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,8 @@ export function PhotoImportMobilePage(): JSX.Element {
   const [actionReadId, setActionReadId] = useState<number | null>(null);
   const [visionBusy, setVisionBusy] = useState(false);
   const [streamPreview, setStreamPreview] = useState("");
+  const [coverImageIdForBarcode, setCoverImageIdForBarcode] = useState<number | null>(null);
+  const [barcodeScanning, setBarcodeScanning] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -108,8 +112,12 @@ export function PhotoImportMobilePage(): JSX.Element {
         onToken: (text) => setStreamPreview((prev) => prev + text),
         onDone: (payload) => {
           setVerification(payload);
+          setActiveImageId(payload.image_id);
           setGptReady(payload.reads.length > 0 && payload.image_status === "processed");
           setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
+          if (payload.reads.length > 0) {
+            setCoverImageIdForBarcode(payload.image_id);
+          }
         },
         onError: (message) => setError(message),
       });
@@ -126,6 +134,39 @@ export function PhotoImportMobilePage(): JSX.Element {
     setGptReady(false);
     setStreamPreview("");
     setSelectedReadIds(new Set());
+    setCoverImageIdForBarcode(null);
+  };
+
+  const runBarcodeCompanion = async (files: FileList | null, input: HTMLInputElement | null) => {
+    const file = files?.[0];
+    if (!file || !token || coverImageIdForBarcode == null) return;
+    setBarcodeScanning(true);
+    setVisionBusy(true);
+    setError(null);
+    try {
+      const saved = await uploadPhotoImportBarcodeCompanion(token, coverImageIdForBarcode, file);
+      await streamPhotoImportVision(token, saved.id, "quick", {
+        onStatus: (data) => {
+          if (data.phase === "barcode_scan") {
+            setStreamPreview("Reading barcode close-up…");
+          }
+        },
+        onDone: (payload) => {
+          setVerification(payload);
+          setActiveImageId(payload.image_id);
+          setGptReady(payload.reads.length > 0);
+          setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
+          setStreamPreview("");
+        },
+        onError: (message) => setError(message),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Barcode scan failed");
+    } finally {
+      setBarcodeScanning(false);
+      setVisionBusy(false);
+      if (input) input.value = "";
+    }
   };
 
   const setMode = async (mode: PhotoImportCaptureMode) => {
@@ -263,7 +304,7 @@ export function PhotoImportMobilePage(): JSX.Element {
         {folderDrop
           ? "Shoot one comic per photo. Your computer runs GPT and adds books to your collection — no review on this phone."
           : singleComic
-            ? "Snap one comic — GPT reads it in a few seconds. Match our catalog when you are ready."
+            ? "Snap the cover first, then optionally add a tight UPC photo — GPT reads the cover; the barcode shot is scan-only and faster."
             : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>
 
@@ -327,8 +368,26 @@ export function PhotoImportMobilePage(): JSX.Element {
           className="mt-3 rounded-lg bg-emerald-600/25 px-3 py-2 text-sm font-semibold text-emerald-200"
           role="status"
         >
-          Verified — review below, then scan the next comic.
+          Cover read done — add a barcode close-up below if you have one, then scan the next comic.
         </p>
+      ) : null}
+
+      {singleComic && gptReady && coverImageIdForBarcode != null && !folderDrop ? (
+        <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Barcode (optional)</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Fill the frame with the UPC box — no GPT on this shot, just a fast scan merged into this book.
+          </p>
+          <button
+            type="button"
+            data-testid="photo-import-barcode-companion"
+            disabled={barcodeScanning || visionBusy || uploading}
+            onClick={() => barcodeInputRef.current?.click()}
+            className="mt-3 w-full rounded-lg border border-sky-600 bg-sky-950/50 py-3 text-sm font-semibold text-sky-200 hover:bg-sky-900/50 disabled:opacity-50"
+          >
+            {barcodeScanning ? "Scanning barcode…" : "Add barcode close-up"}
+          </button>
+        </div>
       ) : null}
 
       {reads.length > 0 && !folderDrop ? (
@@ -455,6 +514,15 @@ export function PhotoImportMobilePage(): JSX.Element {
         </p>
       ) : null}
 
+      <input
+        ref={barcodeInputRef}
+        data-testid="photo-import-barcode-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => void runBarcodeCompanion(e.target.files, e.target)}
+      />
       <input
         ref={cameraInputRef}
         data-testid="photo-import-camera-input"

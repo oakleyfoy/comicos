@@ -30,6 +30,9 @@ IMAGE_STATUS_PROCESSING = "processing"
 IMAGE_STATUS_PROCESSED = "processed"
 IMAGE_STATUS_FAILED = "failed"
 
+IMAGE_ROLE_COVER = "cover"
+IMAGE_ROLE_BARCODE = "barcode"
+
 DETECTION_STATUS_DETECTED = "detected"
 DETECTION_STATUS_RECOGNIZED = "recognized"
 DETECTION_STATUS_NEEDS_REVIEW = "needs_review"
@@ -75,6 +78,8 @@ class PhotoImportImage(SQLModel, table=True):
     width: int | None = Field(default=None, nullable=True)
     height: int | None = Field(default=None, nullable=True)
     status: str = Field(max_length=32, default=IMAGE_STATUS_UPLOADED, nullable=False)
+    image_role: str = Field(max_length=16, default=IMAGE_ROLE_COVER, nullable=False)
+    pair_cover_image_id: int | None = Field(default=None, foreign_key="photo_import_image.id", nullable=True)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 

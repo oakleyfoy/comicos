@@ -66,7 +66,7 @@ from app.services.photo_import_folder_pipeline_service import (
     kick_folder_process_pending,
     reset_folder_session_vision_for_rerun,
 )
-from app.services.photo_import_upload_service import upload_session_images
+from app.services.photo_import_upload_service import upload_barcode_companion_image, upload_session_images
 from app.services.photo_import_vision_stream_service import iter_vision_read_sse
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.photo_import_vision_accuracy_service import build_vision_sandbox_accuracy_report
@@ -231,9 +231,28 @@ async def upload_images_endpoint(
     images: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ) -> list[PhotoImportImageRead]:
-    """Save uploads; clients should call vision-stream (quick) per image for GPT reads."""
+    """Save uploads; clients should call vision-stream (quick) per cover image for GPT reads."""
     saved, _pending_ids = await upload_session_images(session, token=token, files=images)
     return saved
+
+
+@photo_import_router.post(
+    "/sessions/{token}/images/{cover_image_id}/barcode-companion",
+    response_model=PhotoImportImageRead,
+)
+async def upload_barcode_companion_endpoint(
+    token: str,
+    cover_image_id: int,
+    image: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> PhotoImportImageRead:
+    """Upload a UPC close-up linked to an existing cover photo (no GPT on this file)."""
+    return await upload_barcode_companion_image(
+        session,
+        token=token,
+        cover_image_id=cover_image_id,
+        upload=image,
+    )
 
 
 @photo_import_router.get("/sessions/{token}/detections", response_model=list[PhotoImportDetectedBookRead])

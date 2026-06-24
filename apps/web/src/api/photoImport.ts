@@ -182,6 +182,8 @@ export type PhotoImportImage = {
   width: number | null;
   height: number | null;
   status: string;
+  image_role?: "cover" | "barcode";
+  pair_cover_image_id?: number | null;
   created_at: string;
 };
 
@@ -346,6 +348,20 @@ export async function uploadPhotoImportImages(token: string, files: File[]): Pro
     method: "POST",
     body: form,
   });
+}
+
+/** UPC close-up linked to a cover photo (processed with decode-only, no GPT cover read). */
+export async function uploadPhotoImportBarcodeCompanion(
+  token: string,
+  coverImageId: number,
+  file: File,
+): Promise<PhotoImportImage> {
+  const form = new FormData();
+  form.append("image", file);
+  return requestPhotoImport(
+    `/api/v1/photo-import/sessions/${encodeURIComponent(token)}/images/${coverImageId}/barcode-companion`,
+    { method: "POST", body: form },
+  );
 }
 
 export function confirmPhotoImportSession(

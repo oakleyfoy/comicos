@@ -89,6 +89,37 @@ def iter_vision_read_sse(
         return
 
     raw = path.read_bytes()
+
+    from app.services.photo_import_barcode_companion_service import (
+        apply_barcode_companion_bytes,
+        is_barcode_companion_image,
+    )
+
+    if is_barcode_companion_image(image):
+        yield _sse("status", {"phase": "barcode_scan", "message": "Reading barcode close-up"})
+        try:
+            cover_id, rows = apply_barcode_companion_bytes(session, barcode_image=image, image_bytes=raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("photo_import.barcode_companion_stream.failed image_id=%s", image_id)
+            image.status = IMAGE_STATUS_FAILED
+            session.add(image)
+            session.commit()
+            yield _sse("error", {"message": str(exc)})
+            return
+        refresh_session_counts(session, session_id=int(image.session_id))
+        yield _sse(
+            "done",
+            {
+                "image_id": cover_id,
+                "pair_cover_image_id": cover_id,
+                "barcode_companion_image_id": image_id,
+                "image_status": IMAGE_STATUS_PROCESSED,
+                "vision_mode": "barcode_companion",
+                "reads": [vision_read_to_payload(r).model_dump() for r in rows],
+            },
+        )
+        return
+
     settings = get_settings()
     if not settings.openai_api_key:
         image.status = IMAGE_STATUS_FAILED

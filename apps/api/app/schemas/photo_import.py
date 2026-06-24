@@ -153,6 +153,8 @@ class PhotoImportImageRead(BaseModel):
     width: int | None
     height: int | None
     status: str
+    image_role: str = "cover"
+    pair_cover_image_id: int | None = None
     created_at: datetime
 
 
