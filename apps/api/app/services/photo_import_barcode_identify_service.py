@@ -45,7 +45,8 @@ def _year_from_cover_date(cover_date: str | None) -> str:
 
 
 def _local_catalog_hit(session: Session, barcode: str) -> dict[str, Any] | None:
-    for key in comic_barcode_lookup_variants(barcode):
+    keys = sorted(comic_barcode_lookup_variants(barcode), key=len, reverse=True)
+    for key in keys:
         row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == key)).first()
         if row is None or row.issue_id is None:
             continue

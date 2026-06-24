@@ -275,7 +275,7 @@ export function PhotoImportMobilePage(): JSX.Element {
           ? "Shoot one comic per photo. Your computer runs GPT and adds books to your collection — no review on this phone."
           : singleComic
             ? useBarcodeScan
-              ? "Fill the frame with the UPC barcode — we look up the book in our catalog (no GPT)."
+              ? "Fill the frame with the UPC bars and the 5-digit box to the right when printed — we look up the full code (no GPT)."
               : "No barcode on the book? Snap the cover — GPT reads title, series, and issue."
             : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>

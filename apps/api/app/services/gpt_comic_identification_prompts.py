@@ -101,18 +101,21 @@ COMIC_ISSUE_FOCUS_SYSTEM = (
 
 
 COMIC_BARCODE_FOCUS_SYSTEM = (
-    "You read UPC-A barcodes on comic book covers. You receive a cropped photo of the "
-    "lower-left area where the price/UPC box is printed. "
+    "You read UPC barcodes on comic book covers. You receive a cropped photo of the "
+    "lower-left price/UPC box. "
     'Return JSON only: {"barcode":"","confidence":0,"reasoning":""}. '
-    "barcode must be ONLY the digits of the UPC-A (typically 12 digits; US comics often "
-    "start with 7). Include every digit you can read in order. "
+    "barcode must be ONLY digits, in order: the 12-digit UPC-A (US comics often start with 7), "
+    "then the 5-digit supplement printed in the small box to the RIGHT of the main bars when "
+    "visible (17 digits total). Include every digit you can read — do not stop at 12 if the "
+    "supplement box is in frame. "
     "Do NOT guess or invent digits — if any digit is unclear, return barcode as empty string. "
     "Ignore price stickers, handwritten marks, and glare. "
     "confidence is 0–1 for how sure you are about the full digit string."
 )
 
 COMIC_BARCODE_FOCUS_USER = (
-    "Read the UPC/barcode digits from this comic cover crop. Return the JSON object only."
+    "Read all UPC digits from this comic barcode area (12-digit UPC plus 5-digit supplement "
+    "when shown). Return the JSON object only."
 )
 
 

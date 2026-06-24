@@ -148,6 +148,45 @@ def comic_barcode_lookup_variants(raw: str) -> list[str]:
     return variants
 
 
+def merge_comic_upc_decodes(candidates: list[str]) -> str | None:
+    """Merge 1D decode results into one key (12-digit UPC-A + optional 5-digit supplement)."""
+    digit_strings: list[str] = []
+    for raw in candidates:
+        normalized = normalize_upc(raw)
+        if normalized.isdigit():
+            digit_strings.append(normalized)
+    if not digit_strings:
+        return None
+
+    for digits in sorted(digit_strings, key=len, reverse=True):
+        if len(digits) >= 17 and upc_check_digit_valid(digits[:12]):
+            return digits[:17]
+        if len(digits) in (16, 15, 14) and upc_check_digit_valid(digits[:12]):
+            return digits[:12] + digits[12:].zfill(5)[-5:]
+
+    upc12: str | None = None
+    supplement5: str | None = None
+    for digits in digit_strings:
+        if len(digits) == 12 and upc_check_digit_valid(digits):
+            upc12 = digits
+        elif len(digits) == 13 and upc_check_digit_valid(digits) and digits.startswith("0"):
+            upc12 = digits[1:]
+        elif len(digits) == 5:
+            supplement5 = digits
+        elif len(digits) == 4 and digits.isdigit():
+            supplement5 = digits.zfill(5)
+
+    if upc12 and supplement5:
+        return f"{upc12}{supplement5}"
+    if upc12:
+        return upc12
+
+    for digits in sorted(digit_strings, key=len, reverse=True):
+        if barcode_usable_for_lookup(digits):
+            return digits
+    return None
+
+
 def barcode_usable_for_lookup(digits: str) -> bool:
     if not digits.isdigit():
         return False

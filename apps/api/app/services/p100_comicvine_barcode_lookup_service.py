@@ -38,9 +38,14 @@ def _empty_lookup(*, raw: dict[str, Any] | None = None) -> dict[str, Any]:
 def _row_matches_barcode(row: dict[str, Any], normalized: str) -> bool:
     from app.services.comicvine_api_response import comicvine_barcodes_from_issue_row
 
+    wanted = set(comic_barcode_lookup_variants(normalized))
     for candidate in comicvine_barcodes_from_issue_row(row):
-        if normalize_upc(candidate) == normalized:
+        cand_norm = normalize_upc(candidate)
+        if cand_norm in wanted:
             return True
+        for variant in comic_barcode_lookup_variants(cand_norm):
+            if variant in wanted:
+                return True
     return False
 
 
@@ -87,7 +92,8 @@ def lookup_comicvine_by_barcode(barcode: str) -> dict[str, Any]:
         return _empty_lookup()
 
     importer = ComicVineCatalogImporter()
-    for candidate in comic_barcode_lookup_variants(barcode):
+    variants = sorted(comic_barcode_lookup_variants(barcode), key=len, reverse=True)
+    for candidate in variants:
         if not barcode_usable_for_lookup(candidate):
             continue
         logger.info("p100.comicvine_barcode_lookup.started barcode=%s", candidate)

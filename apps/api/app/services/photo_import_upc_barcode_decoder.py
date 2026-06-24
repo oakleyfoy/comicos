@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from PIL import Image, ImageEnhance, ImageOps
 
-from app.services.catalog_ingestion_service import normalize_upc, upc_check_digit_valid
+from app.services.catalog_ingestion_service import merge_comic_upc_decodes, normalize_upc, upc_check_digit_valid
 from app.services.photo_import_barcode_vision import crop_upc_region_bytes, sanitize_vision_barcode
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,9 @@ def _pyzbar_available() -> bool:
 
 
 def _collect_valid_upc(candidates: list[str]) -> str | None:
+    merged = merge_comic_upc_decodes(candidates)
+    if merged:
+        return merged
     for raw in candidates:
         code = sanitize_vision_barcode(raw)
         if code:
@@ -118,15 +121,17 @@ def _try_backends_on_pil(
     opencv_fn: Callable[[Any], list[str]] | None,
     pyzbar_fn: Callable[[Image.Image], list[str]] | None,
 ) -> tuple[str, str] | None:
+    candidates: list[str] = []
+    last_label = "raw"
     for label, processed in [("raw", pil), *[(f"pp{i}", p) for i, p in enumerate(_preprocess_pil_variants(pil)[1:])]]:
+        last_label = label
         if opencv_fn is not None:
-            code = _collect_valid_upc(opencv_fn(_bgr_from_pil(processed)))
-            if code:
-                return code, f"opencv:{label}"
+            candidates.extend(opencv_fn(_bgr_from_pil(processed)))
         if pyzbar_fn is not None:
-            code = _collect_valid_upc(pyzbar_fn(processed))
-            if code:
-                return code, f"pyzbar:{label}"
+            candidates.extend(pyzbar_fn(processed))
+    code = _collect_valid_upc(candidates)
+    if code:
+        return code, f"merged:{last_label}"
     return None
 
 

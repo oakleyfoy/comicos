@@ -5,7 +5,18 @@ from __future__ import annotations
 import io
 import re
 
-from app.services.catalog_ingestion_service import normalize_upc, upc_check_digit_valid
+from app.services.catalog_ingestion_service import merge_comic_upc_decodes, normalize_upc, upc_check_digit_valid
+
+
+def normalize_comic_scan_barcode(raw: str | None) -> str:
+    """Digits-only comic UPC key (12-digit UPC-A plus optional 5-digit supplement when present)."""
+    digits = normalize_upc(raw or "")
+    if not digits.isdigit() or len(digits) < 11:
+        return ""
+    merged = merge_comic_upc_decodes([digits])
+    if merged:
+        return merged
+    return sanitize_vision_barcode(raw)
 
 
 def sanitize_vision_barcode(raw: str | None) -> str:
@@ -55,7 +66,7 @@ def crop_upc_region_bytes(image_bytes: bytes) -> bytes:
 def parse_barcode_focus_payload(payload: dict) -> tuple[str, float, str]:
     raw = str(payload.get("barcode") or payload.get("barcode_text") or "")
     digits = re.sub(r"\D", "", raw)
-    code = sanitize_vision_barcode(digits)
+    code = normalize_comic_scan_barcode(digits)
     try:
         confidence = max(0.0, min(1.0, float(payload.get("confidence") or 0.0)))
     except (TypeError, ValueError):

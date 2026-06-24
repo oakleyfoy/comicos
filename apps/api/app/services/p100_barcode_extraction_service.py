@@ -37,7 +37,7 @@ def accept_gpt_barcode_digits(raw: str | None) -> str | None:
     digits = re.sub(r"\D", "", str(raw))
     if not _GPT_BARCODE_DIGITS.fullmatch(digits):
         return None
-    validated = sanitize_vision_barcode(digits)
+    validated = merge_comic_upc_decodes([digits]) or sanitize_vision_barcode(digits)
     return validated or None
 
 
