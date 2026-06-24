@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { readComicWithGpt, type GptComicReadResult } from "../../api/gptComicRead";
+import {
+  barcodeMethodLabel,
+  finalMatchSourceLabel,
+  readComicWithGpt,
+  type GptComicReadResult,
+} from "../../api/gptComicRead";
 import { AppShell } from "../../components/AppShell";
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
@@ -52,13 +57,19 @@ export function GptComicReadPage(): JSX.Element {
     }
   };
 
+  const gpt = result?.gpt_read;
+  const barcodeDisplay =
+    result?.barcode_read.barcode?.trim() ||
+    (result && !result.barcode_read.barcode ? "Not detected" : null);
+
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-4 py-10">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Add Comics</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-900">GPT Comic Read</h1>
         <p className="mt-3 text-slate-600">
-          Upload one comic photo and see what GPT identifies. No catalog matching or inventory action.
+          Upload one comic photo for GPT identification, optional barcode verification, and local catalog
+          matching. Missing barcodes never block adding books to your collection.
         </p>
 
         {error ? (
@@ -110,44 +121,66 @@ export function GptComicReadPage(): JSX.Element {
             {!loading && !result ? (
               <p className="mt-4 text-sm text-slate-500">Upload an image and click “Read with GPT”.</p>
             ) : null}
-            {result ? (
+            {result && gpt ? (
               <>
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <Field label="Publisher" value={result.publisher} />
-                  <Field label="Series" value={result.series} />
-                  <Field label="Issue Number" value={result.issue_number} />
-                  <Field label="Issue Title" value={result.issue_title} />
-                  <Field label="Year" value={result.year} />
-                  <Field label="Cover Date" value={result.cover_date} />
-                  <Field label="Variant" value={result.variant_description} />
-                  <Field label="Barcode" value={result.barcode} />
+                  <Field label="Publisher" value={gpt.publisher} />
+                  <Field label="Series" value={gpt.series} />
+                  <Field label="Issue Number" value={gpt.issue_number} />
+                  <Field label="Issue Title" value={gpt.issue_title} />
+                  <Field label="Year" value={gpt.year} />
+                  <Field label="Cover Date" value={gpt.cover_date} />
+                  <Field label="Variant" value={gpt.variant_description} />
                   <Field
                     label="Confidence"
                     value={
-                      result.confidence != null ? `${Math.round(result.confidence * 100)}%` : null
+                      gpt.confidence != null ? `${Math.round(gpt.confidence * 100)}%` : null
                     }
                   />
                 </dl>
-                {result.reasoning ? (
+
+                <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-3" data-testid="gpt-barcode-section">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Barcode</p>
+                  <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <Field label="Barcode" value={barcodeDisplay} />
+                    <Field label="Method" value={barcodeMethodLabel(result.barcode_read.method)} />
+                    <Field
+                      label="ComicVine barcode match"
+                      value={result.comicvine_barcode_match.matched ? "Found" : "Not found"}
+                    />
+                    <Field
+                      label="Final match source"
+                      value={finalMatchSourceLabel(result.final_match_source)}
+                    />
+                  </dl>
+                  {result.catalog_match.matched ? (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Local catalog: {result.catalog_match.series} #{result.catalog_match.issue_number}
+                      {result.catalog_match.publisher ? ` · ${result.catalog_match.publisher}` : ""}
+                    </p>
+                  ) : null}
+                </div>
+
+                {gpt.reasoning ? (
                   <div className="mt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reasoning</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{result.reasoning}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{gpt.reasoning}</p>
                   </div>
                 ) : null}
-                {result.possible_alternates && result.possible_alternates.length > 0 ? (
+                {gpt.possible_alternates && gpt.possible_alternates.length > 0 ? (
                   <div className="mt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Possible Alternatives
                     </p>
                     <ul className="mt-1 list-disc pl-5 text-sm text-slate-800">
-                      {result.possible_alternates.map((alt) => (
+                      {gpt.possible_alternates.map((alt) => (
                         <li key={alt}>{alt}</li>
                       ))}
                     </ul>
                   </div>
                 ) : null}
                 <p className="mt-4 text-xs text-slate-400">
-                  Model: {result.model} · {result.image_width}×{result.image_height}
+                  Model: {gpt.model} · {gpt.image_width}×{gpt.image_height}
                 </p>
               </>
             ) : null}

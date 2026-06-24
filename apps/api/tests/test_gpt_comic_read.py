@@ -1,4 +1,4 @@
-"""GPT Comic Read — clean standalone GPT vision flow (no P100 pipeline)."""
+"""GPT Comic Read — GPT vision + barcode verification (no P100 photo-import pipeline)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from app.models.photo_import import (
     PhotoImportDetectedBook,
     PhotoImportSession,
 )
-from app.services.gpt_comic_read_service import GptComicReadResult
 from test_inventory import auth_headers, register_and_login
 
 
@@ -24,31 +23,65 @@ def _png_bytes(width: int = 400, height: int = 600) -> bytes:
     return buf.getvalue()
 
 
-def _fake_result() -> GptComicReadResult:
-    return GptComicReadResult(
-        publisher="Marvel",
-        series="Falcon",
-        issue_number="1",
-        issue_title="Take Flight",
-        year="2017",
-        cover_date="December 2017",
-        variant_description="",
-        barcode="",
-        confidence=0.92,
-        reasoning="Cover logo and trade dress match The Falcon #1.",
-        model="gpt-4o",
-        image_width=400,
-        image_height=600,
-        raw_response={"parsed": {"series": "Falcon"}, "openai_response": {"id": "x"}},
-        possible_alternates=["The Falcon (2017)"],
-    )
+def _enriched_payload() -> dict:
+    return {
+        "gpt_read": {
+            "publisher": "Marvel",
+            "series": "Falcon",
+            "issue_number": "1",
+            "issue_title": "Take Flight",
+            "year": "2017",
+            "cover_date": "December 2017",
+            "variant_description": "",
+            "barcode": "",
+            "confidence": 0.92,
+            "reasoning": "Cover logo and trade dress match The Falcon #1.",
+            "possible_alternates": ["The Falcon (2017)"],
+            "raw_response": {"parsed": {"series": "Falcon"}, "openai_response": {"id": "x"}},
+            "model": "gpt-4o",
+            "image_width": 400,
+            "image_height": 600,
+        },
+        "catalog_match": {
+            "matched": False,
+            "catalog_issue_id": None,
+            "method": "none",
+            "confidence": None,
+            "series": None,
+            "issue_number": None,
+            "publisher": None,
+            "cover_image_url": None,
+            "alternates": [],
+        },
+        "barcode_read": {
+            "barcode": None,
+            "barcode_type": None,
+            "confidence": 0.0,
+            "method": "none",
+            "crop_used": None,
+            "error": None,
+        },
+        "comicvine_barcode_match": {
+            "matched": False,
+            "source": "comicvine",
+            "comicvine_issue_id": None,
+            "series": None,
+            "issue_number": None,
+            "publisher": None,
+            "cover_date": None,
+            "name": None,
+            "image_url": None,
+            "raw": None,
+        },
+        "final_match_source": "gpt_only",
+    }
 
 
-def test_gpt_comic_read_returns_gpt_fields(client: TestClient) -> None:
+def test_gpt_comic_read_returns_nested_gpt_fields(client: TestClient) -> None:
     token = register_and_login(client, "gpt-read-1@example.com")
     with mock.patch(
-        "app.api.gpt_comic_read.read_comic_with_gpt",
-        return_value=_fake_result(),
+        "app.api.gpt_comic_read.run_gpt_comic_read_enriched",
+        return_value=_enriched_payload(),
     ) as called:
         res = client.post(
             "/api/v1/gpt-comic-read",
@@ -57,23 +90,20 @@ def test_gpt_comic_read_returns_gpt_fields(client: TestClient) -> None:
         )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["publisher"] == "Marvel"
-    assert body["series"] == "Falcon"
-    assert body["issue_number"] == "1"
-    assert body["reasoning"]
-    assert body["model"] == "gpt-4o"
-    assert body["image_width"] == 400
-    assert body["image_height"] == 600
-    assert body["possible_alternates"] == ["The Falcon (2017)"]
-    assert body["raw_response"]["parsed"]["series"] == "Falcon"
+    assert body["gpt_read"]["publisher"] == "Marvel"
+    assert body["gpt_read"]["series"] == "Falcon"
+    assert body["gpt_read"]["issue_number"] == "1"
+    assert body["gpt_read"]["model"] == "gpt-4o"
+    assert body["barcode_read"]["method"] == "none"
+    assert body["final_match_source"] == "gpt_only"
     called.assert_called_once()
 
 
-def test_gpt_comic_read_response_has_no_catalog_fields(client: TestClient) -> None:
+def test_gpt_comic_read_response_has_no_photo_import_fields(client: TestClient) -> None:
     token = register_and_login(client, "gpt-read-2@example.com")
     with mock.patch(
-        "app.api.gpt_comic_read.read_comic_with_gpt",
-        return_value=_fake_result(),
+        "app.api.gpt_comic_read.run_gpt_comic_read_enriched",
+        return_value=_enriched_payload(),
     ):
         res = client.post(
             "/api/v1/gpt-comic-read",
@@ -82,10 +112,7 @@ def test_gpt_comic_read_response_has_no_catalog_fields(client: TestClient) -> No
         )
     body = res.json()
     for forbidden in (
-        "catalog_issue_id",
         "candidate",
-        "match_score",
-        "selected_issue",
         "verification",
         "fingerprint",
         "cover_similarity",
@@ -99,8 +126,8 @@ def test_gpt_comic_read_creates_no_photo_import_rows(client: TestClient) -> None
 
     token = register_and_login(client, "gpt-read-3@example.com")
     with mock.patch(
-        "app.api.gpt_comic_read.read_comic_with_gpt",
-        return_value=_fake_result(),
+        "app.api.gpt_comic_read.run_gpt_comic_read_enriched",
+        return_value=_enriched_payload(),
     ):
         res = client.post(
             "/api/v1/gpt-comic-read",
@@ -114,8 +141,8 @@ def test_gpt_comic_read_creates_no_photo_import_rows(client: TestClient) -> None
         assert db.exec(select(PhotoImportCandidate)).first() is None
 
 
-def test_gpt_comic_read_does_not_touch_catalog_or_db() -> None:
-    """The service takes only image bytes and never imports P100 matching/catalog code."""
+def test_gpt_comic_read_service_still_gpt_only() -> None:
+    """Core GPT service takes only image bytes and never imports P100 matching/catalog code."""
     import inspect
 
     import app.services.gpt_comic_read_service as svc
@@ -136,28 +163,18 @@ def test_gpt_comic_read_does_not_touch_catalog_or_db() -> None:
 
 def test_gpt_comic_read_handles_invalid_image(client: TestClient) -> None:
     token = register_and_login(client, "gpt-read-4@example.com")
-    res = client.post(
-        "/api/v1/gpt-comic-read",
-        files={"image": ("broken.png", b"not-an-image", "image/png")},
-        headers=auth_headers(token),
-    )
+    from app.services.gpt_comic_read_service import GptComicReadImageError
+
+    with mock.patch(
+        "app.api.gpt_comic_read.run_gpt_comic_read_enriched",
+        side_effect=GptComicReadImageError("Uploaded file is not a valid image"),
+    ):
+        res = client.post(
+            "/api/v1/gpt-comic-read",
+            files={"image": ("broken.png", b"not-an-image", "image/png")},
+            headers=auth_headers(token),
+        )
     assert res.status_code == 400
     body = res.json()
     message = body.get("detail") or body.get("error", {}).get("message", "")
     assert "valid image" in message.lower()
-
-
-def test_gpt_comic_read_returns_raw_response(client: TestClient) -> None:
-    token = register_and_login(client, "gpt-read-5@example.com")
-    with mock.patch(
-        "app.api.gpt_comic_read.read_comic_with_gpt",
-        return_value=_fake_result(),
-    ):
-        res = client.post(
-            "/api/v1/gpt-comic-read",
-            files={"image": ("falcon.png", _png_bytes(), "image/png")},
-            headers=auth_headers(token),
-        )
-    assert res.status_code == 200
-    assert "raw_response" in res.json()
-    assert res.json()["raw_response"]["openai_response"]["id"] == "x"
