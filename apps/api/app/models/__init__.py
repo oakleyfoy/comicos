@@ -496,6 +496,12 @@ from app.models.photo_import import (
     PhotoImportSession,
 )
 from app.models.photo_import_vision_read import PhotoImportVisionRead
+from app.models.intake_queue import (
+    ComicIssueBarcode,
+    IntakeItemCandidate,
+    IntakeSession,
+    IntakeSessionItem,
+)
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
     CollectionContinuityAlert,

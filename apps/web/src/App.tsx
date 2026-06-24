@@ -26,6 +26,8 @@ import { GptComicReadPage } from "./pages/addComics/GptComicReadPage";
 import { PhotoImportReviewPage } from "./pages/addComics/PhotoImportReviewPage";
 import { PhotoImportVisionSandboxDashboardPage } from "./pages/ops/PhotoImportVisionSandboxDashboardPage";
 import { PhotoImportMobilePage } from "./pages/addComics/PhotoImportMobilePage";
+import { IntakeScannerPage } from "./pages/intake/IntakeScannerPage";
+import { IntakeReviewPage } from "./pages/intake/IntakeReviewPage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
 import { MarketplaceCoverageDashboardPage } from "./pages/MarketplaceCoverageDashboardPage";
@@ -272,9 +274,12 @@ export default function App() {
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/storefront/:publicSlug" element={<DealerStorefrontPage />} />
       <Route path="/photo-import/mobile/:token" element={<PhotoImportMobilePage />} />
+      <Route path="/intake/scan" element={<IntakeScannerPage />} />
+      <Route path="/intake/scan/:token" element={<IntakeScannerPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<CollectorOnboardingGate />}>
         <Route path="/collector-onboarding" element={<CollectorOnboardingPage />} />
+        <Route path="/intake/review/:token" element={<IntakeReviewPage />} />
         <Route path="/dashboard" element={<DashboardPage loadProfile="portfolio" />} />
         <Route path="/dashboard/collection" element={<DashboardPage loadProfile="collection" />} />
         <Route path="/dashboard/market" element={<DashboardPage loadProfile="market" />} />
