@@ -129,6 +129,25 @@ def normalize_upc(raw: str) -> str:
     return re.sub(r"[\s\-]", "", (raw or "").strip())
 
 
+# Modern US direct-market floppy prefixes (12-digit UPC + 5-digit supplement box).
+DIRECT_MARKET_UPC_PREFIXES = (
+    "761941",  # DC
+    "759606",  # Marvel
+    "709785",  # Dark Horse / others
+    "827714",  # Image (common)
+)
+
+
+def direct_market_requires_supplement_key(digits: str) -> bool:
+    """True when a 12-digit-only scan is not enough to identify the issue."""
+    normalized = normalize_upc(digits)
+    if len(normalized) >= 17:
+        return False
+    if len(normalized) < 12:
+        return False
+    return any(normalized.startswith(prefix) for prefix in DIRECT_MARKET_UPC_PREFIXES)
+
+
 def comic_barcode_lookup_variants(raw: str) -> list[str]:
     """Candidate keys for catalog / ComicVine (12-digit UPC, full UPC+supplement, etc.)."""
     normalized = normalize_upc(raw)
@@ -148,6 +167,15 @@ def comic_barcode_lookup_variants(raw: str) -> list[str]:
     return variants
 
 
+def comic_barcode_lookup_keys_for_search(raw: str) -> list[str]:
+    """Lookup keys longest-first; never fall back to 12-digit when a 17-digit key applies."""
+    variants = comic_barcode_lookup_variants(raw)
+    long_keys = [v for v in variants if len(v) >= 17]
+    if long_keys:
+        return sorted(long_keys, key=len, reverse=True)
+    return sorted(variants, key=len, reverse=True)
+
+
 def merge_comic_upc_decodes(candidates: list[str]) -> str | None:
     """Merge 1D decode results into one key (12-digit UPC-A + optional 5-digit supplement)."""
     digit_strings: list[str] = []
@@ -159,27 +187,31 @@ def merge_comic_upc_decodes(candidates: list[str]) -> str | None:
         return None
 
     for digits in sorted(digit_strings, key=len, reverse=True):
-        if len(digits) >= 17 and upc_check_digit_valid(digits[:12]):
+        if len(digits) >= 17:
             return digits[:17]
-        if len(digits) in (16, 15, 14) and upc_check_digit_valid(digits[:12]):
-            return digits[:12] + digits[12:].zfill(5)[-5:]
 
-    upc12: str | None = None
+    upc12_strict: str | None = None
+    upc12_loose: str | None = None
     supplement5: str | None = None
     for digits in digit_strings:
-        if len(digits) == 12 and upc_check_digit_valid(digits):
-            upc12 = digits
-        elif len(digits) == 13 and upc_check_digit_valid(digits) and digits.startswith("0"):
-            upc12 = digits[1:]
+        if len(digits) == 12:
+            upc12_loose = digits
+            if upc_check_digit_valid(digits):
+                upc12_strict = digits
+        elif len(digits) == 13 and digits.startswith("0"):
+            upc12_loose = digits[1:]
+            if upc_check_digit_valid(digits):
+                upc12_strict = digits[1:]
         elif len(digits) == 5:
             supplement5 = digits
         elif len(digits) == 4 and digits.isdigit():
             supplement5 = digits.zfill(5)
 
-    if upc12 and supplement5:
-        return f"{upc12}{supplement5}"
-    if upc12:
-        return upc12
+    if supplement5 and (upc12_loose or upc12_strict):
+        return f"{upc12_loose or upc12_strict}{supplement5}"
+
+    if upc12_strict:
+        return upc12_strict
 
     for digits in sorted(digit_strings, key=len, reverse=True):
         if barcode_usable_for_lookup(digits):
@@ -192,6 +224,8 @@ def barcode_usable_for_lookup(digits: str) -> bool:
         return False
     if len(digits) >= 17:
         return True
+    if direct_market_requires_supplement_key(digits):
+        return False
     if len(digits) in (12, 13):
         return upc_check_digit_valid(digits)
     return 11 <= len(digits) <= 18

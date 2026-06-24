@@ -22,6 +22,7 @@ from app.services.catalog_ingestion_service import (
     normalize_issue_number,
     normalize_series_name,
     normalize_upc,
+    direct_market_requires_supplement_key,
     series_names_compatible,
     upc_check_digit_valid,
 )
@@ -49,6 +50,15 @@ def normalized_read_barcode(read: PhotoImportVisionRead) -> str:
 
 def barcode_read_trustworthy_for_upc(read: PhotoImportVisionRead) -> bool:
     code = normalized_read_barcode(read)
+    if len(code) >= 17:
+        if not _vision_has_identity(read):
+            return True
+        conf = read.confidence
+        if conf is None:
+            return False
+        return float(conf) >= BARCODE_TRUST_MIN_GPT_CONFIDENCE
+    if direct_market_requires_supplement_key(code):
+        return False
     if len(code) < BARCODE_TRUST_MIN_NORMALIZED_LEN:
         return False
     if not upc_check_digit_valid(code):
@@ -186,7 +196,25 @@ def _upc_match(session: Session, barcode: str | None) -> CatalogMatchResult | No
     if not barcode or not barcode.strip():
         return None
     normalized = normalize_upc(barcode)
-    if not normalized or not upc_check_digit_valid(normalized):
+    if not normalized:
+        return None
+    if direct_market_requires_supplement_key(normalized):
+        return None
+    if len(normalized) >= 17:
+        row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first()
+        if row is not None and row.issue_id is not None:
+            identity = load_catalog_issue_identity(session, int(row.issue_id))
+            return CatalogMatchResult(
+                catalog_issue_id=int(row.issue_id),
+                catalog_variant_id=int(row.variant_id) if row.variant_id is not None else None,
+                cover_url=identity.cover_image_url if identity else None,
+                method="upc",
+                confidence=1.0,
+                series=identity.series if identity else None,
+                issue_number=identity.issue_number if identity else None,
+                publisher=identity.publisher if identity else None,
+            )
+    if not upc_check_digit_valid(normalized):
         return None
     row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first()
     if row is None or row.issue_id is None:

@@ -46,8 +46,8 @@ def test_barcode_demoted_when_it_conflicts_with_gpt_vision(session: Session) -> 
     session.add(
         CatalogUpc(
             issue_id=wrong.id,
-            upc="761941343730",
-            normalized_upc="761941343730",
+            upc="76194134373001234",
+            normalized_upc="76194134373001234",
             source="test",
         )
     )
@@ -60,7 +60,7 @@ def test_barcode_demoted_when_it_conflicts_with_gpt_vision(session: Session) -> 
         series="Preacher",
         issue_number="58",
         issue_title="",
-        barcode="7 61941 34373 0",
+        barcode="76194134373001234",
         confidence=0.6,
         reasoning="GPT says Preacher 58",
         raw_response={},
@@ -79,8 +79,8 @@ def test_barcode_wins_when_high_confidence_despite_gpt_conflict(session: Session
     session.add(
         CatalogUpc(
             issue_id=wrong.id,
-            upc="761941343730",
-            normalized_upc="761941343730",
+            upc="76194134373001234",
+            normalized_upc="76194134373001234",
             source="test",
         )
     )
@@ -93,7 +93,7 @@ def test_barcode_wins_when_high_confidence_despite_gpt_conflict(session: Session
         series="Preacher",
         issue_number="58",
         issue_title="",
-        barcode="7 61941 34373 0",
+        barcode="76194134373001234",
         confidence=0.92,
         reasoning="GPT misread issue; barcode clear",
         raw_response={},

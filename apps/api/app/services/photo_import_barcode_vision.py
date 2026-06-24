@@ -16,6 +16,8 @@ def normalize_comic_scan_barcode(raw: str | None) -> str:
     merged = merge_comic_upc_decodes([digits])
     if merged:
         return merged
+    if len(digits) >= 17 and digits.isdigit():
+        return digits[:17]
     return sanitize_vision_barcode(raw)
 
 

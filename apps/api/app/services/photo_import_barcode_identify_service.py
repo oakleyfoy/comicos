@@ -16,7 +16,12 @@ from app.models.photo_import import (
     PhotoImportImage,
 )
 from app.models.photo_import_vision_read import PhotoImportVisionRead
-from app.services.catalog_ingestion_service import comic_barcode_lookup_variants, normalize_upc
+from app.services.catalog_ingestion_service import (
+    comic_barcode_lookup_keys_for_search,
+    direct_market_requires_supplement_key,
+    normalize_upc,
+)
+from app.services.photo_import_barcode_vision import normalize_comic_scan_barcode
 from app.services.p100_barcode_extraction_service import extract_barcode_from_image
 from app.services.p100_comicvine_barcode_lookup_service import lookup_comicvine_by_barcode
 from app.services.photo_import_vision_sandbox_service import (
@@ -45,8 +50,9 @@ def _year_from_cover_date(cover_date: str | None) -> str:
 
 
 def _local_catalog_hit(session: Session, barcode: str) -> dict[str, Any] | None:
-    keys = sorted(comic_barcode_lookup_variants(barcode), key=len, reverse=True)
-    for key in keys:
+    for key in comic_barcode_lookup_keys_for_search(barcode):
+        if len(key) < 17 and direct_market_requires_supplement_key(barcode):
+            continue
         row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == key)).first()
         if row is None or row.issue_id is None:
             continue
@@ -142,7 +148,17 @@ def identify_and_persist_barcode_primary(
             "or switch to “No barcode — cover photo” for older books."
         )
 
-    normalized = normalize_upc(str(barcode))
+    normalized = normalize_comic_scan_barcode(str(barcode)) or normalize_upc(str(barcode))
+    if direct_market_requires_supplement_key(normalized):
+        base = normalized[:12]
+        image.status = IMAGE_STATUS_FAILED
+        session.add(image)
+        session.commit()
+        raise BarcodeIdentifyError(
+            f"Base UPC detected ({base}). Include the 5-digit extension in the photo, "
+            "or switch to “No barcode — cover photo”."
+        )
+
     local = _local_catalog_hit(session, normalized)
     comicvine = None if local else lookup_comicvine_by_barcode(normalized)
 

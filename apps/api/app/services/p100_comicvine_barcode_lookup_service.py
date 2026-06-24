@@ -8,7 +8,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.services.catalog_ingestion_service import (
     barcode_usable_for_lookup,
-    comic_barcode_lookup_variants,
+    comic_barcode_lookup_keys_for_search,
     normalize_upc,
 )
 from app.services.comicvine_api_response import (
@@ -38,12 +38,12 @@ def _empty_lookup(*, raw: dict[str, Any] | None = None) -> dict[str, Any]:
 def _row_matches_barcode(row: dict[str, Any], normalized: str) -> bool:
     from app.services.comicvine_api_response import comicvine_barcodes_from_issue_row
 
-    wanted = set(comic_barcode_lookup_variants(normalized))
+    wanted = set(comic_barcode_lookup_keys_for_search(normalized))
     for candidate in comicvine_barcodes_from_issue_row(row):
         cand_norm = normalize_upc(candidate)
         if cand_norm in wanted:
             return True
-        for variant in comic_barcode_lookup_variants(cand_norm):
+        for variant in comic_barcode_lookup_keys_for_search(cand_norm):
             if variant in wanted:
                 return True
     return False
@@ -92,7 +92,7 @@ def lookup_comicvine_by_barcode(barcode: str) -> dict[str, Any]:
         return _empty_lookup()
 
     importer = ComicVineCatalogImporter()
-    variants = sorted(comic_barcode_lookup_variants(barcode), key=len, reverse=True)
+    variants = comic_barcode_lookup_keys_for_search(barcode)
     for candidate in variants:
         if not barcode_usable_for_lookup(candidate):
             continue
