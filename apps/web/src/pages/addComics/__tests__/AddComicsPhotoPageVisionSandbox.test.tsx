@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as intake from "../../../api/intake";
 import * as photoImport from "../../../api/photoImport";
 import { AddComicsPhotoPage } from "../AddComicsPhotoPage";
 
@@ -16,46 +17,42 @@ vi.mock("../../../components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-const sandboxSession: photoImport.PhotoImportSession = {
+const intakeSession: intake.IntakeSession = {
   id: 1,
-  session_token: "sandbox-tok",
+  session_token: "intake-tok",
+  name: null,
   status: "active",
-  created_at: "2026-06-19T00:00:00Z",
-  expires_at: "2026-06-20T00:00:00Z",
-  last_seen_at: null,
   source_device: "desktop",
-  confirmed_count: 0,
-  uploaded_photo_count: 2,
-  detected_book_count: 2,
-  capture_mode: "single_comic",
-  mobile_url: "http://localhost/photo-import/mobile/sandbox-tok",
-  desktop_review_url: "http://localhost/add-comics/photo/session/sandbox-tok",
-  vision_sandbox: true,
+  scanned_count: 0,
+  created_at: "2026-06-24T00:00:00Z",
+  expires_at: "2026-06-25T00:00:00Z",
+  last_seen_at: null,
+  scanner_url: "http://localhost/intake/scan/intake-tok",
+  review_url: "http://localhost/intake/review/intake-tok",
 };
 
 beforeEach(() => {
   cleanup();
   vi.restoreAllMocks();
   navigate.mockReset();
-  vi.spyOn(photoImport, "createPhotoImportSession").mockResolvedValue(sandboxSession);
-  vi.spyOn(photoImport, "getPhotoImportSession").mockResolvedValue(sandboxSession);
+  vi.spyOn(intake, "createIntakeSession").mockResolvedValue(intakeSession);
+  vi.spyOn(intake, "getIntakeSession").mockResolvedValue(intakeSession);
   vi.spyOn(photoImport, "qrCodeUrlForLink").mockReturnValue("data:image/png;base64,xx");
-  vi.spyOn(photoImport, "mobilePhotoImportUrl").mockReturnValue("http://localhost/mobile");
 });
 
-describe("AddComicsPhotoPage GPT review", () => {
-  it("links to the canonical GPT review route", async () => {
+describe("AddComicsPhotoPage hands-free intake", () => {
+  it("starts an intake session and opens the intake review screen", async () => {
     render(
       <MemoryRouter>
         <AddComicsPhotoPage />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Start Phone Photo Session/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start Intake Session/i }));
     await waitFor(() => {
-      expect(screen.getByText(/GPT reads complete/i)).toBeInTheDocument();
+      expect(intake.createIntakeSession).toHaveBeenCalled();
     });
-    expect(screen.getByRole("button", { name: /Review GPT reads/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Review GPT reads/i }));
-    expect(navigate).toHaveBeenCalledWith("/add-comics/photo/session/sandbox-tok");
+    expect(screen.getByRole("button", { name: /Open review screen/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Open review screen/i }));
+    expect(navigate).toHaveBeenCalledWith("/intake/review/intake-tok");
   });
 });
