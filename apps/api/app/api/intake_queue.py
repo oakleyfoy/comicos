@@ -15,6 +15,8 @@ from app.models import User
 from app.models.intake_queue import IntakeSession, IntakeSessionItem
 from app.schemas.intake_queue import (
     IntakeAddAllResponse,
+    IntakeCatalogSearchResponse,
+    IntakeCatalogSearchResult,
     IntakeChooseIssuePayload,
     IntakeCounts,
     IntakeEnqueueResponse,
@@ -35,10 +37,12 @@ from app.services.intake_queue_service import (
     create_intake_session,
     enqueue_intake_item,
     get_intake_session_by_token_or_404,
+    import_and_accept_intake_item,
     intake_counts,
     list_intake_items,
     reject_intake_item,
     requeue_intake_item,
+    search_catalog_issues,
     set_session_status,
 )
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
@@ -251,6 +255,30 @@ def choose_item_endpoint(
         variant_id=payload.variant_id,
     )
     return _item_response(session, item)
+
+
+@intake_router.post("/items/{item_id}/import-and-accept", response_model=IntakeItemRead)
+def import_and_accept_endpoint(
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> IntakeItemRead:
+    item = import_and_accept_intake_item(session, item_id=item_id, owner_user_id=int(current_user.id))
+    return _item_response(session, item)
+
+
+@intake_router.get("/catalog-search", response_model=IntakeCatalogSearchResponse)
+def catalog_search_endpoint(
+    q: str,
+    issue_number: str | None = None,
+    limit: int = 25,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> IntakeCatalogSearchResponse:
+    rows = search_catalog_issues(session, query=q, issue_number=issue_number, limit=limit)
+    return IntakeCatalogSearchResponse(
+        results=[IntakeCatalogSearchResult(**row) for row in rows]
+    )
 
 
 @intake_router.post("/items/{item_id}/add-to-inventory", response_model=IntakeItemRead)

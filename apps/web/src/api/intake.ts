@@ -179,6 +179,29 @@ export function addIntakeItemToInventory(itemId: number): Promise<IntakeItem> {
   });
 }
 
+export function importAndAcceptIntakeItem(itemId: number): Promise<IntakeItem> {
+  return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/import-and-accept`, {
+    method: "POST",
+  });
+}
+
+export type IntakeCatalogSearchResult = {
+  catalog_issue_id: number;
+  series: string | null;
+  issue_number: string | null;
+  publisher: string | null;
+  cover_url: string | null;
+};
+
+export function searchCatalogIssues(
+  q: string,
+  issueNumber?: string,
+): Promise<{ results: IntakeCatalogSearchResult[] }> {
+  const params = new URLSearchParams({ q });
+  if (issueNumber) params.set("issue_number", issueNumber);
+  return requestIntake(`/api/v1/intake/catalog-search?${params.toString()}`);
+}
+
 export function rejectIntakeItem(itemId: number): Promise<IntakeItem> {
   return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/reject`, { method: "POST" });
 }

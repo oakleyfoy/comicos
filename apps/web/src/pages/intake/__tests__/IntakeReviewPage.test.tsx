@@ -96,4 +96,47 @@ describe("IntakeReviewPage", () => {
     fireEvent.click(addButton);
     await waitFor(() => expect(addSpy).toHaveBeenCalledWith(11));
   });
+
+  const cvOnlyReview = {
+    ...baseReview,
+    items: [{ ...baseReview.items[0], selected_catalog_issue_id: null }],
+  };
+
+  it("imports and accepts a ComicVine-only candidate", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue(cvOnlyReview);
+    const importSpy = vi.spyOn(intake, "importAndAcceptIntakeItem").mockResolvedValue({
+      ...cvOnlyReview.items[0],
+      status: "auto_matched",
+      selected_catalog_issue_id: 777,
+    });
+    renderReview();
+    const btn = await screen.findByRole("button", { name: /Import & Accept/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(importSpy).toHaveBeenCalledWith(11));
+  });
+
+  it("chooses a different issue via catalog search", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue(cvOnlyReview);
+    vi.spyOn(intake, "searchCatalogIssues").mockResolvedValue({
+      results: [
+        {
+          catalog_issue_id: 900,
+          series: "Superman",
+          issue_number: "39",
+          publisher: "DC Comics",
+          cover_url: null,
+        },
+      ],
+    });
+    const chooseSpy = vi.spyOn(intake, "chooseIntakeItemIssue").mockResolvedValue({
+      ...cvOnlyReview.items[0],
+      status: "auto_matched",
+      selected_catalog_issue_id: 900,
+    });
+    renderReview();
+    fireEvent.click(await screen.findByRole("button", { name: "Choose different issue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Superman #39 DC Comics/ }));
+    await waitFor(() => expect(chooseSpy).toHaveBeenCalledWith(11, 900));
+  });
 });

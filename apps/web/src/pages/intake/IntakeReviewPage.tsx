@@ -5,10 +5,14 @@ import {
   acceptIntakeItem,
   addAllHighConfidence,
   addIntakeItemToInventory,
+  chooseIntakeItemIssue,
   getIntakeReview,
+  importAndAcceptIntakeItem,
   intakeImageUrl,
   rejectIntakeItem,
   requeueIntakeItem,
+  searchCatalogIssues,
+  type IntakeCatalogSearchResult,
   type IntakeCounts,
   type IntakeItem,
   type IntakeReview,
@@ -59,6 +63,10 @@ export function IntakeReviewPage(): JSX.Element {
   const [review, setReview] = useState<IntakeReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [pickerItem, setPickerItem] = useState<IntakeItem | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerResults, setPickerResults] = useState<IntakeCatalogSearchResult[]>([]);
+  const [pickerBusy, setPickerBusy] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -105,6 +113,46 @@ export function IntakeReviewPage(): JSX.Element {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Add all failed");
+    }
+  };
+
+  const openPicker = (item: IntakeItem) => {
+    setPickerItem(item);
+    setPickerQuery(item.matched_series ?? "");
+    setPickerResults([]);
+  };
+
+  const runPickerSearch = async () => {
+    if (!pickerQuery.trim()) return;
+    setPickerBusy(true);
+    setError(null);
+    try {
+      const data = await searchCatalogIssues(
+        pickerQuery,
+        pickerItem?.matched_issue_number ?? undefined,
+      );
+      setPickerResults(data.results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Search failed");
+    } finally {
+      setPickerBusy(false);
+    }
+  };
+
+  const choosePickerResult = async (catalogIssueId: number) => {
+    if (!pickerItem) return;
+    const itemId = pickerItem.id;
+    setPickerBusy(true);
+    setError(null);
+    try {
+      applyItem(await chooseIntakeItemIssue(itemId, catalogIssueId));
+      setPickerItem(null);
+      setPickerResults([]);
+      void load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not choose issue");
+    } finally {
+      setPickerBusy(false);
     }
   };
 
@@ -158,6 +206,14 @@ export function IntakeReviewPage(): JSX.Element {
             .filter(Boolean)
             .join(" ");
           const canConfirm = item.selected_catalog_issue_id != null;
+          const reviewable =
+            item.status === "ready_for_review" ||
+            item.status === "needs_review" ||
+            item.status === "auto_matched";
+          const canImport =
+            !canConfirm &&
+            reviewable &&
+            (item.matched_series != null || item.normalized_barcode != null);
           return (
             <article key={item.id} className="flex gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
               <img
@@ -199,6 +255,26 @@ export function IntakeReviewPage(): JSX.Element {
                         Accept match
                       </button>
                     ) : null}
+                    {canImport ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void runAction(item.id, () => importAndAcceptIntakeItem(item.id))}
+                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                      >
+                        Import &amp; Accept
+                      </button>
+                    ) : null}
+                    {reviewable ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openPicker(item)}
+                        className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                      >
+                        Choose different issue
+                      </button>
+                    ) : null}
                     {canConfirm ? (
                       <button
                         type="button"
@@ -237,6 +313,74 @@ export function IntakeReviewPage(): JSX.Element {
           </p>
         ) : null}
       </div>
+
+      {pickerItem ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4">
+          <div className="mt-10 w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Choose different issue</h2>
+              <button
+                type="button"
+                onClick={() => setPickerItem(null)}
+                className="rounded-lg border border-slate-600 px-2 py-1 text-xs"
+              >
+                Close
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void runPickerSearch();
+              }}
+              className="mb-3 flex gap-2"
+            >
+              <input
+                value={pickerQuery}
+                onChange={(e) => setPickerQuery(e.target.value)}
+                placeholder="Search series, e.g. Superman"
+                className="flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm"
+                aria-label="Catalog search"
+              />
+              <button
+                type="submit"
+                disabled={pickerBusy}
+                className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-semibold disabled:opacity-50"
+              >
+                Search
+              </button>
+            </form>
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {pickerResults.map((res) => (
+                <button
+                  key={res.catalog_issue_id}
+                  type="button"
+                  disabled={pickerBusy}
+                  onClick={() => void choosePickerResult(res.catalog_issue_id)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-2 text-left hover:border-sky-500 disabled:opacity-50"
+                >
+                  {res.cover_url ? (
+                    <img src={res.cover_url} alt="" className="h-14 w-10 rounded object-cover" loading="lazy" />
+                  ) : (
+                    <div className="h-14 w-10 rounded bg-slate-700" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {[res.series, res.issue_number ? `#${res.issue_number}` : null].filter(Boolean).join(" ") ||
+                        "Untitled"}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">{res.publisher || ""}</p>
+                  </div>
+                </button>
+              ))}
+              {pickerResults.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-500">
+                  {pickerBusy ? "Searching…" : "Search the catalog to pick the correct issue."}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

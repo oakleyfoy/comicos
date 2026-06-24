@@ -99,6 +99,18 @@ class IntakeChooseIssuePayload(BaseModel):
     variant_id: int | None = None
 
 
+class IntakeCatalogSearchResult(BaseModel):
+    catalog_issue_id: int
+    series: str | None
+    issue_number: str | None
+    publisher: str | None
+    cover_url: str | None
+
+
+class IntakeCatalogSearchResponse(BaseModel):
+    results: list[IntakeCatalogSearchResult]
+
+
 class IntakeAddAllResponse(BaseModel):
     added: int
     candidates: int

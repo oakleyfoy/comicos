@@ -306,7 +306,7 @@ def choose_intake_item_issue(
     catalog_issue_id: int,
     variant_id: int | None = None,
 ) -> IntakeSessionItem:
-    """Pick a different catalog issue for an item (manual correction)."""
+    """Pick a catalog issue for an item: confirms the match and learns the barcode mapping."""
     item = _load_owned_item(session, item_id=item_id, owner_user_id=owner_user_id)
     identity = load_catalog_issue_identity(session, catalog_issue_id)
     if identity is None:
@@ -318,10 +318,224 @@ def choose_intake_item_issue(
     item.matched_issue_number = identity.issue_number
     item.cover_url = identity.cover_image_url
     item.match_source = MATCH_SOURCE_MANUAL
-    item.status = ITEM_READY_FOR_REVIEW
+    # Manual pick is a confirmation: learn the barcode and mark accepted so it can be added.
+    _learn_barcode(
+        session,
+        normalized_barcode=item.normalized_barcode,
+        catalog_issue_id=catalog_issue_id,
+        variant_id=variant_id,
+        source=MATCH_SOURCE_MANUAL,
+        user_id=owner_user_id,
+    )
+    item.status = ITEM_AUTO_MATCHED
+    item.confidence = max(item.confidence, 0.99)
     session.add(item)
     session.commit()
     session.refresh(item)
+    return item
+
+
+def search_catalog_issues(
+    session: Session,
+    *,
+    query: str,
+    issue_number: str | None = None,
+    limit: int = 25,
+) -> list[dict[str, object]]:
+    """Lightweight catalog issue search for the manual issue picker."""
+    from app.models.catalog_master import CatalogSeries
+    from app.services.catalog_ingestion_service import normalize_issue_number
+
+    q = (query or "").strip()
+    if not q:
+        return []
+    stmt = (
+        select(CatalogIssue.id)
+        .join(CatalogSeries, CatalogSeries.id == CatalogIssue.series_id)
+        .where(CatalogSeries.name.ilike(f"%{q}%"))
+    )
+    if issue_number and issue_number.strip():
+        stmt = stmt.where(CatalogIssue.normalized_issue_number == normalize_issue_number(issue_number))
+    stmt = stmt.order_by(CatalogIssue.id.desc()).limit(max(1, min(int(limit), 50)))
+    issue_ids = [int(i) for i in session.exec(stmt).all()]
+
+    results: list[dict[str, object]] = []
+    for issue_id in issue_ids:
+        identity = load_catalog_issue_identity(session, issue_id)
+        if identity is None:
+            continue
+        results.append(
+            {
+                "catalog_issue_id": issue_id,
+                "series": identity.series,
+                "issue_number": identity.issue_number,
+                "publisher": identity.publisher,
+                "cover_url": identity.cover_image_url,
+            }
+        )
+    return results
+
+
+def _parse_year(value: str | None) -> int | None:
+    import re
+
+    match = re.search(r"(18|19|20)\d{2}", str(value or ""))
+    return int(match.group(0)) if match else None
+
+
+def _find_comicvine_volume_for_item(importer, item: IntakeSessionItem) -> int | None:
+    from app.services.photo_import_comicvine_ondemand_service import select_comicvine_volume_id
+
+    # Barcode-first: the supplement-bearing UPC usually resolves a single volume.
+    if item.normalized_barcode:
+        try:
+            rows = importer.search_issues_by_barcode(item.normalized_barcode)
+            for row in rows:
+                vid = importer.volume_id_from_issue_api_row(row)
+                if vid is not None:
+                    return int(vid)
+        except Exception:
+            logger.warning("intake.import.barcode_search_failed item_id=%s", item.id, exc_info=True)
+
+    series = (item.matched_series or "").strip()
+    if not series:
+        return None
+    issue_number = (item.matched_issue_number or "").strip()
+    year = _parse_year(item.matched_year)
+    publisher = (item.matched_publisher or "").strip()
+    queries = [series] + ([f"{series} {publisher}"] if publisher else [])
+    seen: set[str] = set()
+    for query in queries:
+        key = query.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            candidates = importer.search_volumes(query, limit=30)
+        except Exception:
+            logger.warning("intake.import.volume_search_failed item_id=%s query=%r", item.id, query, exc_info=True)
+            continue
+        vid = select_comicvine_volume_id(
+            candidates, series=series, issue_number=issue_number, year=year
+        )
+        if vid is not None:
+            return int(vid)
+    return None
+
+
+def _resolve_imported_issue_id(
+    session: Session,
+    *,
+    normalized_barcode: str | None,
+    catalog_series_id: int | None,
+    issue_number: str | None,
+) -> tuple[int | None, int | None]:
+    from app.models.catalog_master import CatalogUpc
+    from app.services.catalog_ingestion_service import (
+        comic_barcode_lookup_keys_for_search,
+        normalize_issue_number,
+    )
+
+    if normalized_barcode:
+        for key in comic_barcode_lookup_keys_for_search(normalized_barcode):
+            row = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == key)).first()
+            if row is not None and row.issue_id is not None:
+                return int(row.issue_id), (int(row.variant_id) if row.variant_id is not None else None)
+
+    if catalog_series_id is not None and (issue_number or "").strip():
+        norm = normalize_issue_number(issue_number or "")
+        issue = session.exec(
+            select(CatalogIssue).where(
+                CatalogIssue.series_id == catalog_series_id,
+                CatalogIssue.normalized_issue_number == norm,
+            )
+        ).first()
+        if issue is not None and issue.id is not None:
+            return int(issue.id), None
+    return None, None
+
+
+def import_and_accept_intake_item(
+    session: Session, *, item_id: int, owner_user_id: int
+) -> IntakeSessionItem:
+    """Import the ComicVine volume/issue into the local catalog, link it, accept, and learn the barcode."""
+    item = _load_owned_item(session, item_id=item_id, owner_user_id=owner_user_id)
+    if item.selected_catalog_issue_id is not None:
+        # Already resolvable locally — just confirm it.
+        return accept_intake_item(session, item_id=item_id, owner_user_id=owner_user_id)
+
+    from app.services.catalog_ingestion_service import catalog_series_id_for_comicvine_volume
+    from app.services.comicvine_catalog_importer import ComicVineCatalogImporter
+
+    importer = ComicVineCatalogImporter()
+    if importer.initialize_or_explain():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ComicVine is not configured on this server.",
+        )
+
+    volume_id = _find_comicvine_volume_for_item(importer, item)
+    if volume_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not find this book on ComicVine. Use “Choose different issue”.",
+        )
+
+    try:
+        stats = importer.import_single_volume(session, comicvine_volume_id=volume_id, import_issues=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("intake.import.failed item_id=%s volume_id=%s", item.id, volume_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="ComicVine import failed. Try again or choose the issue manually.",
+        ) from exc
+
+    catalog_series_id = catalog_series_id_for_comicvine_volume(
+        session,
+        volume_id=volume_id,
+        publisher_id=None,
+        prefer_start_year=_parse_year(item.matched_year),
+    )
+    if catalog_series_id is None and stats.imported_series_ids:
+        catalog_series_id = int(stats.imported_series_ids[0])
+
+    issue_id, variant_id = _resolve_imported_issue_id(
+        session,
+        normalized_barcode=item.normalized_barcode,
+        catalog_series_id=catalog_series_id,
+        issue_number=item.matched_issue_number,
+    )
+    if issue_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Imported from ComicVine but could not resolve the exact issue. Use “Choose different issue”.",
+        )
+
+    identity = load_catalog_issue_identity(session, issue_id)
+    item.selected_catalog_issue_id = issue_id
+    item.selected_variant_id = variant_id
+    if identity is not None:
+        item.matched_publisher = identity.publisher
+        item.matched_series = identity.series
+        item.matched_issue_number = identity.issue_number
+        item.cover_url = identity.cover_image_url or item.cover_url
+    item.match_source = "comicvine"
+    _learn_barcode(
+        session,
+        normalized_barcode=item.normalized_barcode,
+        catalog_issue_id=issue_id,
+        variant_id=variant_id,
+        source="comicvine",
+        user_id=owner_user_id,
+    )
+    item.status = ITEM_AUTO_MATCHED
+    item.confidence = max(item.confidence, 0.95)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    logger.info(
+        "intake.import.accepted item_id=%s volume_id=%s catalog_issue_id=%s", item.id, volume_id, issue_id
+    )
     return item
 
 

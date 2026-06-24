@@ -186,6 +186,99 @@ def test_accept_learns_barcode_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
         assert item.status == ITEM_AUTO_MATCHED
 
 
+def test_choose_issue_learns_and_accepts() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        issue_id = _seed_dc_superman_39(session)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="x.jpg")
+        item.status = ITEM_NEEDS_REVIEW
+        item.normalized_barcode = FULL_BARCODE
+        session.add(item)
+        session.commit()
+
+        svc.choose_intake_item_issue(
+            session, item_id=int(item.id), owner_user_id=1, catalog_issue_id=issue_id
+        )
+
+        session.refresh(item)
+        assert item.selected_catalog_issue_id == issue_id
+        assert item.status == ITEM_AUTO_MATCHED
+        learned = session.exec(
+            select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == FULL_BARCODE)
+        ).one()
+        assert learned.catalog_issue_id == issue_id
+
+
+def test_search_catalog_issues_finds_series() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        issue_id = _seed_dc_superman_39(session)
+
+        results = svc.search_catalog_issues(session, query="superman", issue_number="39")
+
+        assert any(r["catalog_issue_id"] == issue_id for r in results)
+        assert all(r["series"] == "Superman" for r in results)
+
+
+def test_import_and_accept_links_local_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    import app.services.catalog_ingestion_service as cat_ing
+    import app.services.comicvine_catalog_importer as cv_imp
+
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        issue_id = _seed_dc_superman_39(session)
+        issue = session.get(CatalogIssue, issue_id)
+        series_id = int(issue.series_id)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="x.jpg")
+        item.status = ITEM_READY_FOR_REVIEW
+        item.normalized_barcode = FULL_BARCODE
+        item.matched_series = "Superman"
+        item.matched_issue_number = "39"
+        item.matched_publisher = "DC Comics"
+        item.matched_year = "2015"
+        session.add(item)
+        session.commit()
+
+        class FakeImporter:
+            def initialize_or_explain(self):
+                return None
+
+            def search_issues_by_barcode(self, _b):
+                return []
+
+            def volume_id_from_issue_api_row(self, _row):
+                return None
+
+            def search_volumes(self, _q, *, limit=30):
+                return [{"id": 4242, "name": "Superman", "start_year": 2011}]
+
+            def import_single_volume(self, _session, *, comicvine_volume_id, import_issues):
+                return SimpleNamespace(imported_series_ids=[series_id], created_issues=0)
+
+        monkeypatch.setattr(cv_imp, "ComicVineCatalogImporter", FakeImporter)
+        monkeypatch.setattr(
+            cat_ing, "catalog_series_id_for_comicvine_volume", lambda _session, **k: series_id
+        )
+
+        svc.import_and_accept_intake_item(session, item_id=int(item.id), owner_user_id=1)
+
+        session.refresh(item)
+        assert item.selected_catalog_issue_id == issue_id
+        assert item.status == ITEM_AUTO_MATCHED
+        assert item.match_source == "comicvine"
+        learned = session.exec(
+            select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == FULL_BARCODE)
+        ).one()
+        assert learned.catalog_issue_id == issue_id
+
+
 def test_enqueue_is_nonblocking_and_increments_count(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _engine()
     with Session(engine) as session:
