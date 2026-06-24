@@ -61,9 +61,17 @@ def test_barcode_primary_stream_skips_gpt(tmp_path, monkeypatch) -> None:
             barcode="761941343730",
         )
 
+        from app.services.photo_import_barcode_identify_service import BarcodeIdentifyOutcome
+
+        outcome = BarcodeIdentifyOutcome(
+            status="exact_match",
+            detected_barcode="76194134373001234",
+            rows=[fake_read],
+        )
+
         with mock.patch(
             "app.services.photo_import_barcode_identify_service.identify_and_persist_barcode_primary",
-            return_value=[fake_read],
+            return_value=outcome,
         ):
             with mock.patch(
                 "app.services.photo_import_vision_stream_service.stream_comic_vision_text",

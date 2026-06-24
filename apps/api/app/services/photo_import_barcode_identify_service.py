@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlmodel import Session, select
 
-from app.models.catalog_master import CatalogUpc
+from app.models.catalog_master import CatalogIssue, CatalogUpc
 from app.models.photo_import import (
     IMAGE_STATUS_FAILED,
     IMAGE_STATUS_PROCESSED,
@@ -16,6 +17,13 @@ from app.models.photo_import import (
     PhotoImportImage,
 )
 from app.models.photo_import_vision_read import PhotoImportVisionRead
+from app.services.barcode_validation_service import (
+    MatchStatus,
+    base_upc,
+    parse_comic_upc_extension,
+    supplement_extension,
+    validate_barcode_catalog_match,
+)
 from app.services.catalog_ingestion_service import (
     comic_barcode_lookup_keys_for_search,
     direct_market_requires_supplement_key,
@@ -33,9 +41,23 @@ from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 
 logger = logging.getLogger(__name__)
 
+SUGGESTED_ACTION_COVER = "Use cover scan or find in catalog"
+
 
 class BarcodeIdentifyError(Exception):
     """Barcode scan could not produce a book identification."""
+
+
+@dataclass
+class BarcodeIdentifyOutcome:
+    """Structured result of a barcode-primary identification attempt."""
+
+    status: MatchStatus
+    detected_barcode: str = ""
+    base_upc: str = ""
+    reason: str = ""
+    suggested_action: str = ""
+    rows: list[PhotoImportVisionRead] = field(default_factory=list)
 
 
 def is_barcode_primary_image(image: PhotoImportImage) -> bool:
@@ -59,6 +81,10 @@ def _local_catalog_hit(session: Session, barcode: str) -> dict[str, Any] | None:
         identity = load_catalog_issue_identity(session, int(row.issue_id))
         if identity is None:
             continue
+        issue = session.get(CatalogIssue, int(row.issue_id))
+        year = ""
+        if issue is not None and issue.cover_date is not None:
+            year = str(issue.cover_date.year)
         return {
             "source": "catalog_upc",
             "catalog_issue_id": int(row.issue_id),
@@ -67,6 +93,7 @@ def _local_catalog_hit(session: Session, barcode: str) -> dict[str, Any] | None:
             "series": identity.series,
             "issue_number": identity.issue_number,
             "publisher": identity.publisher,
+            "year": year,
             "cover_image_url": identity.cover_image_url,
         }
     return None
@@ -123,13 +150,24 @@ def _vision_result_from_hit(
     )
 
 
+def _mark_image(session: Session, image: PhotoImportImage, status: str) -> None:
+    image.status = status
+    session.add(image)
+    session.commit()
+
+
 def identify_and_persist_barcode_primary(
     session: Session,
     *,
     image: PhotoImportImage,
     image_bytes: bytes,
-) -> list[PhotoImportVisionRead]:
-    """Decode UPC from a barcode photo and create a vision read without GPT."""
+) -> BarcodeIdentifyOutcome:
+    """Decode UPC from a barcode photo and identify the book without a GPT cover read.
+
+    Returns a structured outcome. ``exact_match`` carries persisted reads; every other
+    status (``no_safe_match``, ``ambiguous_base_upc``, ``not_found``, ``unreadable``)
+    carries the detected barcode and a reason so the client can refuse a bad match.
+    """
     image_id = int(image.id or 0)
     logger.info("photo_import.barcode_primary.started image_id=%s", image_id)
 
@@ -139,37 +177,99 @@ def identify_and_persist_barcode_primary(
         log_context=f"photo_import barcode_primary image_id={image_id}",
     )
     barcode = extraction.get("barcode")
+    raw_detected = str(barcode or "")
     if not barcode:
-        image.status = IMAGE_STATUS_FAILED
-        session.add(image)
-        session.commit()
-        raise BarcodeIdentifyError(
-            "Could not read a UPC from this photo. Fill the frame with the barcode, "
-            "or switch to “No barcode — cover photo” for older books."
+        logger.info("photo_import.barcode_primary.unreadable image_id=%s", image_id)
+        _mark_image(session, image, IMAGE_STATUS_FAILED)
+        return BarcodeIdentifyOutcome(
+            status="unreadable",
+            reason=(
+                "Could not read a UPC from this photo. Fill the frame with the barcode, "
+                "or switch to cover photo for older books."
+            ),
+            suggested_action=SUGGESTED_ACTION_COVER,
         )
 
-    normalized = normalize_comic_scan_barcode(str(barcode)) or normalize_upc(str(barcode))
+    normalized = normalize_comic_scan_barcode(raw_detected) or normalize_upc(raw_detected)
+    ext = supplement_extension(normalized)
+    logger.info(
+        "photo_import.barcode_primary.detected image_id=%s raw=%s normalized=%s base=%s extension=%s",
+        image_id,
+        raw_detected,
+        normalized,
+        base_upc(normalized),
+        ext or "(none)",
+    )
+
+    # Modern direct-market UPC without its 5-digit supplement is ambiguous: never auto-match.
     if direct_market_requires_supplement_key(normalized):
-        base = normalized[:12]
-        image.status = IMAGE_STATUS_FAILED
-        session.add(image)
-        session.commit()
-        raise BarcodeIdentifyError(
-            f"Read the main UPC ({base}) but not the 5-digit supplement. DC/Marvel boxes use a "
-            "second small barcode (often on the opposite side of the main bars)—include both in "
-            "one photo, or switch to “No barcode — cover photo”."
+        base = base_upc(normalized)
+        logger.info(
+            "photo_import.barcode_primary.ambiguous_base_upc image_id=%s base=%s", image_id, base
+        )
+        _mark_image(session, image, IMAGE_STATUS_PROCESSED)
+        return BarcodeIdentifyOutcome(
+            status="ambiguous_base_upc",
+            detected_barcode=base,
+            base_upc=base,
+            reason=(
+                f"Read the main UPC ({base}) but not the 5-digit supplement. DC/Marvel boxes use a "
+                "second small barcode—include both in one photo, or use cover scan."
+            ),
+            suggested_action=SUGGESTED_ACTION_COVER,
         )
 
     local = _local_catalog_hit(session, normalized)
     comicvine = None if local else lookup_comicvine_by_barcode(normalized)
+    matched = local or (comicvine if comicvine and comicvine.get("matched") else None)
 
-    if local is None and not (comicvine and comicvine.get("matched")):
-        image.status = IMAGE_STATUS_FAILED
-        session.add(image)
-        session.commit()
-        raise BarcodeIdentifyError(
-            f"UPC {normalized} is not in our catalog or ComicVine yet. "
-            "Try cover photo mode, or Validate on demand after a cover read."
+    if matched is None:
+        logger.info("photo_import.barcode_primary.not_found image_id=%s barcode=%s", image_id, normalized)
+        _mark_image(session, image, IMAGE_STATUS_PROCESSED)
+        return BarcodeIdentifyOutcome(
+            status="not_found",
+            detected_barcode=normalized,
+            base_upc=base_upc(normalized),
+            reason=f"UPC {normalized} is not in our catalog or ComicVine yet.",
+            suggested_action=SUGGESTED_ACTION_COVER,
+        )
+
+    # Log the selected candidate before validating it.
+    cover_date = str(matched.get("cover_date") or "")
+    matched_year = matched.get("year") or _year_from_cover_date(cover_date)
+    logger.info(
+        "photo_import.barcode_primary.candidate image_id=%s source=%s issue_id=%s "
+        "publisher=%r series=%r issue=%r year=%r",
+        image_id,
+        "catalog_upc" if local else "comicvine",
+        matched.get("catalog_issue_id"),
+        matched.get("publisher"),
+        matched.get("series"),
+        matched.get("issue_number"),
+        matched_year,
+    )
+
+    # Safe-match validation: refuse implausible records (wrong publisher / issue / era).
+    validation = validate_barcode_catalog_match(
+        normalized,
+        publisher=matched.get("publisher"),
+        issue_number=matched.get("issue_number"),
+        year=matched_year,
+    )
+    if validation.status != "exact_match":
+        logger.warning(
+            "photo_import.barcode_primary.rejected image_id=%s barcode=%s reason=%s",
+            image_id,
+            normalized,
+            validation.reason,
+        )
+        _mark_image(session, image, IMAGE_STATUS_PROCESSED)
+        return BarcodeIdentifyOutcome(
+            status="no_safe_match",
+            detected_barcode=normalized,
+            base_upc=base_upc(normalized),
+            reason=f"Barcode matched catalog record failed validation: {validation.reason}",
+            suggested_action=SUGGESTED_ACTION_COVER,
         )
 
     result = _vision_result_from_hit(
@@ -200,9 +300,7 @@ def identify_and_persist_barcode_primary(
         session.commit()
         session.refresh(row)
 
-    image.status = IMAGE_STATUS_PROCESSED
-    session.add(image)
-    session.commit()
+    _mark_image(session, image, IMAGE_STATUS_PROCESSED)
 
     logger.info(
         "photo_import.barcode_primary.success image_id=%s barcode=%s source=%s read_id=%s",
@@ -211,4 +309,9 @@ def identify_and_persist_barcode_primary(
         "catalog_upc" if local else "comicvine",
         row.id,
     )
-    return [row]
+    return BarcodeIdentifyOutcome(
+        status="exact_match",
+        detected_barcode=normalized,
+        base_upc=base_upc(normalized),
+        rows=[row],
+    )

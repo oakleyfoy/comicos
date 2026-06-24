@@ -103,7 +103,7 @@ def iter_vision_read_sse(
     if is_barcode_primary_image(image):
         yield _sse("status", {"phase": "barcode_scan", "message": "Looking up UPC in catalog"})
         try:
-            rows = identify_and_persist_barcode_primary(session, image=image, image_bytes=raw)
+            outcome = identify_and_persist_barcode_primary(session, image=image, image_bytes=raw)
         except BarcodeIdentifyError as exc:
             yield _sse("error", {"message": str(exc)})
             return
@@ -119,9 +119,14 @@ def iter_vision_read_sse(
             "done",
             {
                 "image_id": image_id,
-                "image_status": IMAGE_STATUS_PROCESSED,
+                "image_status": image.status,
                 "vision_mode": "barcode_primary",
-                "reads": [vision_read_to_payload(r).model_dump() for r in rows],
+                "match_status": outcome.status,
+                "detected_barcode": outcome.detected_barcode,
+                "base_upc": outcome.base_upc,
+                "reason": outcome.reason,
+                "suggested_action": outcome.suggested_action,
+                "reads": [vision_read_to_payload(r).model_dump() for r in outcome.rows],
             },
         )
         return

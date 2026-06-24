@@ -51,6 +51,11 @@ export function PhotoImportMobilePage(): JSX.Element {
   const [actionReadId, setActionReadId] = useState<number | null>(null);
   const [visionBusy, setVisionBusy] = useState(false);
   const [streamPreview, setStreamPreview] = useState("");
+  const [noSafeMatch, setNoSafeMatch] = useState<{
+    detectedBarcode: string;
+    reason: string;
+    suggestedAction: string;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -114,8 +119,27 @@ export function PhotoImportMobilePage(): JSX.Element {
           }
         },
         onDone: (payload) => {
-          setVerification(payload);
           setActiveImageId(payload.image_id);
+          // Barcode-primary: only treat exact_match as an identified book. Any other
+          // status (no_safe_match, ambiguous_base_upc, not_found, unreadable) must NOT
+          // show "Book identified" — surface the detected barcode and a safe fallback.
+          if (
+            payload.vision_mode === "barcode_primary" &&
+            payload.match_status &&
+            payload.match_status !== "exact_match"
+          ) {
+            setVerification({ ...payload, reads: [] });
+            setGptReady(false);
+            setSelectedReadIds(new Set());
+            setNoSafeMatch({
+              detectedBarcode: payload.detected_barcode || "",
+              reason: payload.reason || "No safe catalog match found.",
+              suggestedAction: payload.suggested_action || "Use cover scan or find in catalog",
+            });
+            return;
+          }
+          setNoSafeMatch(null);
+          setVerification(payload);
           setGptReady(payload.reads.length > 0 && payload.image_status === "processed");
           setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
         },
@@ -134,6 +158,7 @@ export function PhotoImportMobilePage(): JSX.Element {
     setGptReady(false);
     setStreamPreview("");
     setSelectedReadIds(new Set());
+    setNoSafeMatch(null);
   };
 
   const setMode = async (mode: PhotoImportCaptureMode) => {
@@ -260,7 +285,8 @@ export function PhotoImportMobilePage(): JSX.Element {
   const useBarcodeScan = singleComic && scanIntent === "barcode" && !folderDrop;
   const captureReady = !folderDrop && gptReady && !uploading && !visionBusy;
   const reads = verification?.reads ?? [];
-  const gptPending = !folderDrop && ((activeImageId != null && !gptReady && !uploading) || visionBusy);
+  const gptPending =
+    !folderDrop && !noSafeMatch && ((activeImageId != null && !gptReady && !uploading) || visionBusy);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
@@ -380,6 +406,23 @@ export function PhotoImportMobilePage(): JSX.Element {
         >
           {useBarcodeScan ? "Book identified — scan the next comic." : "Cover read done — scan the next comic."}
         </p>
+      ) : null}
+
+      {noSafeMatch ? (
+        <div
+          className="mt-3 space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-sm"
+          role="status"
+        >
+          {noSafeMatch.detectedBarcode ? (
+            <p className="text-amber-100">
+              Barcode detected:{" "}
+              <span className="font-mono font-semibold">{noSafeMatch.detectedBarcode}</span>
+            </p>
+          ) : null}
+          <p className="font-semibold text-amber-200">No safe catalog match found.</p>
+          <p className="text-amber-100/80">{noSafeMatch.reason}</p>
+          <p className="text-amber-100/90">Try cover scan or Find in catalog.</p>
+        </div>
       ) : null}
 
       {reads.length > 0 && !folderDrop ? (

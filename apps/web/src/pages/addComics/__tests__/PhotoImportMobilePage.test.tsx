@@ -114,6 +114,40 @@ describe("PhotoImportMobilePage", () => {
     expect(await screen.findByText("Falcon #1")).toBeInTheDocument();
   });
 
+  it("shows no safe match notice instead of identifying the wrong book", async () => {
+    vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
+      {
+        id: 77,
+        session_id: 1,
+        original_filename: "bc.jpg",
+        mime_type: "image/jpeg",
+        file_size: 1,
+        width: null,
+        height: null,
+        status: "uploaded",
+        created_at: "2026-06-17T00:00:00Z",
+      },
+    ]);
+    vi.spyOn(photoImport, "streamPhotoImportVision").mockImplementation(async (_t, _id, _m, handlers) => {
+      handlers.onDone?.({
+        image_id: 77,
+        image_status: "processed",
+        vision_mode: "barcode_primary",
+        match_status: "no_safe_match",
+        detected_barcode: "76194134192703921",
+        reason: "Barcode matched catalog record failed validation: prefix 761941 expects dc.",
+        suggested_action: "Use cover scan or find in catalog",
+        reads: [],
+      });
+    });
+    renderPage();
+    const gallery = screen.getByTestId("photo-import-gallery-input") as HTMLInputElement;
+    fireEvent.change(gallery, { target: { files: [new File(["x"], "bc.jpg", { type: "image/jpeg" })] } });
+    expect(await screen.findByText("No safe catalog match found.")).toBeInTheDocument();
+    expect(screen.getByText("76194134192703921")).toBeInTheDocument();
+    expect(screen.queryByText(/Book identified/i)).not.toBeInTheDocument();
+  });
+
   it("uploads cover intent when user selects no barcode", async () => {
     vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
       {

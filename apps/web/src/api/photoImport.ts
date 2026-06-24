@@ -193,10 +193,19 @@ export type PhotoImportImageVerification = {
   reads: PhotoImportVisionRead[];
 };
 
+export type PhotoImportVisionDone = PhotoImportImageVerification & {
+  vision_mode?: string;
+  match_status?: string;
+  detected_barcode?: string;
+  base_upc?: string;
+  reason?: string;
+  suggested_action?: string;
+};
+
 export type PhotoImportVisionStreamHandlers = {
   onStatus?: (data: { phase?: string; vision_mode?: string; message?: string }) => void;
   onToken?: (text: string) => void;
-  onDone?: (verification: PhotoImportImageVerification) => void;
+  onDone?: (verification: PhotoImportVisionDone) => void;
   onError?: (message: string) => void;
 };
 
@@ -583,6 +592,14 @@ export async function streamPhotoImportVision(
               image_id: Number(payload.image_id),
               image_status: String(payload.image_status ?? "processed"),
               reads: (payload.reads as PhotoImportVisionRead[]) ?? [],
+              vision_mode: typeof payload.vision_mode === "string" ? payload.vision_mode : undefined,
+              match_status: typeof payload.match_status === "string" ? payload.match_status : undefined,
+              detected_barcode:
+                typeof payload.detected_barcode === "string" ? payload.detected_barcode : undefined,
+              base_upc: typeof payload.base_upc === "string" ? payload.base_upc : undefined,
+              reason: typeof payload.reason === "string" ? payload.reason : undefined,
+              suggested_action:
+                typeof payload.suggested_action === "string" ? payload.suggested_action : undefined,
             });
           } else if (parsed.event === "error") {
             const msg = typeof payload.message === "string" ? payload.message : "Vision read failed";
