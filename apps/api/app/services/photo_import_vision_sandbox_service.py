@@ -17,12 +17,8 @@ from app.services.photo_import_storage_service import resolve_photo_import_stora
 from app.services.comic_vision_read_mode import ComicVisionReadMode, normalize_vision_read_mode, resolve_vision_profile
 from app.services.gpt_comic_vision_client import call_comic_vision
 from app.services.photo_import_barcode_vision import (
-    barcode_needs_focus_pass,
-    crop_upc_region_bytes,
-    parse_barcode_focus_payload,
     sanitize_vision_barcode,
 )
-from app.services.photo_import_upc_barcode_decoder import decode_upc_from_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -167,39 +163,6 @@ def _focused_issue_number_read(
     return issue, confidence, reasoning
 
 
-def _focused_barcode_read(
-    image_bytes: bytes,
-    *,
-    image_id: int,
-    model: str,
-    api_key: str,
-    max_image_side_px: int,
-) -> tuple[str, float, str]:
-    """Second pass: cropped lower-left UPC region, high detail, digits-only."""
-    from app.services.gpt_comic_identification_prompts import (
-        COMIC_BARCODE_FOCUS_SYSTEM,
-        COMIC_BARCODE_FOCUS_USER,
-    )
-
-    crop_bytes = crop_upc_region_bytes(image_bytes)
-    side = max(int(max_image_side_px), 2560)
-    try:
-        parsed, _payload, _raw, _model_used = call_comic_vision(
-            crop_bytes,
-            model=model,
-            api_key=api_key,
-            log_context=f"photo_import barcode_focus image_id={image_id}",
-            system=COMIC_BARCODE_FOCUS_SYSTEM,
-            user=COMIC_BARCODE_FOCUS_USER,
-            image_detail="high",
-            max_image_side_px=side,
-        )
-    except Exception:  # noqa: BLE001
-        logger.warning("photo_import.barcode_focus_failed image_id=%s", image_id, exc_info=True)
-        return "", 0.0, ""
-    return parse_barcode_focus_payload(parsed)
-
-
 def _extract_comics_payloads(parsed: dict[str, Any]) -> list[dict[str, Any]]:
     """Normalize the model output into a list of per-book dicts.
 
@@ -297,58 +260,12 @@ def read_comics_with_gpt_vision(
                 focus_conf,
             )
 
-    # Prefer 1D scan on UPC crop over GPT digits; GPT barcode vision only if scan misses.
-    for result in results:
-        decoded = decode_upc_from_image_bytes(image_bytes)
-        if decoded is not None:
-            code, source = decoded
-            result.barcode = code
-            note = f"Barcode scan ({source})"
-            result.reasoning = (
-                f"{result.reasoning} {note}".strip() if result.reasoning else note
-            )
-            logger.info(
-                "photo_import.barcode_decoder_recovered image_id=%s barcode=%s source=%s",
-                image_id,
-                code,
-                source,
-            )
-            continue
-        if not barcode_needs_focus_pass(result.barcode):
-            continue
-        if result.barcode:
-            result.barcode = ""
-            logger.info(
-                "photo_import.barcode_cleared_invalid image_id=%s (GPT digits failed check digit)",
-                image_id,
-            )
-        code, bc_conf, bc_reason = _focused_barcode_read(
-            image_bytes,
-            image_id=image_id,
-            model=model,
-            api_key=settings.openai_api_key,
-            max_image_side_px=int(profile["max_image_side_px"]),
-        )
-        if code:
-            result.barcode = code
-            if bc_reason:
-                result.reasoning = (
-                    f"{result.reasoning} Barcode re-read: {bc_reason}".strip()
-                    if result.reasoning
-                    else bc_reason
-                )
-            logger.info(
-                "photo_import.barcode_focus_recovered image_id=%s barcode=%s conf=%.2f",
-                image_id,
-                code,
-                bc_conf,
-            )
-        elif result.barcode:
-            result.barcode = ""
-            logger.info(
-                "photo_import.barcode_cleared_invalid image_id=%s (failed check digit after main read)",
-                image_id,
-            )
+    enrich_vision_results_with_barcode(
+        image_bytes,
+        results,
+        image_id=image_id,
+        allow_gpt_barcode_fallback=True,
+    )
 
     logger.info(
         "photo_import.vision_sandbox.response image_id=%s model_used=%s books=%d",
@@ -357,6 +274,56 @@ def read_comics_with_gpt_vision(
         len(results),
     )
     return results
+
+
+def enrich_vision_results_with_barcode(
+    image_bytes: bytes,
+    results: list[VisionSandboxReadResult],
+    *,
+    image_id: int,
+    allow_gpt_barcode_fallback: bool = True,
+) -> None:
+    """After GPT cover read (including quick/stream), extract UPC from the photo."""
+    if not results:
+        return
+
+    from app.services.p100_barcode_extraction_service import extract_barcode_from_image
+
+    logger.info("photo_import.barcode_extraction.started image_id=%s books=%d", image_id, len(results))
+    extraction = extract_barcode_from_image(
+        image_bytes,
+        allow_gpt_fallback=allow_gpt_barcode_fallback,
+        log_context=f"photo_import image_id={image_id}",
+    )
+    code = extraction.get("barcode")
+    method = str(extraction.get("method") or "none")
+
+    for result in results:
+        raw = dict(result.raw_response or {})
+        raw["barcode_extraction"] = extraction
+        result.raw_response = raw
+
+        if code:
+            result.barcode = str(code)
+            note = f"Barcode ({method.replace('_', ' ')})"
+            result.reasoning = f"{result.reasoning} {note}".strip() if result.reasoning else note
+            logger.info(
+                "photo_import.barcode_extraction.applied image_id=%s barcode=%s method=%s",
+                image_id,
+                code,
+                method,
+            )
+            continue
+
+        sanitized = sanitize_vision_barcode(result.barcode)
+        if sanitized:
+            result.barcode = sanitized
+        elif result.barcode:
+            result.barcode = ""
+            logger.info(
+                "photo_import.barcode_cleared_invalid image_id=%s (GPT digits failed check digit)",
+                image_id,
+            )
 
 
 def read_comic_with_gpt_vision(image_bytes: bytes, *, image_id: int) -> VisionSandboxReadResult:

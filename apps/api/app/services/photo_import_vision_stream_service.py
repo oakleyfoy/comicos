@@ -118,6 +118,7 @@ def iter_vision_read_sse(
             from app.services.photo_import_vision_sandbox_service import (
                 _extract_comics_payloads,
                 _parse_sandbox_payload,
+                enrich_vision_results_with_barcode,
             )
 
             books = _extract_comics_payloads(parsed)
@@ -134,6 +135,12 @@ def iter_vision_read_sse(
                 }
                 result.raw_response_text = accumulated
                 results.append(result)
+            enrich_vision_results_with_barcode(
+                raw,
+                results,
+                image_id=image_id,
+                allow_gpt_barcode_fallback=True,
+            )
             rows = _persist_results(session, image=image, results=results)
         else:
             results = read_comics_with_gpt_vision(raw, image_id=image_id, mode=read_mode)
