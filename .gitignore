@@ -29,6 +29,13 @@ data/midtown_html_upload_failures/
 data/retailer_html_upload_failures/
 data/retailer_sessions/
 
+# Local temp / generated files
+data/
+*.log
+tmp_*.py
+tmp_prod_*.js
+**/scripts/_*.py
+
 # Cursor local settings
 .cursor/
 
