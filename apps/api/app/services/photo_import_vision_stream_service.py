@@ -94,6 +94,37 @@ def iter_vision_read_sse(
         apply_barcode_companion_bytes,
         is_barcode_companion_image,
     )
+    from app.services.photo_import_barcode_identify_service import (
+        BarcodeIdentifyError,
+        identify_and_persist_barcode_primary,
+        is_barcode_primary_image,
+    )
+
+    if is_barcode_primary_image(image):
+        yield _sse("status", {"phase": "barcode_scan", "message": "Looking up UPC in catalog"})
+        try:
+            rows = identify_and_persist_barcode_primary(session, image=image, image_bytes=raw)
+        except BarcodeIdentifyError as exc:
+            yield _sse("error", {"message": str(exc)})
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("photo_import.barcode_primary_stream.failed image_id=%s", image_id)
+            image.status = IMAGE_STATUS_FAILED
+            session.add(image)
+            session.commit()
+            yield _sse("error", {"message": str(exc)})
+            return
+        refresh_session_counts(session, session_id=int(image.session_id))
+        yield _sse(
+            "done",
+            {
+                "image_id": image_id,
+                "image_status": IMAGE_STATUS_PROCESSED,
+                "vision_mode": "barcode_primary",
+                "reads": [vision_read_to_payload(r).model_dump() for r in rows],
+            },
+        )
+        return
 
     if is_barcode_companion_image(image):
         yield _sse("status", {"phase": "barcode_scan", "message": "Reading barcode close-up"})

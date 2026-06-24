@@ -11,8 +11,8 @@ import {
   rereadVisionRead,
   streamPhotoImportVision,
   uploadPhotoImportImages,
-  uploadPhotoImportBarcodeCompanion,
   type PhotoImportCaptureMode,
+  type PhotoImportScanIntent,
   type PhotoImportImageVerification,
   type PhotoImportSession,
   type PhotoImportVisionRead,
@@ -38,9 +38,9 @@ export function PhotoImportMobilePage(): JSX.Element {
   const { token = "" } = useParams();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [session, setSession] = useState<PhotoImportSession | null>(null);
   const [captureMode, setCaptureMode] = useState<PhotoImportCaptureMode>("single_comic");
+  const [scanIntent, setScanIntent] = useState<PhotoImportScanIntent>("barcode");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [activeImageId, setActiveImageId] = useState<number | null>(null);
@@ -51,8 +51,6 @@ export function PhotoImportMobilePage(): JSX.Element {
   const [actionReadId, setActionReadId] = useState<number | null>(null);
   const [visionBusy, setVisionBusy] = useState(false);
   const [streamPreview, setStreamPreview] = useState("");
-  const [coverImageIdForBarcode, setCoverImageIdForBarcode] = useState<number | null>(null);
-  const [barcodeScanning, setBarcodeScanning] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -110,14 +108,16 @@ export function PhotoImportMobilePage(): JSX.Element {
     try {
       await streamPhotoImportVision(token, imageId, "quick", {
         onToken: (text) => setStreamPreview((prev) => prev + text),
+        onStatus: (data) => {
+          if (data.phase === "barcode_scan" || data.vision_mode === "barcode_primary") {
+            setStreamPreview("Reading barcode…");
+          }
+        },
         onDone: (payload) => {
           setVerification(payload);
           setActiveImageId(payload.image_id);
           setGptReady(payload.reads.length > 0 && payload.image_status === "processed");
           setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
-          if (payload.reads.length > 0) {
-            setCoverImageIdForBarcode(payload.image_id);
-          }
         },
         onError: (message) => setError(message),
       });
@@ -134,39 +134,6 @@ export function PhotoImportMobilePage(): JSX.Element {
     setGptReady(false);
     setStreamPreview("");
     setSelectedReadIds(new Set());
-    setCoverImageIdForBarcode(null);
-  };
-
-  const runBarcodeCompanion = async (files: FileList | null, input: HTMLInputElement | null) => {
-    const file = files?.[0];
-    if (!file || !token || coverImageIdForBarcode == null) return;
-    setBarcodeScanning(true);
-    setVisionBusy(true);
-    setError(null);
-    try {
-      const saved = await uploadPhotoImportBarcodeCompanion(token, coverImageIdForBarcode, file);
-      await streamPhotoImportVision(token, saved.id, "quick", {
-        onStatus: (data) => {
-          if (data.phase === "barcode_scan") {
-            setStreamPreview("Reading barcode close-up…");
-          }
-        },
-        onDone: (payload) => {
-          setVerification(payload);
-          setActiveImageId(payload.image_id);
-          setGptReady(payload.reads.length > 0);
-          setSelectedReadIds(new Set(payload.reads.map((r) => r.id)));
-          setStreamPreview("");
-        },
-        onError: (message) => setError(message),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Barcode scan failed");
-    } finally {
-      setBarcodeScanning(false);
-      setVisionBusy(false);
-      if (input) input.value = "";
-    }
   };
 
   const setMode = async (mode: PhotoImportCaptureMode) => {
@@ -191,7 +158,9 @@ export function PhotoImportMobilePage(): JSX.Element {
     resetVerification();
     const folderDrop = session?.source_device === PHOTO_IMPORT_FOLDER_SOURCE;
     try {
-      const saved = await uploadPhotoImportImages(token, batch);
+      const intent: PhotoImportScanIntent =
+        captureMode === "single_comic" && scanIntent === "barcode" ? "barcode" : "cover";
+      const saved = await uploadPhotoImportImages(token, batch, intent);
       await refresh();
       if (folderDrop) {
         setActiveImageId(null);
@@ -288,6 +257,7 @@ export function PhotoImportMobilePage(): JSX.Element {
 
   const singleComic = captureMode === "single_comic";
   const folderDrop = session?.source_device === PHOTO_IMPORT_FOLDER_SOURCE;
+  const useBarcodeScan = singleComic && scanIntent === "barcode" && !folderDrop;
   const captureReady = !folderDrop && gptReady && !uploading && !visionBusy;
   const reads = verification?.reads ?? [];
   const gptPending = !folderDrop && ((activeImageId != null && !gptReady && !uploading) || visionBusy);
@@ -304,7 +274,9 @@ export function PhotoImportMobilePage(): JSX.Element {
         {folderDrop
           ? "Shoot one comic per photo. Your computer runs GPT and adds books to your collection — no review on this phone."
           : singleComic
-            ? "Snap the cover first, then optionally add a tight UPC photo — GPT reads the cover; the barcode shot is scan-only and faster."
+            ? useBarcodeScan
+              ? "Fill the frame with the UPC barcode — we look up the book in our catalog (no GPT)."
+              : "No barcode on the book? Snap the cover — GPT reads title, series, and issue."
             : "One photo can include several comics. GPT lists each book; you choose which to match."}
       </p>
 
@@ -342,6 +314,42 @@ export function PhotoImportMobilePage(): JSX.Element {
       </fieldset>
       ) : null}
 
+      {!folderDrop && singleComic ? (
+        <fieldset className="mt-4 space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            How to identify
+          </legend>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 has-[:checked]:border-sky-500 has-[:checked]:ring-1 has-[:checked]:ring-sky-500/40">
+            <input
+              type="radio"
+              name="scan-intent"
+              className="mt-1"
+              checked={scanIntent === "barcode"}
+              disabled={uploading || visionBusy}
+              onChange={() => setScanIntent("barcode")}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-100">Scan barcode</span>
+              <span className="mt-0.5 block text-xs text-emerald-400/90">Recommended — one close-up UPC photo</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 has-[:checked]:border-amber-500/80 has-[:checked]:ring-1 has-[:checked]:ring-amber-500/30">
+            <input
+              type="radio"
+              name="scan-intent"
+              className="mt-1"
+              checked={scanIntent === "cover"}
+              disabled={uploading || visionBusy}
+              onChange={() => setScanIntent("cover")}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-100">No barcode — cover photo</span>
+              <span className="mt-0.5 block text-xs text-slate-500">Older books, newsstand without UPC, etc.</span>
+            </span>
+          </label>
+        </fieldset>
+      ) : null}
+
       {session ? (
         <p className="mt-4 text-sm text-slate-400">
           Session connected · Photos: {session.uploaded_photo_count}
@@ -355,8 +363,10 @@ export function PhotoImportMobilePage(): JSX.Element {
 
       {gptPending ? (
         <div className="mt-3 space-y-2" role="status">
-          <p className="text-sm text-amber-200/90">Reading cover (fast mode)…</p>
-          {streamPreview ? (
+          <p className="text-sm text-amber-200/90">
+            {useBarcodeScan ? "Looking up barcode…" : "Reading cover (fast mode)…"}
+          </p>
+          {streamPreview && !useBarcodeScan ? (
             <pre className="max-h-32 overflow-auto rounded-lg bg-slate-900/80 p-2 text-[11px] text-slate-400 whitespace-pre-wrap">
               {streamPreview}
             </pre>
@@ -368,41 +378,27 @@ export function PhotoImportMobilePage(): JSX.Element {
           className="mt-3 rounded-lg bg-emerald-600/25 px-3 py-2 text-sm font-semibold text-emerald-200"
           role="status"
         >
-          Cover read done — add a barcode close-up below if you have one, then scan the next comic.
+          {useBarcodeScan ? "Book identified — scan the next comic." : "Cover read done — scan the next comic."}
         </p>
-      ) : null}
-
-      {singleComic && gptReady && coverImageIdForBarcode != null && !folderDrop ? (
-        <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Barcode (optional)</p>
-          <p className="mt-1 text-sm text-slate-400">
-            Fill the frame with the UPC box — no GPT on this shot, just a fast scan merged into this book.
-          </p>
-          <button
-            type="button"
-            data-testid="photo-import-barcode-companion"
-            disabled={barcodeScanning || visionBusy || uploading}
-            onClick={() => barcodeInputRef.current?.click()}
-            className="mt-3 w-full rounded-lg border border-sky-600 bg-sky-950/50 py-3 text-sm font-semibold text-sky-200 hover:bg-sky-900/50 disabled:opacity-50"
-          >
-            {barcodeScanning ? "Scanning barcode…" : "Add barcode close-up"}
-          </button>
-        </div>
       ) : null}
 
       {reads.length > 0 && !folderDrop ? (
         <section className="mt-6 space-y-4" aria-label="GPT verification">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-200">What GPT read</h2>
+            <h2 className="text-sm font-semibold text-slate-200">
+              {useBarcodeScan ? "Catalog match" : "What GPT read"}
+            </h2>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={catalogBusy || actionReadId != null}
-                onClick={() => void rereadPhoto()}
-                className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-              >
-                Re-read (accurate)
-              </button>
+              {!useBarcodeScan ? (
+                <button
+                  type="button"
+                  disabled={catalogBusy || actionReadId != null}
+                  onClick={() => void rereadPhoto()}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                >
+                  Re-read (accurate)
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={catalogBusy || selectedReadIds.size === 0}
@@ -431,7 +427,7 @@ export function PhotoImportMobilePage(): JSX.Element {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-white">{formatReadSummary(read)}</p>
-                    {read.confidence != null ? (
+                    {read.confidence != null && !useBarcodeScan ? (
                       <p className="text-xs text-slate-500">
                         GPT confidence {Math.round(read.confidence * 100)}%
                       </p>
@@ -515,15 +511,6 @@ export function PhotoImportMobilePage(): JSX.Element {
       ) : null}
 
       <input
-        ref={barcodeInputRef}
-        data-testid="photo-import-barcode-input"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => void runBarcodeCompanion(e.target.files, e.target)}
-      />
-      <input
         ref={cameraInputRef}
         data-testid="photo-import-camera-input"
         type="file"
@@ -563,7 +550,7 @@ export function PhotoImportMobilePage(): JSX.Element {
               captureReady ? "bg-emerald-600 hover:bg-emerald-500" : "bg-sky-600 hover:bg-sky-500"
             }`}
           >
-            {uploading ? "Uploading…" : captureReady ? "Scan next comic" : "Take comic photo"}
+            {uploading ? "Uploading…" : captureReady ? (useBarcodeScan ? "Scan next barcode" : "Scan next comic") : useBarcodeScan ? "Scan barcode" : "Take cover photo"}
           </button>
         ) : (
           <button
@@ -590,7 +577,7 @@ export function PhotoImportMobilePage(): JSX.Element {
           }}
           className="rounded-xl border border-slate-600 bg-slate-900 py-3 text-sm font-semibold disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : singleComic ? "Choose one photo" : "Upload from library"}
+          {uploading ? "Uploading…" : useBarcodeScan ? "Choose barcode photo" : singleComic ? "Choose cover photo" : "Upload from library"}
         </button>
         ) : null}
       </div>

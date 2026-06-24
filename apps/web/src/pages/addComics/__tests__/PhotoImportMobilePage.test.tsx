@@ -40,12 +40,11 @@ beforeEach(() => {
 });
 
 describe("PhotoImportMobilePage", () => {
-  it("defaults to one comic per photo with primary capture button", async () => {
+  it("defaults to barcode scan with primary capture button", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "Add Comics From Your Phone" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Take comic photo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Scan barcode" })).toBeInTheDocument();
     expect(screen.getByText(/One Comic Per Photo/i)).toBeInTheDocument();
-    expect(screen.getByText(/Recommended/i)).toBeInTheDocument();
   });
 
   it("uses capture on camera input only and single file in single-comic mode", () => {
@@ -100,6 +99,11 @@ describe("PhotoImportMobilePage", () => {
     const file = new File(["pixels"], "roll.jpg", { type: "image/jpeg" });
     fireEvent.change(gallery, { target: { files: [file] } });
     await waitFor(() => {
+      expect(photoImport.uploadPhotoImportImages).toHaveBeenCalledWith(
+        "test-token-123",
+        expect.any(Array),
+        "barcode",
+      );
       expect(photoImport.streamPhotoImportVision).toHaveBeenCalledWith(
         "test-token-123",
         99,
@@ -107,7 +111,37 @@ describe("PhotoImportMobilePage", () => {
         expect.any(Object),
       );
     });
-    expect(await screen.findByText(/Verified/i)).toBeInTheDocument();
+    expect(await screen.findByText("Falcon #1")).toBeInTheDocument();
+  });
+
+  it("uploads cover intent when user selects no barcode", async () => {
+    vi.spyOn(photoImport, "uploadPhotoImportImages").mockResolvedValue([
+      {
+        id: 100,
+        session_id: 1,
+        original_filename: "cover.jpg",
+        mime_type: "image/jpeg",
+        file_size: 1,
+        width: null,
+        height: null,
+        status: "uploaded",
+        created_at: "2026-06-17T00:00:00Z",
+      },
+    ]);
+    vi.spyOn(photoImport, "streamPhotoImportVision").mockResolvedValue(undefined);
+    renderPage();
+    await screen.findByRole("button", { name: "Scan barcode" });
+    fireEvent.click(screen.getByText(/No barcode — cover photo/i).closest("label")!);
+    expect(screen.getByRole("button", { name: "Take cover photo" })).toBeInTheDocument();
+    const gallery = screen.getByTestId("photo-import-gallery-input") as HTMLInputElement;
+    fireEvent.change(gallery, { target: { files: [new File(["x"], "cover.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => {
+      expect(photoImport.uploadPhotoImportImages).toHaveBeenCalledWith(
+        "test-token-123",
+        expect.any(Array),
+        "cover",
+      );
+    });
   });
 
   it("can switch to experimental group mode", async () => {

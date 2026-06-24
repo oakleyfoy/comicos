@@ -6,7 +6,11 @@ import logging
 from typing import Any
 
 from app.core.config import get_settings
-from app.services.catalog_ingestion_service import normalize_upc, upc_check_digit_valid
+from app.services.catalog_ingestion_service import (
+    barcode_usable_for_lookup,
+    comic_barcode_lookup_variants,
+    normalize_upc,
+)
 from app.services.comicvine_api_response import (
     comicvine_best_cover_url,
     payload_results,
@@ -77,38 +81,34 @@ def _search_issues_text(importer: ComicVineCatalogImporter, normalized: str) -> 
 
 
 def lookup_comicvine_by_barcode(barcode: str) -> dict[str, Any]:
-    normalized = normalize_upc(barcode)
-    if not normalized or not upc_check_digit_valid(normalized):
-        logger.info("p100.comicvine_barcode_lookup.skip invalid_barcode=%r", barcode)
-        return _empty_lookup()
-
     settings = get_settings()
     if not (settings.comicvine_api_key or "").strip():
         logger.info("p100.comicvine_barcode_lookup.skip reason=no_api_key")
         return _empty_lookup()
 
-    logger.info("p100.comicvine_barcode_lookup.started barcode=%s", normalized)
     importer = ComicVineCatalogImporter()
+    for candidate in comic_barcode_lookup_variants(barcode):
+        if not barcode_usable_for_lookup(candidate):
+            continue
+        logger.info("p100.comicvine_barcode_lookup.started barcode=%s", candidate)
+        rows: list[dict[str, Any]] = []
+        try:
+            rows = importer.search_issues_by_barcode(candidate, limit=5)
+        except Exception:
+            logger.exception("p100.comicvine_barcode_lookup.filter_search_failed barcode=%s", candidate)
 
-    rows: list[dict[str, Any]] = []
-    try:
-        rows = importer.search_issues_by_barcode(normalized, limit=5)
-    except Exception:
-        logger.exception("p100.comicvine_barcode_lookup.filter_search_failed barcode=%s", normalized)
+        if not rows:
+            rows = _search_issues_text(importer, candidate)
+            rows = [row for row in rows if _row_matches_barcode(row, candidate)]
 
-    if not rows:
-        logger.info("p100.comicvine_barcode_lookup.filter_empty trying_text_search")
-        rows = _search_issues_text(importer, normalized)
-        rows = [row for row in rows if _row_matches_barcode(row, normalized)]
+        if rows:
+            result = _issue_from_row(rows[0])
+            logger.info(
+                "p100.comicvine_barcode_lookup.success barcode=%s comicvine_issue_id=%s",
+                candidate,
+                result.get("comicvine_issue_id"),
+            )
+            return result
 
-    if not rows:
-        logger.info("p100.comicvine_barcode_lookup.not_found barcode=%s", normalized)
-        return _empty_lookup()
-
-    result = _issue_from_row(rows[0])
-    logger.info(
-        "p100.comicvine_barcode_lookup.success barcode=%s comicvine_issue_id=%s",
-        normalized,
-        result.get("comicvine_issue_id"),
-    )
-    return result
+    logger.info("p100.comicvine_barcode_lookup.not_found barcode=%r", barcode)
+    return _empty_lookup()

@@ -12,6 +12,7 @@ from sqlmodel import Session
 
 from app.models.photo_import import (
     IMAGE_ROLE_BARCODE,
+    IMAGE_ROLE_BARCODE_PRIMARY,
     IMAGE_ROLE_COVER,
     IMAGE_STATUS_FAILED,
     IMAGE_STATUS_UPLOADED,
@@ -139,6 +140,7 @@ async def upload_session_images(
     token: str,
     files: list[UploadFile],
     defer_gpt_processing: bool = True,
+    scan_intent: str = "cover",
 ) -> tuple[list[PhotoImportImageRead], list[int]]:
     if len(files) > MAX_BATCH_FILES:
         raise HTTPException(
@@ -149,8 +151,15 @@ async def upload_session_images(
     activate_session(session, import_row)
     saved: list[PhotoImportImageRead] = []
     pending_image_ids: list[int] = []
+    intent = (scan_intent or "cover").strip().lower()
+    image_role = IMAGE_ROLE_BARCODE_PRIMARY if intent == "barcode" else IMAGE_ROLE_COVER
     for upload in files:
-        row = await _save_one_upload(session, import_row=import_row, upload=upload)
+        row = await _save_one_upload(
+            session,
+            import_row=import_row,
+            upload=upload,
+            image_role=image_role,
+        )
         logger.info(
             "photo_import.upload.process image_id=%s session_id=%s vision_sandbox=%s defer=%s",
             row.id,

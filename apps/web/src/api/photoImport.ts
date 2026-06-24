@@ -339,11 +339,18 @@ export function listPhotoImportDetections(token: string): Promise<PhotoImportDet
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}/detections`);
 }
 
-export async function uploadPhotoImportImages(token: string, files: File[]): Promise<PhotoImportImage[]> {
+export type PhotoImportScanIntent = "barcode" | "cover";
+
+export async function uploadPhotoImportImages(
+  token: string,
+  files: File[],
+  scanIntent: PhotoImportScanIntent = "cover",
+): Promise<PhotoImportImage[]> {
   const form = new FormData();
   for (const file of files) {
     form.append("images", file);
   }
+  form.append("scan_intent", scanIntent);
   return requestPhotoImport(`/api/v1/photo-import/sessions/${encodeURIComponent(token)}/images`, {
     method: "POST",
     body: form,

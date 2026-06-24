@@ -129,6 +129,35 @@ def normalize_upc(raw: str) -> str:
     return re.sub(r"[\s\-]", "", (raw or "").strip())
 
 
+def comic_barcode_lookup_variants(raw: str) -> list[str]:
+    """Candidate keys for catalog / ComicVine (12-digit UPC, full UPC+supplement, etc.)."""
+    normalized = normalize_upc(raw)
+    if not normalized.isdigit():
+        return []
+    variants: list[str] = []
+
+    def add(value: str) -> None:
+        if value and value not in variants:
+            variants.append(value)
+
+    add(normalized)
+    if len(normalized) >= 17:
+        add(normalized[:17])
+    if len(normalized) >= 12:
+        add(normalized[:12])
+    return variants
+
+
+def barcode_usable_for_lookup(digits: str) -> bool:
+    if not digits.isdigit():
+        return False
+    if len(digits) >= 17:
+        return True
+    if len(digits) in (12, 13):
+        return upc_check_digit_valid(digits)
+    return 11 <= len(digits) <= 18
+
+
 def upc_check_digit_valid(raw: str) -> bool:
     """True when normalized UPC-A (12) or EAN-13 passes the standard check digit."""
     digits = normalize_upc(raw)

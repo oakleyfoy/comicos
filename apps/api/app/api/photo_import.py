@@ -6,7 +6,7 @@ import logging
 import os
 import socket
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session
 
@@ -229,10 +229,16 @@ def complete_session_endpoint(
 async def upload_images_endpoint(
     token: str,
     images: list[UploadFile] = File(...),
+    scan_intent: str = Form("cover"),
     session: Session = Depends(get_session),
 ) -> list[PhotoImportImageRead]:
-    """Save uploads; clients should call vision-stream (quick) per cover image for GPT reads."""
-    saved, _pending_ids = await upload_session_images(session, token=token, files=images)
+    """Save uploads; call vision-stream per image (barcode lookup or GPT cover read)."""
+    saved, _pending_ids = await upload_session_images(
+        session,
+        token=token,
+        files=images,
+        scan_intent=scan_intent,
+    )
     return saved
 
 
