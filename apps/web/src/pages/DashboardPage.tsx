@@ -120,6 +120,7 @@ import { LoadingState } from "../components/LoadingState";
 import { MarketIntelligenceDashboard } from "../components/MarketIntelligenceDashboard";
 import { PageHeader } from "../components/PageHeader";
 import { PortfolioInventoryList } from "../components/PortfolioInventoryList";
+import { PortfolioInventoryDetailDrawer } from "../components/PortfolioInventoryDetailDrawer";
 import { ScanIngestionSummaryCard } from "../components/ScanIngestionSummaryCard";
 import { ScanNormalizationSummaryCard } from "../components/ScanNormalizationSummaryCard";
 import { ScanBoundarySummaryCard } from "../components/ScanBoundarySummaryCard";
@@ -888,6 +889,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const [gradeDrafts, setGradeDrafts] = useState<Record<number, InventoryItem["grade_status"]>>({});
   const [starDrafts, setStarDrafts] = useState<Record<number, string>>({});
   const [activeNotesItem, setActiveNotesItem] = useState<InventoryItem | null>(null);
+  const [drawerInventoryCopyId, setDrawerInventoryCopyId] = useState<number | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [inventoryIntelSummary, setInventoryIntelSummary] = useState<InventoryIntelligenceRollupSummary | null>(
@@ -1250,6 +1252,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       arrival_classification: arrivalClassificationFilter || undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
+      list_enrichment: loadProfile === "portfolio" ? "card" : "full",
     }),
     [
       gradeStatus,
@@ -1273,6 +1276,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       search,
       sortBy,
       sortDir,
+      loadProfile,
     ],
   );
 
@@ -7891,6 +7895,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   setActiveNotesItem(item);
                   setNotesDraft(item.condition_notes ?? "");
                 }}
+                onOpenDetail={(item) => setDrawerInventoryCopyId(item.inventory_copy_id)}
                 receivingCopyIds={receivingCopyIds}
                 onMarkReceived={(id) => void markInventoryCopyReceived(id)}
               />
@@ -7922,6 +7927,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       </section>
       </>
       ) : null}
+
+      <PortfolioInventoryDetailDrawer
+        inventoryCopyId={drawerInventoryCopyId}
+        onClose={() => setDrawerInventoryCopyId(null)}
+      />
 
       {activeNotesItem ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white px-4">

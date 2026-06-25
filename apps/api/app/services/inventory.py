@@ -1,6 +1,7 @@
 from decimal import Decimal
 from collections import defaultdict
 import logging
+from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -578,6 +579,103 @@ def _inventory_row_from_query_row(
     return InventoryRow.model_validate(row_map)
 
 
+def _inventory_row_card_from_query_row(
+    row,
+    *,
+    organization_id: int | None,
+    org_assignment_metadata: dict,
+    org_review_metadata: dict,
+) -> InventoryRow:
+    """Portfolio grid row: spine fields only — enrichment loads on detail/drawer open."""
+    row_map = dict(row._mapping)
+    row_created_at = row_map.pop("row_created_at", None)
+    if row_map.get("order_date") is None and row_created_at is not None:
+        row_map["order_date"] = (
+            row_created_at.date() if hasattr(row_created_at, "date") else row_created_at
+        )
+    _apply_list_display_metadata(row_map)
+    if organization_id is not None:
+        inv_pk = int(row_map["inventory_copy_id"])
+        meta = org_assignment_metadata.get(inv_pk, {})
+        row_map["organization_assignment_id"] = meta.get("organization_assignment_id")
+        row_map["organization_assigned_user_id"] = meta.get("organization_assigned_user_id")
+        row_map["organization_assignment_status"] = meta.get("organization_assignment_status")
+        row_map["organization_queue_name"] = meta.get("organization_queue_name")
+        row_map["organization_queue_position"] = meta.get("organization_queue_position")
+        review_meta = org_review_metadata.get(inv_pk, {})
+        row_map["organization_active_review_id"] = review_meta.get("organization_active_review_id")
+        row_map["organization_review_status"] = review_meta.get("organization_review_status")
+        row_map["organization_review_type"] = review_meta.get("organization_review_type")
+        row_map["organization_review_queue_name"] = review_meta.get("organization_review_queue_name")
+    return InventoryRow.model_validate(row_map)
+
+
+def _list_inventory_paginated_card(
+    session: Session,
+    current_user: User,
+    *,
+    page: int,
+    page_size: int,
+    search: str | None,
+    publisher: str | None,
+    hold_status: str | None,
+    grade_status: str | None,
+    release_year: int | None,
+    release_calendar: ReleaseCalendarPresence | None,
+    asset_state: str | None,
+    sort_by: str | None,
+    sort_dir: str,
+    organization_id: int | None,
+    org_scope_ids: tuple[int, ...] | None,
+    org_assignment_metadata: dict,
+    org_review_metadata: dict,
+) -> InventoryListResponse:
+    user_id = int(current_user.id)
+    filtered_stmt = apply_inventory_filters(
+        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
+        search=search,
+        publisher=publisher,
+        hold_status=hold_status,
+        grade_status=grade_status,
+        release_year=release_year,
+        release_calendar=release_calendar,
+        asset_state=asset_state,
+    )
+    total_stmt = _apply_inventory_spine_joins(
+        select(func.count()).select_from(InventoryCopy)
+    ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (user_id,)))
+    total_stmt = apply_inventory_filters(
+        total_stmt,
+        search=search,
+        publisher=publisher,
+        hold_status=hold_status,
+        grade_status=grade_status,
+        release_year=release_year,
+        release_calendar=release_calendar,
+        asset_state=asset_state,
+    )
+    total = int(session.exec(total_stmt).one())
+    if total == 0:
+        return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
+
+    offset = (page - 1) * page_size
+    page_stmt = apply_inventory_sort(filtered_stmt, sort_by, sort_dir).limit(page_size).offset(offset)
+    rows = session.exec(page_stmt).all()
+    if not rows:
+        return InventoryListResponse(page=page, page_size=page_size, total=total, items=[])
+
+    items = [
+        _inventory_row_card_from_query_row(
+            row,
+            organization_id=organization_id,
+            org_assignment_metadata=org_assignment_metadata,
+            org_review_metadata=org_review_metadata,
+        )
+        for row in rows
+    ]
+    return InventoryListResponse(page=page, page_size=page_size, total=total, items=items)
+
+
 def _list_inventory_paginated_fast(
     session: Session,
     current_user: User,
@@ -855,6 +953,7 @@ def list_inventory(
     sort_by: str | None,
     sort_dir: str,
     organization_id: int | None = None,
+    list_enrichment: Literal["card", "full"] = "full",
 ) -> InventoryListResponse:
     org_scope_ids: tuple[int, ...] | None = None
     org_assignment_metadata: dict[int, dict[str, object]] = {}
@@ -886,7 +985,7 @@ def list_inventory(
             inventory_item_ids=visible_ids,
         )
 
-    if not _inventory_list_needs_full_enrichment_scan(
+    needs_full_enrichment_scan = _inventory_list_needs_full_enrichment_scan(
         intelligence_health=intelligence_health,
         ownership_intel=ownership_intel,
         ownership_state=ownership_state,
@@ -901,7 +1000,30 @@ def list_inventory(
         action_attention=action_attention,
         action_center_category=action_center_category,
         arrival_classification=arrival_classification,
-    ):
+    )
+
+    if list_enrichment == "card" and not needs_full_enrichment_scan:
+        return _list_inventory_paginated_card(
+            session,
+            current_user,
+            page=page,
+            page_size=page_size,
+            search=search,
+            publisher=publisher,
+            hold_status=hold_status,
+            grade_status=grade_status,
+            release_year=release_year,
+            release_calendar=release_calendar,
+            asset_state=asset_state,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            organization_id=organization_id,
+            org_scope_ids=org_scope_ids,
+            org_assignment_metadata=org_assignment_metadata,
+            org_review_metadata=org_review_metadata,
+        )
+
+    if not needs_full_enrichment_scan:
         return _list_inventory_paginated_fast(
             session,
             current_user,

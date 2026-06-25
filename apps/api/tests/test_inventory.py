@@ -612,3 +612,25 @@ def test_inventory_summary_metrics_calculate_correctly(
     assert data["graded_count"] == 1
     assert data["hold_count"] == 2
     assert data["sell_count"] == 1
+
+
+def test_inventory_list_enrichment_card_skips_row_attachments(client: TestClient) -> None:
+    token = register_and_login(client, "card-list@example.com")
+    create_order(client, token)
+
+    full = client.get("/inventory?page=1&page_size=5", headers=auth_headers(token))
+    card = client.get(
+        "/inventory?page=1&page_size=5&list_enrichment=card",
+        headers=auth_headers(token),
+    )
+    assert full.status_code == 200
+    assert card.status_code == 200
+
+    full_item = full.json()["items"][0]
+    card_item = card.json()["items"][0]
+    assert card_item["title"] == full_item["title"]
+    assert card_item["inventory_copy_id"] == full_item["inventory_copy_id"]
+    assert card_item.get("inventory_risks") in (None, [])
+    assert card_item.get("inventory_action_center") is None
+    assert card_item.get("duplicate_ownership") is None
+    assert card_item.get("run_detection") is None

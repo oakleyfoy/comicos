@@ -37,18 +37,40 @@ describe("RetailerHtmlImportPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     navigateMock = vi.fn();
+    vi.spyOn(apiClient, "getRetailerAccounts").mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          retailer: "third_eye",
+          display_name: "Third Eye Comics",
+          masked_username: "html-import",
+          credential_version: 0,
+          status: "active",
+          sync_enabled: false,
+          created_at: "2026-06-01T00:00:00Z",
+          updated_at: "2026-06-01T00:00:00Z",
+        },
+        {
+          id: 2,
+          retailer: "midtown",
+          display_name: "Midtown Comics",
+          masked_username: "html-import",
+          credential_version: 0,
+          status: "active",
+          sync_enabled: false,
+          created_at: "2026-06-01T00:00:00Z",
+          updated_at: "2026-06-01T00:00:00Z",
+        },
+      ],
+    });
     vi.spyOn(apiClient, "listImportRetailers").mockResolvedValue({
       items: [
-        { key: "midtown", display_name: "Midtown Comics", status: "supported", supported: true, accepts_upload: true, is_fallback: false },
-        { key: "dcbs", display_name: "DCBS / Discount Comic Book Service", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
-        { key: "third_eye", display_name: "Third Eye Comics", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
-        { key: "mycomicshop", display_name: "MyComicShop", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
         { key: "unknown", display_name: "Unknown / Other Retailer", status: "generic", supported: false, accepts_upload: true, is_fallback: true },
       ],
     });
     vi.spyOn(apiClient, "importRetailerOrderHtml").mockResolvedValue({
       order_id: 77,
-      retailer: "unknown",
+      retailer: "third_eye",
       retailer_order_number: "ABC-1001",
       item_count: 2,
       parser_status: "generic",
@@ -60,22 +82,17 @@ describe("RetailerHtmlImportPage", () => {
     cleanup();
   });
 
-  it("renders retailer cards with statuses and the fallback copy", async () => {
+  it("renders a retailer dropdown from connected accounts", async () => {
     render(
       <MemoryRouter>
         <RetailerHtmlImportPage />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Midtown Comics")).toBeInTheDocument();
-    expect(screen.getByText("Full parser")).toBeInTheDocument();
-    expect(screen.getAllByText("HTML import (beta parser)").length).toBeGreaterThanOrEqual(3);
-    expect(
-      screen.getByText(/Don't see your retailer\? Upload a saved order page and ComicOS can add support\./i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Save your retailer order page as HTML \(Ctrl\+S\)/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Choose a Retailer")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Third Eye Comics" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Midtown Comics" })).toBeInTheDocument();
+    expect(apiClient.listImportRetailers).not.toHaveBeenCalled();
   });
 
   it("uploads a saved html file for the selected retailer and opens the review page", async () => {
@@ -85,7 +102,8 @@ describe("RetailerHtmlImportPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByText("Unknown / Other Retailer"));
+    const select = await screen.findByLabelText("Choose a Retailer");
+    fireEvent.change(select, { target: { value: "third_eye" } });
 
     const file = new File(["<html><h1>Order #ABC-1001</h1></html>"], "order.html", { type: "text/html" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -93,8 +111,21 @@ describe("RetailerHtmlImportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload & review order" }));
 
     await waitFor(() => {
-      expect(apiClient.importRetailerOrderHtml).toHaveBeenCalledWith("unknown", file);
+      expect(apiClient.importRetailerOrderHtml).toHaveBeenCalledWith("third_eye", file);
       expect(navigateMock).toHaveBeenCalledWith("/retailer-orders/77");
     });
+  });
+
+  it("falls back to import catalog when no retailer accounts exist", async () => {
+    vi.mocked(apiClient.getRetailerAccounts).mockResolvedValueOnce({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <RetailerHtmlImportPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("option", { name: "Unknown / Other Retailer" })).toBeInTheDocument();
+    expect(apiClient.listImportRetailers).toHaveBeenCalled();
   });
 });

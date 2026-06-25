@@ -42,6 +42,39 @@ _GENERIC_ORDER_HTML = """
 
 _NO_ITEMS_HTML = "<html><head><title>Order #X9</title></head><body><p>Nothing here.</p></body></html>"
 
+_DCBS_ORDER_TABLE_HTML = """
+<html>
+  <head><title>Order #970668 Detail - Discount Comic Book Service</title></head>
+  <body>
+    <a href="https://www.dcbservice.com/products/dc-comics/1">DC Comics</a>
+    <a href="https://www.dcbservice.com/products/marvel-comics/4">Marvel Comics</a>
+    <h2>Order ID: 970668</h2>
+    <table>
+      <tr>
+        <th>Product</th><th>Qty</th><th>Price</th><th>Total</th><th>Status</th>
+      </tr>
+      <tr>
+        <td class="compactoff"><img alt="X-Men #34 Inhyuk Lee Marvel Snap Swimsuit Variant" class="cartimg" src="/files/MAY265025.jpg"></td>
+        <td>X-Men #34 Inhyuk Lee Marvel Snap Swimsuit Variant<div class="productcode">MAY265025</div></td>
+        <td class="centered">1</td>
+        <td class="currency">$3.19</td>
+        <td class="currency">$3.19</td>
+        <td class="centered"><img alt="Processing" class="statusimg" src="/processing.png"></td>
+      </tr>
+      <tr>
+        <td class="compactoff"><img alt="Spectacular Spider-Man Brand New Day #3" class="cartimg" src="/files/MAY264642.jpg"></td>
+        <td>Spectacular Spider-Man Brand New Day #3<div class="productcode">MAY264642</div></td>
+        <td class="centered">2</td>
+        <td class="currency">$3.19</td>
+        <td class="currency">$6.38</td>
+        <td class="centered"><img alt="Processing" class="statusimg" src="/processing.png"></td>
+      </tr>
+    </table>
+    <p>Order Total: $9.57</p>
+  </body>
+</html>
+"""
+
 _THIRD_EYE_SHOPIFY_HTML = """
 <html>
   <head><title>Order #973967</title></head>
@@ -267,6 +300,29 @@ def test_import_beta_retailer_html_emits_warning(client, session) -> None:
     assert payload["retailer"] == "dcbs"
     assert payload["parser_status"] == "beta"
     assert any("beta" in warning.lower() for warning in payload["warnings"])
+
+
+def test_dcbs_parser_reads_order_table_not_publisher_menu(client) -> None:
+    token = register_and_login(client, "html-v2-dcbs-table@example.com")
+    parser = get_retailer_html_parser("dcbs")
+    detail = parser.parse(_DCBS_ORDER_TABLE_HTML)
+    assert detail.retailer_order_number == "970668"
+    assert len(detail.items) == 2
+    assert detail.items[0].title.startswith("X-Men #34")
+    assert detail.items[0].retailer_item_id == "MAY265025"
+    assert detail.items[1].quantity == 2
+    assert detail.parse_diagnostics["parse_source"] == "dcbs_order_table"
+
+    response = client.post(
+        "/api/v1/retailer-orders/import/html",
+        headers=auth_headers(token),
+        data={"retailer": "dcbs"},
+        files={"file": ("dcbs-order.html", _DCBS_ORDER_TABLE_HTML.encode("utf-8"), "text/html")},
+    )
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["retailer_order_number"] == "970668"
+    assert payload["item_count"] == 2
 
 
 def test_import_html_rejects_unknown_retailer(client) -> None:

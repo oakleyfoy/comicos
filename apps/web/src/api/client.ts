@@ -7095,6 +7095,8 @@ export interface InventoryQueryParams {
   sort_by?: SortBy;
   sort_dir?: "asc" | "desc";
   organization_id?: number;
+  /** Fast portfolio grid: spine fields only; enrichment loads on detail open. */
+  list_enrichment?: "card" | "full";
 }
 
 export type InventoryReportExportParams = Omit<InventoryQueryParams, "page" | "page_size"> & {

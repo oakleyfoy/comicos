@@ -234,6 +234,7 @@ export function PortfolioInventoryList(props: {
   onStarDraftChange: (id: number, value: string) => void;
   onSave: (id: number, payload: InventoryUpdatePayload) => Promise<void>;
   onOpenNotes: (item: InventoryItem) => void;
+  onOpenDetail?: (item: InventoryItem) => void;
   receivingCopyIds: ReadonlySet<number>;
   onMarkReceived: (id: number) => void;
 }): JSX.Element {
@@ -253,6 +254,7 @@ export function PortfolioInventoryList(props: {
     onStarDraftChange,
     onSave,
     onOpenNotes,
+    onOpenDetail,
     receivingCopyIds,
     onMarkReceived,
   } = props;
@@ -268,6 +270,15 @@ export function PortfolioInventoryList(props: {
           : null;
         const canReceive = canQuickReceiveInventoryCopy(item);
         const isReceiving = receivingCopyIds.has(id);
+        const openDetail = () => {
+          if (onOpenDetail) {
+            onOpenDetail(item);
+          }
+        };
+        const coverClass =
+          "relative block h-20 w-14 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-left";
+        const titleClass =
+          "line-clamp-2 text-sm font-semibold leading-snug text-patriot-navy hover:text-patriot-blue";
 
         return (
           <article
@@ -283,44 +294,80 @@ export function PortfolioInventoryList(props: {
                 aria-label={`Select ${item.title}`}
               />
 
-              <Link
-                to={`/inventory/${id}`}
-                className="relative block h-20 w-14 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
-                aria-label={`${item.title} cover`}
-                data-testid="inventory-card-cover"
-              >
-                {item.cover_image_url ? (
-                  <img
-                    src={item.cover_image_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                      const fallback = event.currentTarget.nextElementSibling;
-                      if (fallback instanceof HTMLElement) {
-                        fallback.style.display = "flex";
-                      }
-                    }}
-                  />
-                ) : null}
-                <span
-                  className="absolute inset-0 flex items-center justify-center text-base text-slate-400"
-                  style={{ display: item.cover_image_url ? "none" : "flex" }}
-                  aria-hidden="true"
+              {onOpenDetail ? (
+                <button
+                  type="button"
+                  onClick={openDetail}
+                  className={coverClass}
+                  aria-label={`${item.title} cover`}
+                  data-testid="inventory-card-cover"
                 >
-                  📚
-                </span>
-              </Link>
+                  {item.cover_image_url ? (
+                    <img
+                      src={item.cover_image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                        const fallback = event.currentTarget.nextElementSibling;
+                        if (fallback instanceof HTMLElement) {
+                          fallback.style.display = "flex";
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    className="absolute inset-0 flex items-center justify-center text-base text-slate-400"
+                    style={{ display: item.cover_image_url ? "none" : "flex" }}
+                    aria-hidden="true"
+                  >
+                    📚
+                  </span>
+                </button>
+              ) : (
+                <Link
+                  to={`/inventory/${id}`}
+                  className={coverClass}
+                  aria-label={`${item.title} cover`}
+                  data-testid="inventory-card-cover"
+                >
+                  {item.cover_image_url ? (
+                    <img
+                      src={item.cover_image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                        const fallback = event.currentTarget.nextElementSibling;
+                        if (fallback instanceof HTMLElement) {
+                          fallback.style.display = "flex";
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    className="absolute inset-0 flex items-center justify-center text-base text-slate-400"
+                    style={{ display: item.cover_image_url ? "none" : "flex" }}
+                    aria-hidden="true"
+                  >
+                    📚
+                  </span>
+                </Link>
+              )}
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Link
-                    to={`/inventory/${id}`}
-                    className="line-clamp-2 text-sm font-semibold leading-snug text-patriot-navy hover:text-patriot-blue"
-                  >
-                    {item.title} #{item.issue_number}
-                  </Link>
+                  {onOpenDetail ? (
+                    <button type="button" onClick={openDetail} className={titleClass}>
+                      {item.title} #{item.issue_number}
+                    </button>
+                  ) : (
+                    <Link to={`/inventory/${id}`} className={titleClass}>
+                      {item.title} #{item.issue_number}
+                    </Link>
+                  )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <span
@@ -472,12 +519,22 @@ export function PortfolioInventoryList(props: {
                 >
                   Notes
                 </button>
-                <Link
-                  to={`/inventory/${id}`}
-                  className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
-                >
-                  Open
-                </Link>
+                {onOpenDetail ? (
+                  <button
+                    type="button"
+                    onClick={openDetail}
+                    className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
+                  >
+                    Details
+                  </button>
+                ) : (
+                  <Link
+                    to={`/inventory/${id}`}
+                    className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
+                  >
+                    Open
+                  </Link>
+                )}
               </div>
             </div>
           </article>

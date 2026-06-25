@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { ApiError, apiClient, type SupportedRetailer } from "../api/client";
+import { ApiError, apiClient } from "../api/client";
 import { AppShell } from "../components/AppShell";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBanner } from "../components/StatusBanner";
@@ -13,53 +13,26 @@ function isAcceptedFile(file: File): boolean {
   return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
-function statusLabel(retailer: SupportedRetailer): string {
-  if (retailer.is_fallback) {
-    return "Other retailer";
-  }
-  if (retailer.status === "supported") {
-    return "Full parser";
-  }
-  if (retailer.status === "beta") {
-    return "HTML import (beta parser)";
-  }
-  return "HTML import";
-}
+type RetailerOption = { key: string; label: string };
 
-function retailerImportHint(retailer: SupportedRetailer | undefined): string | null {
-  if (!retailer) {
-    return null;
+function dedupeRetailerOptions(items: RetailerOption[]): RetailerOption[] {
+  const seen = new Set<string>();
+  const out: RetailerOption[] = [];
+  for (const item of items) {
+    if (seen.has(item.key)) {
+      continue;
+    }
+    seen.add(item.key);
+    out.push(item);
   }
-  if (retailer.key === "midtown") {
-    return "Use the same save-as-HTML steps below. Midtown uses the dedicated parser (order #, line items, covers).";
-  }
-  if (retailer.status === "beta") {
-    return (
-      "Same workflow as Midtown: open your order detail page in the browser, press Ctrl+S, save as Webpage HTML, " +
-      "then upload here. ComicOS uses best-effort parsing for this retailer; review every line on the next screen before confirming."
-    );
-  }
-  if (retailer.is_fallback) {
-    return "Upload a saved order page from any retailer. We’ll try generic parsing and you can fix fields before confirming.";
-  }
-  return null;
-}
-
-function statusClasses(retailer: SupportedRetailer): string {
-  if (retailer.status === "supported") {
-    return "border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
-  }
-  if (retailer.is_fallback) {
-    return "border-cyan-400/40 bg-cyan-400/10 text-cyan-100";
-  }
-  return "border-amber-400/40 bg-amber-400/10 text-amber-100";
+  return out;
 }
 
 export function RetailerHtmlImportPage() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [retailers, setRetailers] = useState<SupportedRetailer[]>([]);
-  const [selectedRetailer, setSelectedRetailer] = useState<string | null>(null);
+  const [retailerOptions, setRetailerOptions] = useState<RetailerOption[]>([]);
+  const [selectedRetailer, setSelectedRetailer] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -67,28 +40,46 @@ export function RetailerHtmlImportPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void apiClient
-      .listImportRetailers()
-      .then((response) => {
-        if (cancelled) {
+    void (async () => {
+      try {
+        const accounts = await apiClient.getRetailerAccounts();
+        const fromAccounts = dedupeRetailerOptions(
+          accounts.items.map((account) => ({
+            key: account.retailer,
+            label: (account.display_name?.trim() || account.retailer).replace(/_/g, " "),
+          })),
+        );
+        if (fromAccounts.length > 0) {
+          if (!cancelled) {
+            setRetailerOptions(fromAccounts);
+            setSelectedRetailer((current) => current || fromAccounts[0].key);
+          }
           return;
         }
-        setRetailers(response.items);
-        const supported = response.items.find((item) => item.status === "supported");
-        setSelectedRetailer((current) => current ?? supported?.key ?? response.items[0]?.key ?? null);
-      })
-      .catch((loadError) => {
+        const catalog = await apiClient.listImportRetailers();
+        const fromCatalog = dedupeRetailerOptions(
+          catalog.items.map((item) => ({ key: item.key, label: item.display_name })),
+        );
         if (!cancelled) {
-          setError(loadError instanceof ApiError ? loadError.message : "Unable to load supported retailers.");
+          setRetailerOptions(fromCatalog);
+          setSelectedRetailer((current) => current || fromCatalog[0]?.key || "");
         }
-      });
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof ApiError ? loadError.message : "Unable to load retailers.");
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const selectedRetailerCard = retailers.find((item) => item.key === selectedRetailer);
-  const importHint = retailerImportHint(selectedRetailerCard);
+  const selectClass = useMemo(
+    () =>
+      "mt-2 w-full max-w-md rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50",
+    [],
+  );
 
   const pickFile = useCallback((file: File | null) => {
     setError(null);
@@ -136,7 +127,7 @@ export function RetailerHtmlImportPage() {
       <PageHeader
         eyebrow="Add comics"
         title="Import saved order HTML"
-        description="Save your retailer order page as HTML (Ctrl+S), upload it here, review detected books, then confirm into your portfolio. Works for Midtown, Third Eye, DCBS, and more—no login or sync required."
+        description="Save your order page as HTML (Ctrl+S), pick your retailer, upload, and review before adding to your portfolio."
       />
 
       {error ? (
@@ -145,93 +136,39 @@ export function RetailerHtmlImportPage() {
         </div>
       ) : null}
 
-      <section className="mt-6" aria-label="Supported retailers">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Choose your retailer
-        </h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {retailers.map((retailer) => {
-            const isSelected = retailer.key === selectedRetailer;
-            return (
-              <button
-                key={retailer.key}
-                type="button"
-                onClick={() => {
-                  setSelectedRetailer(retailer.key);
-                  setError(null);
-                }}
-                aria-pressed={isSelected}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  isSelected
-                    ? "border-cyan-400/70 bg-cyan-400/10 ring-1 ring-cyan-400/40"
-                    : "border-white/10 bg-slate-900/70 hover:border-white/25"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-white">{retailer.display_name}</span>
-                </div>
-                <span
-                  className={`mt-3 inline-block rounded-full border px-3 py-1 text-xs font-medium ${statusClasses(
-                    retailer,
-                  )}`}
-                >
-                  {statusLabel(retailer)}
-                </span>
-                {retailer.is_fallback ? (
-                  <p className="mt-3 text-xs text-slate-300">
-                    Don&apos;t see your retailer? Upload a saved order page and ComicOS can add support.
-                  </p>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-        {importHint ? (
-          <p className="mt-4 text-sm text-slate-300">{importHint}</p>
-        ) : null}
+      <section className="mt-6" aria-label="Retailer selection">
+        <label className="block text-sm font-semibold text-slate-200" htmlFor="retailer-import-select">
+          Choose a Retailer
+        </label>
+        <select
+          id="retailer-import-select"
+          value={selectedRetailer}
+          disabled={retailerOptions.length === 0 || isUploading}
+          onChange={(event) => {
+            setSelectedRetailer(event.target.value);
+            setError(null);
+          }}
+          className={selectClass}
+        >
+          {retailerOptions.length === 0 ? (
+            <option value="">Loading retailers…</option>
+          ) : (
+            retailerOptions.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))
+          )}
+        </select>
       </section>
 
       <section className="mt-8 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
-        <ol className="space-y-4 text-sm text-slate-200">
-          <li className="flex gap-4">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-sm font-semibold text-cyan-200">
-              1
-            </span>
-            <div>
-              <p className="font-semibold text-white">Open your retailer order detail page</p>
-              <p className="mt-1 text-slate-300">
-                Go to the page that shows your order number and the list of books you bought.
-              </p>
-            </div>
-          </li>
-          <li className="flex gap-4">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-sm font-semibold text-cyan-200">
-              2
-            </span>
-            <div>
-              <p className="font-semibold text-white">Press Ctrl+S and save as Webpage HTML</p>
-              <p className="mt-1 text-slate-300">
-                Save the page as <span className="text-slate-100">Webpage, HTML Only</span>. You should get a{" "}
-                <span className="font-mono text-slate-100">.html</span> file.
-              </p>
-            </div>
-          </li>
-          <li className="flex gap-4">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-sm font-semibold text-cyan-200">
-              3
-            </span>
-            <div>
-              <p className="font-semibold text-white">Drop the saved file here, then review the detected books</p>
-              <p className="mt-1 text-slate-300">
-                ComicOS reads the saved HTML, extracts your order and items, and opens the review page so you can
-                confirm into your portfolio.
-              </p>
-            </div>
-          </li>
-        </ol>
+        <p className="text-sm text-slate-300">
+          Open your order detail page in the browser, press Ctrl+S, save as Webpage HTML, then upload the file below.
+        </p>
 
         <div
-          className={`mt-8 rounded-3xl border-2 border-dashed px-6 py-10 text-center transition ${
+          className={`mt-6 rounded-3xl border-2 border-dashed px-6 py-10 text-center transition ${
             dragActive
               ? "border-cyan-400/60 bg-cyan-400/10"
               : "border-white/15 bg-slate-950/40 hover:border-white/25"

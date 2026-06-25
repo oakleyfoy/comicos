@@ -5859,6 +5859,10 @@ def get_inventory(
     sort_by: str | None = None,
     sort_dir: Literal["asc", "desc"] = "asc",
     organization_id: Annotated[int | None, Query(description="Organization scope for shared dealer inventory visibility.")] = None,
+    list_enrichment: Annotated[
+        Literal["card", "full"],
+        Query(description="card = fast portfolio grid rows; full = per-row enrichment (slow)."),
+    ] = "full",
 ) -> InventoryListResponse:
     return list_inventory(
         session=session,
@@ -5883,6 +5887,7 @@ def get_inventory(
         sort_by=sort_by,
         sort_dir=sort_dir,
         organization_id=organization_id,
+        list_enrichment=list_enrichment,
     )
 
 

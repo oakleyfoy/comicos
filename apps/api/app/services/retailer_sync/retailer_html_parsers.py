@@ -350,6 +350,9 @@ def _extract_shopify_style_items(soup: BeautifulSoup) -> list[RetailerOrderItem]
         href_lower = href.lower()
         if "/products/" not in href_lower and "/product/" not in href_lower:
             continue
+        # DCBS (and similar) publisher menus use /products/{publisher}/{id} — not order lines.
+        if re.search(r"/products/[^/]+/\d+/?(?:[#?]|$)", href_lower):
+            continue
         key = href_lower.split("?", 1)[0]
         if key in seen:
             continue
@@ -717,6 +720,95 @@ class DCBSSavedHtmlParser(GenericRetailerHtmlParser):
     retailer_key = "dcbs"
     display_name = "DCBS / Discount Comic Book Service"
     status = "beta"
+
+    def _extract_dcbs_order_table_items(self, soup: BeautifulSoup) -> list[RetailerOrderItem]:
+        """Parse DCBS account order tables (cartimg rows), not site navigation menus."""
+        items: list[RetailerOrderItem] = []
+        seen: set[str] = set()
+        for row in soup.find_all("tr"):
+            img = row.find("img", class_=lambda value: value and "cartimg" in value)
+            if img is None:
+                continue
+            alt_title = (img.get("alt") or "").strip()
+            cells = row.find_all("td")
+            cell_texts = [cell.get_text(" ", strip=True) for cell in cells]
+            item = self._build_item_from_cells(cell_texts, str(row))
+            if item is None and alt_title and _is_plausible_item_title(alt_title):
+                prices = [_parse_price(text) for text in cell_texts if _PRICE_RE.search(text)]
+                prices = [p for p in prices if p is not None]
+                if not prices:
+                    continue
+                qty = 1
+                for text in cell_texts:
+                    if re.fullmatch(r"\d{1,3}", text.strip()):
+                        qty = max(1, int(text.strip()))
+                        break
+                issue_number, cover_name = _parse_issue_and_cover(alt_title)
+                item = RetailerOrderItem(
+                    title=strip_title_parentheticals(alt_title),
+                    publisher=_detect_publisher(" ".join(cell_texts)),
+                    quantity=qty,
+                    unit_price=prices[0],
+                    total_price=prices[-1] if len(prices) > 1 else None,
+                    issue_number=issue_number,
+                    cover_name=cover_name,
+                    raw_fragment=str(row)[:4000],
+                )
+                item.parse_diagnostics = {"parse_source": "dcbs_order_table"}
+            if item is None:
+                continue
+            if alt_title and _is_plausible_item_title(alt_title):
+                item.title = strip_title_parentheticals(alt_title)
+            product_code = row.select_one(".productcode")
+            if product_code is not None:
+                code = product_code.get_text(" ", strip=True)
+                if code:
+                    item.retailer_item_id = code
+            if img.get("src"):
+                item.image_url = str(img["src"]).strip() or None
+                item.thumbnail_url = item.image_url
+            key = item.retailer_item_id or f"{item.title}|{item.quantity}|{item.unit_price}"
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(item)
+        return _filter_plausible_items(items)
+
+    def parse(self, html_text: str) -> RetailerOrderDetail:
+        soup = BeautifulSoup(html_text, "html.parser")
+        order_number = self._extract_order_number(soup)
+        items = self._extract_dcbs_order_table_items(soup)
+        if not items:
+            items = self._extract_items_from_tables(soup)
+            items = _filter_plausible_items(items)
+
+        order_total = None
+        for label in ("Order Total", "Grand Total", "Total", "Subtotal"):
+            match = re.search(
+                rf"{label}\s*[:]?\s*\$?\s*([0-9]+(?:\.[0-9]{{2}}))",
+                soup.get_text(" ", strip=True),
+                flags=re.IGNORECASE,
+            )
+            if match:
+                order_total = _parse_price(match.group(0))
+                if order_total is not None:
+                    break
+
+        detail = RetailerOrderDetail(
+            retailer_order_number=order_number or "",
+            order_total=order_total,
+            items=items,
+            raw_html=html_text,
+        )
+        detail.parse_diagnostics = {
+            "parse_scope": "dcbs",
+            "parse_source": "dcbs_order_table",
+            "retailer": self.retailer_key,
+            "item_blocks_found": len(items),
+            "items_parsed": len(items),
+            "order_number_found": bool(order_number),
+        }
+        return detail
 
 
 class ThirdEyeSavedHtmlParser(GenericRetailerHtmlParser):
