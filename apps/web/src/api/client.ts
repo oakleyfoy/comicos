@@ -22010,6 +22010,11 @@ export const apiClient = {
     return request<RetailerOrderSnapshotRead>(`/api/v1/retailer-orders/${orderId}`);
   },
 
+  retailerOrderCoverImageUrl(remoteUrl: string): string {
+    const params = new URLSearchParams({ u: remoteUrl });
+    return `${API_BASE_URL}/api/v1/retailer-orders/cover-image?${params.toString()}`;
+  },
+
   confirmRetailerOrder(orderId: number, itemCount = 0): Promise<RetailerOrderSnapshotRead> {
     const timeoutMs = Math.min(180_000, 45_000 + Math.max(0, itemCount) * 3_000);
     return requestWithTimeout<RetailerOrderSnapshotRead>(

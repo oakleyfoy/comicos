@@ -23,6 +23,22 @@ _DCBS_FILES_PATH_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _DCBS_PRODUCT_CODE_RE = re.compile(r"^[A-Za-z0-9]+$")
+_DCBS_CODE_IN_TEXT_RE = re.compile(r"\b([A-Z]{3}\d{5,7})\b")
+
+
+def _dcbs_product_code_from_raw(raw: dict) -> str | None:
+    for key in ("retailer_item_id", "product_code", "sku"):
+        candidate = raw.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            code = candidate.strip().upper()
+            if _DCBS_PRODUCT_CODE_RE.fullmatch(code):
+                return code
+    cover_name = raw.get("cover_name")
+    if isinstance(cover_name, str):
+        match = _DCBS_CODE_IN_TEXT_RE.search(cover_name.upper())
+        if match:
+            return match.group(1)
+    return None
 
 
 def dcbs_product_code_cover_url(product_code: str | None, *, size: str = "small") -> str | None:
@@ -80,10 +96,17 @@ def resolve_retailer_cover_url(
     retailer: str | None,
     fallback_image_url: str | None = None,
     fallback_cover_image_url: str | None = None,
+    fallback_retailer_item_id: str | None = None,
+    fallback_cover_name: str | None = None,
 ) -> str | None:
     raw = raw_item_json if isinstance(raw_item_json, dict) else {}
     diagnostics = raw.get("parse_diagnostics") if isinstance(raw.get("parse_diagnostics"), dict) else {}
-    product_code = raw.get("retailer_item_id")
+    merged_for_code = dict(raw)
+    if fallback_retailer_item_id and not merged_for_code.get("retailer_item_id"):
+        merged_for_code["retailer_item_id"] = fallback_retailer_item_id
+    if fallback_cover_name and not merged_for_code.get("cover_name"):
+        merged_for_code["cover_name"] = fallback_cover_name
+    product_code = _dcbs_product_code_from_raw(merged_for_code)
     is_dcbs = (retailer or "").casefold() == "dcbs"
 
     for key in _REMOTE_IMAGE_KEYS:
@@ -91,6 +114,10 @@ def resolve_retailer_cover_url(
         if isinstance(candidate, str) and candidate.strip():
             resolved = absolutize_retailer_image_url(candidate.strip(), retailer)
             if resolved:
+                if is_dcbs and product_code:
+                    media = dcbs_product_code_cover_url(product_code)
+                    if media and "dcbservice.com/files/" in resolved.casefold():
+                        return media
                 return resolved
 
     for key in ("cover_image_url", "source_image_url", "image_url", "thumbnail_url"):

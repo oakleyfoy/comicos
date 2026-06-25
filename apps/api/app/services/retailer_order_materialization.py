@@ -272,10 +272,35 @@ def _find_import_for_retailer_order(
         .where(DraftImport.user_id == owner_user_id)
         .order_by(DraftImport.updated_at.desc(), DraftImport.id.desc())
     ).all()
-    for draft in imports:
-        if _draft_contains_retailer_order(draft, retailer_order_number):
+    matches = [draft for draft in imports if _draft_contains_retailer_order(draft, retailer_order_number)]
+    for draft in matches:
+        if draft.status != "confirmed":
             return draft
-    return None
+    return matches[0] if matches else None
+
+
+def _reopen_stale_retailer_draft_if_needed(
+    session: Session,
+    *,
+    draft: DraftImport | None,
+    order: RetailerOrderSnapshot,
+) -> DraftImport | None:
+    """Recover when a prior confirm marked the draft confirmed but never linked inventory."""
+    if draft is None or draft.status != "confirmed":
+        return draft
+    if _linked_acquisition_id(order) is not None or _linked_order_id(order) is not None:
+        return draft
+    draft.status = "draft"
+    draft.linked_order_id = None
+    draft.updated_at = utc_now()
+    session.add(draft)
+    session.flush()
+    logger.info(
+        "retailer_confirm reopened stale draft import_id=%s order=%s",
+        draft.id,
+        order.retailer_order_number,
+    )
+    return draft
 
 
 def _linked_order_id(order: RetailerOrderSnapshot) -> int | None:
@@ -621,6 +646,16 @@ def _materialize_retailer_order_inventory_acquisition(
     expected_qty = _expected_quantity_from_snapshots(item_snapshots)
     order_number = order.retailer_order_number
 
+    existing_draft = _reopen_stale_retailer_draft_if_needed(
+        session,
+        draft=_find_import_for_retailer_order(
+            session,
+            owner_user_id=owner_user_id,
+            retailer_order_number=order.retailer_order_number,
+        ),
+        order=order,
+    )
+
     existing_acquisition_id = _linked_acquisition_id(order)
     if existing_acquisition_id is not None:
         linked = session.get(Acquisition, existing_acquisition_id)
@@ -640,11 +675,6 @@ def _materialize_retailer_order_inventory_acquisition(
                 item_snapshots=item_snapshots,
             )
 
-    existing_draft = _find_import_for_retailer_order(
-        session,
-        owner_user_id=owner_user_id,
-        retailer_order_number=order.retailer_order_number,
-    )
     if existing_draft is not None and existing_draft.status == "confirmed":
         acq_id = _linked_acquisition_id(order)
         if acq_id is not None:
@@ -678,6 +708,7 @@ def _materialize_retailer_order_inventory_acquisition(
                 import_id=int(draft.id),
                 item_snapshots=item_snapshots,
             )
+        draft = _reopen_stale_retailer_draft_if_needed(session, draft=draft, order=order) or draft
 
     with _stage_timer("draft_prepare", order_number=order_number):
         prepare_draft_import_for_retailer_confirm(session, draft)
@@ -1038,6 +1069,7 @@ def materialize_retailer_order_inventory(
         owner_user_id=owner_user_id,
         retailer_order_number=order.retailer_order_number,
     )
+    existing_draft = _reopen_stale_retailer_draft_if_needed(session, draft=existing_draft, order=order)
     if (
         existing_draft is not None
         and existing_draft.status == "confirmed"

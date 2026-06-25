@@ -23,6 +23,7 @@ from app.services.retailer_credentials import (
     mask_retailer_username,
     validate_retailer_credential_key,
 )
+from app.services.retailer_sync.retailer_cover_urls import resolve_retailer_cover_url
 from app.services.retailer_order_materialization import (
     RetailerOrderMaterializationResult,
     _stage_timer,
@@ -469,7 +470,7 @@ def build_retailer_order_quality_summary(
     return {
         "review_status": retailer_order_review_status(order),
         "item_count": item_count,
-        "cover_image_count": sum(1 for item in order_items if item.image_url),
+        "cover_image_count": sum(1 for item in order_items if _snapshot_has_resolvable_cover(item)),
         "product_url_count": sum(1 for item in order_items if item.product_url),
         "price_count": sum(1 for item in order_items if item.unit_price is not None),
         "release_date_count": sum(1 for item in order_items if item.release_date is not None),
@@ -481,3 +482,17 @@ def build_retailer_order_quality_summary(
 
 def masked_username_for_account(account: RetailerAccount) -> str:
     return mask_retailer_username(account.username)
+
+
+def _snapshot_has_resolvable_cover(item: RetailerOrderItemSnapshot) -> bool:
+    raw = item.raw_item_json if isinstance(item.raw_item_json, dict) else {}
+    return bool(
+        resolve_retailer_cover_url(
+            raw,
+            retailer=item.retailer,
+            fallback_image_url=item.image_url,
+            fallback_cover_image_url=item.thumbnail_url,
+            fallback_retailer_item_id=item.retailer_item_id,
+            fallback_cover_name=item.cover_name,
+        )
+    )

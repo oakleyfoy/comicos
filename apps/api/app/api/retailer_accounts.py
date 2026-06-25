@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile, status
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
@@ -80,6 +82,26 @@ from app.services.imports import serialize_import
 
 logger = logging.getLogger(__name__)
 
+_RETAILER_COVER_IMAGE_HOSTS = frozenset(
+    {
+        "media.dcbservice.com",
+        "www.dcbservice.com",
+        "dcbservice.com",
+        "www.midtowncomics.com",
+        "midtowncomics.com",
+        "cdn.shopify.com",
+    }
+)
+
+
+def _retailer_cover_host_allowed(url: str) -> bool:
+    host = (urlparse(url).hostname or "").casefold()
+    if not host:
+        return False
+    return host in _RETAILER_COVER_IMAGE_HOSTS or any(
+        host.endswith(f".{allowed}") for allowed in _RETAILER_COVER_IMAGE_HOSTS
+    )
+
 retailer_accounts_v1_router = APIRouter(
     prefix="/api/v1", tags=["Retailer Accounts API v1 (P91-01)"]
 )
@@ -116,11 +138,15 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     raw_for_cover = dict(raw)
     if base.retailer_item_id and not raw_for_cover.get("retailer_item_id"):
         raw_for_cover["retailer_item_id"] = base.retailer_item_id
+    if base.cover_name and not raw_for_cover.get("cover_name"):
+        raw_for_cover["cover_name"] = base.cover_name
     display_cover = resolve_retailer_cover_url(
         raw_for_cover,
         retailer=item.retailer,
         fallback_image_url=base.image_url,
-        fallback_cover_image_url=raw.get("cover_image_url") or base.cover_image_url,
+        fallback_cover_image_url=raw.get("cover_image_url") or base.cover_image_url or base.thumbnail_url,
+        fallback_retailer_item_id=base.retailer_item_id,
+        fallback_cover_name=base.cover_name,
     )
     remote_midtown_image_url = raw.get("remote_midtown_image_url")
     remote_shopify_image_url = raw.get("remote_shopify_image_url")
@@ -129,6 +155,13 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
         if isinstance(raw.get("parse_diagnostics"), dict)
         else None
     )
+    if remote_dcbs_image_url:
+        remote_dcbs_image_url = resolve_retailer_cover_url(
+            {"remote_dcbs_image_url": remote_dcbs_image_url, "retailer_item_id": base.retailer_item_id},
+            retailer=item.retailer,
+            fallback_retailer_item_id=base.retailer_item_id,
+            fallback_cover_name=base.cover_name,
+        )
     return base.model_copy(
         update={
             "title": strip_title_parentheticals(base.title) or base.title,
@@ -139,7 +172,7 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
             "remote_midtown_image_url": remote_midtown_image_url,
             "image_title": raw.get("image_title"),
             "cover_image_url": display_cover,
-            "image_url": display_cover or base.image_url,
+            "image_url": display_cover,
             "source_image_url": display_cover
             or raw.get("source_image_url")
             or remote_shopify_image_url
@@ -562,6 +595,24 @@ async def import_midtown_order_html(
         retailer_order_number=order_number,
         item_count=int(stats.get("items_imported", 0)),
     )
+
+
+@retailer_accounts_v1_router.get("/retailer-orders/cover-image")
+def retailer_order_cover_image(
+    u: str = Query(min_length=8, max_length=2048),
+) -> Response:
+    """Proxy retailer product thumbnails for review UI (public CDN URLs only)."""
+    if not _retailer_cover_host_allowed(u):
+        raise HTTPException(status_code=400, detail="Retailer cover URL host is not allowed.")
+    try:
+        with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+            upstream = client.get(u, headers={"User-Agent": "ComicOS/1.0 (retailer-cover-proxy)"})
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Could not fetch retailer cover image.") from exc
+    if upstream.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Retailer cover image is unavailable.")
+    media_type = upstream.headers.get("content-type") or "image/jpeg"
+    return Response(content=upstream.content, media_type=media_type)
 
 
 @retailer_accounts_v1_router.get(

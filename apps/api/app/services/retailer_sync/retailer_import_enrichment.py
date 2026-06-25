@@ -55,6 +55,8 @@ def _snapshot_cover_url(snapshot: RetailerOrderItemSnapshot) -> str | None:
         retailer=snapshot.retailer,
         fallback_image_url=snapshot.image_url,
         fallback_cover_image_url=snapshot.thumbnail_url,
+        fallback_retailer_item_id=snapshot.retailer_item_id,
+        fallback_cover_name=snapshot.cover_name,
     )
 
 

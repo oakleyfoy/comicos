@@ -113,14 +113,13 @@ def get_master_universe_catalog_dashboard(
         pub_name = publisher_name_by_id.get(int(series.publisher_id or 0), "Unknown")
         key = _publisher_key(pub_name)
         label = _publisher_label(pub_name)
-        vol_inc, iss_inc = series_by_pub_key.get(key, (label, 0, 0))
+        _stored_label, vol_inc, iss_inc = series_by_pub_key.get(key, (label, 0, 0))
         series_by_pub_key[key] = (
             label,
             vol_inc + 1,
             iss_inc + issue_counts_by_series.get(int(series.id), 0),
         )
 
-    source_tally_by_pub: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for pub_id, ext in session.exec(select(CatalogIssue.publisher_id, CatalogIssue.external_source_ids)).all():
         if pub_id is None:
             continue

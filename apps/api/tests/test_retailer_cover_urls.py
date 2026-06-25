@@ -30,3 +30,8 @@ def test_resolve_dcbs_cover_from_retailer_item_id_only() -> None:
     assert resolve_retailer_cover_url(raw, retailer="dcbs") == (
         "https://media.dcbservice.com/small/MAY264642.jpg"
     )
+
+
+def test_resolve_dcbs_cover_from_variant_cover_name() -> None:
+    raw = {"cover_name": "Variant MAY265025"}
+    assert resolve_retailer_cover_url(raw, retailer="dcbs") == _DCBS_MEDIA

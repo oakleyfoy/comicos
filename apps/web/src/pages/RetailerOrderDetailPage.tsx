@@ -38,6 +38,17 @@ function formatMoney(value: string | null | undefined): string {
   }).format(parsed);
 }
 
+function retailerReviewCoverSrc(item: RetailerOrderItemSnapshotRead): string | undefined {
+  const url = (item.cover_image_url || item.image_url || "").trim();
+  if (!url) {
+    return undefined;
+  }
+  if (url.includes("media.dcbservice.com")) {
+    return url;
+  }
+  return apiClient.retailerOrderCoverImageUrl(url);
+}
+
 function statusBadgeClass(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized === "confirmed" || normalized === "captured") {
@@ -236,18 +247,8 @@ export function RetailerOrderDetailPage() {
         if (maybeDone) {
           applyConfirmedOrderState(maybeDone);
         } else {
-          const legacyRetired =
-            confirmError instanceof ApiError &&
-            confirmError.status === 410 &&
-            confirmError.message.toLowerCase().includes("legacy customer orders");
           setError(
-            legacyRetired
-              ? "Add to portfolio is blocked by a server setting (legacy order retirement). Deploy the latest API or ask ops to enable retailer portfolio adds."
-              : confirmError instanceof ApiError && confirmError.status === 500
-                ? "Add to portfolio failed on the server (often the production DB no longer has legacy order tables). Run or deploy the latest ComicOS API with retailer acquisition materialization, then try again."
-                : confirmError instanceof ApiError
-                  ? confirmError.message
-                  : "Unable to confirm retailer order.",
+            confirmError instanceof ApiError ? confirmError.message : "Unable to confirm retailer order.",
           );
         }
       }
@@ -523,12 +524,13 @@ export function RetailerOrderDetailPage() {
                     data-testid="retailer-review-cover"
                     className="h-[120px] w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/80 sm:h-[132px] sm:w-[88px]"
                   >
-                    {item.cover_image_url || item.image_url ? (
+                    {retailerReviewCoverSrc(item) ? (
                       <img
-                        src={item.cover_image_url || item.image_url || ""}
+                        src={retailerReviewCoverSrc(item) || ""}
                         alt={item.title}
                         className="h-full w-full object-cover"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center px-1 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
