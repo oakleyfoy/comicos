@@ -15,6 +15,28 @@ function isAcceptedFile(file: File): boolean {
 
 type RetailerOption = { key: string; label: string };
 
+function mergeImportRetailerOptions(
+  catalogItems: { key: string; display_name: string; accepts_upload: boolean }[],
+  accounts: { retailer: string; display_name?: string | null }[],
+): RetailerOption[] {
+  const accountLabelByKey = new Map<string, string>();
+  for (const account of accounts) {
+    const label = (account.display_name?.trim() || account.retailer).replace(/_/g, " ");
+    accountLabelByKey.set(account.retailer, label);
+  }
+  const options = catalogItems
+    .filter((item) => item.accepts_upload)
+    .map((item) => ({
+      key: item.key,
+      label: accountLabelByKey.get(item.key) ?? item.display_name,
+    }));
+  return dedupeRetailerOptions(options).sort((a, b) => {
+    if (a.key === "unknown") return 1;
+    if (b.key === "unknown") return -1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 function dedupeRetailerOptions(items: RetailerOption[]): RetailerOption[] {
   const seen = new Set<string>();
   const out: RetailerOption[] = [];
@@ -42,27 +64,14 @@ export function RetailerHtmlImportPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const accounts = await apiClient.getRetailerAccounts();
-        const fromAccounts = dedupeRetailerOptions(
-          accounts.items.map((account) => ({
-            key: account.retailer,
-            label: (account.display_name?.trim() || account.retailer).replace(/_/g, " "),
-          })),
-        );
-        if (fromAccounts.length > 0) {
-          if (!cancelled) {
-            setRetailerOptions(fromAccounts);
-            setSelectedRetailer((current) => current || fromAccounts[0].key);
-          }
-          return;
-        }
-        const catalog = await apiClient.listImportRetailers();
-        const fromCatalog = dedupeRetailerOptions(
-          catalog.items.map((item) => ({ key: item.key, label: item.display_name })),
-        );
+        const [catalog, accounts] = await Promise.all([
+          apiClient.listImportRetailers(),
+          apiClient.getRetailerAccounts(),
+        ]);
+        const options = mergeImportRetailerOptions(catalog.items, accounts.items);
         if (!cancelled) {
-          setRetailerOptions(fromCatalog);
-          setSelectedRetailer((current) => current || fromCatalog[0]?.key || "");
+          setRetailerOptions(options);
+          setSelectedRetailer((current) => current || options[0]?.key || "");
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -77,7 +86,7 @@ export function RetailerHtmlImportPage() {
 
   const selectClass = useMemo(
     () =>
-      "mt-2 w-full max-w-md rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50",
+      "mt-2 w-full max-w-md rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm outline-none focus:border-patriot-blue focus:ring-2 focus:ring-patriot-blue/25",
     [],
   );
 
@@ -137,7 +146,10 @@ export function RetailerHtmlImportPage() {
       ) : null}
 
       <section className="mt-6" aria-label="Retailer selection">
-        <label className="block text-sm font-semibold text-slate-200" htmlFor="retailer-import-select">
+        <label
+          className="block text-sm font-semibold text-patriot-navy"
+          htmlFor="retailer-import-select"
+        >
           Choose a Retailer
         </label>
         <select
@@ -162,16 +174,16 @@ export function RetailerHtmlImportPage() {
         </select>
       </section>
 
-      <section className="mt-8 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
-        <p className="text-sm text-slate-300">
+      <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60">
+        <p className="text-sm text-slate-600">
           Open your order detail page in the browser, press Ctrl+S, save as Webpage HTML, then upload the file below.
         </p>
 
         <div
           className={`mt-6 rounded-3xl border-2 border-dashed px-6 py-10 text-center transition ${
             dragActive
-              ? "border-cyan-400/60 bg-cyan-400/10"
-              : "border-white/15 bg-slate-950/40 hover:border-white/25"
+              ? "border-patriot-blue bg-blue-50"
+              : "border-slate-300 bg-slate-50 hover:border-slate-400"
           }`}
           onDragEnter={(event) => {
             event.preventDefault();
@@ -194,10 +206,10 @@ export function RetailerHtmlImportPage() {
             className="hidden"
             onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
           />
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-slate-600">
             {selectedFile ? (
               <>
-                Selected: <span className="font-medium text-white">{selectedFile.name}</span>
+                Selected: <span className="font-medium text-slate-900">{selectedFile.name}</span>
               </>
             ) : (
               "Drop your saved order .html file here"
@@ -208,7 +220,7 @@ export function RetailerHtmlImportPage() {
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={isUploading}
-              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:border-patriot-blue hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Choose file
             </button>
@@ -216,7 +228,7 @@ export function RetailerHtmlImportPage() {
               type="button"
               onClick={() => void handleUpload()}
               disabled={isUploading || !selectedFile || !selectedRetailer}
-              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl bg-patriot-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUploading ? "Importing…" : "Upload & review order"}
             </button>
@@ -227,7 +239,7 @@ export function RetailerHtmlImportPage() {
           <button
             type="button"
             onClick={() => navigate("/retailer-orders")}
-            className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-patriot-blue hover:text-patriot-blue"
           >
             View imported orders
           </button>

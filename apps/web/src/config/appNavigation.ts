@@ -216,7 +216,9 @@ export function findGroupIdForPath(pathname: string): string | null {
   if (
     pathname === "/universe" ||
     pathname === "/catalog-universe" ||
-    pathname.startsWith("/catalog-universe/")
+    pathname.startsWith("/catalog-universe/") ||
+    pathname === "/catalog/import" ||
+    pathname.startsWith("/catalog/import/")
   ) {
     return "catalog";
   }

@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-
+import { useState } from "react";
 import {
   type InventoryActionCenterCategory,
   type InventoryItem,
@@ -10,6 +9,7 @@ import {
 import { formatCurrencyAmount, formatUsdCurrency } from "../lib/currencyFormat";
 import { canQuickReceiveInventoryCopy } from "../lib/inventoryReceiving";
 import { FavoriteStarRating } from "./FavoriteStarRating";
+import { PortfolioInventoryCardExpand } from "./PortfolioInventoryDetailDrawer";
 
 type Chip = { key: string; label: string; className: string; title?: string };
 
@@ -234,7 +234,6 @@ export function PortfolioInventoryList(props: {
   onStarDraftChange: (id: number, value: string) => void;
   onSave: (id: number, payload: InventoryUpdatePayload) => Promise<void>;
   onOpenNotes: (item: InventoryItem) => void;
-  onOpenDetail?: (item: InventoryItem) => void;
   receivingCopyIds: ReadonlySet<number>;
   onMarkReceived: (id: number) => void;
 }): JSX.Element {
@@ -254,10 +253,11 @@ export function PortfolioInventoryList(props: {
     onStarDraftChange,
     onSave,
     onOpenNotes,
-    onOpenDetail,
     receivingCopyIds,
     onMarkReceived,
   } = props;
+
+  const [expandedCopyId, setExpandedCopyId] = useState<number | null>(null);
 
   return (
     <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -270,10 +270,9 @@ export function PortfolioInventoryList(props: {
           : null;
         const canReceive = canQuickReceiveInventoryCopy(item);
         const isReceiving = receivingCopyIds.has(id);
-        const openDetail = () => {
-          if (onOpenDetail) {
-            onOpenDetail(item);
-          }
+        const isExpanded = expandedCopyId === id;
+        const toggleDetail = () => {
+          setExpandedCopyId((current) => (current === id ? null : id));
         };
         const coverClass =
           "relative block h-20 w-14 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-left";
@@ -281,10 +280,13 @@ export function PortfolioInventoryList(props: {
           "line-clamp-2 text-sm font-semibold leading-snug text-patriot-navy hover:text-patriot-blue";
 
         return (
-          <article
+          <div
             key={id}
-            className="flex flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+            className={`flex flex-col rounded-2xl border bg-white shadow-sm transition ${
+              isExpanded ? "border-blue-300 ring-1 ring-blue-200" : "border-slate-200 hover:border-blue-200 hover:shadow-md"
+            }`}
           >
+            <article className="flex flex-col p-3">
             <div className="flex items-start gap-2">
               <input
                 type="checkbox"
@@ -294,14 +296,13 @@ export function PortfolioInventoryList(props: {
                 aria-label={`Select ${item.title}`}
               />
 
-              {onOpenDetail ? (
-                <button
-                  type="button"
-                  onClick={openDetail}
-                  className={coverClass}
-                  aria-label={`${item.title} cover`}
-                  data-testid="inventory-card-cover"
-                >
+              <button
+                type="button"
+                onClick={toggleDetail}
+                className={coverClass}
+                aria-label={`${item.title} cover`}
+                data-testid="inventory-card-cover"
+              >
                   {item.cover_image_url ? (
                     <img
                       src={item.cover_image_url}
@@ -324,50 +325,13 @@ export function PortfolioInventoryList(props: {
                   >
                     📚
                   </span>
-                </button>
-              ) : (
-                <Link
-                  to={`/inventory/${id}`}
-                  className={coverClass}
-                  aria-label={`${item.title} cover`}
-                  data-testid="inventory-card-cover"
-                >
-                  {item.cover_image_url ? (
-                    <img
-                      src={item.cover_image_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                        const fallback = event.currentTarget.nextElementSibling;
-                        if (fallback instanceof HTMLElement) {
-                          fallback.style.display = "flex";
-                        }
-                      }}
-                    />
-                  ) : null}
-                  <span
-                    className="absolute inset-0 flex items-center justify-center text-base text-slate-400"
-                    style={{ display: item.cover_image_url ? "none" : "flex" }}
-                    aria-hidden="true"
-                  >
-                    📚
-                  </span>
-                </Link>
-              )}
+              </button>
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  {onOpenDetail ? (
-                    <button type="button" onClick={openDetail} className={titleClass}>
-                      {item.title} #{item.issue_number}
-                    </button>
-                  ) : (
-                    <Link to={`/inventory/${id}`} className={titleClass}>
-                      {item.title} #{item.issue_number}
-                    </Link>
-                  )}
+                  <button type="button" onClick={toggleDetail} className={titleClass}>
+                    {item.title} #{item.issue_number}
+                  </button>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <span
@@ -519,25 +483,23 @@ export function PortfolioInventoryList(props: {
                 >
                   Notes
                 </button>
-                {onOpenDetail ? (
-                  <button
-                    type="button"
-                    onClick={openDetail}
-                    className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
-                  >
-                    Details
-                  </button>
-                ) : (
-                  <Link
-                    to={`/inventory/${id}`}
-                    className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
-                  >
-                    Open
-                  </Link>
-                )}
+                <button
+                  type="button"
+                  onClick={toggleDetail}
+                  className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
+                >
+                  {isExpanded ? "Close" : "Details"}
+                </button>
               </div>
             </div>
-          </article>
+            </article>
+            {isExpanded ? (
+              <PortfolioInventoryCardExpand
+                inventoryCopyId={id}
+                onClose={() => setExpandedCopyId(null)}
+              />
+            ) : null}
+          </div>
         );
       })}
     </div>

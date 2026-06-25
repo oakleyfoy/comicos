@@ -285,6 +285,19 @@ def _add_sample(stats: GcdBackfillStats, **row: Any) -> None:
         stats.samples.append(row)
 
 
+def _load_upc_lookup(session: Session) -> tuple[set[str], dict[str, int | None]]:
+    learned = {
+        str(bc)
+        for bc in session.exec(select(ComicIssueBarcode.normalized_barcode)).all()
+        if bc
+    }
+    existing: dict[str, int | None] = {}
+    for upc, issue_id in session.exec(select(CatalogUpc.normalized_upc, CatalogUpc.issue_id)).all():
+        if upc:
+            existing[str(upc)] = int(issue_id) if issue_id is not None else None
+    return learned, existing
+
+
 def run_gcd_backfill(
     session: Session,
     gcd: Engine,
@@ -296,6 +309,7 @@ def run_gcd_backfill(
     state = _Resume.load(resume_path)
     stats = state.stats
     index = build_local_index(session)
+    learned_barcodes, existing_upc = _load_upc_lookup(session)
 
     with gcd.connect() as conn:
         stats.gcd_total_issues = int(conn.execute(text("SELECT COUNT(*) FROM gcd_issue")).scalar() or 0)
@@ -367,16 +381,13 @@ def run_gcd_backfill(
                     continue
 
                 # Rule: user-confirmed learned mappings always win.
-                learned = session.exec(
-                    select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == bc)
-                ).first()
-                if learned is not None:
+                if bc in learned_barcodes:
                     stats.skipped_learned += 1
                     continue
 
-                existing = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == bc)).first()
-                if existing is not None:
-                    if existing.issue_id is not None and int(existing.issue_id) != local.issue_id:
+                existing_issue_id = existing_upc.get(bc)
+                if existing_issue_id is not None:
+                    if int(existing_issue_id) != local.issue_id:
                         stats.duplicate_conflicts += 1
                         stats.by_publisher[pub_key].conflicts += 1
                         stats.by_year[year_key].conflicts += 1
@@ -389,6 +400,7 @@ def run_gcd_backfill(
                 _add_sample(stats, barcode=bc, local_issue_id=local.issue_id, publisher=local.publisher, series=local.series, issue_number=local.issue_number, year=local.year, validation_status="exact_match")
 
                 if write:
+                    existing_upc[bc] = local.issue_id
                     variant = session.exec(
                         select(CatalogVariant).where(CatalogVariant.issue_id == local.issue_id)
                     ).first()

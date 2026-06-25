@@ -33,10 +33,21 @@ vi.mock("../../components/StatusBanner", () => ({
   StatusBanner: ({ children }: { children: ReactNode }) => <div role="alert">{children}</div>,
 }));
 
+const IMPORT_CATALOG = {
+  items: [
+    { key: "midtown", display_name: "Midtown Comics", status: "supported", supported: true, accepts_upload: true, is_fallback: false },
+    { key: "dcbs", display_name: "DCBS / Discount Comic Book Service", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
+    { key: "third_eye", display_name: "Third Eye Comics", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
+    { key: "mycomicshop", display_name: "MyComicShop", status: "beta", supported: false, accepts_upload: true, is_fallback: false },
+    { key: "unknown", display_name: "Unknown / Other Retailer", status: "generic", supported: false, accepts_upload: true, is_fallback: true },
+  ],
+};
+
 describe("RetailerHtmlImportPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     navigateMock = vi.fn();
+    vi.spyOn(apiClient, "listImportRetailers").mockResolvedValue(IMPORT_CATALOG);
     vi.spyOn(apiClient, "getRetailerAccounts").mockResolvedValue({
       items: [
         {
@@ -63,17 +74,12 @@ describe("RetailerHtmlImportPage", () => {
         },
       ],
     });
-    vi.spyOn(apiClient, "listImportRetailers").mockResolvedValue({
-      items: [
-        { key: "unknown", display_name: "Unknown / Other Retailer", status: "generic", supported: false, accepts_upload: true, is_fallback: true },
-      ],
-    });
     vi.spyOn(apiClient, "importRetailerOrderHtml").mockResolvedValue({
       order_id: 77,
-      retailer: "third_eye",
-      retailer_order_number: "ABC-1001",
+      retailer: "dcbs",
+      retailer_order_number: "970668",
       item_count: 2,
-      parser_status: "generic",
+      parser_status: "beta",
       warnings: [],
     });
   });
@@ -82,7 +88,7 @@ describe("RetailerHtmlImportPage", () => {
     cleanup();
   });
 
-  it("renders a retailer dropdown from connected accounts", async () => {
+  it("lists all HTML import retailers including DCBS", async () => {
     render(
       <MemoryRouter>
         <RetailerHtmlImportPage />
@@ -90,9 +96,9 @@ describe("RetailerHtmlImportPage", () => {
     );
 
     expect(await screen.findByLabelText("Choose a Retailer")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Third Eye Comics" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "DCBS / Discount Comic Book Service" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Midtown Comics" })).toBeInTheDocument();
-    expect(apiClient.listImportRetailers).not.toHaveBeenCalled();
+    expect(screen.getByRole("option", { name: "Third Eye Comics" })).toBeInTheDocument();
   });
 
   it("uploads a saved html file for the selected retailer and opens the review page", async () => {
@@ -103,29 +109,16 @@ describe("RetailerHtmlImportPage", () => {
     );
 
     const select = await screen.findByLabelText("Choose a Retailer");
-    fireEvent.change(select, { target: { value: "third_eye" } });
+    fireEvent.change(select, { target: { value: "dcbs" } });
 
-    const file = new File(["<html><h1>Order #ABC-1001</h1></html>"], "order.html", { type: "text/html" });
+    const file = new File(["<html><h1>Order #970668</h1></html>"], "order.html", { type: "text/html" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
     fireEvent.click(screen.getByRole("button", { name: "Upload & review order" }));
 
     await waitFor(() => {
-      expect(apiClient.importRetailerOrderHtml).toHaveBeenCalledWith("third_eye", file);
+      expect(apiClient.importRetailerOrderHtml).toHaveBeenCalledWith("dcbs", file);
       expect(navigateMock).toHaveBeenCalledWith("/retailer-orders/77");
     });
-  });
-
-  it("falls back to import catalog when no retailer accounts exist", async () => {
-    vi.mocked(apiClient.getRetailerAccounts).mockResolvedValueOnce({ items: [] });
-
-    render(
-      <MemoryRouter>
-        <RetailerHtmlImportPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("option", { name: "Unknown / Other Retailer" })).toBeInTheDocument();
-    expect(apiClient.listImportRetailers).toHaveBeenCalled();
   });
 });
