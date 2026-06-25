@@ -220,6 +220,30 @@ def test_third_eye_confirm_materializes_on_acquisition_spine(client, session, mo
     assert body["portfolio_items_added"] == 3
 
 
+def test_dcbs_confirm_materializes_on_acquisition_spine(client, session, monkeypatch) -> None:
+    from app.services import retailer_order_materialization as materialization_module
+
+    monkeypatch.setattr(materialization_module, "legacy_customer_orders_writes_enabled", lambda: False)
+
+    token = register_and_login(client, "dcbs-confirm@example.com")
+    imported = client.post(
+        "/api/v1/retailer-orders/import/html",
+        headers=auth_headers(token),
+        data={"retailer": "dcbs"},
+        files={"file": ("dcbs-order.html", _DCBS_ORDER_TABLE_HTML.encode("utf-8"), "text/html")},
+    )
+    assert imported.status_code == 201, imported.text
+    order_id = imported.json()["order_id"]
+
+    confirmed = client.post(f"/api/v1/retailer-orders/{order_id}/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    body = confirmed.json()
+    assert body["review_status"] == "confirmed"
+    assert body["linked_acquisition_id"] is not None
+    assert body["inventory_copies_created"] == 3
+    assert body["portfolio_items_added"] == 3
+
+
 def test_registry_contains_all_supported_retailers() -> None:
     assert set(retailer_html_parsers) == {"midtown", "dcbs", "third_eye", "mycomicshop", "unknown"}
     assert retailer_html_parsers["midtown"].status == "supported"
@@ -308,6 +332,9 @@ def test_dcbs_parser_reads_order_table_not_publisher_menu(client) -> None:
     detail = parser.parse(_DCBS_ORDER_TABLE_HTML)
     assert detail.retailer_order_number == "970668"
     assert len(detail.items) == 2
+    assert detail.items[0].image_url == "https://www.dcbservice.com/files/MAY265025.jpg"
+    assert detail.items[0].issue_number == "34"
+    assert detail.items[0].publisher and "marvel" in detail.items[0].publisher.lower()
     assert detail.items[0].title.startswith("X-Men #34")
     assert detail.items[0].retailer_item_id == "MAY265025"
     assert detail.items[1].quantity == 2

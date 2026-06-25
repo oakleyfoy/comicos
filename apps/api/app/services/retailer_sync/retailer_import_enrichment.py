@@ -12,6 +12,7 @@ from app.models import (
     RetailerOrderSnapshot,
     User,
 )
+from app.services.retailer_sync.retailer_cover_urls import resolve_retailer_cover_url
 from app.schemas.ai import AiDraftOrderItem, ParseOrderResponse
 from app.schemas.imports import DraftImportUpdate
 from app.services.imports import persist_draft_import, update_import_for_user
@@ -48,18 +49,13 @@ def _match_existing_item(
 
 
 def _snapshot_cover_url(snapshot: RetailerOrderItemSnapshot) -> str | None:
-    """Web-servable retailer cover URL.
-
-    Saved-HTML imports store a *local* file path in ``image_url`` (e.g.
-    ``./Order_files/2539636_ful.jpg``) plus a derived remote URL
-    (``remote_midtown_image_url``) in ``raw_item_json``. Prefer the remote URL so
-    the cover renders without a catalog match; fall back to the stored ``image_url``.
-    """
     raw = snapshot.raw_item_json if isinstance(snapshot.raw_item_json, dict) else {}
-    remote = raw.get("remote_midtown_image_url")
-    if isinstance(remote, str) and remote.strip():
-        return remote.strip()
-    return snapshot.image_url
+    return resolve_retailer_cover_url(
+        raw,
+        retailer=snapshot.retailer,
+        fallback_image_url=snapshot.image_url,
+        fallback_cover_image_url=snapshot.thumbnail_url,
+    )
 
 
 def _snapshot_to_item(snapshot: RetailerOrderItemSnapshot) -> AiDraftOrderItem:

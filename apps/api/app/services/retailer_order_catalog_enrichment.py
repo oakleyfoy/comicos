@@ -506,3 +506,60 @@ def apply_retailer_enrichment_to_confirmed_order(
             raw["source_image_url"] = source_url
             snap.raw_item_json = raw
             session.add(snap)
+
+
+def apply_retailer_enrichment_to_acquisition_inventory(
+    session: Session,
+    *,
+    owner_user_id: int,
+    acquisition_id: int,
+    draft_import: DraftImport,
+    item_snapshots: list[RetailerOrderItemSnapshot],
+) -> None:
+    """Apply draft enrichment onto acquisition inventory copies (no legacy order spine)."""
+    payload = ParseOrderResponse.model_validate(draft_import.parsed_payload_json or {})
+    copies = list(
+        session.exec(
+            select(InventoryCopy)
+            .where(
+                InventoryCopy.acquisition_id == acquisition_id,
+                InventoryCopy.user_id == owner_user_id,
+            )
+            .order_by(InventoryCopy.id.asc())
+        ).all()
+    )
+    copy_index = 0
+    for index, draft_item in enumerate(payload.items):
+        snapshot = item_snapshots[index] if index < len(item_snapshots) else None
+        qty = int(snapshot.quantity or 1) if snapshot is not None else int(draft_item.quantity or 1)
+        catalog_cover = (draft_item.cover_image_url or "").strip()
+        if _is_broken_local_retailer_image(catalog_cover):
+            catalog_cover = ""
+        retailer_source = (draft_item.source_image_url or draft_item.retailer_cover_url or "").strip()
+        source_url = catalog_cover or retailer_source or None
+        for _ in range(qty):
+            if copy_index >= len(copies):
+                break
+            copy = copies[copy_index]
+            copy_index += 1
+            if source_url:
+                copy.source_image_url = source_url
+            if draft_item.parsed_release_date and copy.release_date is None:
+                copy.release_date = draft_item.parsed_release_date
+            if copy.release_date is not None:
+                copy.release_year = copy.release_date.year
+                if copy.release_status not in ("released", "not_released_yet"):
+                    copy.release_status = (
+                        "released" if copy.release_date <= date.today() else "not_released_yet"
+                    )
+            session.add(copy)
+        if snapshot is not None:
+            raw = dict(snapshot.raw_item_json or {})
+            raw["enrichment_status"] = draft_item.enrichment_status
+            raw["enrichment_confidence"] = draft_item.enrichment_confidence
+            raw["catalog_match_id"] = draft_item.catalog_match_id
+            raw["enrichment_notes"] = draft_item.enrichment_notes
+            raw["cover_image_url"] = draft_item.cover_image_url
+            raw["source_image_url"] = source_url
+            snapshot.raw_item_json = raw
+            session.add(snapshot)

@@ -69,10 +69,12 @@ from app.services.retailer_accounts import (
 )
 from app.services.retailer_order_materialization import RetailerOrderMaterializationResult
 from app.services.retailer_order_catalog_enrichment import (
+    apply_retailer_enrichment_to_acquisition_inventory,
     apply_retailer_enrichment_to_confirmed_order,
     reenrich_retailer_draft_import_with_diagnostics,
 )
 from app.services.retailer_order_draft_sync import list_retailer_order_item_snapshots
+from app.services.retailer_sync.retailer_cover_urls import resolve_retailer_cover_url
 from app.services.retailer_sync.retailer_import_enrichment import enrich_drafts_from_retailer_orders
 from app.services.imports import serialize_import
 
@@ -111,19 +113,18 @@ def _serialize_run(run) -> RetailerSyncRunRead:
 def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     raw = item.raw_item_json if isinstance(item.raw_item_json, dict) else {}
     base = RetailerOrderItemSnapshotRead.model_validate(item)
+    display_cover = resolve_retailer_cover_url(
+        raw,
+        retailer=item.retailer,
+        fallback_image_url=base.image_url,
+        fallback_cover_image_url=raw.get("cover_image_url") or base.cover_image_url,
+    )
     remote_midtown_image_url = raw.get("remote_midtown_image_url")
     remote_shopify_image_url = raw.get("remote_shopify_image_url")
-    # Review cover priority: an enriched/catalog cover, then the retailer-derived
-    # remote image, then whatever raw/local image we captured. This makes the
-    # retailer cover render at review time even before catalog enrichment runs.
-    display_cover = (
-        raw.get("cover_image_url")
-        or raw.get("source_image_url")
-        or remote_midtown_image_url
-        or remote_shopify_image_url
-        or raw.get("image_url")
-        or base.cover_image_url
-        or base.image_url
+    remote_dcbs_image_url = raw.get("remote_dcbs_image_url") or (
+        raw.get("parse_diagnostics", {}).get("remote_dcbs_image_url")
+        if isinstance(raw.get("parse_diagnostics"), dict)
+        else None
     )
     return base.model_copy(
         update={
@@ -135,8 +136,11 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
             "remote_midtown_image_url": remote_midtown_image_url,
             "image_title": raw.get("image_title"),
             "cover_image_url": display_cover,
-            "source_image_url": raw.get("source_image_url")
+            "image_url": display_cover or base.image_url,
+            "source_image_url": display_cover
+            or raw.get("source_image_url")
             or remote_shopify_image_url
+            or remote_dcbs_image_url
             or remote_midtown_image_url
             or base.source_image_url,
         }
@@ -625,12 +629,12 @@ def reenrich_retailer_order_route(
 
     raw = order.raw_snapshot_json if isinstance(order.raw_snapshot_json, dict) else {}
     linked_order_id = raw.get("comicos_linked_order_id")
-    if linked_order_id is None:
+    linked_acquisition_id = raw.get("comicos_linked_acquisition_id")
+    if linked_order_id is None and linked_acquisition_id is None:
         raise HTTPException(
             status_code=409,
             detail="Confirm this retailer order before re-running catalog enrichment.",
         )
-    linked_order_id = int(linked_order_id)
 
     # Avoid a circular import at module load time (materialization imports enrichment).
     from app.services.retailer_order_materialization import _find_import_for_retailer_order
@@ -651,13 +655,22 @@ def reenrich_retailer_order_route(
     item_snapshots = list_retailer_order_item_snapshots(
         session, order_snapshot_id=int(order.id or 0)
     )
-    apply_retailer_enrichment_to_confirmed_order(
-        session,
-        owner_user_id=owner_user_id,
-        order_id=linked_order_id,
-        draft_import=draft,
-        item_snapshots=item_snapshots,
-    )
+    if linked_order_id is not None:
+        apply_retailer_enrichment_to_confirmed_order(
+            session,
+            owner_user_id=owner_user_id,
+            order_id=int(linked_order_id),
+            draft_import=draft,
+            item_snapshots=item_snapshots,
+        )
+    else:
+        apply_retailer_enrichment_to_acquisition_inventory(
+            session,
+            owner_user_id=owner_user_id,
+            acquisition_id=int(linked_acquisition_id),
+            draft_import=draft,
+            item_snapshots=item_snapshots,
+        )
     refreshed_raw = dict(order.raw_snapshot_json or {})
     refreshed_raw["comicos_enrichment_summary"] = summary.as_dict()
     order.raw_snapshot_json = refreshed_raw
@@ -665,15 +678,16 @@ def reenrich_retailer_order_route(
     session.commit()
 
     logger.info(
-        "retailer_reenrich order_id=%s linked_order_id=%s matched=%s needs_review=%s",
+        "retailer_reenrich order_id=%s linked_order_id=%s linked_acquisition_id=%s matched=%s needs_review=%s",
         order_id,
         linked_order_id,
+        linked_acquisition_id,
         summary.matched_items,
         summary.needs_review_items,
     )
     return RetailerOrderReEnrichResponse(
         order_id=order_id,
-        linked_order_id=linked_order_id,
+        linked_order_id=int(linked_order_id) if linked_order_id is not None else None,
         enrichment_summary=summary.as_dict(),
         lines=[RetailerOrderLineDiagnostic(**diag.as_dict()) for diag in diagnostics],
     )

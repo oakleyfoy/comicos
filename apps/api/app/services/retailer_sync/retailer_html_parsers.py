@@ -83,6 +83,9 @@ _PUBLISHER_HINTS = (
     "vault",
     "titan",
     "archie",
+    "idw",
+    "konami",
+    "nickelodeon",
 )
 
 
@@ -491,7 +494,25 @@ def _parse_issue_and_cover(title: str) -> tuple[str | None, str | None]:
     cover_match = re.search(r"\b(Cover\s+[A-Z0-9]+)\b", title, flags=re.IGNORECASE)
     issue_number = issue_match.group(1) if issue_match else None
     cover_name = cover_match.group(1).title() if cover_match else None
+    if cover_name is None:
+        variant_match = re.search(r"\bVariant\s+([A-Z0-9]+)\b", title, flags=re.IGNORECASE)
+        if variant_match:
+            cover_name = f"Variant {variant_match.group(1).upper()}"
     return issue_number, cover_name
+
+
+def _normalize_dcbs_saved_image_src(src: str | None) -> tuple[str | None, str | None]:
+    if not src:
+        return None, None
+    cleaned = str(src).strip().replace("\\", "/")
+    if cleaned.startswith(("http://", "https://")):
+        return cleaned, cleaned
+    if cleaned.startswith("//"):
+        remote = f"https:{cleaned}"
+        return remote, remote
+    path = cleaned if cleaned.startswith("/") else f"/{cleaned}"
+    remote = f"https://www.dcbservice.com{path}"
+    return cleaned, remote
 
 
 class RetailerHtmlParser:
@@ -765,8 +786,16 @@ class DCBSSavedHtmlParser(GenericRetailerHtmlParser):
                 if code:
                     item.retailer_item_id = code
             if img.get("src"):
-                item.image_url = str(img["src"]).strip() or None
-                item.thumbnail_url = item.image_url
+                local_src, remote_src = _normalize_dcbs_saved_image_src(str(img["src"]))
+                if remote_src:
+                    item.image_url = remote_src
+                    item.thumbnail_url = remote_src
+                    item.parse_diagnostics = dict(item.parse_diagnostics or {})
+                    item.parse_diagnostics["remote_dcbs_image_url"] = remote_src
+                    if local_src and local_src != remote_src:
+                        item.parse_diagnostics["local_saved_image_path"] = local_src
+            if not item.publisher:
+                item.publisher = _detect_publisher(alt_title) or _detect_publisher(item.title)
             key = item.retailer_item_id or f"{item.title}|{item.quantity}|{item.unit_price}"
             if key in seen:
                 continue

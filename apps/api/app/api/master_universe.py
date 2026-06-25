@@ -17,6 +17,8 @@ from app.schemas.master_universe import (
     MasterUniverseVariantListResponse,
     MasterUniverseVolumeListResponse,
 )
+from app.schemas.master_universe_catalog_dashboard import MasterUniverseCatalogDashboardResponse
+from app.services.universe.master_universe_catalog_dashboard_service import get_master_universe_catalog_dashboard
 from app.services.universe.universe_acquisition_service import create_placeholder_from_universe_variant
 from app.services.universe.universe_issue_service import list_issues_for_volume, list_variants_for_issue
 from app.services.universe.universe_publisher_service import list_publishers
@@ -28,6 +30,24 @@ master_universe_v1_router = APIRouter(prefix="/api/v1/universe", tags=["Master U
 
 def attach_master_universe_layer(app) -> None:
     app.include_router(master_universe_v1_router)
+
+
+@master_universe_v1_router.get("/catalog-dashboard", response_model=MasterUniverseCatalogDashboardResponse)
+def master_universe_catalog_dashboard_endpoint(
+    search: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MasterUniverseCatalogDashboardResponse:
+    assert current_user.id is not None
+    return get_master_universe_catalog_dashboard(
+        session,
+        owner_user_id=int(current_user.id),
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @master_universe_v1_router.get("/publishers", response_model=MasterUniversePublisherListResponse)

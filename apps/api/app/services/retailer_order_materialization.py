@@ -26,7 +26,11 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.services.legacy_spine_availability import legacy_customer_order_table_exists
+from app.services.legacy_spine_availability import (
+    legacy_comic_issue_table_exists,
+    legacy_customer_order_table_exists,
+)
+from app.services.legacy_customer_orders_policy import legacy_customer_orders_writes_enabled
 
 from app.models import (
     Acquisition,
@@ -56,6 +60,7 @@ from app.services.retailer_order_catalog_enrichment import (
     apply_retailer_enrichment_to_confirmed_order,
     enrich_retailer_draft_import_for_confirm,
 )
+from app.services.retailer_sync.retailer_cover_urls import resolve_retailer_cover_url
 from app.services.retailer_order_draft_sync import (
     list_retailer_order_item_snapshots,
     sync_isolated_draft_import_for_retailer_order,
@@ -101,23 +106,33 @@ def run_retailer_order_enrichment(
     *,
     owner_user_id: int,
     order_snapshot_id: int,
-    order_id: int,
     draft_id: int,
+    order_id: int | None = None,
+    acquisition_id: int | None = None,
 ) -> None:
-    """Run best-effort catalog/cover enrichment against an already-confirmed order.
-
-    Opens its own DB session so it is safe to run on a background thread after the
-    confirm request has returned. All failures are logged, never raised.
-    """
+    """Run best-effort catalog/cover enrichment after confirm (order or acquisition spine)."""
     from app.db.session import get_engine
+    from app.services.retailer_order_catalog_enrichment import (
+        apply_retailer_enrichment_to_acquisition_inventory,
+        apply_retailer_enrichment_to_confirmed_order,
+    )
 
     start = time.monotonic()
-    logger.info("retailer_confirm_stage start stage=enrichment order_id=%s", order_id)
+    logger.info(
+        "retailer_confirm_stage start stage=enrichment order_id=%s acquisition_id=%s",
+        order_id,
+        acquisition_id,
+    )
     try:
         with Session(get_engine()) as bg_session:
             draft = bg_session.get(DraftImport, draft_id)
             if draft is None:
-                logger.warning("retailer_confirm_enrichment missing draft draft_id=%s order_id=%s", draft_id, order_id)
+                logger.warning(
+                    "retailer_confirm_enrichment missing draft draft_id=%s order_id=%s acquisition_id=%s",
+                    draft_id,
+                    order_id,
+                    acquisition_id,
+                )
                 return
             summary = enrich_retailer_draft_import_for_confirm(
                 bg_session,
@@ -127,13 +142,22 @@ def run_retailer_order_enrichment(
             item_snapshots = list_retailer_order_item_snapshots(
                 bg_session, order_snapshot_id=order_snapshot_id
             )
-            apply_retailer_enrichment_to_confirmed_order(
-                bg_session,
-                owner_user_id=owner_user_id,
-                order_id=order_id,
-                draft_import=draft,
-                item_snapshots=item_snapshots,
-            )
+            if order_id is not None:
+                apply_retailer_enrichment_to_confirmed_order(
+                    bg_session,
+                    owner_user_id=owner_user_id,
+                    order_id=order_id,
+                    draft_import=draft,
+                    item_snapshots=item_snapshots,
+                )
+            elif acquisition_id is not None:
+                apply_retailer_enrichment_to_acquisition_inventory(
+                    bg_session,
+                    owner_user_id=owner_user_id,
+                    acquisition_id=acquisition_id,
+                    draft_import=draft,
+                    item_snapshots=item_snapshots,
+                )
             order = bg_session.get(RetailerOrderSnapshot, order_snapshot_id)
             if order is not None:
                 raw = dict(order.raw_snapshot_json or {})
@@ -174,15 +198,17 @@ def _schedule_retailer_order_enrichment(
     *,
     owner_user_id: int,
     order_snapshot_id: int,
-    order_id: int,
     draft_id: int,
+    order_id: int | None = None,
+    acquisition_id: int | None = None,
 ) -> None:
     def _task() -> None:
         run_retailer_order_enrichment(
             owner_user_id=owner_user_id,
             order_snapshot_id=order_snapshot_id,
-            order_id=order_id,
             draft_id=draft_id,
+            order_id=order_id,
+            acquisition_id=acquisition_id,
         )
 
     try:
@@ -462,11 +488,17 @@ def _materialize_copies_on_acquisition(
             issue_number=issue_number,
             publisher=publisher,
         )
-        image_url = snapshot.image_url or snapshot.thumbnail_url
+        image_url = resolve_retailer_cover_url(
+            snapshot.raw_item_json if isinstance(snapshot.raw_item_json, dict) else None,
+            retailer=snapshot.retailer,
+            fallback_image_url=snapshot.image_url,
+            fallback_cover_image_url=snapshot.thumbnail_url,
+        )
         if draft_item is not None:
             image_url = (
                 getattr(draft_item, "cover_thumbnail_url", None)
                 or getattr(draft_item, "cover_image_url", None)
+                or getattr(draft_item, "retailer_cover_url", None)
                 or image_url
             )
         unit_cost = quantize_money(unit_price)
@@ -701,11 +733,7 @@ def _materialize_retailer_order_inventory_acquisition(
         total_items=len(item_snapshots),
     )
 
-    enrichment_summary = {
-        **_pending_enrichment_summary(len(item_snapshots)),
-        "status": "skipped_unified_spine",
-        "message": "Catalog enrichment for retailer orders requires the legacy order spine.",
-    }
+    enrichment_summary = _pending_enrichment_summary(len(item_snapshots))
     acquisition_id = int(acquisition.id or 0)
     _persist_materialization_on_snapshot(
         session,
@@ -724,6 +752,13 @@ def _materialize_retailer_order_inventory_acquisition(
     session.add(order)
     with _stage_timer("commit", order_number=order_number):
         session.commit()
+
+    _schedule_retailer_order_enrichment(
+        owner_user_id=owner_user_id,
+        order_snapshot_id=int(order.id or 0),
+        draft_id=int(draft.id),
+        acquisition_id=acquisition_id,
+    )
 
     return RetailerOrderMaterializationResult(
         order_id=None,
@@ -961,6 +996,17 @@ def _finalize_existing_order(
     )
 
 
+def _use_acquisition_retailer_materialization(session: Session) -> bool:
+    """Use acquisition copies when legacy customer_order writes are retired or spine is gone."""
+    if not legacy_customer_order_table_exists(session):
+        return True
+    if not legacy_customer_orders_writes_enabled():
+        return True
+    if not legacy_comic_issue_table_exists(session):
+        return True
+    return False
+
+
 def materialize_retailer_order_inventory(
     session: Session,
     *,
@@ -970,7 +1016,7 @@ def materialize_retailer_order_inventory(
 ) -> RetailerOrderMaterializationResult:
     """Create or reuse order/inventory from a retailer snapshot."""
     item_snapshots = list_retailer_order_item_snapshots(session, order_snapshot_id=int(order.id or 0))
-    if not legacy_customer_order_table_exists(session):
+    if _use_acquisition_retailer_materialization(session):
         return _materialize_retailer_order_inventory_acquisition(
             session,
             owner_user_id=owner_user_id,

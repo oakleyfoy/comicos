@@ -21677,6 +21677,48 @@ export interface MasterUniverseSummary {
   variant_count: number;
 }
 
+export interface MasterUniverseCatalogSourceCounts {
+  comicvine: number;
+  gcd: number;
+  other: number;
+  unknown: number;
+}
+
+export interface MasterUniverseCatalogDashboardSummary {
+  total_publishers: number;
+  universe_volume_count: number;
+  universe_issue_ceiling: number;
+  catalog_series_count: number;
+  catalog_issue_count: number;
+  missing_catalog_issues: number;
+  reference_tree_publishers: number;
+  reference_tree_issues: number;
+  reference_tree_variants: number;
+  inventory_copy_count: number;
+  inventory_linked_to_catalog: number;
+  inventory_unlinked: number;
+  catalog_source_counts: MasterUniverseCatalogSourceCounts;
+}
+
+export interface MasterUniverseCatalogPublisherRow {
+  publisher: string;
+  universe_volume_count: number;
+  universe_issue_ceiling: number;
+  catalog_series_count: number;
+  catalog_issue_count: number;
+  missing_catalog_issues: number;
+  inventory_copy_count: number;
+  primary_catalog_source: string | null;
+}
+
+export interface MasterUniverseCatalogDashboardResponse {
+  summary: MasterUniverseCatalogDashboardSummary;
+  rows: MasterUniverseCatalogPublisherRow[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
 export interface MasterUniversePublisherNode {
   id: number;
   name: string;
@@ -25539,6 +25581,18 @@ export const apiClient = {
   ): Promise<CatalogUniverseSearchResponse> {
     const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
     return requestScanV1Flat<CatalogUniverseSearchResponse>(`/catalog-universe/search?${params.toString()}`);
+  },
+
+  getMasterUniverseCatalogDashboard(
+    search?: string,
+    limit = 100,
+    offset = 0,
+  ): Promise<MasterUniverseCatalogDashboardResponse> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search?.trim()) params.set("search", search.trim());
+    return requestScanV1Flat<MasterUniverseCatalogDashboardResponse>(
+      `/universe/catalog-dashboard?${params.toString()}`,
+    );
   },
 
   listMasterUniversePublishers(

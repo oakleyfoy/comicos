@@ -498,16 +498,6 @@ export function RetailerOrderDetailPage() {
               </div>
             ) : null}
 
-            {!orderConfirmed ? (
-              <div className="mt-4">
-                <StatusBanner tone="info">
-                  <strong className="font-semibold">CAPTURED</strong> means this retailer order is saved in ComicOS only.
-                  Books are not in your portfolio until you click <strong className="font-semibold">Add to portfolio</strong>.
-                  Catalog badges can stay on “Review pending” until background matching runs; that does not block adding.
-                </StatusBanner>
-              </div>
-            ) : null}
-
             {isSaving ? (
               <div className="mt-4">
                 <StatusBanner tone="info">
@@ -520,15 +510,6 @@ export function RetailerOrderDetailPage() {
             {order.item_count === 0 || order.cover_image_count === 0 || order.price_count === 0 ? (
               <div className="mt-4">
                 <StatusBanner tone="warning">This capture may be incomplete.</StatusBanner>
-              </div>
-            ) : null}
-
-            {order.item_count > 0 && order.release_date_count < order.item_count ? (
-              <div className="mt-4">
-                <StatusBanner tone="info">
-                  Some release dates are still pending catalog review. ComicOS fills release and FOC dates from
-                  catalog data once each book is matched.
-                </StatusBanner>
               </div>
             ) : null}
 
