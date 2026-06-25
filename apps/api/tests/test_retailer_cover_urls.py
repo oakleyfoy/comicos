@@ -35,3 +35,19 @@ def test_resolve_dcbs_cover_from_retailer_item_id_only() -> None:
 def test_resolve_dcbs_cover_from_variant_cover_name() -> None:
     raw = {"cover_name": "Variant MAY265025"}
     assert resolve_retailer_cover_url(raw, retailer="dcbs") == _DCBS_MEDIA
+
+
+def test_resolve_dcbs_cover_from_saved_page_files_path() -> None:
+    # Saved-page exports store covers as "<Title>_files/<CODE>.jpg" on dcbservice.com.
+    saved = (
+        "https://www.dcbservice.com/./Order #970668 Detail - "
+        "Discount Comic Book Service_files/MAY265025.jpg"
+    )
+    raw = {"image_url": saved}
+    assert resolve_retailer_cover_url(raw, retailer="dcbs") == _DCBS_MEDIA
+    assert resolve_retailer_cover_url(raw, retailer="dcbs", fallback_image_url=saved) == _DCBS_MEDIA
+
+
+def test_absolutize_dcbs_saved_page_files_path() -> None:
+    saved = "https://www.dcbservice.com/x_files/MAY265025.jpg"
+    assert absolutize_retailer_image_url(saved, "dcbs") == _DCBS_MEDIA

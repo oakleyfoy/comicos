@@ -164,13 +164,16 @@ def _lookup_prior_inventory_issues(
         .where(func.lower(ComicTitle.name) == series_key)
     )
     if owner_user_id is not None:
+        # Reuse a single expression object so the coalesce() in SELECT and GROUP BY
+        # share the same bound parameter; otherwise Postgres rejects the GROUP BY.
+        pub_expr = publisher_expr()
         stmt = apply_inventory_spine_joins(
-            select(publisher_expr(), func.count()).select_from(InventoryCopy)
+            select(pub_expr, func.count()).select_from(InventoryCopy)
         ).where(
             func.lower(title_expr()) == series_key,
             InventoryCopy.user_id == owner_user_id,
         )
-        rows = session.exec(stmt.group_by(publisher_expr()).order_by(func.count().desc())).all()
+        rows = session.exec(stmt.group_by(pub_expr).order_by(func.count().desc())).all()
     else:
         from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
 

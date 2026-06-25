@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import extract, func
 from sqlmodel import Session, select
 
-from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc, CatalogVariant
 from app.models.intake_queue import ComicIssueBarcode
 from app.services.catalog_ingestion_service import (
     normalize_issue_number,
@@ -43,6 +44,29 @@ CREATE TABLE catalog_upc_cache (
 CREATE TABLE learned_barcode_cache (
   normalized_barcode TEXT PRIMARY KEY
 );
+CREATE TABLE catalog_enrichment_issue (
+  issue_id INTEGER PRIMARY KEY,
+  year INTEGER,
+  publisher_id INTEGER,
+  series_id INTEGER,
+  publisher_norm TEXT NOT NULL,
+  series_norm TEXT NOT NULL,
+  issue_norm TEXT NOT NULL,
+  publisher_name TEXT,
+  series_name TEXT,
+  issue_number TEXT,
+  cover_date TEXT,
+  release_date TEXT,
+  store_date TEXT,
+  title TEXT,
+  description TEXT,
+  external_source_ids TEXT,
+  variant_printing TEXT,
+  variant_variant_name TEXT,
+  has_upc INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_enrich_year ON catalog_enrichment_issue(year);
+CREATE INDEX IF NOT EXISTS ix_enrich_pub_year ON catalog_enrichment_issue(publisher_norm, year);
 """
 
 
@@ -145,6 +169,115 @@ def export_catalog_cache(session: Session, cache_path: Path) -> int:
             learned_batch = []
     if learned_batch:
         conn.executemany("INSERT OR IGNORE INTO learned_barcode_cache VALUES (?)", learned_batch)
+
+    issue_ids_with_upc: set[int] = set()
+    for iid in session.exec(select(CatalogUpc.issue_id)).all():
+        if iid is not None:
+            issue_ids_with_upc.add(int(iid))
+    primary_variant: dict[int, tuple[str | None, str | None]] = {}
+    for vid, iid, printing, variant_name in session.exec(
+        select(
+            CatalogVariant.id,
+            CatalogVariant.issue_id,
+            CatalogVariant.printing,
+            CatalogVariant.variant_name,
+        ).order_by(CatalogVariant.id.asc())
+    ).all():
+        if iid is None or int(iid) in primary_variant:
+            continue
+        primary_variant[int(iid)] = (printing, variant_name)
+
+    enrich_batch: list[tuple] = []
+    enrich_rows = session.exec(
+        select(
+            CatalogIssue.id,
+            CatalogIssue.series_id,
+            CatalogIssue.publisher_id,
+            CatalogIssue.issue_number,
+            CatalogIssue.normalized_issue_number,
+            CatalogIssue.cover_date,
+            CatalogIssue.release_date,
+            CatalogIssue.store_date,
+            CatalogIssue.title,
+            CatalogIssue.description,
+            CatalogIssue.external_source_ids,
+        )
+    ).all()
+    for (
+        issue_id,
+        series_id,
+        publisher_id,
+        issue_number,
+        norm_issue,
+        cover_date,
+        release_date,
+        store_date,
+        title,
+        description,
+        external_source_ids,
+    ) in enrich_rows:
+        if issue_id is None or series_id is None:
+            continue
+        series_name, _spub, start_year = series_meta.get(int(series_id), ("", None, None))
+        pub_name = pubs.get(int(publisher_id or 0), "") if publisher_id else ""
+        pub_norm = normalize_series_name(pub_name)
+        ser_norm = normalize_series_name(series_name)
+        iss_norm = normalize_issue_number(norm_issue or issue_number or "")
+        if not pub_norm or not ser_norm or not iss_norm:
+            continue
+        year = issue_year_key(
+            cover_date.year if cover_date is not None else None,
+            release_date.year if release_date is not None else (int(start_year) if start_year else None),
+        )
+        year_int = int(year) if isinstance(year, int) else None
+        v_print, v_name = primary_variant.get(int(issue_id), (None, None))
+        ext_json = json.dumps(external_source_ids or {}, separators=(",", ":"))
+        enrich_batch.append(
+            (
+                int(issue_id),
+                year_int,
+                int(publisher_id) if publisher_id else None,
+                int(series_id),
+                pub_norm,
+                ser_norm,
+                iss_norm,
+                pub_name,
+                series_name,
+                issue_number or "",
+                cover_date.isoformat() if cover_date else None,
+                release_date.isoformat() if release_date else None,
+                store_date.isoformat() if store_date else None,
+                title,
+                description,
+                ext_json,
+                v_print,
+                v_name,
+                1 if int(issue_id) in issue_ids_with_upc else 0,
+            )
+        )
+        if len(enrich_batch) >= 5000:
+            conn.executemany(
+                """
+                INSERT INTO catalog_enrichment_issue
+                (issue_id, year, publisher_id, series_id, publisher_norm, series_norm, issue_norm,
+                 publisher_name, series_name, issue_number, cover_date, release_date, store_date,
+                 title, description, external_source_ids, variant_printing, variant_variant_name, has_upc)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                enrich_batch,
+            )
+            enrich_batch = []
+    if enrich_batch:
+        conn.executemany(
+            """
+            INSERT INTO catalog_enrichment_issue
+            (issue_id, year, publisher_id, series_id, publisher_norm, series_norm, issue_norm,
+             publisher_name, series_name, issue_number, cover_date, release_date, store_date,
+             title, description, external_source_ids, variant_printing, variant_variant_name, has_upc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            enrich_batch,
+        )
 
     conn.commit()
     count = int(conn.execute("SELECT COUNT(*) FROM catalog_issue_cache").fetchone()[0])

@@ -1139,6 +1139,7 @@ from app.api.intake_queue import attach_intake_queue_layer
 from app.api.gpt_comic_read import attach_gpt_comic_read_layer
 from app.api.catalog_universe import attach_catalog_universe_layer
 from app.api.catalog_import_dashboard import attach_catalog_import_dashboard_layer
+from app.api.gcd_enrichment_dashboard import attach_gcd_enrichment_dashboard_layer
 from app.api.master_universe import attach_master_universe_layer
 from app.api.scan_reconciliation import attach_scan_reconciliation_layer
 from app.api.scan_defects import attach_scan_defects_layer
@@ -1384,6 +1385,7 @@ attach_intake_queue_layer(app)
 attach_gpt_comic_read_layer(app)
 attach_catalog_universe_layer(app)
 attach_catalog_import_dashboard_layer(app)
+attach_gcd_enrichment_dashboard_layer(app)
 attach_master_universe_layer(app)
 attach_scan_reconciliation_layer(app)
 attach_scan_defects_layer(app)

@@ -146,6 +146,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Master Universe", to: "/universe", prominent: true },
       { label: "Universe Tree", to: "/catalog-universe", prominent: true },
       { label: "GCD Import Dashboard", to: "/catalog/import", prominent: true },
+      { label: "GCD Enrichment (P103)", to: "/catalog/enrichment", prominent: true },
       { label: "Placeholder Match Queue", to: "/catalog-universe/placeholders" },
     ],
   },
@@ -218,7 +219,9 @@ export function findGroupIdForPath(pathname: string): string | null {
     pathname === "/catalog-universe" ||
     pathname.startsWith("/catalog-universe/") ||
     pathname === "/catalog/import" ||
-    pathname.startsWith("/catalog/import/")
+    pathname.startsWith("/catalog/import/") ||
+    pathname === "/catalog/enrichment" ||
+    pathname.startsWith("/catalog/enrichment/")
   ) {
     return "catalog";
   }

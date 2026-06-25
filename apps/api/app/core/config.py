@@ -175,6 +175,7 @@ class Settings(BaseSettings):
     )
     locg_import_enabled: bool = Field(default=True, alias="LOCG_IMPORT_ENABLED")
     gcd_import_enabled: bool = Field(default=True, alias="GCD_IMPORT_ENABLED")
+    gcd_enrichment_enabled: bool = Field(default=True, alias="GCD_ENRICHMENT_ENABLED")
     gcd_sqlite_path_raw: str = Field(default="", alias="GCD_SQLITE_PATH")
     comicvine_api_key: str = Field(default="", alias="COMICVINE_API_KEY")
     comicvine_api_base_url: str = Field(default="", alias="COMICVINE_API_BASE_URL")

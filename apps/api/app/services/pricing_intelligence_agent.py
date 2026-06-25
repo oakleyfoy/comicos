@@ -251,17 +251,21 @@ def _find_market_trend(
 
 
 def _order_history_quantities(session: Session, *, owner_user_id: int) -> dict[tuple[str, str], int]:
+    # Reuse single expression objects so SELECT/GROUP BY/ORDER BY share the same
+    # bound parameters; otherwise Postgres rejects the GROUP BY.
+    title_e = title_expr()
+    issue_e = issue_number_expr()
     rows = session.exec(
         apply_inventory_spine_joins(
             select(
-                title_expr().label("title"),
-                issue_number_expr().label("issue_number"),
+                title_e.label("title"),
+                issue_e.label("issue_number"),
                 func.sum(order_item_quantity_expr()).label("total_quantity"),
             ).select_from(InventoryCopy)
         )
         .where(InventoryCopy.user_id == owner_user_id)
-        .group_by(title_expr(), issue_number_expr())
-        .order_by(title_expr().asc(), issue_number_expr().asc())
+        .group_by(title_e, issue_e)
+        .order_by(title_e.asc(), issue_e.asc())
     ).all()
     return {(str(row.title), str(row.issue_number)): int(row.total_quantity or 0) for row in rows}
 

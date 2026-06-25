@@ -30,6 +30,14 @@ from app.services.p102_gcd_modern_acquisition_write_service import (  # noqa: E4
     run_p102_write_batch,
     validate_write_batch_args,
 )
+from gcd_pipeline_cli import (  # noqa: E402
+    add_confirm_write_argument,
+    add_gcd_cache_arguments,
+    add_json_argument,
+    add_output_argument,
+    add_refresh_cache_argument,
+    resolve_output_path,
+)
 
 DEFAULT_GCD = Path(r"C:\comic-os-p41-feed\data\p101\current\2026-06-15.db")
 OUT = Path("data/p102/gcd_modern_acquisition_dryrun.json")
@@ -95,22 +103,17 @@ def _print_write_summary(payload: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="P102 GCD modern acquisition dry-run / write-batch")
-    parser.add_argument("--gcd-db", default=str(DEFAULT_GCD))
-    parser.add_argument("--cache", default=str(DEFAULT_CACHE_PATH))
-    parser.add_argument("--refresh-cache", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--output", default=None, help="Report JSON path (default depends on mode)")
+    add_gcd_cache_arguments(parser, gcd_default=str(DEFAULT_GCD), cache_default=str(DEFAULT_CACHE_PATH))
+    add_refresh_cache_argument(parser)
+    add_json_argument(parser)
+    add_output_argument(parser, default=None, help_text="Report JSON path (default depends on mode)")
     parser.add_argument("--write-batch", action="store_true", help="Controlled catalog write (requires safety flags)")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--publisher", choices=FOCUS_PUBLISHERS, default=None)
     parser.add_argument("--year", type=int, default=None)
     parser.add_argument("--year-from", type=int, default=None)
     parser.add_argument("--year-to", type=int, default=None)
-    parser.add_argument(
-        "--confirm-write",
-        default=None,
-        help='Must be YES when using --write-batch',
-    )
+    add_confirm_write_argument(parser)
     args = parser.parse_args()
 
     gcd_path = Path(args.gcd_db)
@@ -140,7 +143,7 @@ def main() -> int:
             print(str(exc), file=sys.stderr)
             return 2
         assert filters is not None
-        out = Path(args.output or WRITE_OUT)
+        out = resolve_output_path(args, WRITE_OUT)
         with Session(get_engine()) as session:
             report = run_p102_write_batch(
                 session,
@@ -165,7 +168,7 @@ def main() -> int:
     payload = report.to_json()
     payload["elapsed_seconds"] = round(time.perf_counter() - t0, 2)
 
-    out = Path(args.output or OUT)
+    out = resolve_output_path(args, OUT)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 

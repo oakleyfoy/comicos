@@ -26,6 +26,13 @@ from app.services.gcd_barcode_import_service import GCD_SOURCE  # noqa: E402
 from app.services.gcd_catalog_import_dashboard_service import load_job_dashboard_dict  # noqa: E402
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity  # noqa: E402
 
+from gcd_pipeline_cli import (  # noqa: E402
+    add_audit_mode_arguments,
+    add_output_argument,
+    add_report_source_arguments,
+    resolve_output_path,
+)
+
 DEFAULT_REPORT = Path("data/p102/gcd_large_write_batch_report.json")
 OUT = Path("data/p102/gcd_large_write_batch_audit.json")
 
@@ -279,16 +286,9 @@ def run_full_audit(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="P102 write-batch post audit")
-    parser.add_argument("--report", default=str(DEFAULT_REPORT))
-    parser.add_argument("--job-id", type=int, default=None)
-    parser.add_argument("--output", default=str(OUT))
-    parser.add_argument("--barcode-samples", type=int, default=25)
-    parser.add_argument(
-        "--fast",
-        action="store_true",
-        help="Scoped audit: report counts, UPC count on inserted issue ids only, batch-local duplicates, barcode samples",
-    )
-    parser.add_argument("--json", action="store_true")
+    add_report_source_arguments(parser, default_report=str(DEFAULT_REPORT))
+    add_output_argument(parser, default=str(OUT))
+    add_audit_mode_arguments(parser, default_sample_size=25)
     args = parser.parse_args()
 
     timings: dict[str, float] = {}
@@ -309,7 +309,7 @@ def main() -> int:
                 written,
                 expected_issues,
                 expected_upcs,
-                args.barcode_samples,
+                args.sample_size,
                 timings,
             )
         else:
@@ -318,7 +318,7 @@ def main() -> int:
                 written,
                 expected_issues,
                 expected_upcs,
-                args.barcode_samples,
+                args.sample_size,
                 timings,
             )
 
@@ -372,7 +372,7 @@ def main() -> int:
         "errors_sample": errors[:30],
     }
 
-    out = Path(args.output)
+    out = resolve_output_path(args, OUT)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(audit, indent=2), encoding="utf-8")
 

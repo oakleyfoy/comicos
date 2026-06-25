@@ -367,6 +367,8 @@ export function PortfolioInventoryList(props: {
               </div>
             </div>
 
+            {!isExpanded ? (
+              <>
             <p className="mt-2 line-clamp-3 text-xs leading-snug text-slate-600">
               {item.publisher}
               <span className="text-slate-600"> · </span>
@@ -488,15 +490,40 @@ export function PortfolioInventoryList(props: {
                   onClick={toggleDetail}
                   className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
                 >
-                  {isExpanded ? "Close" : "Details"}
+                  Details
                 </button>
               </div>
             </div>
+              </>
+            ) : (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={toggleDetail}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+              </div>
+            )}
             </article>
             {isExpanded ? (
               <PortfolioInventoryCardExpand
+                item={item}
                 inventoryCopyId={id}
                 onClose={() => setExpandedCopyId(null)}
+                isSaving={isSaving}
+                fMvDrafts={fMvDrafts}
+                gradeDrafts={gradeDrafts}
+                holdDrafts={holdDrafts}
+                starDrafts={starDrafts}
+                normalizeDecimalInput={normalizeDecimalInput}
+                onFmvDraftChange={onFmvDraftChange}
+                onGradeDraftChange={onGradeDraftChange}
+                onHoldDraftChange={onHoldDraftChange}
+                onStarDraftChange={onStarDraftChange}
+                onSave={onSave}
+                onOpenNotes={onOpenNotes}
               />
             ) : null}
           </div>

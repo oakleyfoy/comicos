@@ -7,7 +7,7 @@ from ``catalog_issue`` + ``acquisition`` and denormalized fields on ``inventory_
 
 from __future__ import annotations
 
-from sqlalchemy import func, literal
+from sqlalchemy import func, literal, literal_column
 
 from app.models import (
     Acquisition,
@@ -20,16 +20,24 @@ from app.models import (
 from app.models.acquisition import AcquisitionPlaceholderIssue
 
 
+# Inline constant fallbacks (literal_column) instead of bound parameters so the
+# coalesce() SQL text is identical wherever the expression is reused. Postgres
+# matches GROUP BY against SELECT by expression text; bound params get distinct
+# placeholders in SELECT vs GROUP BY and break "must appear in GROUP BY" checks.
+_UNKNOWN = literal_column("'Unknown'")
+_EMPTY = literal_column("''")
+
+
 def title_expr():
-    return func.coalesce(CatalogSeries.name, AcquisitionPlaceholderIssue.title, "Unknown")
+    return func.coalesce(CatalogSeries.name, AcquisitionPlaceholderIssue.title, _UNKNOWN)
 
 
 def publisher_expr():
-    return func.coalesce(CatalogPublisher.name, AcquisitionPlaceholderIssue.publisher, "Unknown")
+    return func.coalesce(CatalogPublisher.name, AcquisitionPlaceholderIssue.publisher, _UNKNOWN)
 
 
 def issue_number_expr():
-    return func.coalesce(CatalogIssue.issue_number, AcquisitionPlaceholderIssue.issue_number, "")
+    return func.coalesce(CatalogIssue.issue_number, AcquisitionPlaceholderIssue.issue_number, _EMPTY)
 
 
 def cover_name_expr():

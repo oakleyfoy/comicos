@@ -24,6 +24,26 @@ _DCBS_FILES_PATH_RE = re.compile(
 )
 _DCBS_PRODUCT_CODE_RE = re.compile(r"^[A-Za-z0-9]+$")
 _DCBS_CODE_IN_TEXT_RE = re.compile(r"\b([A-Z]{3}\d{5,7})\b")
+# Saved-page exports store covers under "<Title>_files/<DIAMOND_CODE>.jpg".
+_DCBS_SAVED_PAGE_FILES_RE = re.compile(r"_files[/\\]", flags=re.IGNORECASE)
+# Any DCBS image whose filename is a Diamond product code (e.g. MAY264524.jpg).
+_DCBS_CODE_FILENAME_RE = re.compile(
+    r"([A-Za-z]{2,4}\d{5,7})\.(?:jpg|jpeg|png|webp|gif)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _dcbs_code_from_url(url: str | None) -> str | None:
+    if not url or not str(url).strip():
+        return None
+    normalized = str(url).strip().replace("\\", "/")
+    match = _DCBS_FILES_PATH_RE.search(normalized)
+    if match:
+        return match.group(1).upper()
+    fname_match = _DCBS_CODE_FILENAME_RE.search(normalized)
+    if fname_match:
+        return fname_match.group(1).upper()
+    return None
 
 
 def _dcbs_product_code_from_raw(raw: dict) -> str | None:
@@ -38,6 +58,10 @@ def _dcbs_product_code_from_raw(raw: dict) -> str | None:
         match = _DCBS_CODE_IN_TEXT_RE.search(cover_name.upper())
         if match:
             return match.group(1)
+    for key in ("cover_image_url", "source_image_url", "image_url", "thumbnail_url"):
+        code = _dcbs_code_from_url(raw.get(key) if isinstance(raw.get(key), str) else None)
+        if code:
+            return code
     return None
 
 
@@ -55,13 +79,18 @@ def remap_dcbs_cover_url(url: str | None, *, product_code: str | None = None) ->
     if not url or not str(url).strip():
         return None
     cleaned = str(url).strip()
-    match = _DCBS_FILES_PATH_RE.search(cleaned.replace("\\", "/"))
-    code = product_code or (match.group(1) if match else None)
+    normalized = cleaned.replace("\\", "/")
+    match = _DCBS_FILES_PATH_RE.search(normalized)
+    code = product_code or (match.group(1) if match else None) or _dcbs_code_from_url(normalized)
     media = dcbs_product_code_cover_url(code)
-    if media and (
+    if not media:
+        return cleaned
+    lowered = cleaned.casefold()
+    if (
         match is not None
-        or "dcbservice.com/files/" in cleaned.casefold()
-        or cleaned.casefold().startswith("/files/")
+        or _DCBS_SAVED_PAGE_FILES_RE.search(normalized) is not None
+        or "dcbservice.com" in lowered
+        or lowered.startswith("/files/")
     ):
         return media
     return cleaned
