@@ -19,6 +19,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Callable
 
 from fastapi import HTTPException
@@ -387,6 +388,22 @@ def _seller_label_for_retailer_order(*, account, order: RetailerOrderSnapshot) -
     return retailer or "Retailer"
 
 
+def _infer_retailer_order_total(
+    order: RetailerOrderSnapshot,
+    item_snapshots: list[RetailerOrderItemSnapshot],
+) -> Decimal:
+    if order.order_total is not None:
+        return quantize_money(order.order_total)
+    subtotal = Decimal("0")
+    for snapshot in item_snapshots:
+        qty = max(1, int(snapshot.quantity or 0))
+        if snapshot.total_price is not None:
+            subtotal += quantize_money(snapshot.total_price)
+        elif snapshot.unit_price is not None:
+            subtotal += quantize_money(snapshot.unit_price) * qty
+    return quantize_money(subtotal)
+
+
 def _create_retailer_order_acquisition(
     session: Session,
     *,
@@ -394,13 +411,14 @@ def _create_retailer_order_acquisition(
     order: RetailerOrderSnapshot,
     account,
     expected_qty: int,
+    item_snapshots: list[RetailerOrderItemSnapshot],
 ) -> Acquisition:
     acquisition = Acquisition(
         user_id=owner_user_id,
         acquisition_type=ACQUISITION_TYPE_LCS,
         purchase_date=order.order_date,
         seller_name=_seller_label_for_retailer_order(account=account, order=order),
-        total_paid=quantize_money(order.order_total or 0),
+        total_paid=_infer_retailer_order_total(order, item_snapshots),
         expected_book_count=expected_qty,
         status=ACQUISITION_STATUS_OPEN,
         notes=f"Retailer order #{order.retailer_order_number}",
@@ -451,7 +469,7 @@ def _materialize_copies_on_acquisition(
                 or getattr(draft_item, "cover_image_url", None)
                 or image_url
             )
-        unit_cost = quantize_money(unit_price or 0)
+        unit_cost = quantize_money(unit_price)
         for _ in range(qty):
             if catalog_link.catalog_issue_id is not None:
                 copy = create_received_catalog_copy(
@@ -643,6 +661,7 @@ def _materialize_retailer_order_inventory_acquisition(
             order=order,
             account=account,
             expected_qty=expected_qty,
+            item_snapshots=item_snapshots,
         )
         inventory_ids, line_debug = _materialize_copies_on_acquisition(
             session,

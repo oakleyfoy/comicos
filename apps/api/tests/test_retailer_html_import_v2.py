@@ -147,6 +147,46 @@ def test_third_eye_fetches_shopify_product_json_for_cover_and_release() -> None:
     assert inhyuk.release_date == date(2026, 5, 8)
 
 
+def test_third_eye_confirm_materializes_on_acquisition_spine(client, session, monkeypatch) -> None:
+    from app.services import retailer_order_materialization as materialization_module
+    from app.services.retailer_sync import retailer_html_parsers as parsers_module
+
+    monkeypatch.setattr(
+        materialization_module,
+        "legacy_customer_order_table_exists",
+        lambda _session: False,
+    )
+    monkeypatch.setattr(
+        parsers_module,
+        "_get_shopify_product_meta",
+        lambda _url: (None, None),
+    )
+
+    token = register_and_login(client, "third-eye-confirm@example.com")
+    imported = client.post(
+        "/api/v1/retailer-orders/import/html",
+        headers=auth_headers(token),
+        data={"retailer": "third_eye"},
+        files={
+            "file": (
+                "order.html",
+                _THIRD_EYE_CUSTOMER_ACCOUNT_HTML.encode("utf-8"),
+                "text/html",
+            )
+        },
+    )
+    assert imported.status_code == 201, imported.text
+    order_id = imported.json()["order_id"]
+
+    confirmed = client.post(f"/api/v1/retailer-orders/{order_id}/confirm", headers=auth_headers(token))
+    assert confirmed.status_code == 200, confirmed.text
+    body = confirmed.json()
+    assert body["review_status"] == "confirmed"
+    assert body["linked_acquisition_id"] is not None
+    assert body["inventory_copies_created"] == 3
+    assert body["portfolio_items_added"] == 3
+
+
 def test_registry_contains_all_supported_retailers() -> None:
     assert set(retailer_html_parsers) == {"midtown", "dcbs", "third_eye", "mycomicshop", "unknown"}
     assert retailer_html_parsers["midtown"].status == "supported"

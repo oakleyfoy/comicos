@@ -20,9 +20,11 @@ from app.models.acquisition import ALLOCATION_MODE_EVEN, ALLOCATION_MODE_MANUAL
 CENT = Decimal("0.01")
 
 
-def quantize_money(value: Decimal | None) -> Decimal:
+def quantize_money(value: Decimal | int | float | str | None) -> Decimal:
     if value is None:
         return Decimal("0.00")
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
     return value.quantize(CENT)
 
 
