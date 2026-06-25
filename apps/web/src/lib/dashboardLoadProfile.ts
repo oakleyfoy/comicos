@@ -130,8 +130,7 @@ export function dashboardShowsAutomationScanCards(profile: DashboardLoadProfile)
   return profile === "full";
 }
 
-export function buildDashboardWidgetPromises(
-  query: InventoryQueryParams,
+export function buildDashboardShellWidgetPromises(
   filters: DashboardPortfolioFilters,
   profile: DashboardLoadProfile,
 ): Record<string, Promise<unknown>> {
@@ -155,16 +154,6 @@ export function buildDashboardWidgetPromises(
     widgets.inventorySummary = apiClient.getInventorySummary();
   }
 
-  if (dashboardShowsInventoryGrid(profile)) {
-    widgets.inventoryList = apiClient.getInventory(query);
-  }
-
-  if (profile === "portfolio" || profile === "full") {
-    widgets.portfolioValue = apiClient.getPortfolioValueSummary(portfolioValueParams);
-    widgets.physicalIntake = apiClient.getPhysicalIntakeSummary();
-    widgets.inventoryArrivalTracking = apiClient.getInventoryArrivalTracking({ not_released_limit: 40 });
-  }
-
   if (profile === "collection" || profile === "full") {
     if (profile === "full") {
       widgets.portfolioPerformance = apiClient.getPortfolioPerformance();
@@ -184,4 +173,46 @@ export function buildDashboardWidgetPromises(
   }
 
   return widgets;
+}
+
+/** Heavy portfolio panels — loaded after first paint so the grid and summary appear quickly. */
+export function buildPortfolioDeferredWidgetPromises(
+  filters: DashboardPortfolioFilters,
+  profile: DashboardLoadProfile,
+): Record<string, Promise<unknown>> {
+  if (profile !== "portfolio" && profile !== "full") {
+    return {};
+  }
+  const portfolioValueParams = {
+    publisher: filters.publisher || undefined,
+    ownership_state: filters.ownershipIntelFilter || undefined,
+    valuation_scope: filters.valuationScopeFilter || undefined,
+    confidence_bucket: filters.confidenceBucketFilter || undefined,
+  };
+  return {
+    portfolioValue: apiClient.getPortfolioValueSummary(portfolioValueParams),
+    physicalIntake: apiClient.getPhysicalIntakeSummary(),
+    inventoryArrivalTracking: apiClient.getInventoryArrivalTracking({ not_released_limit: 40 }),
+  };
+}
+
+export function buildInventoryListWidgetPromises(
+  query: InventoryQueryParams,
+  profile: DashboardLoadProfile,
+): Record<string, Promise<unknown>> {
+  if (!dashboardShowsInventoryGrid(profile)) {
+    return {};
+  }
+  return { inventoryList: apiClient.getInventory(query) };
+}
+
+export function buildDashboardWidgetPromises(
+  query: InventoryQueryParams,
+  filters: DashboardPortfolioFilters,
+  profile: DashboardLoadProfile,
+): Record<string, Promise<unknown>> {
+  return {
+    ...buildDashboardShellWidgetPromises(filters, profile),
+    ...buildInventoryListWidgetPromises(query, profile),
+  };
 }

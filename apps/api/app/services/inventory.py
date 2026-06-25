@@ -59,8 +59,8 @@ from app.services.duplicate_candidate_reviews import (
 from app.services.duplicate_consolidation import inventory_duplicate_teaser
 from app.services.duplicate_ownership_intelligence import duplicate_ownership_inventory_context_for_owner
 from app.services.inventory_action_center import attachment_from_items, build_inventory_action_items
-from app.services.inventory_intelligence import compute_inventory_intelligence
-from app.services.inventory_risks import compute_inventory_risks
+from app.services.inventory_intelligence import compute_inventory_intelligence, inventory_intelligence_signals_for_ids
+from app.services.inventory_risks import compute_inventory_risks, _aggregate_risks, _inventory_projection_rows
 from app.services.order_arrival_intelligence import (
     batch_order_arrival_classifications,
     classifications_for_inventory_copy,
@@ -214,7 +214,6 @@ def build_inventory_detail_query(current_user: User):
             source_type_expr().label("source_type"),
             InventoryCopy.acquisition_cost.label("acquisition_cost"),
             InventoryCopy.current_fmv.label("current_fmv"),
-            InventoryCopy.metadata_identity_key.label("metadata_identity_key"),
             InventoryCopy.canonical_series_id.label("canonical_series_id"),
             gain_loss_expr,
             InventoryCopy.grade_status.label("grade_status"),
@@ -397,6 +396,200 @@ def apply_inventory_sort(stmt, sort_by: str | None, sort_dir: str):
     tie_breaker = InventoryCopy.id.desc() if sort_dir == "desc" else InventoryCopy.id.asc()
 
     return stmt.order_by(direction, tie_breaker)
+
+
+def _inventory_list_needs_full_enrichment_scan(
+    *,
+    intelligence_health: str | None,
+    ownership_intel: str | None,
+    ownership_state: str | None,
+    valuation_scope: str | None,
+    fmv_confidence_bucket: str | None,
+    fmv_liquidity_bucket: str | None,
+    fmv_stale_data: bool | None,
+    fmv_currency_code: str | None,
+    risk_priority: str | None,
+    risk_type: str | None,
+    needs_attention: bool,
+    action_attention: bool,
+    action_center_category: str | None,
+    arrival_classification: OrderArrivalClassification | None,
+) -> bool:
+    return bool(
+        intelligence_health
+        or ownership_intel
+        or ownership_state
+        or valuation_scope
+        or fmv_confidence_bucket
+        or fmv_liquidity_bucket
+        or fmv_stale_data is not None
+        or fmv_currency_code
+        or risk_priority
+        or risk_type
+        or needs_attention
+        or action_attention
+        or action_center_category
+        or arrival_classification
+    )
+
+
+def _inventory_row_from_query_row(
+    session: Session,
+    row,
+    *,
+    intel_signals: dict,
+    dup_attachments: dict,
+    run_attachments: dict,
+    risks_by_inventory: dict,
+    arrival_by_inventory: dict,
+    actions_by_inventory: dict,
+    organization_id: int | None,
+    org_assignment_metadata: dict,
+    org_review_metadata: dict,
+) -> InventoryRow:
+    row_map = dict(row._mapping)
+    inv_pk = int(row_map["inventory_copy_id"])
+    row_created_at = row_map.pop("row_created_at", None)
+    if row_map.get("order_date") is None and row_created_at is not None:
+        row_map["order_date"] = (
+            row_created_at.date() if hasattr(row_created_at, "date") else row_created_at
+        )
+    _apply_list_display_metadata(row_map)
+    intel = intel_signals.get(inv_pk)
+    row_map["inventory_intelligence"] = intel
+    row_map["ownership_state"] = intel.ownership_state if intel is not None else None
+    row_map["duplicate_ownership"] = dup_attachments.get(inv_pk)
+    row_map["run_detection"] = run_attachments.get(inv_pk)
+    row_map["inventory_risks"] = risks_by_inventory.get(inv_pk, [])
+    row_map["order_arrival_classifications"] = arrival_by_inventory.get(inv_pk, [])
+    row_map["inventory_action_center"] = attachment_from_items(actions_by_inventory.get(inv_pk, []))
+    fmv_attachment = build_inventory_fmv_attachment(session, row=row_map, include_detail=False)
+    row_map["current_market_fmv"] = fmv_attachment.current_market_fmv
+    p68_fmv = (fmv_attachment.valuation_evidence_json or {}).get("p68_authoritative_fmv")
+    if p68_fmv is not None:
+        row_map["current_fmv"] = quantize_money(Decimal(str(p68_fmv)))
+    row_map["fmv_snapshot_id"] = fmv_attachment.fmv_snapshot_id
+    row_map["fmv_method"] = fmv_attachment.fmv_method
+    row_map["fmv_confidence_bucket"] = fmv_attachment.fmv_confidence_bucket
+    row_map["fmv_liquidity_bucket"] = fmv_attachment.fmv_liquidity_bucket
+    row_map["fmv_volatility_bucket"] = fmv_attachment.fmv_volatility_bucket
+    row_map["fmv_stale_data"] = fmv_attachment.fmv_stale_data
+    row_map["fmv_currency_code"] = fmv_attachment.fmv_currency_code
+    row_map["valuation_scope"] = fmv_attachment.valuation_scope
+    row_map["valuation_evidence_json"] = fmv_attachment.valuation_evidence_json
+    if organization_id is not None:
+        meta = org_assignment_metadata.get(inv_pk, {})
+        row_map["organization_assignment_id"] = meta.get("organization_assignment_id")
+        row_map["organization_assigned_user_id"] = meta.get("organization_assigned_user_id")
+        row_map["organization_assignment_status"] = meta.get("organization_assignment_status")
+        row_map["organization_queue_name"] = meta.get("organization_queue_name")
+        row_map["organization_queue_position"] = meta.get("organization_queue_position")
+        review_meta = org_review_metadata.get(inv_pk, {})
+        row_map["organization_active_review_id"] = review_meta.get("organization_active_review_id")
+        row_map["organization_review_status"] = review_meta.get("organization_review_status")
+        row_map["organization_review_type"] = review_meta.get("organization_review_type")
+        row_map["organization_review_queue_name"] = review_meta.get("organization_review_queue_name")
+    return InventoryRow.model_validate(row_map)
+
+
+def _list_inventory_paginated_fast(
+    session: Session,
+    current_user: User,
+    *,
+    page: int,
+    page_size: int,
+    search: str | None,
+    publisher: str | None,
+    hold_status: str | None,
+    grade_status: str | None,
+    release_year: int | None,
+    release_calendar: ReleaseCalendarPresence | None,
+    asset_state: str | None,
+    sort_by: str | None,
+    sort_dir: str,
+    organization_id: int | None,
+    org_scope_ids: tuple[int, ...] | None,
+    org_assignment_metadata: dict,
+    org_review_metadata: dict,
+) -> InventoryListResponse:
+    user_id = int(current_user.id)
+    _, dup_attachments = duplicate_ownership_inventory_context_for_owner(
+        session,
+        user=current_user,
+        dup_scan_classification="all",
+    )
+    _, run_attachments = run_detection_inventory_context_for_owner(session, user=current_user)
+    arrival_by_inventory = batch_order_arrival_classifications(session, user_id=user_id)
+
+    filtered_stmt = apply_inventory_filters(
+        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
+        search=search,
+        publisher=publisher,
+        hold_status=hold_status,
+        grade_status=grade_status,
+        release_year=release_year,
+        release_calendar=release_calendar,
+        asset_state=asset_state,
+    )
+    total_stmt = _apply_inventory_spine_joins(
+        select(func.count()).select_from(InventoryCopy)
+    ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (user_id,)))
+    total_stmt = apply_inventory_filters(
+        total_stmt,
+        search=search,
+        publisher=publisher,
+        hold_status=hold_status,
+        grade_status=grade_status,
+        release_year=release_year,
+        release_calendar=release_calendar,
+        asset_state=asset_state,
+    )
+    total = int(session.exec(total_stmt).one())
+    if total == 0:
+        return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
+
+    offset = (page - 1) * page_size
+    page_stmt = apply_inventory_sort(filtered_stmt, sort_by, sort_dir).limit(page_size).offset(offset)
+    rows = session.exec(page_stmt).all()
+    page_ids = [int(row.inventory_copy_id) for row in rows]
+    if not page_ids:
+        return InventoryListResponse(page=page, page_size=page_size, total=total, items=[])
+
+    intel_signals = inventory_intelligence_signals_for_ids(session, current_user, page_ids)
+    risk_proj_rows = _inventory_projection_rows(session, user_id=user_id, inventory_copy_ids=page_ids)
+    risks_flat, risks_by_inventory = _aggregate_risks(
+        risk_proj_rows,
+        session=session,
+        current_user=current_user,
+    )
+    actions_by_inventory: defaultdict[int, list] = defaultdict(list)
+    for act in build_inventory_action_items(
+        session,
+        risk_rows=risks_flat,
+        signals_map=intel_signals,
+        arrival_map=arrival_by_inventory,
+        user_id_scope=user_id,
+        inventory_copy_ids=page_ids,
+    ):
+        actions_by_inventory[act.inventory_copy_id].append(act)
+
+    items = [
+        _inventory_row_from_query_row(
+            session,
+            row,
+            intel_signals=intel_signals,
+            dup_attachments=dup_attachments,
+            run_attachments=run_attachments,
+            risks_by_inventory=risks_by_inventory,
+            arrival_by_inventory=arrival_by_inventory,
+            actions_by_inventory=actions_by_inventory,
+            organization_id=organization_id,
+            org_assignment_metadata=org_assignment_metadata,
+            org_review_metadata=org_review_metadata,
+        )
+        for row in rows
+    ]
+    return InventoryListResponse(page=page, page_size=page_size, total=total, items=items)
 
 
 def build_portfolio_performance_query(current_user: User):
@@ -606,6 +799,43 @@ def list_inventory(
             organization_id=organization_id,
             inventory_item_ids=visible_ids,
         )
+
+    if not _inventory_list_needs_full_enrichment_scan(
+        intelligence_health=intelligence_health,
+        ownership_intel=ownership_intel,
+        ownership_state=ownership_state,
+        valuation_scope=valuation_scope,
+        fmv_confidence_bucket=fmv_confidence_bucket,
+        fmv_liquidity_bucket=fmv_liquidity_bucket,
+        fmv_stale_data=fmv_stale_data,
+        fmv_currency_code=fmv_currency_code,
+        risk_priority=risk_priority,
+        risk_type=risk_type,
+        needs_attention=needs_attention,
+        action_attention=action_attention,
+        action_center_category=action_center_category,
+        arrival_classification=arrival_classification,
+    ):
+        return _list_inventory_paginated_fast(
+            session,
+            current_user,
+            page=page,
+            page_size=page_size,
+            search=search,
+            publisher=publisher,
+            hold_status=hold_status,
+            grade_status=grade_status,
+            release_year=release_year,
+            release_calendar=release_calendar,
+            asset_state=asset_state,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            organization_id=organization_id,
+            org_scope_ids=org_scope_ids,
+            org_assignment_metadata=org_assignment_metadata,
+            org_review_metadata=org_review_metadata,
+        )
+
     _, _, _, intel_signals = compute_inventory_intelligence(
         session,
         current_user=current_user,
@@ -932,18 +1162,19 @@ def get_inventory_copy_detail(
     _detail_cover = _detail_catalog_cover_url(merged["cover_images"], merged.get("primary_cover_image_id"))
     if _detail_cover is not None:
         merged["cover_image_url"] = _detail_cover
-    _, _, _, intelligence_signals = compute_inventory_intelligence(
+    intelligence_signals = inventory_intelligence_signals_for_ids(
         session,
-        current_user=current_user,
-        include_signals=True,
+        current_user,
+        [inventory_copy_id],
     )
     _, dup_attachments = duplicate_ownership_inventory_context_for_owner(
         session,
         user=current_user,
         dup_scan_classification="all",
     )
-    merged["inventory_intelligence"] = intelligence_signals.get(inventory_copy_id)
-    merged["ownership_state"] = intelligence_signals.get(inventory_copy_id).ownership_state if intelligence_signals.get(inventory_copy_id) else None
+    intel = intelligence_signals.get(inventory_copy_id)
+    merged["inventory_intelligence"] = intel
+    merged["ownership_state"] = intel.ownership_state if intel is not None else None
     merged["duplicate_ownership"] = dup_attachments.get(inventory_copy_id)
     _, run_attachments = run_detection_inventory_context_for_owner(
         session,
@@ -951,7 +1182,16 @@ def get_inventory_copy_detail(
     )
     merged["run_detection"] = run_attachments.get(inventory_copy_id)
     arrival_map = batch_order_arrival_classifications(session, user_id=int(current_user.id))
-    _, risks_flat, risk_attach_map = compute_inventory_risks(session, current_user=current_user)
+    risk_proj_rows = _inventory_projection_rows(
+        session,
+        user_id=int(current_user.id),
+        inventory_copy_ids=[inventory_copy_id],
+    )
+    risks_flat, risk_attach_map = _aggregate_risks(
+        risk_proj_rows,
+        session=session,
+        current_user=current_user,
+    )
     merged["inventory_risks"] = risk_attach_map.get(inventory_copy_id, [])
     ledger = build_inventory_action_items(
         session,
@@ -959,6 +1199,7 @@ def get_inventory_copy_detail(
         signals_map=intelligence_signals,
         arrival_map=arrival_map,
         user_id_scope=int(current_user.id),
+        inventory_copy_ids=[inventory_copy_id],
     )
     scoped_actions = [a for a in ledger if a.inventory_copy_id == inventory_copy_id]
     merged["inventory_action_center"] = attachment_from_items(scoped_actions)

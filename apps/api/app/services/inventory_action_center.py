@@ -164,8 +164,15 @@ def build_inventory_action_items(
     signals_map: Mapping[int, InventoryCopyIntelligenceSignals],
     arrival_map: Mapping[int, list[OrderArrivalClassification]],
     user_id_scope: int | None,
+    inventory_copy_ids: Sequence[int] | None = None,
 ) -> list[InventoryActionCenterItem]:
-    projections = list(_inventory_projection_rows(session, user_id=user_id_scope))
+    projections = list(
+        _inventory_projection_rows(
+            session,
+            user_id=user_id_scope,
+            inventory_copy_ids=inventory_copy_ids,
+        ),
+    )
     if not projections:
         return []
 

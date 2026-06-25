@@ -1105,17 +1105,19 @@ export function InventoryDetailPage() {
       return;
     }
 
-    const [detailResponse, historyResponse] = await Promise.all([
-      apiClient.getInventoryCopy(parsedInventoryCopyId),
-      apiClient.getInventoryFmvHistory(parsedInventoryCopyId),
-    ]);
+    const detailResponse = await apiClient.getInventoryCopy(parsedInventoryCopyId);
     setDetail(detailResponse);
-    setHistory(historyResponse);
     setFmvDraft(detailResponse.current_fmv ?? "");
     setHoldDraft(detailResponse.hold_status);
     setGradeDraft(detailResponse.grade_status);
     setStarDraft(detailResponse.star_rating ? String(detailResponse.star_rating) : "");
     setNotesDraft(detailResponse.condition_notes ?? "");
+    try {
+      const historyResponse = await apiClient.getInventoryFmvHistory(parsedInventoryCopyId);
+      setHistory(historyResponse);
+    } catch {
+      setHistory([]);
+    }
   }
 
   async function handlePhysicalMarkReceived(): Promise<void> {
@@ -1563,21 +1565,29 @@ export function InventoryDetailPage() {
       }
 
       try {
-        const [detailResponse, historyResponse] = await Promise.all([
-          apiClient.getInventoryCopy(parsedInventoryCopyId),
-          apiClient.getInventoryFmvHistory(parsedInventoryCopyId),
-        ]);
+        const detailResponse = await apiClient.getInventoryCopy(parsedInventoryCopyId);
         if (ignore) {
           return;
         }
 
         setDetail(detailResponse);
-        setHistory(historyResponse);
         setFmvDraft(detailResponse.current_fmv ?? "");
         setHoldDraft(detailResponse.hold_status);
         setGradeDraft(detailResponse.grade_status);
         setStarDraft(detailResponse.star_rating ? String(detailResponse.star_rating) : "");
         setNotesDraft(detailResponse.condition_notes ?? "");
+
+        try {
+          const historyResponse = await apiClient.getInventoryFmvHistory(parsedInventoryCopyId);
+          if (!ignore) {
+            setHistory(historyResponse);
+          }
+        } catch (historyErr) {
+          if (!ignore) {
+            setHistory([]);
+            console.warn("FMV history failed to load", historyErr);
+          }
+        }
       } catch (loadError) {
         if (!ignore) {
           setError(loadError instanceof Error ? loadError.message : "Unable to load inventory copy.");

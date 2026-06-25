@@ -69,7 +69,7 @@ describe("ConnectedRetailersPage Midtown browser entry", () => {
     expect(await screen.findByRole("heading", { name: "Connected Retailers" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load My Midtown Orders" }));
     expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown/orders");
-    fireEvent.click(screen.getByRole("button", { name: "Open Live Browser (Fallback)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Live browser (security check)" }));
     expect(navigateMock).toHaveBeenCalledWith("/connected-retailers/midtown");
   });
 });

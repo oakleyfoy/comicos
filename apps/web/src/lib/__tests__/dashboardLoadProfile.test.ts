@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDashboardWidgetPromises, type DashboardLoadProfile } from "../dashboardLoadProfile";
+import {
+  buildDashboardWidgetPromises,
+  buildDashboardShellWidgetPromises,
+  buildPortfolioDeferredWidgetPromises,
+  type DashboardLoadProfile,
+} from "../dashboardLoadProfile";
 
 describe("buildDashboardWidgetPromises", () => {
   const filters = {
@@ -12,8 +17,16 @@ describe("buildDashboardWidgetPromises", () => {
   const query = { page: 1, page_size: 25, sort_by: "purchase_date" as const, sort_dir: "asc" as const };
 
   it("portfolio profile requests only a small widget set", () => {
+    const shellKeys = Object.keys(buildDashboardShellWidgetPromises(filters, "portfolio")).sort();
+    expect(shellKeys).toEqual(["inventorySummary"]);
+    const deferredKeys = Object.keys(buildPortfolioDeferredWidgetPromises(filters, "portfolio")).sort();
+    expect(deferredKeys).toEqual(
+      ["inventoryArrivalTracking", "physicalIntake", "portfolioValue"].sort(),
+    );
     const keys = Object.keys(buildDashboardWidgetPromises(query, filters, "portfolio")).sort();
-    expect(keys).toEqual(["inventoryList", "inventorySummary", "physicalIntake", "portfolioValue"].sort());
+    expect(keys).toEqual(
+      ["inventoryArrivalTracking", "inventoryList", "inventorySummary", "physicalIntake", "portfolioValue"].sort(),
+    );
   });
 
   it("collection profile adds analytics widgets without portfolio value batch", () => {

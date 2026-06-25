@@ -578,7 +578,7 @@ export function ConnectedRetailersPage() {
       <PageHeader
         eyebrow="Settings"
         title="Connected Retailers"
-        description="Connect a user-owned Midtown Comics account and open Midtown inside ComicOS to choose an order."
+        description="Connect your Midtown Comics login to load orders in ComicOS, or import a saved order HTML file from any supported retailer."
       />
 
       <section className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
@@ -587,9 +587,8 @@ export function ConnectedRetailersPage() {
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
             <h2 className="text-2xl font-semibold text-white">Load your Midtown orders</h2>
             <p className="max-w-2xl text-sm text-slate-300">
-              ComicOS signs in to Midtown with your saved credentials, pulls your order history, and lists
-              it here so you can pick an order to capture. The live browser is only needed if Midtown asks
-              for a one-time security check.
+              Save your Midtown username and password here, then load your order history inside ComicOS. ComicOS
+              currently supports automatic sync for Midtown only; use import below for other retailers.
             </p>
             <div className="flex flex-wrap gap-3 pt-1 text-sm text-slate-200">
               <span className={`inline-flex rounded-full border px-3 py-1 ${statusBadgeClass(account?.status ?? "pending")}`}>
@@ -600,35 +599,164 @@ export function ConnectedRetailersPage() {
               </span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/connected-retailers/import")}
-              className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
-            >
-              Import Saved Retailer Order
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/connected-retailers/midtown/upload")}
-              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-            >
-              Upload Saved Midtown Order
-            </button>
+          <div className="flex flex-col gap-3 sm:items-end">
             <button
               type="button"
               onClick={() => navigate("/connected-retailers/midtown/orders")}
-              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              className="w-full rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 sm:w-auto"
             >
               Load My Midtown Orders
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("/connected-retailers/midtown")}
-              className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
-            >
-              Open Live Browser (Fallback)
-            </button>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400">
+              <button
+                type="button"
+                onClick={() => navigate("/connected-retailers/import")}
+                className="font-medium text-cyan-200/90 underline-offset-2 hover:text-cyan-100 hover:underline"
+              >
+                Import saved order file
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/connected-retailers/midtown/upload")}
+                className="font-medium text-slate-300 underline-offset-2 hover:text-white hover:underline"
+              >
+                Upload Midtown HTML
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/connected-retailers/midtown")}
+                className="font-medium text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+              >
+                Live browser (security check)
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="midtown-account"
+        className="mt-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20"
+      >
+        <div className="flex flex-col gap-6 lg:flex-row lg:justify-between">
+          <div className="space-y-3 max-w-xl">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Account</p>
+              <h2 className="mt-1 text-2xl font-semibold text-white">
+                {account ? "Midtown credentials" : "Connect Midtown Comics"}
+              </h2>
+            </div>
+            {isLoading ? (
+              <p className="text-sm text-slate-400">Loading retailer account status...</p>
+            ) : (
+              <div className="space-y-3 text-sm text-slate-300">
+                {account ? (
+                  <>
+                    <p>
+                      Stored username:{" "}
+                      <span className="font-medium text-white">{account.masked_username ?? "None"}</span>
+                    </p>
+                    <p>
+                      Last sync:{" "}
+                      <span className="font-medium text-white">{formatDateTime(account.last_sync_at)}</span>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-300">
+                    Add your Midtown login to sync orders automatically. You can still import saved HTML files
+                    without connecting an account.
+                  </p>
+                )}
+                {account?.last_error ? (
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-rose-100">
+                    <p className="font-semibold">Last sync error</p>
+                    <p className="mt-2 text-sm">{account.last_error}</p>
+                    {needsAttention.suggestedNextStep ? (
+                      <p className="mt-2 text-sm text-rose-50">{needsAttention.suggestedNextStep}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div className="w-full max-w-xl space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm text-slate-200">
+                <span className="font-medium">Display name</span>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-200">
+                <span className="font-medium">Username or email</span>
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder={account ? "Leave blank to keep current username" : "Midtown username"}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+                />
+              </label>
+            </div>
+            <label className="space-y-2 text-sm text-slate-200">
+              <span className="font-medium">{account ? "Replace password" : "Password"}</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={account ? "Leave blank to keep current password" : "Midtown password"}
+                className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+              />
+            </label>
+            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={syncEnabled}
+                disabled={isLoading || isWorking}
+                onChange={(event) => void handleSyncToggle(event.target.checked)}
+              />
+              <span className="font-medium">Enable automatic order sync</span>
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                disabled={isLoading || isWorking}
+                onClick={() => void handleSaveAccount()}
+                className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isWorking ? "Working…" : account ? "Save credentials" : "Connect Midtown"}
+              </button>
+              {account ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={isLoading || isWorking || retryBlocked}
+                    onClick={() => void handleTestConnection()}
+                    className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {retryBlocked ? "Retry later" : "Test connection"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLoading || isWorking || retryBlocked}
+                    onClick={() => void handleSyncNow()}
+                    className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {retryBlocked ? "Sync paused" : "Sync now"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLoading || isWorking}
+                    onClick={() => void handleDisconnect()}
+                    className="rounded-2xl border border-rose-400/30 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
@@ -734,149 +862,78 @@ export function ConnectedRetailersPage() {
             ) : null}
 
             <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
-              <div className="flex flex-col gap-6 lg:flex-row lg:justify-between">
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Midtown Comics</p>
-                    <h2 className="mt-1 text-2xl font-semibold text-white">Account Connection</h2>
-                  </div>
-                  {isLoading ? (
-                    <p className="text-sm text-slate-400">Loading retailer account status...</p>
-                  ) : (
-                    <div className="space-y-3 text-sm text-slate-300">
-                      <div className="flex flex-wrap gap-3">
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(account?.status ?? 'pending')}`}>
-                          {account?.status ?? 'Not connected'}
-                        </span>
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusBadgeClass(runs[0]?.status ?? 'pending')}`}>
-                          {runs[0]?.status ?? 'No sync run yet'}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.16em]">
-                        <span className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.connected ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-slate-600 bg-slate-900 text-slate-400'}`}>
-                          Extension Connected
-                        </span>
-                        <span className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.midtownPageDetected ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200' : 'border-slate-600 bg-slate-900 text-slate-400'}`}>
-                          Midtown Page Detected
-                        </span>
-                        <span className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.domReadSuccess ? 'border-violet-400/20 bg-violet-400/10 text-violet-200' : 'border-slate-600 bg-slate-900 text-slate-400'}`}>
-                          DOM Read Success
-                        </span>
-                      </div>
-                      {extensionCaptureStatus.lastMessage ? (
-                        <p className="text-xs text-slate-400">{extensionCaptureStatus.lastMessage}</p>
-                      ) : null}
-                      <p>
-                        Stored username: <span className="font-medium text-white">{account?.masked_username ?? 'None'}</span>
-                      </p>
-                      <p>
-                        Last sync: <span className="font-medium text-white">{formatDateTime(account?.last_sync_at)}</span>
-                      </p>
-                      <p>
-                        Last success: <span className="font-medium text-white">{formatDateTime(account?.last_success_at)}</span>
-                      </p>
-                      {account?.last_error ? (
-                        <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-rose-100">
-                          <p className="font-semibold">Last sync error</p>
-                          <p className="mt-2 text-sm">{account.last_error}</p>
-                          {needsAttention.actionRequired ? <p className="mt-3 text-sm text-rose-50">{needsAttention.actionRequired}</p> : null}
-                          {needsAttention.retryAllowedAt ? <p className="mt-2 text-sm text-rose-50">Retry after: {formatDateTime(needsAttention.retryAllowedAt)}</p> : null}
-                          {needsAttention.suggestedNextStep ? <p className="mt-2 text-sm text-rose-50">{needsAttention.suggestedNextStep}</p> : null}
-                        </div>
-                      ) : null}
-                      {needsAttention.challengeDetected ? (
-                        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-amber-100">
-                          <p className="font-semibold">Midtown challenge handling</p>
-                          <p className="mt-2 text-sm">The app now keeps the account in <code>needs_attention</code> and uses a safer retry path. Avoid repeated retries until the cooldown passes.</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Chrome extension</p>
+                  <h2 className="mt-1 text-xl font-semibold text-white">Extension capture (dev)</h2>
                 </div>
-
-                <div className="w-full max-w-xl space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2 text-sm text-slate-200">
-                      <span className="font-medium">Display name</span>
-                      <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60" />
-                    </label>
-                    <label className="space-y-2 text-sm text-slate-200">
-                      <span className="font-medium">Username or email</span>
-                      <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder={account ? 'Leave blank to keep current username' : 'midtown username'} className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60" />
-                    </label>
-                  </div>
-                  <label className="space-y-2 text-sm text-slate-200">
-                    <span className="font-medium">{account ? 'Replace password' : 'Password'}</span>
-                    <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={account ? 'Leave blank to keep current password' : 'Midtown password'} className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-400/60" />
-                  </label>
-                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
-                    <input type="checkbox" checked={syncEnabled} disabled={isLoading || isWorking} onChange={(event) => void handleSyncToggle(event.target.checked)} />
-                    <span className="font-medium">Enable sync for this account</span>
-                  </label>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button type="button" disabled={isLoading || isWorking} onClick={() => void handleSaveAccount()} className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
-                      {isWorking ? 'Working...' : account ? 'Update Midtown Account' : 'Connect Midtown'}
-                    </button>
-                    <button type="button" disabled={isLoading || isWorking || !account || retryBlocked} onClick={() => void handleTestConnection()} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60">
-                      {retryBlocked ? 'Retry Later' : 'Test Connection'}
-                    </button>
-                    <button type="button" disabled={isLoading || isWorking || !account || retryBlocked} onClick={() => void handleSyncNow()} className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-300/40 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60">
-                      {retryBlocked ? 'Sync Paused' : 'Sync Now'}
-                    </button>
-                    <button type="button" disabled={isLoading || isWorking || !account || !midtownExtensionReady} onClick={() => void handleCaptureMidtownOrder()} className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60">
-                      Capture Midtown Order
-                    </button>
-                    <button type="button" disabled={isLoading || isWorking || !account} onClick={() => void handleDisconnect()} className="rounded-2xl border border-rose-400/30 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-60">
-                      Remove Midtown and start over
-                    </button>
-                  </div>
-                  <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-slate-200">
-                    <p className="font-semibold text-white">New here? Follow these 3 steps.</p>
-                    <p className="mt-2">Comicos uses a small Chrome extension to read the Midtown order detail page you already have open, then sends it back here for import.</p>
-                    <div className="mt-4 space-y-3">
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 1</p>
-                        <p className="mt-1 font-semibold text-white">Install the Midtown extension</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          {midtownExtensionInstallUrl ? (
-                            <a href={midtownExtensionInstallUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-400/10">Install Midtown Extension</a>
-                          ) : (
-                            <button type="button" disabled className="inline-flex cursor-not-allowed rounded-xl border border-slate-500/40 px-4 py-2 font-semibold text-slate-400 opacity-70">Install Midtown Extension</button>
-                          )}
-                          <p className="text-slate-300">Install it once, then come back here and refresh Comicos.</p>
-                        </div>
-                        {!midtownExtensionInstallUrl ? (
-                          <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-amber-100">The store link is not configured yet. When Chrome review is approved, set <code className="mx-1 rounded bg-black/20 px-1.5 py-0.5 text-xs">VITE_MIDTOWN_EXTENSION_INSTALL_URL</code> in the frontend environment and redeploy so this button opens the Chrome Web Store page.</p>
-                        ) : null}
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 2</p>
-                        <p className="mt-1 font-semibold text-white">Refresh Comicos until the extension is detected</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <span className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${midtownExtensionReady ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100' : 'border-amber-400/30 bg-amber-400/10 text-amber-100'}`}>
-                            {midtownExtensionReady ? 'Extension connected' : 'Extension not detected'}
-                          </span>
-                          <p className="text-slate-300">{midtownExtensionReady ? 'You are ready to capture an order.' : 'If this still says not detected, the extension is not installed in this browser yet.'}</p>
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 3</p>
-                        <p className="mt-1 font-semibold text-white">Open the Midtown order detail page and capture it</p>
-                        <p className="mt-2 text-slate-300">Open the order you want to review, then click <span className="font-medium text-white">Capture Midtown Order</span>. After capture, review the retailer order directly in ComicOS.</p>
-                      </div>
-                    </div>
-                    {localSyncSession ? <p className="mt-3 text-cyan-100">Waiting for Midtown capture. Capture token expires {formatDateTime(localSyncSession.captureTokenExpiresAt)}.</p> : null}
-                    {showAnotherMidtownPrompt ? (
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-                        <p className="text-sm text-slate-200">Capture another Midtown order?</p>
-                        <div className="mt-3 flex flex-wrap gap-3">
-                          <button type="button" disabled={isLoading || isWorking || !account} onClick={() => void handleImportAnotherMidtownOrder()} className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">Yes, capture another</button>
-                          <button type="button" onClick={() => setShowAnotherMidtownPrompt(false)} className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5">No, I&apos;m done</button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
+                <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.16em]">
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.connected ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200" : "border-slate-600 bg-slate-900 text-slate-400"}`}
+                  >
+                    Extension connected
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.midtownPageDetected ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-900 text-slate-400"}`}
+                  >
+                    Midtown page detected
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 ${extensionCaptureStatus.domReadSuccess ? "border-violet-400/20 bg-violet-400/10 text-violet-200" : "border-slate-600 bg-slate-900 text-slate-400"}`}
+                  >
+                    DOM read success
+                  </span>
                 </div>
+                {extensionCaptureStatus.lastMessage ? (
+                  <p className="text-xs text-slate-400">{extensionCaptureStatus.lastMessage}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={isLoading || isWorking || !account || !midtownExtensionReady}
+                    onClick={() => void handleCaptureMidtownOrder()}
+                    className="rounded-2xl border border-cyan-400/30 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Capture Midtown order
+                  </button>
+                  {midtownExtensionInstallUrl ? (
+                    <a
+                      href={midtownExtensionInstallUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+                    >
+                      Install extension
+                    </a>
+                  ) : null}
+                </div>
+                {localSyncSession ? (
+                  <p className="text-sm text-cyan-100">
+                    Waiting for capture. Token expires {formatDateTime(localSyncSession.captureTokenExpiresAt)}.
+                  </p>
+                ) : null}
+                {showAnotherMidtownPrompt ? (
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                    <p className="text-sm text-slate-200">Capture another Midtown order?</p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        disabled={isLoading || isWorking || !account}
+                        onClick={() => void handleImportAnotherMidtownOrder()}
+                        className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Yes, capture another
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAnotherMidtownPrompt(false)}
+                        className="rounded-2xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/5"
+                      >
+                        No, I&apos;m done
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </section>
 

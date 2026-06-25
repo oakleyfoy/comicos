@@ -71,7 +71,21 @@ describe("ConnectedRetailersPage", () => {
     expect(screen.getByText(/Status: Connected/i)).toBeInTheDocument();
     expect(screen.getByText(/Last successful session:/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load My Midtown Orders" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Live Browser (Fallback)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save credentials" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import saved order file" })).toBeInTheDocument();
+  });
+
+  it("shows connect form when no retailer account exists", async () => {
+    vi.spyOn(apiClient, "getRetailerAccounts").mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <ConnectedRetailersPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Connect Midtown" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connect Midtown Comics" })).toBeInTheDocument();
   });
 
   it("keeps the legacy tools collapsed by default", async () => {
@@ -87,7 +101,6 @@ describe("ConnectedRetailersPage", () => {
 
     fireEvent.click(screen.getAllByText("Advanced legacy extension tools")[0]);
     expect((legacyTools as HTMLDetailsElement).open).toBe(true);
-    expect(screen.getAllByRole("button", { name: "Capture Midtown Order" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "Install Midtown Extension" })[0]).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Capture Midtown order" }).length).toBeGreaterThan(0);
   });
 });

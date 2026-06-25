@@ -5,7 +5,10 @@ import { describeHistoricalTimelineEvent, timelineDotClass } from "../lib/collec
 import { DashboardProfileTabs } from "../components/DashboardProfileTabs";
 import { CollectionInsightsSummaryStrip } from "../components/CollectionInsightsSummaryStrip";
 import {
+  buildPortfolioDeferredWidgetPromises,
+  buildDashboardShellWidgetPromises,
   buildDashboardWidgetPromises,
+  buildInventoryListWidgetPromises,
   dashboardLoadsDealerEffects,
   dashboardLoadsGradingEffects,
   dashboardLoadsMarketEffects,
@@ -871,6 +874,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   const [sortBy, setSortBy] = useState<SortBy>("purchase_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [isLoading, setIsLoading] = useState(true);
+  const [inventoryListLoading, setInventoryListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [receivingCopyIds, setReceivingCopyIds] = useState<ReadonlySet<number>>(() => new Set());
@@ -1373,22 +1377,28 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
   useEffect(() => {
     let ignore = false;
 
-    async function fetchData() {
+    async function fetchShellWidgets() {
       setIsLoading(true);
       setError(null);
 
       const { data, errors } = await settleDashboardWidgets(
-        buildDashboardWidgetPromises(inventoryQuery, dashboardPortfolioFilters, loadProfile),
+        buildDashboardShellWidgetPromises(dashboardPortfolioFilters, loadProfile),
       );
 
       if (ignore) {
         return;
       }
 
-      setDashboardWidgetErrors(errors);
+      setDashboardWidgetErrors((current) => {
+        const next = { ...current };
+        for (const key of Object.keys(errors)) {
+          next[key as DashboardWidgetKey] = errors[key as DashboardWidgetKey];
+        }
+        return next;
+      });
       applyDashboardWidgetResults(data);
 
-      const hasInventoryData = Boolean(data.inventorySummary || data.inventoryList);
+      const hasInventoryData = Boolean(data.inventorySummary);
       if (!hasInventoryData && Object.keys(data).length === 0) {
         setError("Unable to load dashboard.");
       }
@@ -1396,12 +1406,87 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
       setIsLoading(false);
     }
 
-    void fetchData();
+    void fetchShellWidgets();
 
     return () => {
       ignore = true;
     };
-  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, inventoryQuery, loadProfile]);
+  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, loadProfile]);
+
+  useEffect(() => {
+    if (loadProfile !== "portfolio" && loadProfile !== "full") {
+      return;
+    }
+
+    let ignore = false;
+
+    async function fetchDeferredPortfolioWidgets() {
+      const { data, errors } = await settleDashboardWidgets(
+        buildPortfolioDeferredWidgetPromises(dashboardPortfolioFilters, loadProfile),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      setDashboardWidgetErrors((current) => {
+        const next = { ...current };
+        for (const key of Object.keys(errors)) {
+          next[key as DashboardWidgetKey] = errors[key as DashboardWidgetKey];
+        }
+        return next;
+      });
+      applyDashboardWidgetResults(data);
+    }
+
+    void fetchDeferredPortfolioWidgets();
+
+    return () => {
+      ignore = true;
+    };
+  }, [applyDashboardWidgetResults, dashboardPortfolioFilters, loadProfile]);
+
+  useEffect(() => {
+    if (!showInventoryGrid) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function fetchInventoryList() {
+      setInventoryListLoading(true);
+      setError(null);
+
+      const { data, errors } = await settleDashboardWidgets(
+        buildInventoryListWidgetPromises(inventoryQuery, loadProfile),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      setDashboardWidgetErrors((current) => {
+        const next = { ...current };
+        for (const key of Object.keys(errors)) {
+          next[key as DashboardWidgetKey] = errors[key as DashboardWidgetKey];
+        }
+        return next;
+      });
+      applyDashboardWidgetResults(data);
+
+      if (errors.inventoryList && !data.inventoryList) {
+        setError(`Inventory list: ${errors.inventoryList}`);
+      }
+
+      setInventoryListLoading(false);
+    }
+
+    void fetchInventoryList();
+
+    return () => {
+      ignore = true;
+    };
+  }, [applyDashboardWidgetResults, inventoryQuery, loadProfile, showInventoryGrid]);
 
   useEffect(() => {
     if (loadsDealerData) {
@@ -7730,7 +7815,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                   Page {page} of {pageCount} with {total} tracked copies
                 </p>
               </div>
-              {isLoading ? <p className="text-sm text-slate-600">Refreshing inventory...</p> : null}
+              {inventoryListLoading ? <p className="text-sm text-slate-600">Refreshing inventory...</p> : null}
             </div>
           </div>
 
@@ -7774,6 +7859,11 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 />
                 <span>Select all on this page</span>
               </div>
+              <div
+                className={
+                  inventoryListLoading ? "pointer-events-none opacity-60 transition-opacity" : "transition-opacity"
+                }
+              >
               <PortfolioInventoryList
                 inventory={inventory}
                 selectedIds={selectedIds}
@@ -7804,13 +7894,14 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
                 receivingCopyIds={receivingCopyIds}
                 onMarkReceived={(id) => void markInventoryCopyReceived(id)}
               />
+              </div>
             </>
           )}
 
           <div className="flex items-center justify-between border-t border-slate-200 px-5 py-4">
             <button
               type="button"
-              disabled={page === 1}
+              disabled={page === 1 || inventoryListLoading}
               onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
               className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-blue-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:opacity-100"
             >
@@ -7821,7 +7912,7 @@ export function DashboardPage({ loadProfile = "portfolio" }: { loadProfile?: Das
             </span>
             <button
               type="button"
-              disabled={page >= pageCount}
+              disabled={page >= pageCount || inventoryListLoading}
               onClick={() => setPage((currentPage) => Math.min(pageCount, currentPage + 1))}
               className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-blue-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:opacity-100"
             >

@@ -627,3 +627,125 @@ def compute_inventory_intelligence(
     )
 
     return summary, health, breakdown, signals
+
+
+def inventory_intelligence_signals_for_ids(
+    session: Session,
+    current_user: User,
+    inventory_copy_ids: Sequence[int],
+) -> dict[int, InventoryCopyIntelligenceSignals]:
+    """Build per-copy intelligence signals for a subset of rows (detail / targeted reads)."""
+    ids = sorted({int(i) for i in inventory_copy_ids})
+    if not ids:
+        return {}
+    if current_user.id is None:
+        return {}
+
+    user_id = int(current_user.id)
+    inventory_id_set = set(ids)
+    projections = session.exec(
+        projection_stmt(user_id=user_id).where(InventoryCopy.id.in_(ids)),
+    ).all()
+    if not projections:
+        return {}
+
+    covers_map = _covers_by_inventory(session, ids)
+    cid_to_inventory = _cover_to_inventory_mapping(covers_map)
+
+    open_conflict_rows = session.exec(
+        select(CoverRelationshipConflict).where(CoverRelationshipConflict.status == "open"),
+    ).all()
+    inventory_open_conflict_touch = inventory_copy_ids_under_open_conflict(
+        open_conflict_rows,
+        inventory_ids=inventory_id_set,
+        cid_to_inventory=cid_to_inventory,
+    )
+
+    pending_canonical_inv = pending_canonical_inventory_ids(session, inventory_ids=inventory_id_set)
+    dup_pending_inv_touch = duplicate_inventory_pending_touching_inventory_ids(
+        session,
+        owner_user_id=user_id,
+    )
+    _dup_clusters, dup_hits_cover, _vf_clusters, vf_hits_cover = probable_cluster_cover_hits_owner(
+        session,
+        user=current_user,
+    )
+    dup_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, dup_hits_cover)
+    vf_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, vf_hits_cover)
+
+    primary_cover_ids_for_ocr: set[int] = set()
+    for row in projections:
+        inv_id_prim = int(row.inventory_copy_id)
+        covers_prim = covers_map.get(inv_id_prim, [])
+        pcov = _pick_primary_cover(row.primary_cover_image_id, covers_prim)
+        if pcov and pcov.id is not None:
+            primary_cover_ids_for_ocr.add(int(pcov.id))
+
+    latest_ocr = _latest_ocr_map(session, sorted(primary_cover_ids_for_ocr))
+    signals: dict[int, InventoryCopyIntelligenceSignals] = {}
+
+    for row in projections:
+        inv_id = int(row.inventory_copy_id)
+        covers = covers_map.get(inv_id, [])
+        primary_cov = _pick_primary_cover(row.primary_cover_image_id, covers)
+        has_cover_scan = len(covers) > 0
+
+        ownership = normalize_ownership_state(
+            release_status=str(row.release_status),
+            order_status=str(row.order_status),
+            received_at=row.received_at,
+        )
+        preorder_miss = preorder_missing_release_calendar(
+            ownership=ownership,
+            release_date=row.release_date,
+            release_year=row.release_year,
+        )
+
+        primary_id = int(primary_cov.id) if primary_cov and primary_cov.id is not None else None
+        ocr_row = latest_ocr.get(primary_id) if primary_id is not None else None
+        cover_processing_failed = primary_cov is not None and getattr(primary_cov, "processing_status", "") == "failed"
+        ocr_failed = (
+            primary_id is not None
+            and ocr_row is not None
+            and getattr(ocr_row, "processing_status", "") == "failed"
+        )
+        ocr_complete = (
+            primary_id is not None
+            and not cover_processing_failed
+            and ocr_row is not None
+            and getattr(ocr_row, "processing_status", "") == "processed"
+        )
+
+        pending_canonical = inv_id in pending_canonical_inv
+        dup_inventory_pending_flag = inv_id in dup_pending_inv_touch
+        open_conflict = inv_id in inventory_open_conflict_touch
+        probable_dup_cluster_flag = inv_id in dup_scan_inv_touch
+        probable_vf_cluster_flag = inv_id in vf_scan_inv_touch
+
+        inv_health = classify_inventory_health(
+            ownership=ownership,
+            has_cover_scan=has_cover_scan,
+            preorder_miss_cal=preorder_miss,
+            cover_processing_failed=cover_processing_failed,
+            ocr_failed=ocr_failed,
+            open_conflict=open_conflict,
+            pending_canonical=pending_canonical,
+            dup_inventory_pending=dup_inventory_pending_flag,
+            probable_dup_cluster=probable_dup_cluster_flag,
+            probable_vf_cluster=probable_vf_cluster_flag,
+            ocr_complete=ocr_complete,
+        )
+
+        signals[inv_id] = InventoryCopyIntelligenceSignals(
+            ownership_state=ownership,
+            inventory_health=inv_health,
+            has_cover_scan=has_cover_scan,
+            preorder_missing_release_calendar=preorder_miss,
+            has_open_relationship_conflict=open_conflict,
+            has_pending_canonical_suggestion=pending_canonical,
+            in_pending_duplicate_inventory_group=dup_inventory_pending_flag,
+            touches_probable_duplicate_scan_cluster=probable_dup_cluster_flag,
+            touches_probable_variant_family_cluster=probable_vf_cluster_flag,
+        )
+
+    return signals

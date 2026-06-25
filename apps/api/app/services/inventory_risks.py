@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from fastapi import HTTPException
 from sqlmodel import Session, select
@@ -70,7 +70,12 @@ class RiskProjectionRow:
     issue_number: str
 
 
-def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list[RiskProjectionRow]:
+def _inventory_projection_rows(
+    session: Session,
+    *,
+    user_id: int | None,
+    inventory_copy_ids: Sequence[int] | None = None,
+) -> list[RiskProjectionRow]:
     stmt = apply_inventory_spine_joins(
         select(
             InventoryCopy.id.label("inventory_copy_id"),
@@ -89,6 +94,11 @@ def _inventory_projection_rows(session: Session, *, user_id: int | None) -> list
     )
     if user_id is not None:
         stmt = stmt.where(InventoryCopy.user_id == user_id)
+    if inventory_copy_ids is not None:
+        ids = sorted({int(i) for i in inventory_copy_ids})
+        if not ids:
+            return []
+        stmt = stmt.where(InventoryCopy.id.in_(ids))
     stmt = stmt.order_by(InventoryCopy.id.asc())
     rows = session.exec(stmt).all()
     return [

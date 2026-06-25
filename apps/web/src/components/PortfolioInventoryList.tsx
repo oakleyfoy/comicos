@@ -258,7 +258,7 @@ export function PortfolioInventoryList(props: {
   } = props;
 
   return (
-    <div className="divide-y divide-slate-200">
+    <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
       {inventory.map((item) => {
         const id = item.inventory_copy_id;
         const variant = variantLabel(item) || "Standard cover";
@@ -270,8 +270,11 @@ export function PortfolioInventoryList(props: {
         const isReceiving = receivingCopyIds.has(id);
 
         return (
-          <article key={id} className="px-4 py-3 transition hover:bg-blue-50/60">
-            <div className="flex gap-3">
+          <article
+            key={id}
+            className="flex flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+          >
+            <div className="flex items-start gap-2">
               <input
                 type="checkbox"
                 className="mt-1 shrink-0"
@@ -282,7 +285,7 @@ export function PortfolioInventoryList(props: {
 
               <Link
                 to={`/inventory/${id}`}
-                className="relative block h-16 w-12 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
+                className="relative block h-20 w-14 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
                 aria-label={`${item.title} cover`}
                 data-testid="inventory-card-cover"
               >
@@ -310,169 +313,171 @@ export function PortfolioInventoryList(props: {
                 </span>
               </Link>
 
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Link
-                      to={`/inventory/${id}`}
-                      className="truncate text-sm font-semibold text-patriot-navy hover:text-patriot-blue"
-                    >
-                      {item.title} #{item.issue_number}
-                    </Link>
-                    <span
-                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${assetStateTone(
-                        item.asset_state,
-                      )}`}
-                    >
-                      {canReceive ? (
-                        <button
-                          type="button"
-                          disabled={isSaving || isReceiving}
-                          title="Mark this copy in hand"
-                          onClick={() => onMarkReceived(id)}
-                          className="uppercase tracking-wide hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isReceiving ? "Receiving…" : assetStateShort(item.asset_state)}
-                        </button>
-                      ) : (
-                        assetStateShort(item.asset_state)
-                      )}
-                    </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <Link
+                    to={`/inventory/${id}`}
+                    className="line-clamp-2 text-sm font-semibold leading-snug text-patriot-navy hover:text-patriot-blue"
+                  >
+                    {item.title} #{item.issue_number}
+                  </Link>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span
+                    className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${assetStateTone(
+                      item.asset_state,
+                    )}`}
+                  >
                     {canReceive ? (
                       <button
                         type="button"
                         disabled={isSaving || isReceiving}
+                        title="Mark this copy in hand"
                         onClick={() => onMarkReceived(id)}
-                        className="shrink-0 rounded-md border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="uppercase tracking-wide hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isReceiving ? "Marking…" : "Mark received"}
+                        {isReceiving ? "Receiving…" : assetStateShort(item.asset_state)}
                       </button>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-600">
-                    {item.publisher}
-                    <span className="text-slate-600"> · </span>
-                    {variant}
-                    <span className="text-slate-600"> · </span>
-                    {item.retailer}
-                    <span className="text-slate-600"> · </span>
-                    {formatDate(item.order_date)}
-                    <span className="text-slate-600"> · </span>
-                    Paid {formatUsdCurrency(item.acquisition_cost)}
-                    {meta ? (
-                      <>
-                        <span className="text-slate-600"> · </span>
-                        {meta}
-                      </>
-                    ) : null}
-                  </p>
-                  <SignalChips item={item} />
-                </div>
-
-                <div className="flex flex-wrap items-end justify-between gap-3 gap-y-2 border-t border-slate-100 pt-2">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                    <span className="text-slate-500">Market</span>
-                    <span className="font-medium text-slate-900">{marketFmv ?? "—"}</span>
-                    <span className={`${gainLossClass(item.gain_loss ?? "0")} font-medium`}>
-                      {formatUsdCurrency(item.gain_loss ?? "0")}
-                    </span>
-                    {item.valuation_scope === "no_market_data" ? (
-                      <span className="rounded-md border border-slate-500/40 px-1 py-0.5 text-[9px] uppercase text-slate-500">
-                        No FMV
-                      </span>
-                    ) : item.valuation_scope ? (
-                      <span className="rounded-md border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] uppercase text-blue-800">
-                        {item.valuation_scope.replace(/_/g, " ")}
-                      </span>
-                    ) : null}
-                    <span className="text-slate-600">|</span>
-                    <span className="text-slate-500">Your FMV</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={fMvDrafts[id] ?? ""}
-                      onChange={(event) => onFmvDraftChange(id, event.target.value)}
-                      className="w-[4.25rem] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-blue-500"
-                    />
+                    ) : (
+                      assetStateShort(item.asset_state)
+                    )}
+                  </span>
+                  {canReceive ? (
                     <button
                       type="button"
-                      disabled={isSaving}
-                      onClick={() =>
-                        void onSave(id, {
-                          current_fmv: normalizeDecimalInput(fMvDrafts[id] ?? ""),
-                        })
-                      }
-                      className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-patriot-blue hover:bg-blue-100 disabled:opacity-50"
+                      disabled={isSaving || isReceiving}
+                      onClick={() => onMarkReceived(id)}
+                      className="shrink-0 rounded-md border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Save
+                      {isReceiving ? "Marking…" : "Mark received"}
                     </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <select
-                      value={gradeDrafts[id] ?? item.grade_status}
-                      onChange={(event) =>
-                        onGradeDraftChange(id, event.target.value as InventoryItem["grade_status"])
-                      }
-                      onBlur={() =>
-                        void onSave(id, {
-                          grade_status: gradeDrafts[id] ?? item.grade_status,
-                        })
-                      }
-                      className={selectClass}
-                      aria-label="Grade status"
-                    >
-                      <option value="raw">Raw</option>
-                      <option value="submitted">Submitted</option>
-                      <option value="graded">Graded</option>
-                    </select>
-                    <select
-                      value={holdDrafts[id] ?? item.hold_status}
-                      onChange={(event) =>
-                        onHoldDraftChange(id, event.target.value as InventoryItem["hold_status"])
-                      }
-                      onBlur={() =>
-                        void onSave(id, {
-                          hold_status: holdDrafts[id] ?? item.hold_status,
-                        })
-                      }
-                      className={selectClass}
-                      aria-label="Hold status"
-                    >
-                      <option value="hold">Hold</option>
-                      <option value="sell">Sell</option>
-                      <option value="sold">Sold</option>
-                    </select>
-                    <FavoriteStarRating
-                      size="sm"
-                      label={`Favorite rating for ${item.title}`}
-                      disabled={isSaving}
-                      value={
-                        starDrafts[id]
-                          ? Number(starDrafts[id])
-                          : item.star_rating
-                      }
-                      onChange={(rating) => {
-                        onStarDraftChange(id, rating ? String(rating) : "");
-                        void onSave(id, { star_rating: rating });
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onOpenNotes(item)}
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:border-blue-400 hover:text-patriot-blue"
-                    >
-                      Notes
-                    </button>
-                    <Link
-                      to={`/inventory/${id}`}
-                      className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
-                    >
-                      Open
-                    </Link>
-                  </div>
+                  ) : null}
                 </div>
+              </div>
+            </div>
+
+            <p className="mt-2 line-clamp-3 text-xs leading-snug text-slate-600">
+              {item.publisher}
+              <span className="text-slate-600"> · </span>
+              {variant}
+              <span className="text-slate-600"> · </span>
+              {item.retailer}
+              <span className="text-slate-600"> · </span>
+              {formatDate(item.order_date)}
+              <span className="text-slate-600"> · </span>
+              Paid {formatUsdCurrency(item.acquisition_cost)}
+              {meta ? (
+                <>
+                  <span className="text-slate-600"> · </span>
+                  {meta}
+                </>
+              ) : null}
+            </p>
+            <SignalChips item={item} />
+
+            <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <span className="text-slate-500">Market</span>
+                <span className="font-medium text-slate-900">{marketFmv ?? "—"}</span>
+                <span className={`${gainLossClass(item.gain_loss ?? "0")} font-medium`}>
+                  {formatUsdCurrency(item.gain_loss ?? "0")}
+                </span>
+                {item.valuation_scope === "no_market_data" ? (
+                  <span className="rounded-md border border-slate-500/40 px-1 py-0.5 text-[9px] uppercase text-slate-500">
+                    No FMV
+                  </span>
+                ) : item.valuation_scope ? (
+                  <span className="rounded-md border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] uppercase text-blue-800">
+                    {item.valuation_scope.replace(/_/g, " ")}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <span className="text-slate-500">Your FMV</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={fMvDrafts[id] ?? ""}
+                  onChange={(event) => onFmvDraftChange(id, event.target.value)}
+                  className="w-[4.25rem] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() =>
+                    void onSave(id, {
+                      current_fmv: normalizeDecimalInput(fMvDrafts[id] ?? ""),
+                    })
+                  }
+                  className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-patriot-blue hover:bg-blue-100 disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <select
+                  value={gradeDrafts[id] ?? item.grade_status}
+                  onChange={(event) =>
+                    onGradeDraftChange(id, event.target.value as InventoryItem["grade_status"])
+                  }
+                  onBlur={() =>
+                    void onSave(id, {
+                      grade_status: gradeDrafts[id] ?? item.grade_status,
+                    })
+                  }
+                  className={selectClass}
+                  aria-label="Grade status"
+                >
+                  <option value="raw">Raw</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="graded">Graded</option>
+                </select>
+                <select
+                  value={holdDrafts[id] ?? item.hold_status}
+                  onChange={(event) =>
+                    onHoldDraftChange(id, event.target.value as InventoryItem["hold_status"])
+                  }
+                  onBlur={() =>
+                    void onSave(id, {
+                      hold_status: holdDrafts[id] ?? item.hold_status,
+                    })
+                  }
+                  className={selectClass}
+                  aria-label="Hold status"
+                >
+                  <option value="hold">Hold</option>
+                  <option value="sell">Sell</option>
+                  <option value="sold">Sold</option>
+                </select>
+                <FavoriteStarRating
+                  size="sm"
+                  label={`Favorite rating for ${item.title}`}
+                  disabled={isSaving}
+                  value={
+                    starDrafts[id]
+                      ? Number(starDrafts[id])
+                      : item.star_rating
+                  }
+                  onChange={(rating) => {
+                    onStarDraftChange(id, rating ? String(rating) : "");
+                    void onSave(id, { star_rating: rating });
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onOpenNotes(item)}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:border-blue-400 hover:text-patriot-blue"
+                >
+                  Notes
+                </button>
+                <Link
+                  to={`/inventory/${id}`}
+                  className="rounded-lg border border-patriot-blue bg-patriot-blue px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-900"
+                >
+                  Open
+                </Link>
               </div>
             </div>
           </article>
