@@ -102,8 +102,8 @@ export function AddComicsPhotoPage(): JSX.Element {
           </div>
         )}
 
-        <Link to="/add-comics/online-retail" className="mt-8 inline-block text-sm text-blue-700 hover:underline">
-          ← Online Retail
+        <Link to="/connected-retailers/import" className="mt-8 inline-block text-sm text-blue-700 hover:underline">
+          ← Import retailer orders
         </Link>
       </div>
     </AppShell>

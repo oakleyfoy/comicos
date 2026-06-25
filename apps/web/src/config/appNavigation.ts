@@ -48,7 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "acquire",
     title: "Add Comics",
     links: [
-      { label: "Online Retail", to: "/add-comics/online-retail", prominent: true },
+      { label: "Import retailer orders", to: "/connected-retailers/import", prominent: true },
       { label: "Phone Photo", to: "/add-comics/photo" },
       { label: "Import folder", to: "/add-comics/import-folder" },
       { label: "GPT Comic Read", to: "/add-comics/gpt-read" },
@@ -135,7 +135,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Account & data", to: "/settings/account" },
-      { label: "Import retailer orders", to: "/connected-retailers/import" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Workflow Health", to: "/workflow-health" },
     ],
