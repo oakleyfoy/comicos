@@ -501,17 +501,27 @@ def _parse_issue_and_cover(title: str) -> tuple[str | None, str | None]:
     return issue_number, cover_name
 
 
-def _normalize_dcbs_saved_image_src(src: str | None) -> tuple[str | None, str | None]:
+def _normalize_dcbs_saved_image_src(
+    src: str | None,
+    *,
+    product_code: str | None = None,
+) -> tuple[str | None, str | None]:
+    from app.services.retailer_sync.retailer_cover_urls import dcbs_product_code_cover_url, remap_dcbs_cover_url
+
     if not src:
         return None, None
     cleaned = str(src).strip().replace("\\", "/")
     if cleaned.startswith(("http://", "https://")):
-        return cleaned, cleaned
+        remote = remap_dcbs_cover_url(cleaned, product_code=product_code) or cleaned
+        return cleaned, remote
     if cleaned.startswith("//"):
-        remote = f"https:{cleaned}"
+        remote = remap_dcbs_cover_url(f"https:{cleaned}", product_code=product_code) or f"https:{cleaned}"
         return remote, remote
     path = cleaned if cleaned.startswith("/") else f"/{cleaned}"
-    remote = f"https://www.dcbservice.com{path}"
+    remote = remap_dcbs_cover_url(f"https://www.dcbservice.com{path}", product_code=product_code)
+    if not remote:
+        media = dcbs_product_code_cover_url(product_code)
+        remote = media or f"https://www.dcbservice.com{path}"
     return cleaned, remote
 
 
@@ -786,7 +796,10 @@ class DCBSSavedHtmlParser(GenericRetailerHtmlParser):
                 if code:
                     item.retailer_item_id = code
             if img.get("src"):
-                local_src, remote_src = _normalize_dcbs_saved_image_src(str(img["src"]))
+                local_src, remote_src = _normalize_dcbs_saved_image_src(
+                    str(img["src"]),
+                    product_code=item.retailer_item_id,
+                )
                 if remote_src:
                     item.image_url = remote_src
                     item.thumbnail_url = remote_src

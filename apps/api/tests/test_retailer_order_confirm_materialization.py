@@ -11,8 +11,6 @@ from sqlmodel import select
 from app.models import (
     DraftImport,
     InventoryCopy,
-    Order,
-    OrderItem,
     PortfolioItem,
     RetailerAccount,
     RetailerOrderItemSnapshot,
@@ -24,6 +22,29 @@ from test_inventory import auth_headers, register_and_login
 
 EXPECTED_LINE_COUNT = 27
 EXPECTED_TOTAL_QUANTITY = 41
+
+
+def _inventory_copies_for_confirm_body(
+    session,
+    body: dict,
+    *,
+    owner_user_id: int,
+) -> list[InventoryCopy]:
+    acquisition_id = body.get("linked_acquisition_id")
+    assert acquisition_id is not None
+    return list(
+        session.exec(
+            select(InventoryCopy).where(
+                InventoryCopy.acquisition_id == acquisition_id,
+                InventoryCopy.user_id == owner_user_id,
+            )
+        ).all()
+    )
+
+
+def _assert_acquisition_confirm_body(body: dict) -> None:
+    assert body["linked_acquisition_id"] is not None
+    assert body.get("linked_order_id") is None
 
 
 def _create_account(client, session, token: str, email: str) -> RetailerAccount:
@@ -113,7 +134,7 @@ def test_confirm_midtown_order_4272232_materializes_inventory(client, session) -
     assert confirmed.status_code == 200, confirmed.text
     body = confirmed.json()
     assert body["review_status"] == "confirmed"
-    assert body["linked_order_id"] is not None
+    _assert_acquisition_confirm_body(body)
     assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
     assert body["total_ordered_quantity"] == EXPECTED_TOTAL_QUANTITY
     assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
@@ -121,15 +142,7 @@ def test_confirm_midtown_order_4272232_materializes_inventory(client, session) -
     for row in body["materialization_line_debug"]:
         assert row["parsed_qty"] == row["order_item_qty"] == row["copies_created"]
 
-    order_items = session.exec(select(OrderItem).where(OrderItem.order_id == body["linked_order_id"])).all()
-    assert len(order_items) == EXPECTED_LINE_COUNT
-    assert sum(int(row.quantity) for row in order_items) == EXPECTED_TOTAL_QUANTITY
-
-    copies = session.exec(
-        select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == body["linked_order_id"])
-    ).all()
+    copies = _inventory_copies_for_confirm_body(session, body, owner_user_id=account.owner_user_id)
     assert len(copies) == EXPECTED_TOTAL_QUANTITY
 
     debug_by_title = {row["title"]: row for row in body["materialization_line_debug"]}
@@ -148,11 +161,9 @@ def test_confirm_midtown_order_4272232_materializes_inventory(client, session) -
     confirmed_again = client.post("/api/v1/retailer-orders/9004272232/confirm", headers=auth_headers(token))
     assert confirmed_again.status_code == 200, confirmed_again.text
     assert confirmed_again.json()["portfolio_items_added"] == 0
-    copies_after = session.exec(
-        select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == body["linked_order_id"])
-    ).all()
+    copies_after = _inventory_copies_for_confirm_body(
+        session, body, owner_user_id=account.owner_user_id
+    )
     assert len(copies_after) == EXPECTED_TOTAL_QUANTITY
 
 
@@ -262,16 +273,12 @@ def test_first_confirm_returns_success_with_inventory_without_retry(client, sess
     body = confirmed.json()
     # First response (no refresh / no retry) carries the materialization result.
     assert body["review_status"] == "confirmed"
-    assert body["linked_order_id"] is not None
+    _assert_acquisition_confirm_body(body)
     assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
     assert body["total_ordered_quantity"] == EXPECTED_TOTAL_QUANTITY
     assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
 
-    copies = session.exec(
-        select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == body["linked_order_id"])
-    ).all()
+    copies = _inventory_copies_for_confirm_body(session, body, owner_user_id=account.owner_user_id)
     assert len(copies) == EXPECTED_TOTAL_QUANTITY
 
 
@@ -316,7 +323,7 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
 
     body = confirmed.json()
     assert body["review_status"] == "confirmed"
-    assert body["linked_order_id"] is not None
+    _assert_acquisition_confirm_body(body)
     assert body["inventory_copies_created"] == EXPECTED_TOTAL_QUANTITY
     assert body["portfolio_items_added"] == EXPECTED_TOTAL_QUANTITY
     # Response carries a pending enrichment marker (enrichment runs after inventory).
@@ -340,11 +347,9 @@ def test_confirm_with_slow_enrichment_stays_fast_and_is_idempotent(client, sessi
     assert later_summary["skipped_items"] >= 1
     assert later_summary["enriched_items"] + later_summary["skipped_items"] == EXPECTED_LINE_COUNT
 
-    copies_after = session.exec(
-        select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == body["linked_order_id"])
-    ).all()
+    copies_after = _inventory_copies_for_confirm_body(
+        session, body, owner_user_id=account.owner_user_id
+    )
     assert len(copies_after) == EXPECTED_TOTAL_QUANTITY
 
 
@@ -413,12 +418,15 @@ def test_inventory_detail_exposes_display_metadata_after_retailer_import(client,
 
     confirmed = client.post("/api/v1/retailer-orders/9004272260/confirm", headers=auth_headers(token))
     assert confirmed.status_code == 200, confirmed.text
-    linked_order_id = confirmed.json()["linked_order_id"]
+    body = confirmed.json()
+    _assert_acquisition_confirm_body(body)
 
     copy = session.exec(
         select(InventoryCopy)
-        .join(OrderItem, InventoryCopy.order_item_id == OrderItem.id)
-        .where(OrderItem.order_id == linked_order_id)
+        .where(
+            InventoryCopy.acquisition_id == body["linked_acquisition_id"],
+            InventoryCopy.user_id == account.owner_user_id,
+        )
         .order_by(InventoryCopy.id.asc())
     ).first()
     assert copy is not None

@@ -13,6 +13,16 @@ import {
 } from "../api/client";
 import { AppShell } from "../components/AppShell";
 
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
 function SummaryGrid({ summary }: { summary: MasterUniverseCatalogDashboardSummary }): JSX.Element {
   const cards: { label: string; value: string; hint?: string }[] = [
     {
@@ -57,11 +67,7 @@ function SummaryGrid({ summary }: { summary: MasterUniverseCatalogDashboardSumma
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => (
-        <div key={card.label} className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.label}</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{card.value}</p>
-          {card.hint ? <p className="mt-1 text-xs text-slate-400">{card.hint}</p> : null}
-        </div>
+        <StatCard key={card.label} label={card.label} value={card.value} hint={card.hint} />
       ))}
     </div>
   );
@@ -78,8 +84,8 @@ function CoverageTable(props: {
     <section className="mt-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">Publisher coverage</h2>
-          <p className="text-sm text-slate-400">
+          <h2 className="text-lg font-semibold text-slate-900">Publisher coverage</h2>
+          <p className="text-sm text-slate-600">
             What ComicOS knows in catalog, what ComicVine discovery expects, and what you own.
           </p>
         </div>
@@ -87,14 +93,14 @@ function CoverageTable(props: {
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Filter publishers…"
-          className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+          className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
           aria-label="Filter publishers"
         />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800">
+      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2">Publisher</th>
               <th className="px-3 py-2">Your copies</th>
@@ -106,7 +112,7 @@ function CoverageTable(props: {
               <th className="px-3 py-2">Primary source</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+          <tbody className="divide-y divide-slate-100 text-slate-800">
             {dashboard.rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
@@ -115,17 +121,17 @@ function CoverageTable(props: {
               </tr>
             ) : (
               dashboard.rows.map((row) => (
-                <tr key={row.publisher} className="hover:bg-slate-900/60">
-                  <td className="px-3 py-2 font-medium text-white">{row.publisher}</td>
+                <tr key={row.publisher} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium text-slate-900">{row.publisher}</td>
                   <td className="px-3 py-2 tabular-nums">{row.inventory_copy_count.toLocaleString()}</td>
                   <td className="px-3 py-2 tabular-nums">{row.catalog_issue_count.toLocaleString()}</td>
                   <td className="px-3 py-2 tabular-nums">{row.catalog_series_count.toLocaleString()}</td>
                   <td className="px-3 py-2 tabular-nums">{row.universe_issue_ceiling.toLocaleString()}</td>
-                  <td className="px-3 py-2 tabular-nums text-amber-200/90">
+                  <td className="px-3 py-2 tabular-nums text-amber-800">
                     {row.missing_catalog_issues > 0 ? row.missing_catalog_issues.toLocaleString() : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">{row.universe_volume_count.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-slate-400">{row.primary_catalog_source ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.primary_catalog_source ?? "—"}</td>
                 </tr>
               ))
             )}
@@ -147,11 +153,19 @@ function ReferenceTreePanel(): JSX.Element {
   const [selectedPublisher, setSelectedPublisher] = useState<MasterUniversePublisherNode | null>(null);
   const [selectedVolume, setSelectedVolume] = useState<MasterUniverseVolumeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     void apiClient.listMasterUniversePublishers(undefined, 80, 0).then(
-      (resp) => setPublishers(resp.items),
-      (err) => setError(err instanceof ApiError ? err.message : "Could not load reference tree."),
+      (resp) => {
+        setPublishers(resp.items);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err instanceof ApiError ? err.message : "Could not load reference tree.");
+        setLoading(false);
+      },
     );
   }, []);
 
@@ -188,56 +202,68 @@ function ReferenceTreePanel(): JSX.Element {
     }
   };
 
+  const emptyTreeMessage =
+    loading
+      ? "Loading reference tree…"
+      : publishers.length === 0
+        ? "No P98 reference publishers yet. Universe build jobs populate this tree; use Universe Tree for live catalog browsing."
+        : "Select a publisher to drill down.";
+
   return (
-    <section className="mt-10 rounded-xl border border-slate-800 bg-slate-950/30 p-4">
-      <h2 className="text-sm font-semibold text-white">P98 reference tree (variant shells)</h2>
-      <p className="mt-1 text-xs text-slate-500">
+    <section className="mt-10 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">P98 reference tree (variant shells)</h2>
+      <p className="mt-1 text-xs text-slate-600">
         Separate from your catalog DB — populated when universe build jobs run. Use{" "}
-        <Link to="/catalog-universe" className="text-sky-400 hover:underline">Universe Tree</Link> to browse catalog +
-        discovery.
+        <Link to="/catalog-universe" className="font-medium text-patriot-blue hover:underline">Universe Tree</Link> to
+        browse catalog + discovery.
       </p>
-      {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      <p className="mt-2 text-xs text-slate-500">{emptyTreeMessage}</p>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-800 p-2 text-sm">
+        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 p-2 text-sm">
           {publishers.map((row) => (
             <li key={row.id}>
               <button
                 type="button"
                 onClick={() => void selectPublisher(row)}
-                className="w-full rounded px-2 py-1 text-left text-slate-200 hover:bg-slate-800"
+                className={`w-full rounded px-2 py-1 text-left hover:bg-slate-100 ${
+                  selectedPublisher?.id === row.id ? "bg-blue-50 font-medium text-patriot-navy" : "text-slate-800"
+                }`}
               >
                 {row.name}
               </button>
             </li>
           ))}
         </ul>
-        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-800 p-2 text-sm">
+        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 p-2 text-sm">
           {volumes.map((row) => (
             <li key={row.id}>
               <button
                 type="button"
                 onClick={() => void selectVolume(row)}
-                className="w-full rounded px-2 py-1 text-left text-slate-200 hover:bg-slate-800"
+                className={`w-full rounded px-2 py-1 text-left hover:bg-slate-100 ${
+                  selectedVolume?.id === row.id ? "bg-blue-50 font-medium text-patriot-navy" : "text-slate-800"
+                }`}
               >
                 {row.name}
               </button>
             </li>
           ))}
         </ul>
-        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-800 p-2 text-sm">
+        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 p-2 text-sm">
           {issues.map((row) => (
             <li key={row.id}>
               <button
                 type="button"
                 onClick={() => void selectIssue(row)}
-                className="w-full rounded px-2 py-1 text-left text-slate-200 hover:bg-slate-800"
+                className="w-full rounded px-2 py-1 text-left text-slate-800 hover:bg-slate-100"
               >
                 #{row.issue_number}
               </button>
             </li>
           ))}
         </ul>
-        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-800 p-2 text-sm text-slate-300">
+        <ul className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 p-2 text-sm text-slate-700">
           {variants.map((row) => (
             <li key={row.id} className="px-2 py-1">
               {row.variant_name || row.variant_type}
@@ -246,6 +272,19 @@ function ReferenceTreePanel(): JSX.Element {
         </ul>
       </div>
     </section>
+  );
+}
+
+function LoadingSkeleton(): JSX.Element {
+  return (
+    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="h-3 w-24 rounded bg-slate-200" />
+          <div className="mt-3 h-8 w-16 rounded bg-slate-100" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -262,7 +301,14 @@ export function MasterUniversePage(): JSX.Element {
       const resp = await apiClient.getMasterUniverseCatalogDashboard(filter || undefined, 150, 0);
       setDashboard(resp);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load catalog dashboard.");
+      setDashboard(null);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof Error && err.message) {
+        setError(err.message);
+      } else {
+        setError("Could not load catalog dashboard. Check that the API is deployed and you are signed in.");
+      }
     } finally {
       setLoading(false);
     }
@@ -277,37 +323,41 @@ export function MasterUniversePage(): JSX.Element {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto max-w-7xl">
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Catalog</p>
-          <h1 className="mt-2 text-2xl font-bold text-white">Master Universe</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-400">
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">Master Universe</h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
             Full catalog command view: what ComicOS has cataloged, what ComicVine discovery expects, what you own, and
             where catalog rows came from (ComicVine, GCD, etc.).
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-sm">
-            <Link to="/catalog-universe" className="font-medium text-sky-400 hover:underline">
+            <Link to="/catalog-universe" className="font-medium text-patriot-blue hover:underline">
               Open Universe Tree browser →
             </Link>
-            <Link to="/catalog/import" className="font-medium text-sky-400 hover:underline">
+            <Link to="/catalog/import" className="font-medium text-patriot-blue hover:underline">
               GCD Import Dashboard →
             </Link>
           </div>
         </header>
 
         {error ? (
-          <p role="alert" className="mt-4 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>
+          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </p>
         ) : null}
 
-        {loading && !dashboard ? (
-          <p className="mt-6 text-sm text-slate-500">Loading coverage…</p>
-        ) : null}
+        {loading && !dashboard ? <LoadingSkeleton /> : null}
 
         {dashboard ? (
           <>
             <SummaryGrid summary={dashboard.summary} />
             <CoverageTable dashboard={dashboard} search={search} onSearchChange={setSearch} />
           </>
+        ) : null}
+
+        {!loading && !dashboard && !error ? (
+          <p className="mt-4 text-sm text-slate-600">No coverage data returned.</p>
         ) : null}
 
         <ReferenceTreePanel />

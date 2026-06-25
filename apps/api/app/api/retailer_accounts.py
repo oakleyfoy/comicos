@@ -113,8 +113,11 @@ def _serialize_run(run) -> RetailerSyncRunRead:
 def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     raw = item.raw_item_json if isinstance(item.raw_item_json, dict) else {}
     base = RetailerOrderItemSnapshotRead.model_validate(item)
+    raw_for_cover = dict(raw)
+    if base.retailer_item_id and not raw_for_cover.get("retailer_item_id"):
+        raw_for_cover["retailer_item_id"] = base.retailer_item_id
     display_cover = resolve_retailer_cover_url(
-        raw,
+        raw_for_cover,
         retailer=item.retailer,
         fallback_image_url=base.image_url,
         fallback_cover_image_url=raw.get("cover_image_url") or base.cover_image_url,

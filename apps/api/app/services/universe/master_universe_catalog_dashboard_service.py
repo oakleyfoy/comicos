@@ -86,19 +86,7 @@ def get_master_universe_catalog_dashboard(
         ).one()
     )
 
-    source_counts = MasterUniverseCatalogSourceCounts()
-    for ext in session.exec(select(CatalogIssue.external_source_ids)).all():
-        bucket = _issue_source_key(ext if isinstance(ext, dict) else None)
-        if bucket == "comicvine":
-            source_counts.comicvine += 1
-        elif bucket == "gcd":
-            source_counts.gcd += 1
-        elif bucket == "other":
-            source_counts.other += 1
-        else:
-            source_counts.unknown += 1
-
-    # Universe discovery per publisher (ComicVine volume universe table)
+    source_tally_by_pub: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     universe_by_key: dict[str, tuple[str, int, int]] = {}
     for publisher, volume_count, issue_sum in session.exec(
         select(
@@ -182,6 +170,18 @@ def get_master_universe_catalog_dashboard(
     rows.sort(key=lambda row: (-row.inventory_copy_count, -row.catalog_issue_count, row.publisher.lower()))
     total_count = len(rows)
     page = rows[offset : offset + limit]
+
+    source_counts = MasterUniverseCatalogSourceCounts()
+    for tallies in source_tally_by_pub.values():
+        for bucket, count in tallies.items():
+            if bucket == "comicvine":
+                source_counts.comicvine += count
+            elif bucket == "gcd":
+                source_counts.gcd += count
+            elif bucket == "other":
+                source_counts.other += count
+            else:
+                source_counts.unknown += count
 
     summary = MasterUniverseCatalogDashboardSummary(
         total_publishers=universe_summary.total_publishers,

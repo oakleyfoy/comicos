@@ -220,11 +220,7 @@ def test_third_eye_confirm_materializes_on_acquisition_spine(client, session, mo
     assert body["portfolio_items_added"] == 3
 
 
-def test_dcbs_confirm_materializes_on_acquisition_spine(client, session, monkeypatch) -> None:
-    from app.services import retailer_order_materialization as materialization_module
-
-    monkeypatch.setattr(materialization_module, "legacy_customer_orders_writes_enabled", lambda: False)
-
+def test_dcbs_confirm_materializes_on_acquisition_spine(client, session) -> None:
     token = register_and_login(client, "dcbs-confirm@example.com")
     imported = client.post(
         "/api/v1/retailer-orders/import/html",
@@ -332,7 +328,7 @@ def test_dcbs_parser_reads_order_table_not_publisher_menu(client) -> None:
     detail = parser.parse(_DCBS_ORDER_TABLE_HTML)
     assert detail.retailer_order_number == "970668"
     assert len(detail.items) == 2
-    assert detail.items[0].image_url == "https://www.dcbservice.com/files/MAY265025.jpg"
+    assert detail.items[0].image_url == "https://media.dcbservice.com/small/MAY265025.jpg"
     assert detail.items[0].issue_number == "34"
     assert detail.items[0].publisher and "marvel" in detail.items[0].publisher.lower()
     assert detail.items[0].title.startswith("X-Men #34")
