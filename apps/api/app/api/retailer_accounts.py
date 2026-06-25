@@ -112,6 +112,7 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
     raw = item.raw_item_json if isinstance(item.raw_item_json, dict) else {}
     base = RetailerOrderItemSnapshotRead.model_validate(item)
     remote_midtown_image_url = raw.get("remote_midtown_image_url")
+    remote_shopify_image_url = raw.get("remote_shopify_image_url")
     # Review cover priority: an enriched/catalog cover, then the retailer-derived
     # remote image, then whatever raw/local image we captured. This makes the
     # retailer cover render at review time even before catalog enrichment runs.
@@ -119,6 +120,7 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
         raw.get("cover_image_url")
         or raw.get("source_image_url")
         or remote_midtown_image_url
+        or remote_shopify_image_url
         or raw.get("image_url")
         or base.cover_image_url
         or base.image_url
@@ -134,6 +136,7 @@ def _serialize_order_item(item) -> RetailerOrderItemSnapshotRead:
             "image_title": raw.get("image_title"),
             "cover_image_url": display_cover,
             "source_image_url": raw.get("source_image_url")
+            or remote_shopify_image_url
             or remote_midtown_image_url
             or base.source_image_url,
         }

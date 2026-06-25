@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date
+from unittest.mock import patch
+
 from sqlmodel import select
 
 from app.models import InventoryCopy, OrderItem, RetailerOrderSnapshot
@@ -115,6 +119,32 @@ def test_third_eye_shopify_customer_account_quantity_links() -> None:
     assert wrap.quantity == 2
     assert str(wrap.unit_price) == "5.99"
     assert str(wrap.total_price) == "11.98"
+
+
+def test_third_eye_fetches_shopify_product_json_for_cover_and_release() -> None:
+    product_json = {
+        "product": {
+            "published_at": "2026-05-08T11:52:22-04:00",
+            "images": [{"src": "https://cdn.shopify.com/s/files/cover.jpg"}],
+        }
+    }
+
+    class _FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(product_json).encode()
+
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    with patch("urllib.request.urlopen", return_value=_FakeResponse()):
+        detail = get_retailer_html_parser("third_eye").parse(_THIRD_EYE_CUSTOMER_ACCOUNT_HTML)
+
+    inhyuk = next(i for i in detail.items if "INHYUK" in i.title.upper())
+    assert inhyuk.image_url == "https://cdn.shopify.com/s/files/cover.jpg"
+    assert inhyuk.release_date == date(2026, 5, 8)
 
 
 def test_registry_contains_all_supported_retailers() -> None:

@@ -16,8 +16,11 @@ Implementation status:
 from __future__ import annotations
 
 import html as html_lib
+import json
 import re
-from datetime import date
+import urllib.error
+import urllib.request
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from bs4 import BeautifulSoup
@@ -44,6 +47,24 @@ _ORDER_HASH_LINK_RE = re.compile(r"order\s*#", flags=re.IGNORECASE)
 _QTY_LABEL_RE = re.compile(r"\b(?:qty|quantity)\b\s*[:x]?\s*(\d{1,3})", flags=re.IGNORECASE)
 _QUANTITY_ONLY_TITLE_RE = re.compile(r"^quantity\s+\d{1,3}$", flags=re.IGNORECASE)
 _SHOPIFY_PRODUCT_HREF_RE = re.compile(r"/products/([^?#]+)", flags=re.IGNORECASE)
+_SHOPIFY_CATALOG_DATE_RE = re.compile(
+    r"(?:^|[/\-])([a-z]{3})(\d{2})cat(?:[/-]|$)",
+    flags=re.IGNORECASE,
+)
+_SHOPIFY_MONTHS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
 _DATE_PATTERNS = ("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y", "%m/%d/%y")
 _PUBLISHER_HINTS = (
     "marvel",
@@ -115,6 +136,98 @@ def _title_from_shopify_product_href(href: str) -> str | None:
     slug = re.sub(r"\s+(\d+)$", r" #\1", slug)
     title = re.sub(r"\s+", " ", slug).strip()
     return title if len(title) >= 3 else None
+
+
+def _shopify_image_src_from_tag(img) -> str | None:
+    for attr in ("src", "data-src", "data-original"):
+        value = img.get(attr)
+        if value and str(value).strip():
+            return str(value).strip()
+    srcset = str(img.get("srcset") or "")
+    for part in srcset.split(","):
+        candidate = part.strip().split(" ", 1)[0]
+        if candidate.startswith(("http://", "https://")):
+            return candidate
+    return None
+
+
+def _normalize_shopify_saved_image_src(src: str | None, *, product_url: str | None) -> str | None:
+    if not src:
+        return None
+    cleaned = html_lib.unescape(src.strip())
+    if cleaned.startswith(("http://", "https://")):
+        return cleaned
+    return None
+
+
+def _shopify_product_json_url(product_url: str) -> str | None:
+    cleaned = html_lib.unescape(product_url.split("?", 1)[0].strip().rstrip("/"))
+    if "/products/" not in cleaned.lower():
+        return None
+    if not any(host in cleaned.lower() for host in ("thirdeyecomics.com", "myshopify.com", "shopify.com")):
+        return None
+    return f"{cleaned}.json" if not cleaned.endswith(".json") else cleaned
+
+
+def _release_date_from_shopify_product_href(href: str, *, default_year: int | None = None) -> date | None:
+    href_clean = html_lib.unescape((href or "").strip().lower())
+    match = _SHOPIFY_CATALOG_DATE_RE.search(href_clean)
+    if match is None:
+        return None
+    month = _SHOPIFY_MONTHS.get(match.group(1).lower())
+    if month is None:
+        return None
+    try:
+        day = int(match.group(2))
+        year = default_year or date.today().year
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def _parse_shopify_product_json(payload: dict) -> tuple[str | None, date | None]:
+    product = payload.get("product") if isinstance(payload, dict) else None
+    if not isinstance(product, dict):
+        return None, None
+    image_url = None
+    images = product.get("images") or []
+    if images and isinstance(images[0], dict):
+        image_url = images[0].get("src")
+    if not image_url and isinstance(product.get("image"), dict):
+        image_url = product["image"].get("src")
+    release_date = None
+    for key in ("published_at", "created_at"):
+        raw = product.get(key)
+        if isinstance(raw, str) and len(raw) >= 10:
+            try:
+                release_date = date.fromisoformat(raw[:10])
+                break
+            except ValueError:
+                continue
+    return (str(image_url).strip() if image_url else None), release_date
+
+
+_shopify_product_meta_cache: dict[str, tuple[str | None, date | None]] = {}
+
+
+def _get_shopify_product_meta(product_url: str) -> tuple[str | None, date | None]:
+    key = html_lib.unescape(product_url.split("?", 1)[0].strip().rstrip("/"))
+    if key in _shopify_product_meta_cache:
+        return _shopify_product_meta_cache[key]
+    json_url = _shopify_product_json_url(product_url)
+    image_url: str | None = None
+    release_date: date | None = _release_date_from_shopify_product_href(product_url)
+    if json_url:
+        try:
+            with urllib.request.urlopen(json_url, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+            fetched_image, fetched_release = _parse_shopify_product_json(payload)
+            image_url = fetched_image
+            release_date = fetched_release or release_date
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+            pass
+    _shopify_product_meta_cache[key] = (image_url, release_date)
+    return image_url, release_date
 
 
 def _best_quantity_line_context(anchor, quantity: int) -> str:
@@ -285,24 +398,49 @@ def _extract_shopify_style_items(soup: BeautifulSoup) -> list[RetailerOrderItem]
             prices = [line_unit] + ([line_total] if line_total is not None else [])
         issue_number, cover_name = _parse_issue_and_cover(title)
         img = container.find("img") if container is not None else anchor.find("img")
+        if img is None:
+            node = anchor
+            for _ in range(10):
+                if node is None:
+                    break
+                img = node.find("img")
+                if img is not None and _shopify_image_src_from_tag(img):
+                    break
+                node = node.parent
         image_url = None
-        if img is not None and img.get("src"):
-            image_url = str(img.get("src")).strip() or None
+        remote_image_url = None
+        if img is not None:
+            image_url = _shopify_image_src_from_tag(img)
+            remote_image_url = _normalize_shopify_saved_image_src(image_url, product_url=href)
+        if href:
+            meta_image, meta_release = _get_shopify_product_meta(href)
+            if remote_image_url is None and meta_image:
+                remote_image_url = meta_image
+            release_date = meta_release
+        else:
+            release_date = None
+        display_image = remote_image_url or image_url
+        publisher = _detect_publisher(title) or _detect_publisher(container_text or "")
 
         item = RetailerOrderItem(
             title=title,
-            publisher=_detect_publisher(container_text or title),
+            publisher=publisher,
             quantity=quantity,
             unit_price=prices[0] if prices else None,
             total_price=prices[-1] if len(prices) > 1 else None,
             issue_number=issue_number,
             cover_name=cover_name,
             product_url=href,
-            image_url=image_url,
-            thumbnail_url=image_url,
+            image_url=display_image,
+            thumbnail_url=display_image,
+            release_date=release_date,
             raw_fragment=(container_text or title)[:4000],
         )
-        item.parse_diagnostics = {"parse_source": "shopify_product_link"}
+        item.parse_diagnostics = {
+            "parse_source": "shopify_product_link",
+            "remote_shopify_image_url": remote_image_url,
+            "local_saved_image_path": image_url if image_url and image_url != display_image else None,
+        }
         items.append(item)
     return items
 
