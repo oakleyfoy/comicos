@@ -272,6 +272,7 @@ def _aggregate_risks(
     *,
     session: Session,
     current_user: User | None,
+    skip_library_duplicate_run: bool = False,
 ) -> tuple[list[InventoryRiskRead], dict[int, list[InventoryRiskRead]]]:
     risk_rows: list[InventoryRiskRead] = []
     risks_by_inventory: defaultdict[int, list[InventoryRiskRead]] = defaultdict(list)
@@ -297,47 +298,51 @@ def _aggregate_risks(
     match_by_cover = _match_rows_by_cover(session, primary_cover_ids)
     open_conflicts = _open_conflicts_by_inventory(session, inventory_ids)
 
-    if current_user is None:
-        duplicate_ownership = list_duplicate_ownership_ops(
-            session,
-            dup_scan_classification="all",
-            classification=None,
-        )
-        run_detection = list_run_detection_ops(session, series_status=None)
-    else:
-        duplicate_ownership = list_duplicate_ownership_owner(
-            session,
-            user=current_user,
-            dup_scan_classification="all",
-            classification=None,
-        )
-        run_detection = list_run_detection_owner(session, user=current_user, series_status=None)
-
     duplicate_groups_by_inventory: defaultdict[int, list[str]] = defaultdict(list)
     duplicate_class_by_inventory: dict[int, str] = {}
-    for group in duplicate_ownership.groups:
-        if group.classification == "intentional_multi_copy":
-            continue
-        for inv_id in group.inventory_copy_ids:
-            duplicate_groups_by_inventory[int(inv_id)].append(group.group_key)
-            duplicate_class_by_inventory[int(inv_id)] = group.classification
-
     run_groups_by_inventory: defaultdict[int, list[tuple[str, str, list[str], list[str]]]] = defaultdict(list)
-    for group in run_detection.series_groups:
-        gap_labels = [
-            item.issue_number or "identity gap"
-            for item in group.missing_issues
-            if item.classification in ("confirmed_missing", "likely_missing", "unresolved_identity_gap")
-        ]
-        pending_labels = [
-            item.issue_number or "pending"
-            for item in group.missing_issues
-            if item.classification in ("preorder_pending", "unreleased_future_issue")
-        ]
-        if not gap_labels and not pending_labels:
-            continue
-        for inv_id in group.inventory_copy_ids:
-            run_groups_by_inventory[int(inv_id)].append((group.series_key, group.series_status, gap_labels, pending_labels))
+
+    if not skip_library_duplicate_run:
+        if current_user is None:
+            duplicate_ownership = list_duplicate_ownership_ops(
+                session,
+                dup_scan_classification="all",
+                classification=None,
+            )
+            run_detection = list_run_detection_ops(session, series_status=None)
+        else:
+            duplicate_ownership = list_duplicate_ownership_owner(
+                session,
+                user=current_user,
+                dup_scan_classification="all",
+                classification=None,
+            )
+            run_detection = list_run_detection_owner(session, user=current_user, series_status=None)
+
+        for group in duplicate_ownership.groups:
+            if group.classification == "intentional_multi_copy":
+                continue
+            for inv_id in group.inventory_copy_ids:
+                duplicate_groups_by_inventory[int(inv_id)].append(group.group_key)
+                duplicate_class_by_inventory[int(inv_id)] = group.classification
+
+        for group in run_detection.series_groups:
+            gap_labels = [
+                item.issue_number or "identity gap"
+                for item in group.missing_issues
+                if item.classification in ("confirmed_missing", "likely_missing", "unresolved_identity_gap")
+            ]
+            pending_labels = [
+                item.issue_number or "pending"
+                for item in group.missing_issues
+                if item.classification in ("preorder_pending", "unreleased_future_issue")
+            ]
+            if not gap_labels and not pending_labels:
+                continue
+            for inv_id in group.inventory_copy_ids:
+                run_groups_by_inventory[int(inv_id)].append(
+                    (group.series_key, group.series_status, gap_labels, pending_labels),
+                )
 
     canonical_ids = pending_canonical_inventory_ids(
         session,

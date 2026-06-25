@@ -15,15 +15,34 @@ function isAcceptedFile(file: File): boolean {
 
 function statusLabel(retailer: SupportedRetailer): string {
   if (retailer.is_fallback) {
-    return "Request support";
+    return "Other retailer";
   }
   if (retailer.status === "supported") {
-    return "Supported";
+    return "Full parser";
   }
   if (retailer.status === "beta") {
-    return "Coming next · Upload sample";
+    return "HTML import (beta parser)";
   }
-  return "Upload sample";
+  return "HTML import";
+}
+
+function retailerImportHint(retailer: SupportedRetailer | undefined): string | null {
+  if (!retailer) {
+    return null;
+  }
+  if (retailer.key === "midtown") {
+    return "Use the same save-as-HTML steps below. Midtown uses the dedicated parser (order #, line items, covers).";
+  }
+  if (retailer.status === "beta") {
+    return (
+      "Same workflow as Midtown: open your order detail page in the browser, press Ctrl+S, save as Webpage HTML, " +
+      "then upload here. ComicOS uses best-effort parsing for this retailer; review every line on the next screen before confirming."
+    );
+  }
+  if (retailer.is_fallback) {
+    return "Upload a saved order page from any retailer. We’ll try generic parsing and you can fix fields before confirming.";
+  }
+  return null;
 }
 
 function statusClasses(retailer: SupportedRetailer): string {
@@ -67,6 +86,9 @@ export function RetailerHtmlImportPage() {
       cancelled = true;
     };
   }, []);
+
+  const selectedRetailerCard = retailers.find((item) => item.key === selectedRetailer);
+  const importHint = retailerImportHint(selectedRetailerCard);
 
   const pickFile = useCallback((file: File | null) => {
     setError(null);
@@ -112,9 +134,9 @@ export function RetailerHtmlImportPage() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Connected Retailers"
-        title="Import a saved retailer order"
-        description="Save your retailer order page as HTML, upload it here, review the detected books, then confirm into your portfolio."
+        eyebrow="Add comics"
+        title="Import saved order HTML"
+        description="Save your retailer order page as HTML (Ctrl+S), upload it here, review detected books, then confirm into your portfolio. Works for Midtown, Third Eye, DCBS, and more—no login or sync required."
       />
 
       {error ? (
@@ -164,6 +186,9 @@ export function RetailerHtmlImportPage() {
             );
           })}
         </div>
+        {importHint ? (
+          <p className="mt-4 text-sm text-slate-300">{importHint}</p>
+        ) : null}
       </section>
 
       <section className="mt-8 rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-xl shadow-black/20">
@@ -264,10 +289,10 @@ export function RetailerHtmlImportPage() {
         <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => navigate("/connected-retailers")}
+            onClick={() => navigate("/retailer-orders")}
             className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
           >
-            Connected Retailers
+            View imported orders
           </button>
         </div>
       </section>

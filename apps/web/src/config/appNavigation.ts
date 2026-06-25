@@ -135,7 +135,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Account & data", to: "/settings/account" },
-      { label: "Connected Retailers", to: "/connected-retailers" },
+      { label: "Import retailer orders", to: "/connected-retailers/import" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Workflow Health", to: "/workflow-health" },
     ],
@@ -146,6 +146,7 @@ export const NAV_GROUPS: NavGroup[] = [
     links: [
       { label: "Master Universe", to: "/universe", prominent: true },
       { label: "Universe Tree", to: "/catalog-universe", prominent: true },
+      { label: "GCD Import Dashboard", to: "/catalog/import", prominent: true },
       { label: "Placeholder Match Queue", to: "/catalog-universe/placeholders" },
     ],
   },

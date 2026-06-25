@@ -68,13 +68,13 @@ describe("RetailerHtmlImportPage", () => {
     );
 
     expect(await screen.findByText("Midtown Comics")).toBeInTheDocument();
-    expect(screen.getByText("Supported")).toBeInTheDocument();
-    expect(screen.getAllByText("Coming next · Upload sample").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("Full parser")).toBeInTheDocument();
+    expect(screen.getAllByText("HTML import (beta parser)").length).toBeGreaterThanOrEqual(3);
     expect(
       screen.getByText(/Don't see your retailer\? Upload a saved order page and ComicOS can add support\./i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Save your retailer order page as HTML, upload it here/i),
+      screen.getByText(/Save your retailer order page as HTML \(Ctrl\+S\)/i),
     ).toBeInTheDocument();
   });
 

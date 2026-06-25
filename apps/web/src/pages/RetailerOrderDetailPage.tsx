@@ -403,7 +403,7 @@ export function RetailerOrderDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate("/connected-retailers")}
+                  onClick={() => navigate("/connected-retailers/import")}
                   className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white transition hover:bg-white/5"
                 >
                   Back to Connected Retailers

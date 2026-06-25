@@ -1166,21 +1166,13 @@ def get_inventory_copy_detail(
         session,
         current_user,
         [inventory_copy_id],
-    )
-    _, dup_attachments = duplicate_ownership_inventory_context_for_owner(
-        session,
-        user=current_user,
-        dup_scan_classification="all",
+        lightweight=True,
     )
     intel = intelligence_signals.get(inventory_copy_id)
     merged["inventory_intelligence"] = intel
     merged["ownership_state"] = intel.ownership_state if intel is not None else None
-    merged["duplicate_ownership"] = dup_attachments.get(inventory_copy_id)
-    _, run_attachments = run_detection_inventory_context_for_owner(
-        session,
-        user=current_user,
-    )
-    merged["run_detection"] = run_attachments.get(inventory_copy_id)
+    merged["duplicate_ownership"] = None
+    merged["run_detection"] = None
     arrival_map = batch_order_arrival_classifications(session, user_id=int(current_user.id))
     risk_proj_rows = _inventory_projection_rows(
         session,
@@ -1191,6 +1183,7 @@ def get_inventory_copy_detail(
         risk_proj_rows,
         session=session,
         current_user=current_user,
+        skip_library_duplicate_run=True,
     )
     merged["inventory_risks"] = risk_attach_map.get(inventory_copy_id, [])
     ledger = build_inventory_action_items(

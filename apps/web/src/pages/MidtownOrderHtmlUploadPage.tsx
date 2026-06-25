@@ -305,7 +305,7 @@ export function MidtownOrderHtmlUploadPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate("/connected-retailers")}
+            onClick={() => navigate("/connected-retailers/import")}
             className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
           >
             Connected Retailers

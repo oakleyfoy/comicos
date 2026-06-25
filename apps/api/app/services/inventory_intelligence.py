@@ -192,6 +192,58 @@ def duplicate_inventory_pending_touching_inventory_ids(session: Session, *, owne
     return out
 
 
+def duplicate_inventory_pending_inventory_ids_for_scope(
+    session: Session,
+    *,
+    owner_user_id: int,
+    inventory_ids: set[int],
+) -> set[int]:
+    """Pending duplicate-review inventory ids within a bounded id set (detail / page scope)."""
+    if not inventory_ids:
+        return set()
+    scoped_ids = sorted({int(i) for i in inventory_ids})
+    rows = session.exec(
+        select(InventoryCopy.id, InventoryCopy.metadata_identity_key).where(
+            InventoryCopy.id.in_(scoped_ids),
+            InventoryCopy.user_id == owner_user_id,
+            InventoryCopy.metadata_identity_key.is_not(None),
+            InventoryCopy.metadata_identity_key != "",
+        ),
+    ).all()
+    if not rows:
+        return set()
+    keys = {str(row.metadata_identity_key) for row in rows if row.metadata_identity_key}
+    if not keys:
+        return set()
+    dup_keys = session.exec(
+        select(InventoryCopy.metadata_identity_key)
+        .where(
+            InventoryCopy.user_id == owner_user_id,
+            InventoryCopy.metadata_identity_key.in_(list(keys)),
+        )
+        .group_by(InventoryCopy.metadata_identity_key)
+        .having(func.count(InventoryCopy.id) >= 2),
+    ).all()
+    dup_key_set = {str(k) for k in dup_keys if k}
+    if not dup_key_set:
+        return set()
+    from app.services.duplicate_candidate_reviews import load_reviews_for_keys
+
+    reviews_map = load_reviews_for_keys(session, list(dup_key_set))
+    pending_keys = {
+        key
+        for key in dup_key_set
+        if reviews_map.get(key) is None or reviews_map.get(key).review_status == "pending"
+    }
+    if not pending_keys:
+        return set()
+    return {
+        int(row.id)
+        for row in rows
+        if row.metadata_identity_key is not None and str(row.metadata_identity_key) in pending_keys
+    }
+
+
 def duplicate_inventory_pending_inventory_ids_ops(session: Session) -> set[int]:
     from app.services.inventory import find_duplicate_inventory_candidates
 
@@ -633,6 +685,8 @@ def inventory_intelligence_signals_for_ids(
     session: Session,
     current_user: User,
     inventory_copy_ids: Sequence[int],
+    *,
+    lightweight: bool = False,
 ) -> dict[int, InventoryCopyIntelligenceSignals]:
     """Build per-copy intelligence signals for a subset of rows (detail / targeted reads)."""
     ids = sorted({int(i) for i in inventory_copy_ids})
@@ -662,16 +716,25 @@ def inventory_intelligence_signals_for_ids(
     )
 
     pending_canonical_inv = pending_canonical_inventory_ids(session, inventory_ids=inventory_id_set)
-    dup_pending_inv_touch = duplicate_inventory_pending_touching_inventory_ids(
-        session,
-        owner_user_id=user_id,
-    )
-    _dup_clusters, dup_hits_cover, _vf_clusters, vf_hits_cover = probable_cluster_cover_hits_owner(
-        session,
-        user=current_user,
-    )
-    dup_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, dup_hits_cover)
-    vf_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, vf_hits_cover)
+    if lightweight:
+        dup_pending_inv_touch = duplicate_inventory_pending_inventory_ids_for_scope(
+            session,
+            owner_user_id=user_id,
+            inventory_ids=inventory_id_set,
+        )
+        dup_scan_inv_touch: set[int] = set()
+        vf_scan_inv_touch: set[int] = set()
+    else:
+        dup_pending_inv_touch = duplicate_inventory_pending_touching_inventory_ids(
+            session,
+            owner_user_id=user_id,
+        )
+        _dup_clusters, dup_hits_cover, _vf_clusters, vf_hits_cover = probable_cluster_cover_hits_owner(
+            session,
+            user=current_user,
+        )
+        dup_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, dup_hits_cover)
+        vf_scan_inv_touch = inventory_ids_touching_cover_set(covers_map, vf_hits_cover)
 
     primary_cover_ids_for_ocr: set[int] = set()
     for row in projections:
