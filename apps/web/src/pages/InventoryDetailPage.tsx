@@ -1677,29 +1677,6 @@ export function InventoryDetailPage() {
 
   useEffect(() => {
     let ignore = false;
-    void (async () => {
-      setCollectionPulseError(null);
-      try {
-        const summary = await apiClient.getCollectionAnalyticsSummary();
-        if (!ignore) {
-          setCollectionPulseSummary(summary);
-        }
-      } catch (pulseErr) {
-        if (!ignore) {
-          setCollectionPulseSummary(null);
-          setCollectionPulseError(
-            pulseErr instanceof ApiError ? pulseErr.message : "Unable to load collection analytics snapshot.",
-          );
-        }
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
     if (!Number.isInteger(parsedInventoryCopyId) || parsedInventoryCopyId <= 0) {
       setInventoryHistoricalTimeline(null);
       setInventoryHistoricalTimelineError(null);

@@ -406,7 +406,7 @@ export function RetailerOrderDetailPage() {
                   onClick={() => navigate("/connected-retailers/import")}
                   className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white transition hover:bg-white/5"
                 >
-                  Back to Connected Retailers
+                  Back to order import
                 </button>
               </div>
             </div>
@@ -501,7 +501,7 @@ export function RetailerOrderDetailPage() {
             {!orderConfirmed ? (
               <div className="mt-4">
                 <StatusBanner tone="info">
-                  <strong className="font-semibold">CAPTURED</strong> means Midtown data is saved in ComicOS only.
+                  <strong className="font-semibold">CAPTURED</strong> means this retailer order is saved in ComicOS only.
                   Books are not in your portfolio until you click <strong className="font-semibold">Add to portfolio</strong>.
                   Catalog badges can stay on “Review pending” until background matching runs; that does not block adding.
                 </StatusBanner>

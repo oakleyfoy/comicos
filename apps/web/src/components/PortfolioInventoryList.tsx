@@ -109,21 +109,21 @@ function buildSignalChips(item: InventoryItem): Chip[] {
       chips.push({
         key: "health",
         label: intel.inventory_health.replace(/_/g, " "),
-        className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-100",
+        className: "border-sky-300 bg-sky-50 text-sky-900",
       });
     }
     if (!intel.has_cover_scan) {
       chips.push({
         key: "unscanned",
         label: "Unscanned",
-        className: "border-white/15 bg-white/5 text-slate-300",
+        className: "border-slate-300 bg-slate-100 text-slate-700",
       });
     }
     if (intel.preorder_missing_release_calendar) {
       chips.push({
         key: "preorder-cal",
         label: "Preorder date gap",
-        className: "border-amber-400/30 bg-amber-400/10 text-amber-100",
+        className: "border-amber-300 bg-amber-50 text-amber-900",
       });
     }
   }
@@ -132,7 +132,7 @@ function buildSignalChips(item: InventoryItem): Chip[] {
     chips.push({
       key: "dup",
       label: "Multi-copy",
-      className: "border-white/15 bg-white/5 text-slate-200",
+      className: "border-slate-300 bg-slate-100 text-slate-800",
       title: item.duplicate_ownership.classification,
     });
   }
@@ -141,7 +141,7 @@ function buildSignalChips(item: InventoryItem): Chip[] {
     chips.push({
       key: "run",
       label: item.run_detection.series_status.replace(/_/g, " "),
-      className: "border-white/15 bg-white/5 text-slate-200",
+      className: "border-slate-300 bg-slate-100 text-slate-800",
     });
   }
 
@@ -151,8 +151,8 @@ function buildSignalChips(item: InventoryItem): Chip[] {
       label: inventoryRiskLabel(risk.risk_type),
       className:
         risk.priority === "critical" || risk.priority === "high"
-          ? "border-rose-400/35 bg-rose-400/10 text-rose-100"
-          : "border-amber-400/30 bg-amber-400/10 text-amber-100",
+          ? "border-rose-300 bg-rose-50 text-rose-900"
+          : "border-amber-300 bg-amber-50 text-amber-900",
     });
   }
 
@@ -160,7 +160,7 @@ function buildSignalChips(item: InventoryItem): Chip[] {
     chips.push({
       key: `act-${cat}`,
       label: actionShort(cat),
-      className: "border-teal-400/30 bg-teal-400/10 text-teal-100",
+      className: "border-teal-300 bg-teal-50 text-teal-900",
     });
   }
 
@@ -168,7 +168,7 @@ function buildSignalChips(item: InventoryItem): Chip[] {
     chips.push({
       key: `arr-${c}`,
       label: orderArrivalShort(c),
-      className: "border-violet-400/30 bg-violet-400/10 text-violet-100",
+      className: "border-violet-300 bg-violet-50 text-violet-900",
     });
   }
 
@@ -197,7 +197,7 @@ function SignalChips({ item }: { item: InventoryItem }): JSX.Element | null {
       {overflow > 0 ? (
         <span
           title={overflowTitle}
-          className="inline-flex rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-slate-400"
+          className="inline-flex rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
         >
           +{overflow}
         </span>

@@ -38,6 +38,84 @@ _GENERIC_ORDER_HTML = """
 
 _NO_ITEMS_HTML = "<html><head><title>Order #X9</title></head><body><p>Nothing here.</p></body></html>"
 
+_THIRD_EYE_SHOPIFY_HTML = """
+<html>
+  <head><title>Order #973967</title></head>
+  <body>
+    <h1>Order 973967</h1>
+    <table class="order-list">
+      <tbody>
+        <tr>
+          <td class="order-list__item-description">
+            <a href="https://www.thirdeyecomics.com/products/gehenna-in-tokyo-1-cvr-a-shimizu">
+              Gehenna In Tokyo #1 (CVR A Shimizu)
+            </a>
+          </td>
+          <td class="order-list__item-quantity">1</td>
+          <td class="order-list__item-price">$3.59 USD /ea</td>
+        </tr>
+        <tr>
+          <td class="order-list__item-description">
+            <a href="https://www.thirdeyecomics.com/products/spider-man-1">Amazing Spider-Man #1</a>
+          </td>
+          <td>2</td>
+          <td>$4.99 USD /ea</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Order Total: $13.97</p>
+  </body>
+</html>
+"""
+
+
+_THIRD_EYE_CUSTOMER_ACCOUNT_HTML = """
+<html>
+  <head><title>Order #973967 - Third Eye Comics</title></head>
+  <body>
+    <h1>Order 973967</h1>
+    <div class="order-items">
+      <div class="line">
+        <a href="https://shop.thirdeyecomics.com/products/marvel-swimsuit-special-brand-new-beach-day-1-inhyuk-lee-marvel-snap-swimsuit-variant?variant=1&amp;sso=silent">Quantity 1</a>
+        Quantity 1 MARVEL SWIMSUIT SPECIAL: BRAND NEW BEACH DAY #1 INHYUK LEE MARVEL SNAP SWIMSUIT VARIANT $5.99
+      </div>
+      <div class="line">
+        <a href="https://shop.thirdeyecomics.com/products/apr26cat-prh-75960621474700111-marvel-swimsuit-special-brand-new-beach-day-1-wraparound-cover?variant=2">Quantity 2</a>
+        Quantity 2 MARVEL SWIMSUIT SPECIAL: BRAND NEW BEACH DAY #1 WRAPAROUND COVER $5.99/ea $11.98
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+
+def test_third_eye_parser_uses_product_links_not_price_junk() -> None:
+    parser = get_retailer_html_parser("third_eye")
+    detail = parser.parse(_THIRD_EYE_SHOPIFY_HTML)
+    assert detail.retailer_order_number == "973967"
+    titles = {item.title for item in detail.items}
+    assert "Gehenna In Tokyo #1" in titles
+    assert "Amazing Spider-Man #1" in titles
+    assert "/ea" not in titles
+    assert "USD" not in titles
+    gehenna = next(i for i in detail.items if "Gehenna" in i.title)
+    assert gehenna.unit_price is not None
+    assert str(gehenna.unit_price) == "3.59"
+    assert "thirdeyecomics.com/products/" in (gehenna.product_url or "")
+
+
+def test_third_eye_shopify_customer_account_quantity_links() -> None:
+    parser = get_retailer_html_parser("third_eye")
+    detail = parser.parse(_THIRD_EYE_CUSTOMER_ACCOUNT_HTML)
+    assert detail.retailer_order_number == "973967"
+    titles = {item.title for item in detail.items}
+    assert any("INHYUK LEE" in t for t in titles)
+    assert any("WRAPAROUND" in t for t in titles)
+    wrap = next(i for i in detail.items if "WRAPAROUND" in i.title)
+    assert wrap.quantity == 2
+    assert str(wrap.unit_price) == "5.99"
+    assert str(wrap.total_price) == "11.98"
+
 
 def test_registry_contains_all_supported_retailers() -> None:
     assert set(retailer_html_parsers) == {"midtown", "dcbs", "third_eye", "mycomicshop", "unknown"}
