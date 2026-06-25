@@ -1,7 +1,9 @@
 from decimal import Decimal
 from collections import defaultdict
+import logging
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import case, func, or_
 from sqlmodel import Session, select
 
@@ -26,6 +28,7 @@ from app.services.inventory_canonical_spine import (
 from app.services.organization_inventory_access import resolve_inventory_visibility
 from app.services.shared_inventory_service import assignment_metadata_for_inventory_ids
 from app.services.review_workflow_service import review_metadata_for_inventory_ids
+from app.schemas.inventory_fmv import InventoryFmvAttachmentRead
 from app.schemas.inventory import (
     BulkInventoryUpdateRequest,
     BulkInventoryUpdateResponse,
@@ -141,6 +144,89 @@ _issue_number_expr = issue_number_expr
 _retailer_expr = retailer_expr
 _purchase_date_expr = purchase_date_expr
 _apply_inventory_spine_joins = apply_inventory_spine_joins
+
+logger = logging.getLogger(__name__)
+
+_ORDER_STATUS_LITERAL = frozenset({"ordered", "preordered", "shipped", "received", "cancelled"})
+_RELEASE_STATUS_LITERAL = frozenset({"released", "not_released_yet", "unknown"})
+_COVER_SOURCE_LITERAL = frozenset({"catalog_cover", "retailer_remote", "local_saved_html", "placeholder"})
+_ASSET_STATE_LITERAL = frozenset(
+    {"in_hand", "ordered_not_received", "preorder_not_released_yet", "cancelled"}
+)
+
+_DETAIL_VALIDATION_STRIP_KEYS: tuple[str, ...] = (
+    "inventory_intelligence",
+    "inventory_fmv",
+    "inventory_action_center",
+    "inventory_risks",
+    "order_arrival_classifications",
+    "cover_images",
+    "originating_scan_session",
+    "grading_candidate",
+    "grading_spread",
+    "grading_roi",
+    "grading_submission",
+    "grading_reconciliation",
+    "grading_recommendation",
+    "grading_risk",
+    "portfolio_intelligence",
+    "duplicate_intelligence",
+    "portfolio_liquidity",
+    "acquisition_priority",
+    "concentration_risk",
+    "portfolio_recommendation",
+    "market_acquisition_score",
+    "market_acquisition_signal",
+    "market_acquisition_opportunity",
+    "portfolio_market_coupling",
+)
+
+
+def _sanitize_detail_row_literals(row_map: dict) -> None:
+    order_status = row_map.get("order_status")
+    if order_status not in _ORDER_STATUS_LITERAL:
+        row_map["order_status"] = "ordered"
+    release_status = row_map.get("release_status")
+    if release_status not in _RELEASE_STATUS_LITERAL:
+        row_map["release_status"] = "unknown"
+    cover_source = row_map.get("cover_source")
+    if cover_source not in _COVER_SOURCE_LITERAL:
+        row_map["cover_source"] = "placeholder"
+    asset_state = row_map.get("asset_state")
+    if asset_state not in _ASSET_STATE_LITERAL:
+        row_map["asset_state"] = "ordered_not_received"
+
+
+def _safe_detail_part(label: str, factory):
+    try:
+        return factory()
+    except Exception:
+        logger.exception("inventory detail %s failed", label)
+        return None
+
+
+def _minimal_fmv_attachment(inventory_copy_id: int) -> InventoryFmvAttachmentRead:
+    return InventoryFmvAttachmentRead(
+        inventory_copy_id=inventory_copy_id,
+        valuation_scope="no_market_data",
+    )
+
+
+def _inventory_detail_response_from_merged(merged: dict) -> InventoryDetailResponse:
+    try:
+        return InventoryDetailResponse.model_validate(merged)
+    except ValidationError:
+        copy_id = merged.get("inventory_copy_id")
+        logger.exception("inventory detail response validation failed for copy %s", copy_id)
+        for key in _DETAIL_VALIDATION_STRIP_KEYS:
+            if key == "cover_images" or key == "inventory_risks" or key == "order_arrival_classifications":
+                merged[key] = []
+            else:
+                merged[key] = None
+        if merged.get("inventory_fmv") is None and copy_id is not None:
+            merged["inventory_fmv"] = _minimal_fmv_attachment(int(copy_id))
+        _sanitize_detail_row_literals(merged)
+        return InventoryDetailResponse.model_validate(merged)
 
 
 def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int, ...] | None = None):
@@ -1145,63 +1231,106 @@ def get_inventory_copy_detail(
         raise HTTPException(status_code=404, detail="Inventory copy not found")
 
     merged = dict(row._mapping)
-    merged["cover_images"] = list_cover_reads_for_inventory(session, inventory_copy_id)
-    detail_metadata = resolve_inventory_display_metadata_for_copy(
-        session,
-        owner_user_id=int(current_user.id),
-        primary_cover_image_id=merged.get("primary_cover_image_id"),
-        source_image_url=merged.get("source_image_url"),
-        copy_release_date=merged.get("release_date"),
-        copy_release_status=merged.get("release_status"),
-        order_item_foc_date=merged.get("foc_date"),
-        catalog_match_id=merged.get("catalog_match_id"),
-        enrichment_status=merged.get("enrichment_status"),
+    _sanitize_detail_row_literals(merged)
+    merged["cover_images"] = _safe_detail_part(
+        "cover_images",
+        lambda: list_cover_reads_for_inventory(session, inventory_copy_id),
+    ) or []
+    detail_metadata = _safe_detail_part(
+        "display_metadata",
+        lambda: resolve_inventory_display_metadata_for_copy(
+            session,
+            owner_user_id=int(current_user.id),
+            primary_cover_image_id=merged.get("primary_cover_image_id"),
+            source_image_url=merged.get("source_image_url"),
+            copy_release_date=merged.get("release_date"),
+            copy_release_status=merged.get("release_status"),
+            order_item_foc_date=merged.get("foc_date"),
+            catalog_match_id=merged.get("catalog_match_id"),
+            enrichment_status=merged.get("enrichment_status"),
+        ),
     )
-    _merge_display_metadata(merged, detail_metadata)
+    if detail_metadata is not None:
+        _merge_display_metadata(merged, detail_metadata)
+        _sanitize_detail_row_literals(merged)
     # Prefer a derivative cover URL for the detail view when covers are loaded.
     _detail_cover = _detail_catalog_cover_url(merged["cover_images"], merged.get("primary_cover_image_id"))
     if _detail_cover is not None:
         merged["cover_image_url"] = _detail_cover
-    intelligence_signals = inventory_intelligence_signals_for_ids(
-        session,
-        current_user,
-        [inventory_copy_id],
-        lightweight=True,
-    )
+    intelligence_signals = _safe_detail_part(
+        "intelligence_signals",
+        lambda: inventory_intelligence_signals_for_ids(
+            session,
+            current_user,
+            [inventory_copy_id],
+            lightweight=True,
+        ),
+    ) or {}
     intel = intelligence_signals.get(inventory_copy_id)
     merged["inventory_intelligence"] = intel
     merged["ownership_state"] = intel.ownership_state if intel is not None else None
     merged["duplicate_ownership"] = None
     merged["run_detection"] = None
-    arrival_map = batch_order_arrival_classifications(session, user_id=int(current_user.id))
-    risk_proj_rows = _inventory_projection_rows(
-        session,
-        user_id=int(current_user.id),
-        inventory_copy_ids=[inventory_copy_id],
-    )
-    risks_flat, risk_attach_map = _aggregate_risks(
-        risk_proj_rows,
-        session=session,
-        current_user=current_user,
-        skip_library_duplicate_run=True,
-    )
+    try:
+        arrival_map = {
+            inventory_copy_id: classifications_for_inventory_copy(
+                session,
+                inventory_copy_id=inventory_copy_id,
+                user_id=int(current_user.id),
+            ),
+        }
+    except Exception:
+        logger.exception("inventory detail arrival classifications failed for copy %s", inventory_copy_id)
+        arrival_map = {inventory_copy_id: []}
+    try:
+        risk_proj_rows = _inventory_projection_rows(
+            session,
+            user_id=int(current_user.id),
+            inventory_copy_ids=[inventory_copy_id],
+        )
+        risks_flat, risk_attach_map = _aggregate_risks(
+            risk_proj_rows,
+            session=session,
+            current_user=current_user,
+            skip_library_duplicate_run=True,
+        )
+    except Exception:
+        logger.exception("inventory detail risks failed for copy %s", inventory_copy_id)
+        risks_flat, risk_attach_map = [], {}
     merged["inventory_risks"] = risk_attach_map.get(inventory_copy_id, [])
-    ledger = build_inventory_action_items(
-        session,
-        risk_rows=risks_flat,
-        signals_map=intelligence_signals,
-        arrival_map=arrival_map,
-        user_id_scope=int(current_user.id),
-        inventory_copy_ids=[inventory_copy_id],
+    try:
+        ledger = build_inventory_action_items(
+            session,
+            risk_rows=risks_flat,
+            signals_map=intelligence_signals,
+            arrival_map=arrival_map,
+            user_id_scope=int(current_user.id),
+            inventory_copy_ids=[inventory_copy_id],
+        )
+        scoped_actions = [a for a in ledger if a.inventory_copy_id == inventory_copy_id]
+        merged["inventory_action_center"] = attachment_from_items(scoped_actions)
+    except Exception:
+        logger.exception("inventory detail action center failed for copy %s", inventory_copy_id)
+        merged["inventory_action_center"] = None
+    merged["order_arrival_classifications"] = _safe_detail_part(
+        "order_arrival_classifications",
+        lambda: classifications_for_inventory_copy(
+            session,
+            inventory_copy_id=inventory_copy_id,
+            user_id=int(current_user.id),
+        ),
+    ) or []
+    fmv_attachment = _safe_detail_part(
+        "fmv_attachment",
+        lambda: build_inventory_fmv_attachment(session, row=merged, include_detail=True),
     )
-    scoped_actions = [a for a in ledger if a.inventory_copy_id == inventory_copy_id]
-    merged["inventory_action_center"] = attachment_from_items(scoped_actions)
-    merged["order_arrival_classifications"] = classifications_for_inventory_copy(
-        session,
-        inventory_copy_id=inventory_copy_id,
-        user_id=int(current_user.id),
-    )
-    fmv_attachment = build_inventory_fmv_attachment(session, row=merged, include_detail=True)
+    if fmv_attachment is None:
+        fmv_attachment = _safe_detail_part(
+            "fmv_attachment_light",
+            lambda: build_inventory_fmv_attachment(session, row=merged, include_detail=False),
+        )
+    if fmv_attachment is None:
+        fmv_attachment = _minimal_fmv_attachment(inventory_copy_id)
     merged["current_market_fmv"] = fmv_attachment.current_market_fmv
     merged["fmv_snapshot_id"] = fmv_attachment.fmv_snapshot_id
     merged["fmv_method"] = fmv_attachment.fmv_method
@@ -1213,98 +1342,153 @@ def get_inventory_copy_detail(
     merged["valuation_scope"] = fmv_attachment.valuation_scope
     merged["valuation_evidence_json"] = fmv_attachment.valuation_evidence_json
     merged["inventory_fmv"] = fmv_attachment
-    merged["originating_scan_session"] = originating_scan_session_for_inventory_copy(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_copy_id=inventory_copy_id,
+    merged["originating_scan_session"] = _safe_detail_part(
+        "originating_scan_session",
+        lambda: originating_scan_session_for_inventory_copy(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_copy_id=inventory_copy_id,
+        ),
     )
-    merged["grading_candidate"] = inventory_grading_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_candidate"] = _safe_detail_part(
+        "grading_candidate",
+        lambda: inventory_grading_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_spread"] = inventory_grading_spread_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_spread"] = _safe_detail_part(
+        "grading_spread",
+        lambda: inventory_grading_spread_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_roi"] = inventory_grading_roi_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_roi"] = _safe_detail_part(
+        "grading_roi",
+        lambda: inventory_grading_roi_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_submission"] = inventory_grading_submission_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_submission"] = _safe_detail_part(
+        "grading_submission",
+        lambda: inventory_grading_submission_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_reconciliation"] = inventory_grading_reconciliation_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_reconciliation"] = _safe_detail_part(
+        "grading_reconciliation",
+        lambda: inventory_grading_reconciliation_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_recommendation"] = inventory_grading_recommendation_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_recommendation"] = _safe_detail_part(
+        "grading_recommendation",
+        lambda: inventory_grading_recommendation_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["grading_risk"] = inventory_grading_risk_badge(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["grading_risk"] = _safe_detail_part(
+        "grading_risk",
+        lambda: inventory_grading_risk_badge(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["portfolio_intelligence"] = inventory_portfolio_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_copy_id=inventory_copy_id,
-        publisher_display_name=str(merged.get("publisher") or ""),
+    merged["portfolio_intelligence"] = _safe_detail_part(
+        "portfolio_intelligence",
+        lambda: inventory_portfolio_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_copy_id=inventory_copy_id,
+            publisher_display_name=str(merged.get("publisher") or ""),
+        ),
     )
-    merged["duplicate_intelligence"] = inventory_duplicate_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["duplicate_intelligence"] = _safe_detail_part(
+        "duplicate_intelligence",
+        lambda: inventory_duplicate_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["portfolio_liquidity"] = inventory_portfolio_liquidity_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["portfolio_liquidity"] = _safe_detail_part(
+        "portfolio_liquidity",
+        lambda: inventory_portfolio_liquidity_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["acquisition_priority"] = inventory_acquisition_priority_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["acquisition_priority"] = _safe_detail_part(
+        "acquisition_priority",
+        lambda: inventory_acquisition_priority_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["concentration_risk"] = inventory_concentration_risk_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["concentration_risk"] = _safe_detail_part(
+        "concentration_risk",
+        lambda: inventory_concentration_risk_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["portfolio_recommendation"] = inventory_portfolio_recommendation_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["portfolio_recommendation"] = _safe_detail_part(
+        "portfolio_recommendation",
+        lambda: inventory_portfolio_recommendation_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["market_acquisition_score"] = inventory_market_acquisition_score_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["market_acquisition_score"] = _safe_detail_part(
+        "market_acquisition_score",
+        lambda: inventory_market_acquisition_score_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["market_acquisition_signal"] = inventory_market_signal_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["market_acquisition_signal"] = _safe_detail_part(
+        "market_acquisition_signal",
+        lambda: inventory_market_signal_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["market_acquisition_opportunity"] = inventory_market_opportunity_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_item_id=inventory_copy_id,
+    merged["market_acquisition_opportunity"] = _safe_detail_part(
+        "market_acquisition_opportunity",
+        lambda: inventory_market_opportunity_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_item_id=inventory_copy_id,
+        ),
     )
-    merged["portfolio_market_coupling"] = inventory_portfolio_market_coupling_teaser(
-        session,
-        owner_user_id=int(current_user.id),
-        inventory_copy_id=inventory_copy_id,
+    merged["portfolio_market_coupling"] = _safe_detail_part(
+        "portfolio_market_coupling",
+        lambda: inventory_portfolio_market_coupling_teaser(
+            session,
+            owner_user_id=int(current_user.id),
+            inventory_copy_id=inventory_copy_id,
+        ),
     )
-    return InventoryDetailResponse.model_validate(merged)
+    _sanitize_detail_row_literals(merged)
+    return _inventory_detail_response_from_merged(merged)
 
 
 def get_inventory_fmv_history(

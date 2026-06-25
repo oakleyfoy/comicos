@@ -245,7 +245,7 @@ def analyze_collection_summary(
     as_of = as_of_date or utc_today_deterministic()
     scope_tag = "ops_global" if projection_user_filter is None else "owner"
     intel_summary, _h, _b, signals_full = compute_inventory_intelligence(
-        session, current_user=intel_user, include_signals=True
+        session, current_user=intel_user, include_signals=False
     )
     projections = list(session.exec(collection_projection_stmt(user_id=projection_user_filter)).all())
 
