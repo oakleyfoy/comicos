@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import pickle
 import sqlite3
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name, normalize_upc, series_names_compatible
 from app.services.p101_catalog_cache_service import CatalogCacheContext
@@ -187,6 +188,79 @@ class _GcdIndex:
     rows_loaded: int = 0
 
 
+def _catalog_scope_match_sets(
+    catalog_scope: Sequence[EnrichmentIssueSnapshot],
+) -> tuple[set[tuple[str, str, str]], set[tuple[str, str]]]:
+    exact_keys: set[tuple[str, str, str]] = set()
+    si_keys: set[tuple[str, str]] = set()
+    for snap in catalog_scope:
+        exact_keys.add((snap.publisher_norm, snap.series_norm, snap.issue_norm))
+        si_keys.add((snap.series_norm, snap.issue_norm))
+    return exact_keys, si_keys
+
+
+def _gcd_index_cache_path(
+    gcd_path: Path,
+    *,
+    year_from: int,
+    year_to: int,
+    catalog_scope: Sequence[EnrichmentIssueSnapshot] | None,
+    cache_dir: Path,
+) -> Path:
+    scope_fp = 0
+    if catalog_scope:
+        scope_fp = hash(tuple((s.issue_id, s.publisher_norm, s.series_norm, s.issue_norm) for s in catalog_scope))
+    gcd_mtime = int(gcd_path.stat().st_mtime)
+    name = f"p103_gcd_index_{gcd_mtime}_{year_from}_{year_to}_{len(catalog_scope or [])}_{scope_fp & 0xFFFFFFFF:x}.pickle"
+    return cache_dir / name
+
+
+def load_gcd_index_for_enrichment(
+    gcd_path: Path,
+    *,
+    year_from: int,
+    year_to: int,
+    focus_publisher: str | None,
+    all_catalog: bool = False,
+    year_filter_explicit: bool = False,
+    catalog_scope: Sequence[EnrichmentIssueSnapshot] | None = None,
+    index_cache_dir: Path | None = None,
+) -> _GcdIndex:
+    cache_dir = index_cache_dir or gcd_path.parent
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = _gcd_index_cache_path(
+        gcd_path,
+        year_from=year_from,
+        year_to=year_to,
+        catalog_scope=catalog_scope,
+        cache_dir=cache_dir,
+    )
+    if cache_path.is_file():
+        try:
+            with cache_path.open("rb") as fh:
+                cached = pickle.load(fh)
+            if isinstance(cached, _GcdIndex):
+                return cached
+        except (OSError, pickle.UnpicklingError):
+            pass
+
+    index = _load_gcd_index(
+        gcd_path,
+        year_from=year_from,
+        year_to=year_to,
+        focus_publisher=focus_publisher,
+        all_catalog=all_catalog,
+        year_filter_explicit=year_filter_explicit,
+        catalog_scope=catalog_scope,
+    )
+    try:
+        with cache_path.open("wb") as fh:
+            pickle.dump(index, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    except OSError:
+        pass
+    return index
+
+
 def _load_gcd_index(
     gcd_path: Path,
     *,
@@ -195,15 +269,17 @@ def _load_gcd_index(
     focus_publisher: str | None,
     all_catalog: bool = False,
     year_filter_explicit: bool = False,
+    catalog_scope: Sequence[EnrichmentIssueSnapshot] | None = None,
 ) -> _GcdIndex:
     conn = sqlite3.connect(gcd_path)
     conn.execute("PRAGMA query_only = ON")
-    where_parts: list[str] = []
-    params: list[int] = []
-    if not all_catalog or year_filter_explicit:
-        where_parts.append(f"{YEAR_EXPR} BETWEEN ? AND ?")
-        params.extend([year_from, year_to])
-    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    where_parts: list[str] = [f"{YEAR_EXPR} BETWEEN ? AND ?"]
+    params: list[int] = [year_from, year_to]
+    where_sql = f"WHERE {' AND '.join(where_parts)}"
+    match_exact: set[tuple[str, str, str]] | None = None
+    match_si: set[tuple[str, str]] | None = None
+    if catalog_scope:
+        match_exact, match_si = _catalog_scope_match_sets(catalog_scope)
     cur = conn.execute(
         f"""
         SELECT i.id AS issue_id, p.id AS gcd_publisher_id, p.name AS publisher_name,
@@ -253,6 +329,9 @@ def _load_gcd_index(
             iss_norm = normalize_issue_number(str(number or ""))
             if not pub_norm or not ser_norm or not iss_norm:
                 continue
+            if match_exact is not None and match_si is not None:
+                if (pub_norm, ser_norm, iss_norm) not in match_exact and (ser_norm, iss_norm) not in match_si:
+                    continue
             row_dict = {
                 "issue_id": gcd_issue_id,
                 "gcd_publisher_id": gcd_publisher_id,
@@ -409,13 +488,16 @@ def run_p103_enrichment_dryrun_fast(
         timer.cache_load_sec = time.perf_counter() - t_cache
 
     t_gcd = time.perf_counter()
-    gcd_index = _load_gcd_index(
+    index_cache_dir = gcd_path.parent / "p103_gcd_index_cache"
+    gcd_index = load_gcd_index_for_enrichment(
         gcd_path,
         year_from=filters.year_from,
         year_to=filters.year_to,
         focus_publisher=filters.publisher,
         all_catalog=filters.all_catalog,
         year_filter_explicit=filters.year_filter_explicit,
+        catalog_scope=catalog_scope,
+        index_cache_dir=index_cache_dir,
     )
     if timer:
         timer.gcd_query_sec = time.perf_counter() - t_gcd

@@ -134,7 +134,7 @@ def test_all_write_uses_batched_commits_and_perf(session: Session, tmp_path: Pat
         return _GcdIndex(exact={key: gcd_row}, by_series_issue={}, rows_loaded=1)
 
     monkeypatch.setattr(
-        "app.services.p103_gcd_enrichment_write_service._load_gcd_index",
+        "app.services.p103_gcd_enrichment_write_service.load_gcd_index_for_enrichment",
         lambda *args, **kwargs: _fake_index(),
     )
 

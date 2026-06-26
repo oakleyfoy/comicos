@@ -54,8 +54,23 @@ def _load_payload(report_path: Path, job_id: int | None) -> tuple[dict[str, Any]
     return raw, report, rollback
 
 
+def _effective_written_rows(report: dict[str, Any], rollback: dict[str, Any]) -> list[dict[str, Any]]:
+    written = list(report.get("written_rows") or [])
+    if written:
+        return written
+    expected_updated = int(report.get("updated_issues", 0))
+    snapshots = rollback.get("issue_snapshots") or []
+    if expected_updated > 0 and len(snapshots) == expected_updated:
+        return [
+            {"catalog_issue_id": int(s["catalog_issue_id"])}
+            for s in snapshots
+            if s.get("catalog_issue_id") is not None
+        ]
+    return written
+
+
 def _confirm_report_counts(report: dict[str, Any], rollback: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    written = report.get("written_rows") or []
+    written = _effective_written_rows(report, rollback)
     failures: list[str] = []
     expected_updated = int(report.get("updated_issues", len(written)))
     expected_upcs = int(report.get("inserted_upcs", 0))
@@ -210,7 +225,7 @@ def run_full_audit(
     report_summary, report_failures = _confirm_report_counts(report, rollback)
     timings["confirm_report_counts"] = time.perf_counter() - t0
 
-    written = report.get("written_rows") or []
+    written = _effective_written_rows(report, rollback)
     expected_updated = int(report.get("updated_issues", len(written)))
     expected_upcs = int(report.get("inserted_upcs", 0))
 
@@ -301,7 +316,7 @@ def main() -> int:
     payload, report, rollback = _load_payload(Path(args.report), args.job_id)
     timings["load_report"] = time.perf_counter() - t_load
 
-    written = report.get("written_rows") or []
+    written = _effective_written_rows(report, rollback)
     expected_updated = int(report.get("updated_issues", len(written)))
     expected_upcs = int(report.get("inserted_upcs", 0))
     errors = report.get("errors") or []

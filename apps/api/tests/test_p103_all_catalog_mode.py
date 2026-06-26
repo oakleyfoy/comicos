@@ -174,7 +174,7 @@ def test_all_write_does_not_insert_catalog_issue(session: Session, tmp_path: Pat
     from app.services.p103_gcd_enrichment_write_service import run_p103_enrichment_write_batch
 
     monkeypatch.setattr(
-        "app.services.p103_gcd_enrichment_write_service._load_gcd_index",
+        "app.services.p103_gcd_enrichment_write_service.load_gcd_index_for_enrichment",
         lambda *args, **kwargs: _GcdIndex(exact={}, by_series_issue={}, rows_loaded=0),
     )
 
