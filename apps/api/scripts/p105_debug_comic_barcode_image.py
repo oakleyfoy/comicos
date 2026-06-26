@@ -134,6 +134,16 @@ def main() -> int:
             )
         if geometry.get("chosen_candidate"):
             print(f"  chosen_candidate: {geometry.get('chosen_candidate')}")
+        viz = result.region_ocr_debug.get("geometry_viz") if result.region_ocr_debug else None
+        if viz:
+            print("GEOMETRY OCR VISUALIZATION")
+            print(f"  chosen_ocr_digits: {viz.get('chosen_ocr_digits')}")
+            print(f"  debug_tesseract_digits: {viz.get('debug_tesseract_digits')}")
+            print(f"  ocr_outside_intended: {viz.get('ocr_outside_intended_left_supplement')}")
+            print(f"  note: {viz.get('intended_vs_detected_note')}")
+            hit = viz.get("ocr_hit_box_original")
+            if hit:
+                print(f"  ocr_hit_box: x={hit.get('x')} y={hit.get('y')} w={hit.get('width')} h={hit.get('height')}")
         rects = geometry.get("rectangles", {})
         for name in ("full_expanded", "price_box", "main_bars", "left_supplement", "right_cover_digit"):
             r = rects.get(name)
@@ -191,8 +201,10 @@ def main() -> int:
         )
 
     print("-" * 64)
-    print(f"overlay.jpg:           {overlay_path}")
-    print(f"left_supplement.jpg:   {left_path}")
+        print(f"overlay.jpg:           {overlay_path}")
+        print(f"overlay_labeled.jpg:   {base / 'overlay_labeled.jpg'}")
+        print(f"left_supplement_context.jpg: {base / 'left_supplement_context.jpg'}")
+        print(f"left_supplement.jpg:   {left_path}")
     print(f"ocr_debug.json:        {ocr_debug_path}")
     print(f"debug_dir:             {base}")
 

@@ -48,6 +48,28 @@ class OcrAttempt:
 
 
 @dataclass
+class TesseractWordBox:
+    """Word-level box from a Tesseract TSV pass (crop-local coordinates)."""
+
+    text: str
+    left: int
+    top: int
+    width: int
+    height: int
+    confidence: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "text": self.text,
+            "left": self.left,
+            "top": self.top,
+            "width": self.width,
+            "height": self.height,
+            "confidence": round(self.confidence, 3),
+        }
+
+
+@dataclass
 class SupplementCandidate:
     digits: str
     score: float
@@ -122,6 +144,114 @@ def _parse_tsv(stdout: str) -> tuple[str, float]:
         confs.append(conf)
     confidence = (sum(confs) / len(confs) / 100.0) if confs else 0.0
     return digits, max(0.0, min(1.0, confidence))
+
+
+def parse_tesseract_tsv_words(stdout: str) -> list[TesseractWordBox]:
+    """Parse Tesseract TSV output into word-level boxes (level == 5)."""
+    words: list[TesseractWordBox] = []
+    for line in (stdout or "").splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) < 12:
+            continue
+        try:
+            level = int(cols[0])
+        except ValueError:
+            continue
+        if level != 5:
+            continue
+        text = (cols[11] or "").strip()
+        if not text:
+            continue
+        try:
+            conf = float(cols[10])
+            left = int(cols[6])
+            top = int(cols[7])
+            width = int(cols[8])
+            height = int(cols[9])
+        except ValueError:
+            continue
+        if conf < 0 or width <= 0 or height <= 0:
+            continue
+        words.append(
+            TesseractWordBox(
+                text=text,
+                left=left,
+                top=top,
+                width=width,
+                height=height,
+                confidence=conf,
+            )
+        )
+    return words
+
+
+def _run_tesseract_tsv(pil: Image.Image, *, psm: int, timeout_seconds: float = _DEFAULT_TIMEOUT) -> str:
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+            pil.save(tmp_path)
+        args = [
+            _tesseract_cmd(),
+            str(tmp_path),
+            "stdout",
+            "--psm",
+            str(psm),
+            "-c",
+            f"tessedit_char_whitelist={_DIGIT_WHITELIST}",
+            "tsv",
+        ]
+        result = subprocess.run(args, capture_output=True, text=True, check=False, timeout=timeout_seconds)
+        if result.returncode != 0:
+            return ""
+        return result.stdout or ""
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.debug("p105.tesseract_tsv_fail psm=%s err=%s", psm, exc)
+        return ""
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def debug_tesseract_word_boxes(
+    pil: Image.Image,
+    *,
+    psm: int = 7,
+) -> tuple[str, float, list[TesseractWordBox]]:
+    """Debug-only Tesseract pass: digits + word boxes (does not affect production OCR attempts)."""
+    stdout = _run_tesseract_tsv(pil, psm=psm)
+    if not stdout:
+        return "", 0.0, []
+    digits, conf = _parse_tsv(stdout)
+    return digits, conf, parse_tesseract_tsv_words(stdout)
+
+
+def find_word_boxes_for_digits(words: list[TesseractWordBox], target_digits: str) -> list[TesseractWordBox]:
+    """Return word boxes whose text contributes to ``target_digits`` (5-digit supplement)."""
+    target = _digits_only(target_digits)
+    if not target:
+        return []
+    for word in words:
+        if _digits_only(word.text) == target:
+            return [word]
+    ordered = sorted(words, key=lambda w: (w.top, w.left))
+    for start in range(len(ordered)):
+        acc = ""
+        picked: list[TesseractWordBox] = []
+        for word in ordered[start:]:
+            chunk = _digits_only(word.text)
+            if not chunk:
+                continue
+            acc += chunk
+            picked.append(word)
+            if acc == target:
+                return picked
+            if len(acc) > len(target):
+                break
+    return []
 
 
 def _run_tesseract_digits(pil: Image.Image, *, psm: int, timeout_seconds: float = _DEFAULT_TIMEOUT) -> tuple[str, float]:

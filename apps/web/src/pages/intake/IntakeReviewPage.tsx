@@ -335,6 +335,22 @@ export function IntakeReviewPage(): JSX.Element {
                       item.barcode_read.review_reason !== item.barcode_read.correction_reason ? (
                         <p className="text-amber-300/90">{String(item.barcode_read.review_reason)}</p>
                       ) : null}
+                      {item.barcode_read.region_ocr_debug &&
+                      typeof item.barcode_read.region_ocr_debug === "object" &&
+                      (item.barcode_read.region_ocr_debug as Record<string, unknown>).geometry_viz ? (
+                        <p className="text-slate-400">
+                          Geometry OCR viz:{" "}
+                          {String(
+                            (
+                              (item.barcode_read.region_ocr_debug as Record<string, unknown>)
+                                .geometry_viz as Record<string, unknown>
+                            ).intended_vs_detected_note ?? "",
+                          )}
+                          {(item.barcode_read.region_debug_path as string | undefined)
+                            ? ` See ${String(item.barcode_read.region_debug_path)}/overlay_labeled.jpg`
+                            : ""}
+                        </p>
+                      ) : null}
                     </>
                   ) : null}
                 </div>

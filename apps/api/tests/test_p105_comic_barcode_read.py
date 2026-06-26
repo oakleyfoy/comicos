@@ -364,6 +364,9 @@ def test_debug_dir_param_writes_manual_outputs(tmp_path) -> None:
     assert (out_dir / "overlay.jpg").is_file()
     assert (out_dir / "left_supplement.jpg").is_file()
     assert (out_dir / "ocr_debug.json").is_file()
+    # Labeled/context overlays require Tesseract; may be absent when OCR engine unavailable.
+    if (out_dir / "overlay_labeled.jpg").is_file():
+        assert (out_dir / "left_supplement_context.jpg").is_file()
 
 
 def test_correct_supplement_via_catalog_single_candidate() -> None:
@@ -428,6 +431,42 @@ def test_opencv_import_status_reports_availability() -> None:
     assert ok is True or ok is False
     if not ok:
         assert err
+
+
+def test_geometry_debug_visuals_mark_outside_intended(monkeypatch) -> None:
+    from app.services.p105_geometry_debug_viz import build_geometry_ocr_debug_visuals
+    from app.services.p105_supplement_ocr import TesseractWordBox
+
+    pil = Image.new("RGB", (520, 360), color=(200, 200, 200))
+    geo = compute_barcode_region_geometry(pil)
+    left_crop = pil.crop(geo.left_supplement)
+
+    def fake_debug(_pil, *, psm=7):  # noqa: ANN001
+        # Digit box at top-left of crop — outside typical supplement band if crop is wrong.
+        return "34137", 0.99, [
+            TesseractWordBox(text="34137", left=2, top=2, width=40, height=12, confidence=95.0),
+        ]
+
+    monkeypatch.setattr(
+        "app.services.p105_geometry_debug_viz.debug_tesseract_word_boxes",
+        fake_debug,
+    )
+    viz = build_geometry_ocr_debug_visuals(pil, geo, left_crop, chosen_digits="34137")
+    assert viz.metadata["ocr_hit_box_original"] is not None
+    assert viz.metadata["chosen_ocr_digits"] == "34137"
+    assert viz.overlay_labeled.size == pil.size
+    assert viz.context.size[0] > 0
+
+
+def test_find_word_boxes_for_digits_joins_words() -> None:
+    from app.services.p105_supplement_ocr import TesseractWordBox, find_word_boxes_for_digits
+
+    words = [
+        TesseractWordBox(text="03", left=1, top=1, width=10, height=8, confidence=90),
+        TesseractWordBox(text="921", left=12, top=1, width=14, height=8, confidence=88),
+    ]
+    hit = find_word_boxes_for_digits(words, "03921")
+    assert len(hit) == 2
 
 
 def test_geometry_overlay_runs_on_synthetic_image() -> None:

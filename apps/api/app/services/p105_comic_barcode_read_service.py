@@ -631,6 +631,18 @@ def read_comic_barcode_from_image_bytes(
         debug_base = _p105_regions.P105_BARCODE_DEBUG_ROOT / str(int(intake_item_id))
     if debug_base is not None:
         overlay = draw_region_overlay(pil, geometry)
+        from app.services.p105_geometry_debug_viz import (
+            build_geometry_ocr_debug_visuals,
+            write_geometry_debug_images,
+        )
+
+        geo_viz = build_geometry_ocr_debug_visuals(
+            pil,
+            geometry,
+            regions["left_supplement"],
+            chosen_digits=decision.ocr_supplement,
+        )
+        region_ocr_debug["geometry_viz"] = geo_viz.metadata
         region_debug_path = save_barcode_region_debug_to_dir(
             debug_base,
             regions,
@@ -638,6 +650,7 @@ def read_comic_barcode_from_image_bytes(
             overlay=overlay,
             left_variants=left_variants,
         )
+        write_geometry_debug_images(debug_base, geo_viz)
 
     final_supplement = decision.final_supplement
     if len(final_supplement) == 5:
