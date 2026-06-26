@@ -261,11 +261,30 @@ export function IntakeReviewPage(): JSX.Element {
                         {item.barcode_read.fingerprint_confirmed ? " (fingerprint ✓)" : ""}
                       </p>
                       <p>
+                        Detection method: {String(item.barcode_read.detection_method ?? "percentage")}
+                        {item.barcode_read.detection_method === "percentage" &&
+                        item.barcode_read.fallback_reason ? (
+                          <>
+                            <br />
+                            Fallback reason: {String(item.barcode_read.fallback_reason)}
+                          </>
+                        ) : null}
+                        {item.barcode_read.geometry_rejection_reason ? (
+                          <>
+                            <br />
+                            Geometry rejection: {String(item.barcode_read.geometry_rejection_reason)}
+                          </>
+                        ) : null}
+                        {item.barcode_read.opencv_available === false ? (
+                          <>
+                            <br />
+                            OpenCV: unavailable
+                          </>
+                        ) : null}
+                      </p>
+                      <p>
                         Confidence: main {Math.round(Number(item.barcode_read.confidence_main ?? 0) * 100)}%,
                         supplement {Math.round(Number(item.barcode_read.confidence_left ?? 0) * 100)}%
-                        {item.barcode_read.detection_method
-                          ? ` · ${String(item.barcode_read.detection_method)} crop`
-                          : ""}
                       </p>
                       {Array.isArray(item.barcode_read.supplement_candidates) &&
                       item.barcode_read.supplement_candidates.length > 0 ? (

@@ -99,6 +99,26 @@ MIN_SANE_IMAGE_LONG_EDGE_PX = 200
 # Cap the detection image size for speed; coords are mapped back to original.
 _MAX_DETECT_LONG_EDGE_PX = 1600
 
+# Known fallback_reason values when detection_method is "percentage".
+FALLBACK_OPENCV_UNAVAILABLE = "opencv_unavailable"
+FALLBACK_IMAGE_TOO_SMALL = "image_too_small"
+FALLBACK_NO_BRIGHT_BOX_CANDIDATES = "no_bright_box_candidates"
+FALLBACK_NO_VALID_PRICE_BOX_CONTOUR = "no_valid_price_box_contour"
+FALLBACK_DETECTED_BOX_TOO_SMALL = "detected_box_too_small"
+FALLBACK_LOW_CONTOUR_SCORE = "low_contour_score"
+FALLBACK_COORDINATE_MAPPING_INVALID = "coordinate_mapping_invalid"
+FALLBACK_EXCEPTION = "exception"
+
+
+def opencv_import_status() -> tuple[bool, str | None]:
+    """Return (opencv_available, import_error_message)."""
+    try:
+        import cv2  # noqa: F401
+
+        return True, None
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
 
 def _box_xywh(box: Box) -> dict[str, int]:
     left, top, right, bottom = box
@@ -111,6 +131,24 @@ def _box_w(box: Box) -> int:
 
 def _box_h(box: Box) -> int:
     return int(box[3] - box[1])
+
+
+@dataclass
+class PriceBoxDetectionDiagnostics:
+    """OpenCV price-box search diagnostics (coords are in ROI space when box is set)."""
+
+    box: Box | None = None
+    deskew_angle: float = 0.0
+    detection_size: tuple[int, int] = (0, 0)
+    detection_scale: float = 1.0
+    opencv_available: bool = False
+    contour_count: int = 0
+    area_candidate_count: int = 0
+    aspect_candidate_count: int = 0
+    candidate_boxes: list[dict[str, Any]] = field(default_factory=list)
+    chosen_candidate: dict[str, Any] | None = None
+    coordinate_mapping_invalid: bool = False
+    exception_message: str | None = None
 
 
 @dataclass
@@ -131,6 +169,14 @@ class BarcodeRegionGeometry:
     geometry_failed: bool = False
     min_region_px: int = MIN_LEFT_SUPPLEMENT_PX
     notes: list[str] = field(default_factory=list)
+    geometry_attempted: bool = True
+    opencv_available: bool = False
+    fallback_reason: str = ""
+    geometry_rejection_reason: str = ""
+    exception_message: str | None = None
+    contour_count: int = 0
+    candidate_boxes: list[dict[str, Any]] = field(default_factory=list)
+    chosen_candidate: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -139,6 +185,14 @@ class BarcodeRegionGeometry:
             "detection_size": {"width": self.detection_size[0], "height": self.detection_size[1]},
             "detection_scale": self.detection_scale,
             "detection_method": self.detection_method,
+            "geometry_attempted": self.geometry_attempted,
+            "opencv_available": self.opencv_available,
+            "fallback_reason": self.fallback_reason,
+            "geometry_rejection_reason": self.geometry_rejection_reason,
+            "exception_message": self.exception_message,
+            "contour_count": self.contour_count,
+            "candidate_boxes": list(self.candidate_boxes),
+            "chosen_candidate": self.chosen_candidate,
             "deskew_angle": self.deskew_angle,
             "geometry_failed": self.geometry_failed,
             "min_region_px": self.min_region_px,
@@ -158,7 +212,15 @@ class BarcodeRegionGeometry:
             f"working_size:  {self.working_size[0]}x{self.working_size[1]}",
             f"detection_size:{self.detection_size[0]}x{self.detection_size[1]} (scale={self.detection_scale:.4f})",
             f"detection_method: {self.detection_method}  deskew={self.deskew_angle:.1f}  failed={self.geometry_failed}",
+            f"geometry_attempted: {self.geometry_attempted}  opencv_available: {self.opencv_available}",
+            f"contour_count: {self.contour_count}  candidates: {len(self.candidate_boxes)}",
         ]
+        if self.fallback_reason:
+            lines.append(f"fallback_reason: {self.fallback_reason}")
+        if self.geometry_rejection_reason:
+            lines.append(f"geometry_rejection_reason: {self.geometry_rejection_reason}")
+        if self.exception_message:
+            lines.append(f"exception_message: {self.exception_message}")
         rects: list[tuple[str, Box | None]] = [
             ("full_expanded", self.full_expanded),
             ("price_box", self.price_box),
@@ -188,19 +250,60 @@ def _clamp_box(box: Box, width: int, height: int) -> Box:
     return left, top, right, bottom
 
 
-def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[int, int], float]:
+def _resolve_percentage_fallback_reason(
+    *,
+    input_too_small: bool,
+    det: PriceBoxDetectionDiagnostics,
+    rejected_detected_box: bool,
+) -> tuple[str, str]:
+    """Return (fallback_reason, geometry_rejection_reason)."""
+    rejection = ""
+    if rejected_detected_box:
+        rejection = FALLBACK_DETECTED_BOX_TOO_SMALL
+        return FALLBACK_DETECTED_BOX_TOO_SMALL, rejection
+    if input_too_small:
+        return FALLBACK_IMAGE_TOO_SMALL, rejection
+    if not det.opencv_available:
+        return FALLBACK_OPENCV_UNAVAILABLE, rejection
+    if det.exception_message and det.box is None:
+        return FALLBACK_EXCEPTION, rejection
+    if det.coordinate_mapping_invalid:
+        return FALLBACK_COORDINATE_MAPPING_INVALID, rejection
+    score_weak = any(
+        c.get("passes_area") and c.get("passes_aspect") and not c.get("passes_score")
+        for c in det.candidate_boxes
+    )
+    if score_weak and det.box is None and det.aspect_candidate_count > 0:
+        return FALLBACK_LOW_CONTOUR_SCORE, rejection
+    if det.contour_count == 0 or det.area_candidate_count == 0:
+        return FALLBACK_NO_BRIGHT_BOX_CANDIDATES, rejection
+    return FALLBACK_NO_VALID_PRICE_BOX_CONTOUR, rejection
+
+
+def _detect_price_box(pil_roi: Image.Image) -> PriceBoxDetectionDiagnostics:
     """Detect the bright rectangular UPC/price box inside the ROI (OpenCV optional).
 
     Detection may run on a downscaled copy for speed; the returned box is mapped
-    back to ROI coordinates. Returns
-    (box_in_roi_coords | None, deskew_angle, detection_image_size, detection_scale).
+    back to ROI coordinates.
     """
     roi_w, roi_h = pil_roi.size
+    diag = PriceBoxDetectionDiagnostics(
+        detection_size=(roi_w, roi_h),
+        detection_scale=1.0,
+    )
+    opencv_ok, import_err = opencv_import_status()
+    diag.opencv_available = opencv_ok
+    if not opencv_ok:
+        diag.exception_message = import_err
+        return diag
+
     try:
         import cv2
         import numpy as np
-    except Exception:  # noqa: BLE001 - OpenCV optional; fall back to percentages
-        return None, 0.0, (roi_w, roi_h), 1.0
+    except Exception as exc:  # noqa: BLE001
+        diag.opencv_available = False
+        diag.exception_message = str(exc)
+        return diag
 
     scale = 1.0
     detect_img = pil_roi
@@ -212,6 +315,8 @@ def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[in
             Image.Resampling.LANCZOS,
         )
     det_w, det_h = detect_img.size
+    diag.detection_size = (det_w, det_h)
+    diag.detection_scale = scale
 
     try:
         rgb = np.asarray(detect_img.convert("RGB"))
@@ -221,18 +326,44 @@ def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[in
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(3, w // 60), max(3, h // 30)))
         closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        diag.contour_count = len(contours)
         best: Box | None = None
         best_angle = 0.0
         best_area = 0.0
+        best_meta: dict[str, Any] | None = None
         roi_area = float(w * h)
+        min_area = roi_area * 0.05
+        max_area = roi_area * 0.95
+        min_score = roi_area * 0.08
+
         for cnt in contours:
             x, y, bw, bh = cv2.boundingRect(cnt)
             area = float(bw * bh)
-            if area < roi_area * 0.05 or area > roi_area * 0.95:
-                continue
             aspect = bw / max(1, bh)
-            if aspect < 1.3 or aspect > 7.0:
+            score = area / roi_area if roi_area else 0.0
+            passes_area = min_area <= area <= max_area
+            passes_aspect = 1.3 <= aspect <= 7.0
+            passes_score = area >= min_score
+            entry: dict[str, Any] = {
+                "x": int(x),
+                "y": int(y),
+                "width": int(bw),
+                "height": int(bh),
+                "area": int(area),
+                "aspect": round(aspect, 3),
+                "score": round(score, 4),
+                "passes_area": passes_area,
+                "passes_aspect": passes_aspect,
+                "passes_score": passes_score,
+                "selected": False,
+            }
+            diag.candidate_boxes.append(entry)
+            if not passes_area:
                 continue
+            diag.area_candidate_count += 1
+            if not passes_aspect:
+                continue
+            diag.aspect_candidate_count += 1
             if area > best_area:
                 best_area = area
                 best = (x, y, x + bw, y + bh)
@@ -241,9 +372,12 @@ def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[in
                 if angle < -45:
                     angle += 90
                 best_angle = max(-15.0, min(15.0, angle))
+                best_meta = dict(entry)
+                best_meta["selected"] = True
+
         if best is None:
-            return None, 0.0, (det_w, det_h), scale
-        # Map detection-image coords back to ROI coords.
+            return diag
+
         inv = 1.0 / scale if scale else 1.0
         mapped = (
             int(best[0] * inv),
@@ -251,10 +385,29 @@ def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[in
             int(best[2] * inv),
             int(best[3] * inv),
         )
-        return mapped, best_angle, (det_w, det_h), scale
+        if mapped[2] <= mapped[0] or mapped[3] <= mapped[1]:
+            diag.coordinate_mapping_invalid = True
+            return diag
+        if mapped[0] < 0 or mapped[1] < 0 or mapped[2] > roi_w or mapped[3] > roi_h:
+            diag.coordinate_mapping_invalid = True
+            return diag
+
+        diag.box = mapped
+        diag.deskew_angle = best_angle
+        if best_meta is not None:
+            diag.chosen_candidate = best_meta
+            for entry in diag.candidate_boxes:
+                entry["selected"] = (
+                    entry["x"] == best_meta["x"]
+                    and entry["y"] == best_meta["y"]
+                    and entry["width"] == best_meta["width"]
+                    and entry["height"] == best_meta["height"]
+                )
+        return diag
     except Exception as exc:  # noqa: BLE001
         logger.debug("p105.price_box_detect_fail err=%s", exc)
-        return None, 0.0, (det_w, det_h), scale
+        diag.exception_message = str(exc)
+        return diag
 
 
 def _splits_from_base(base: Box, width: int, height: int) -> dict[str, Box]:
@@ -283,7 +436,8 @@ def compute_barcode_region_geometry(
     """Compute region boxes in ORIGINAL image coordinates, with size guards + diagnostics."""
     w, h = pil.size
     notes: list[str] = []
-    if max(w, h) < MIN_SANE_IMAGE_LONG_EDGE_PX:
+    input_too_small = max(w, h) < MIN_SANE_IMAGE_LONG_EDGE_PX
+    if input_too_small:
         notes.append(
             f"input image is only {w}x{h}px (long edge < {MIN_SANE_IMAGE_LONG_EDGE_PX}); "
             "looks like a thumbnail, not a full-resolution capture"
@@ -299,8 +453,12 @@ def compute_barcode_region_geometry(
     price_box: Box | None = None
     deskew_angle = 0.0
     method = "percentage"
+    fallback_reason = ""
+    geometry_rejection_reason = ""
+    rejected_detected_box = False
     roi = pil.crop(fe)
-    detected, angle, det_size, det_scale = _detect_price_box(roi)
+    det = _detect_price_box(roi)
+    detected = det.box
     if detected is not None:
         dl, dt, dr, db = detected
         candidate_pb = _clamp_box((fe[0] + dl, fe[1] + dt, fe[0] + dr, fe[1] + db), w, h)
@@ -308,9 +466,10 @@ def compute_barcode_region_geometry(
         ls = candidate_splits["left_supplement"]
         if _box_w(ls) >= min_region_px and _box_h(ls) >= min_region_px:
             price_box = candidate_pb
-            deskew_angle = angle
+            deskew_angle = det.deskew_angle
             method = "geometry"
         else:
+            rejected_detected_box = True
             notes.append(
                 f"rejected detected price_box {_box_xywh(candidate_pb)}: "
                 f"left_supplement {_box_w(ls)}x{_box_h(ls)} < {min_region_px}px; using percentage fallback"
@@ -325,6 +484,24 @@ def compute_barcode_region_geometry(
                 min_region_px,
             )
 
+    if method != "geometry":
+        fallback_reason, geometry_rejection_reason = _resolve_percentage_fallback_reason(
+            input_too_small=input_too_small,
+            det=det,
+            rejected_detected_box=rejected_detected_box,
+        )
+        logger.info(
+            "p105.geometry_fallback original=%sx%s method=percentage fallback_reason=%s "
+            "rejection=%s opencv=%s contours=%s candidates=%s",
+            w,
+            h,
+            fallback_reason,
+            geometry_rejection_reason,
+            det.opencv_available,
+            det.contour_count,
+            len(det.candidate_boxes),
+        )
+
     base = price_box if price_box is not None else fe
     splits = _splits_from_base(base, w, h)
 
@@ -338,10 +515,18 @@ def compute_barcode_region_geometry(
         detection_method=method,
         original_size=(w, h),
         working_size=(w, h),
-        detection_size=det_size,
-        detection_scale=det_scale,
+        detection_size=det.detection_size,
+        detection_scale=det.detection_scale,
         min_region_px=min_region_px,
         notes=notes,
+        geometry_attempted=True,
+        opencv_available=det.opencv_available,
+        fallback_reason=fallback_reason,
+        geometry_rejection_reason=geometry_rejection_reason,
+        exception_message=det.exception_message,
+        contour_count=det.contour_count,
+        candidate_boxes=list(det.candidate_boxes),
+        chosen_candidate=det.chosen_candidate,
     )
 
     ls = geometry.left_supplement

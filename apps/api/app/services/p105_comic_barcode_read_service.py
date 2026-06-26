@@ -93,6 +93,11 @@ class ComicBarcodeReadResult:
     auto_match_allowed: bool = False
     region_debug_path: str = ""
     detection_method: str = "percentage"
+    geometry_attempted: bool = False
+    opencv_available: bool = False
+    fallback_reason: str = ""
+    geometry_rejection_reason: str = ""
+    exception_message: str | None = None
     ocr_attempts: list[dict[str, Any]] = field(default_factory=list)
     supplement_candidates: list[dict[str, Any]] = field(default_factory=list)
     region_ocr_debug: dict[str, Any] = field(default_factory=dict)
@@ -123,6 +128,11 @@ class ComicBarcodeReadResult:
             "auto_match_allowed": self.auto_match_allowed,
             "region_debug_path": self.region_debug_path,
             "detection_method": self.detection_method,
+            "geometry_attempted": self.geometry_attempted,
+            "opencv_available": self.opencv_available,
+            "fallback_reason": self.fallback_reason,
+            "geometry_rejection_reason": self.geometry_rejection_reason,
+            "exception_message": self.exception_message,
             "ocr_attempts": list(self.ocr_attempts),
             "supplement_candidates": list(self.supplement_candidates),
             "region_ocr_debug": dict(self.region_ocr_debug),
@@ -588,12 +598,20 @@ def read_comic_barcode_from_image_bytes(
         "main_upc": main_upc,
         "main_confidence": conf_main,
         "detection_method": geometry.detection_method,
+        "geometry_attempted": geometry.geometry_attempted,
+        "opencv_available": geometry.opencv_available,
+        "fallback_reason": geometry.fallback_reason,
+        "geometry_rejection_reason": geometry.geometry_rejection_reason,
+        "exception_message": geometry.exception_message,
     }
     logger.info(
-        "p105.barcode_regions item=%s method=%s main=%s decoded_supp=%s ocr_supp=%s final=%s "
-        "inferred=%s catalog_ok=%s fp_ok=%s disagree=%s attempts=%d",
+        "p105.barcode_regions item=%s method=%s fallback=%s opencv=%s contours=%s main=%s decoded_supp=%s "
+        "ocr_supp=%s final=%s inferred=%s catalog_ok=%s fp_ok=%s disagree=%s attempts=%d",
         intake_item_id or log_context,
         geometry.detection_method,
+        geometry.fallback_reason or "(none)",
+        geometry.opencv_available,
+        geometry.contour_count,
         main_upc,
         decoded_supplement,
         decision.ocr_supplement,
@@ -698,6 +716,11 @@ def read_comic_barcode_from_image_bytes(
         auto_match_allowed=auto_match,
         region_debug_path=region_debug_path,
         detection_method=geometry.detection_method,
+        geometry_attempted=geometry.geometry_attempted,
+        opencv_available=geometry.opencv_available,
+        fallback_reason=geometry.fallback_reason,
+        geometry_rejection_reason=geometry.geometry_rejection_reason,
+        exception_message=geometry.exception_message,
         ocr_attempts=ocr_attempts_payload,
         supplement_candidates=candidates_payload,
         region_ocr_debug=region_ocr_debug,

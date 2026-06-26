@@ -16,8 +16,14 @@ from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSer
 from app.services.barcode_validation_service import validate_barcode_catalog_match
 from app.services.p105_comic_barcode_regions import (
     BarcodeCropConfig,
+    FALLBACK_DETECTED_BOX_TOO_SMALL,
+    FALLBACK_IMAGE_TOO_SMALL,
+    FALLBACK_NO_VALID_PRICE_BOX_CONTOUR,
+    FALLBACK_OPENCV_UNAVAILABLE,
+    PriceBoxDetectionDiagnostics,
     compute_barcode_region_geometry,
     expand_box,
+    opencv_import_status,
 )
 from app.services.p105_comic_barcode_read_service import (
     _correct_supplement_via_catalog,
@@ -279,12 +285,25 @@ def test_tiny_detected_price_box_falls_back_to_percentage() -> None:
     with Image.open(BytesIO(_price_box_image("03921"))) as img:
         pil = img.convert("RGB")
     tiny_box = (5, 5, 17, 14)  # 12x9 px — the catastrophic real-world case
+    fake_det = PriceBoxDetectionDiagnostics(
+        box=tiny_box,
+        deskew_angle=0.0,
+        detection_size=(520, 200),
+        detection_scale=1.0,
+        opencv_available=True,
+        contour_count=3,
+        area_candidate_count=1,
+        aspect_candidate_count=1,
+        chosen_candidate={"x": 5, "y": 5, "width": 12, "height": 9, "selected": True},
+    )
     with patch(
         "app.services.p105_comic_barcode_regions._detect_price_box",
-        return_value=(tiny_box, 0.0, (520, 200), 1.0),
+        return_value=fake_det,
     ):
         geo = compute_barcode_region_geometry(pil)
     assert geo.detection_method == "percentage"
+    assert geo.fallback_reason == FALLBACK_DETECTED_BOX_TOO_SMALL
+    assert geo.geometry_rejection_reason == FALLBACK_DETECTED_BOX_TOO_SMALL
     assert geo.price_box is None
     assert geo.left_supplement[2] - geo.left_supplement[0] >= 40
     assert geo.left_supplement[3] - geo.left_supplement[1] >= 40
@@ -314,6 +333,7 @@ def test_thumbnail_input_flags_geometry_failed() -> None:
     geom = result.region_ocr_debug["geometry"]
     assert geom["geometry_failed"] is True
     assert geom["original_size"] == {"width": 40, "height": 20}
+    assert geom.get("fallback_reason") == FALLBACK_IMAGE_TOO_SMALL
     reason = result.review_reason.lower()
     assert "too small for reliable barcode ocr" in reason
     assert "original_size=40x20" in reason
@@ -362,6 +382,52 @@ def test_correct_supplement_via_catalog_single_candidate() -> None:
     assert supp == "00311"
     assert returned_issue == issue_id
     assert dist == 1
+
+
+def test_fallback_reason_opencv_unavailable() -> None:
+    pil = Image.new("RGB", (800, 1200), color=(120, 120, 120))
+    det = PriceBoxDetectionDiagnostics(
+        opencv_available=False,
+        exception_message="ImportError: cv2",
+        detection_size=(800, 600),
+    )
+    with patch("app.services.p105_comic_barcode_regions._detect_price_box", return_value=det):
+        geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "percentage"
+    assert geo.fallback_reason == FALLBACK_OPENCV_UNAVAILABLE
+    assert geo.opencv_available is False
+
+
+def test_fallback_reason_image_too_small() -> None:
+    pil = Image.new("RGB", (40, 20), color=(255, 255, 255))
+    geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "percentage"
+    assert geo.fallback_reason == FALLBACK_IMAGE_TOO_SMALL
+
+
+def test_fallback_reason_no_valid_price_box_contour() -> None:
+    pil = Image.new("RGB", (520, 360), color=(40, 40, 40))
+    det = PriceBoxDetectionDiagnostics(
+        opencv_available=True,
+        contour_count=6,
+        area_candidate_count=2,
+        aspect_candidate_count=0,
+        detection_size=(520, 200),
+        candidate_boxes=[
+            {"x": 1, "y": 2, "width": 80, "height": 80, "passes_area": True, "passes_aspect": False},
+        ],
+    )
+    with patch("app.services.p105_comic_barcode_regions._detect_price_box", return_value=det):
+        geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "percentage"
+    assert geo.fallback_reason == FALLBACK_NO_VALID_PRICE_BOX_CONTOUR
+
+
+def test_opencv_import_status_reports_availability() -> None:
+    ok, err = opencv_import_status()
+    assert ok is True or ok is False
+    if not ok:
+        assert err
 
 
 def test_geometry_overlay_runs_on_synthetic_image() -> None:

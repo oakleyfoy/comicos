@@ -25,6 +25,7 @@ bootstrap_api_path()
 from app.services.p105_comic_barcode_read_service import (  # noqa: E402
     read_comic_barcode_from_image_bytes,
 )
+from app.services.p105_comic_barcode_regions import opencv_import_status  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 MANUAL_DEBUG_ROOT = Path("data/p105/debug/manual")
@@ -94,10 +95,15 @@ def main() -> int:
     ocr_debug_path = base / "ocr_debug.json"
 
     geometry = result.region_ocr_debug.get("geometry", {}) if result.region_ocr_debug else {}
+    opencv_ok, opencv_err = opencv_import_status()
 
     print("=" * 64)
     print(f"P105 manual barcode debug - {image_path}")
     print("=" * 64)
+    print("OPENCV / GEOMETRY DETECTION")
+    print(f"  opencv_available:    {opencv_ok}")
+    if opencv_err:
+        print(f"  opencv_import_error: {opencv_err}")
     if geometry:
         orig = geometry.get("original_size", {})
         work = geometry.get("working_size", {})
@@ -110,6 +116,24 @@ def main() -> int:
             f"(scale={geometry.get('detection_scale')})"
         )
         print(f"  geometry_failed: {geometry.get('geometry_failed')}")
+        print(f"  geometry_attempted: {geometry.get('geometry_attempted')}")
+        print(f"  opencv_available (run): {geometry.get('opencv_available')}")
+        print(f"  fallback_reason: {geometry.get('fallback_reason') or '(none — geometry used)'}")
+        if geometry.get("geometry_rejection_reason"):
+            print(f"  geometry_rejection_reason: {geometry.get('geometry_rejection_reason')}")
+        if geometry.get("exception_message"):
+            print(f"  exception_message: {geometry.get('exception_message')}")
+        print(f"  contour_count: {geometry.get('contour_count')}")
+        candidates = geometry.get("candidate_boxes") or []
+        print(f"  candidate_boxes: {len(candidates)}")
+        for cand in candidates[:8]:
+            print(
+                f"    x={cand.get('x')} y={cand.get('y')} w={cand.get('width')} h={cand.get('height')} "
+                f"score={cand.get('score')} area_ok={cand.get('passes_area')} "
+                f"aspect_ok={cand.get('passes_aspect')} selected={cand.get('selected')}"
+            )
+        if geometry.get("chosen_candidate"):
+            print(f"  chosen_candidate: {geometry.get('chosen_candidate')}")
         rects = geometry.get("rectangles", {})
         for name in ("full_expanded", "price_box", "main_bars", "left_supplement", "right_cover_digit"):
             r = rects.get(name)
@@ -124,6 +148,7 @@ def main() -> int:
             print(f"  note: {note}")
         print("-" * 64)
     print(f"detection_method:      {result.detection_method}")
+    print(f"fallback_reason:       {result.fallback_reason or '(none)'}")
     print(f"main_upc:              {result.main_upc or '(none)'}")
     print(f"decoded_supp (bars):   {result.decoded_supplement or '(none)'}")
     print(f"ocr_supplement:        {result.ocr_supplement or '(none)'}")
