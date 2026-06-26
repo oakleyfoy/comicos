@@ -148,6 +148,7 @@ async def enqueue_intake_item(
     token: str,
     upload: UploadFile,
     raw_barcode: str | None = None,
+    frame_uploads: list[UploadFile] | None = None,
 ) -> IntakeSessionItem:
     row = get_intake_session_by_token_or_404(session, token=token)
     if row.status == INTAKE_SESSION_STOPPED:
@@ -161,8 +162,29 @@ async def enqueue_intake_item(
 
     ext = Path(upload.filename or "scan.jpg").suffix or ".jpg"
     dest_dir = _intake_storage_dir(user_id=int(row.user_id), session_id=int(row.id or 0))
-    dest_path = dest_dir / f"{uuid.uuid4().hex}{ext}"
+    file_stem = uuid.uuid4().hex
+    dest_path = dest_dir / f"{file_stem}{ext}"
     dest_path.write_bytes(raw)
+
+    frame_count = 0
+    for idx, frame_upload in enumerate(frame_uploads or []):
+        if frame_count >= 8:
+            break
+        if not frame_upload.content_type or not frame_upload.content_type.startswith("image/"):
+            continue
+        frame_raw = await frame_upload.read()
+        if len(frame_raw) > MAX_FILE_BYTES:
+            continue
+        frame_path = dest_dir / f"{file_stem}_f{idx}{ext}"
+        frame_path.write_bytes(frame_raw)
+        frame_count += 1
+    if frame_count:
+        logger.info(
+            "intake.enqueue.supplement_frames session=%s primary=%s frames=%s",
+            row.id,
+            dest_path.name,
+            frame_count,
+        )
 
     too_small, img_w, img_h, small_reason = recognition_image_too_small(raw)
     logger.info(

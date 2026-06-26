@@ -20,6 +20,8 @@ const DUPLICATE_WINDOW_MS = 2500;
 
 // Recognition images below this long edge are unusable for barcode OCR downstream.
 const MIN_CAPTURE_LONG_EDGE = 600;
+const SUPPLEMENT_FRAME_COUNT = 5;
+const SUPPLEMENT_FRAME_GAP_MS = 100;
 
 function quickFeedback(): void {
   try {
@@ -87,7 +89,7 @@ export function IntakeScannerPage(): JSX.Element {
   }, []);
 
   const enqueueBlob = useCallback(
-    async (blob: Blob, rawBarcode?: string) => {
+    async (blob: Blob, rawBarcode?: string, extraFrames?: Blob[]) => {
       if (!token) return;
       setUploadQueue((q) => q + 1);
       setScanned((s) => s + 1); // optimistic, immediate feedback
@@ -95,7 +97,7 @@ export function IntakeScannerPage(): JSX.Element {
       window.setTimeout(() => setFlash(false), 120);
       quickFeedback();
       try {
-        await enqueueIntakeItem(token, blob, rawBarcode);
+        await enqueueIntakeItem(token, blob, rawBarcode, extraFrames);
       } catch (err) {
         setScanned((s) => Math.max(0, s - 1));
         setFailed((f) => f + 1);
@@ -144,10 +146,22 @@ export function IntakeScannerPage(): JSX.Element {
     return blob;
   }, []);
 
+  const captureSupplementFrames = useCallback(async (): Promise<Blob[]> => {
+    const blobs: Blob[] = [];
+    for (let i = 0; i < SUPPLEMENT_FRAME_COUNT; i += 1) {
+      const blob = await captureFrame();
+      if (blob) blobs.push(blob);
+      if (i + 1 < SUPPLEMENT_FRAME_COUNT) {
+        await new Promise((resolve) => window.setTimeout(resolve, SUPPLEMENT_FRAME_GAP_MS));
+      }
+    }
+    return blobs;
+  }, [captureFrame]);
+
   const manualCapture = useCallback(async () => {
     const blob = await captureFrame();
     if (blob) await enqueueBlob(blob);
-  }, [captureFrame, enqueueBlob]);
+  }, [captureFrame, captureSupplementFrames, enqueueBlob]);
 
   // Auto-detect barcodes when supported, so the user never taps while scanning.
   const startDetection = useCallback(() => {
@@ -169,15 +183,19 @@ export function IntakeScannerPage(): JSX.Element {
         if (capturingRef.current) return;
         capturingRef.current = true;
         lastBarcodeRef.current = { value: consensus.accepted, at: now };
-        const blob = await captureFrame();
-        if (blob) await enqueueBlob(blob, consensus.raw);
+        const frames = await captureSupplementFrames();
+        const primary = frames[0] ?? (await captureFrame());
+        if (primary) {
+          const extras = frames.length > 1 ? frames.slice(1) : undefined;
+          await enqueueBlob(primary, consensus.raw, extras);
+        }
         resetBarcodeVotes(voteStateRef.current);
         capturingRef.current = false;
       } catch {
         /* detector hiccup; keep scanning */
       }
     }, 500);
-  }, [captureFrame, enqueueBlob]);
+  }, [captureFrame, captureSupplementFrames, enqueueBlob]);
 
   const startCamera = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {

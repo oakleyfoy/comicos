@@ -43,6 +43,10 @@ from app.services.p105_supplement_ocr import (
     hamming5,
     score_supplement_candidates,
 )
+from app.services.p105_supplement_ocr_consensus import (
+    SupplementFrameRead,
+    vote_supplement_digits,
+)
 from app.services.photo_import_fingerprint_service import (
     fingerprint_match_score_for_crop_path,
 )
@@ -502,6 +506,37 @@ def _publisher_prefix_ok(main_upc: str, catalog_map: dict[str, int]) -> bool:
     return bool(catalog_map) and direct_market_requires_supplement_key(main_upc)
 
 
+def _supplement_ocr_for_frame_bytes(
+    frame_bytes: bytes,
+    *,
+    frame_index: int,
+    log_context: str,
+) -> SupplementFrameRead:
+    """Run supplement-only OCR on one frame (barcode anchor geometry per frame)."""
+    import io as io_mod
+
+    with Image.open(io_mod.BytesIO(frame_bytes)) as img:
+        pil = img.convert("RGB")
+    geometry = compute_barcode_region_geometry(pil, config=_barcode_crop_config())
+    if not geometry.supplement_ocr_allowed:
+        return SupplementFrameRead(frame_index=frame_index, digits="", confidence=0.0)
+    regions = crops_from_geometry(pil, geometry)
+    attempts = gather_ocr_attempts(
+        [("supplement_only", regions["left_supplement"])],
+        deskew_angle=geometry.deskew_angle,
+        log_context=f"{log_context}:frame{frame_index}",
+    )
+    scored = score_supplement_candidates(attempts, main_upc="", catalog_supplements={})
+    if not scored or len(scored[0].digits) != 5:
+        return SupplementFrameRead(frame_index=frame_index, digits="", confidence=0.0)
+    top = scored[0]
+    return SupplementFrameRead(
+        frame_index=frame_index,
+        digits=top.digits,
+        confidence=top.ocr_confidence,
+    )
+
+
 def read_comic_barcode_from_image_bytes(
     image_bytes: bytes,
     *,
@@ -510,6 +545,7 @@ def read_comic_barcode_from_image_bytes(
     intake_item_id: int | None = None,
     debug_dir: Path | None = None,
     log_context: str = "p105_comic_barcode",
+    supplement_frame_bytes: list[bytes] | None = None,
 ) -> ComicBarcodeReadResult:
     """Decode main UPC from bars; OCR-retry the printed left supplement; reconstruct full barcode."""
     import io as io_mod
@@ -573,6 +609,61 @@ def read_comic_barcode_from_image_bytes(
         publisher_prefix_ok=_publisher_prefix_ok(main_upc, catalog_map),
     )
 
+    extra_frames = list(supplement_frame_bytes or [])
+    frame_bytes_list = [image_bytes] + [fb for fb in extra_frames if fb and fb != image_bytes]
+    frame_reads = [
+        _supplement_ocr_for_frame_bytes(fb, frame_index=idx, log_context=log_context)
+        for idx, fb in enumerate(frame_bytes_list)
+    ]
+    consensus = vote_supplement_digits(frame_reads)
+    if consensus.complete and consensus.digits:
+        consensus_attempts = [
+            OcrAttempt(
+                variant="multi_frame_consensus",
+                raw_text=consensus.digits,
+                digits=consensus.digits,
+                confidence=consensus.confidence,
+                source="multi_frame_consensus",
+            )
+        ]
+        rescored = score_supplement_candidates(
+            consensus_attempts,
+            main_upc=main_upc,
+            catalog_supplements=catalog_map,
+            fingerprint_scorer=fingerprint_scorer,
+            publisher_prefix_ok=_publisher_prefix_ok(main_upc, catalog_map),
+        )
+        consensus_candidate = rescored[0] if rescored else SupplementCandidate(
+            digits=consensus.digits,
+            score=2.0 + consensus.confidence,
+            ocr_confidence=consensus.confidence,
+            repeat_count=max(1, len([r for r in frame_reads if r.digits == consensus.digits])),
+            sources=["multi_frame_consensus"],
+        )
+        if "multi_frame_consensus" not in consensus_candidate.sources:
+            consensus_candidate.sources.append("multi_frame_consensus")
+        consensus_candidate.repeat_count = max(
+            consensus_candidate.repeat_count,
+            len([r for r in frame_reads if r.digits == consensus.digits]),
+        )
+        scored = [consensus_candidate] + [c for c in scored if c.digits != consensus.digits]
+        logger.info(
+            "p105.supplement_consensus item=%s frames=%d digits=%s conf=%.2f reads=%s",
+            intake_item_id or log_context,
+            len(frame_bytes_list),
+            consensus.digits,
+            consensus.confidence,
+            [r.digits for r in frame_reads if r.digits],
+        )
+    elif len(frame_bytes_list) > 1 and consensus.review_reason:
+        logger.warning(
+            "p105.supplement_consensus_incomplete item=%s frames=%d reason=%s reads=%s",
+            intake_item_id or log_context,
+            len(frame_bytes_list),
+            consensus.review_reason,
+            [r.digits for r in frame_reads],
+        )
+
     decision = _resolve_supplement_decision(
         scored,
         main_upc=main_upc,
@@ -602,6 +693,7 @@ def read_comic_barcode_from_image_bytes(
             "final_supplement": decision.final_supplement,
             "ocr_confidence": decision.confidence,
             "correction_reason": decision.correction_reason,
+            "supplement_consensus": consensus.to_dict(),
         },
         "right_cover_digit": {"vision_digit": right_ocr, "vision_confidence": right_conf},
         "decoded_supplement_from_bars": decoded_supplement,
@@ -705,6 +797,9 @@ def read_comic_barcode_from_image_bytes(
             "Supplement OCR skipped: barcode anchor crop not ready. "
             f"See supplement_only.jpg ({geometry.fallback_reason or 'geometry_failed'})."
         )
+    elif len(frame_bytes_list) > 1 and not consensus.complete:
+        auto_match = False
+        review_reason = review_reason or consensus.review_reason
     if geometry.geometry_failed:
         auto_match = False
         ow, oh = geometry.original_size

@@ -255,6 +255,24 @@ export function IntakeReviewPage(): JSX.Element {
                       {item.barcode_read.corrected_supplement ? (
                         <p>Corrected supplement: {String(item.barcode_read.corrected_supplement)}</p>
                       ) : null}
+                      {item.barcode_read.region_ocr_debug &&
+                      typeof item.barcode_read.region_ocr_debug === "object" &&
+                      (
+                        (item.barcode_read.region_ocr_debug as Record<string, unknown>)
+                          .left_supplement as Record<string, unknown> | undefined
+                      )?.supplement_consensus ? (
+                        <p className="text-slate-400">
+                          Multi-frame OCR consensus:{" "}
+                          {String(
+                            (
+                              (
+                                (item.barcode_read.region_ocr_debug as Record<string, unknown>)
+                                  .left_supplement as Record<string, unknown>
+                              ).supplement_consensus as Record<string, unknown>
+                            ).digits || "—",
+                          )}
+                        </p>
+                      ) : null}
                       <p>
                         Final supplement: {String(item.barcode_read.final_supplement || "—")}
                         {item.barcode_read.catalog_confirmed ? " (catalog ✓)" : ""}

@@ -196,9 +196,16 @@ async def enqueue_item_endpoint(
     token: str,
     file: UploadFile = File(...),
     raw_barcode: str | None = Form(default=None),
+    frame_files: list[UploadFile] | None = File(default=None),
     session: Session = Depends(get_session),
 ) -> IntakeEnqueueResponse:
-    item = await enqueue_intake_item(session, token=token, upload=file, raw_barcode=raw_barcode)
+    item = await enqueue_intake_item(
+        session,
+        token=token,
+        upload=file,
+        raw_barcode=raw_barcode,
+        frame_uploads=frame_files or [],
+    )
     row = get_intake_session_by_token_or_404(session, token=token)
     return IntakeEnqueueResponse(
         item_id=int(item.id or 0),

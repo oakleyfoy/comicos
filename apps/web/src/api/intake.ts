@@ -148,10 +148,15 @@ export async function enqueueIntakeItem(
   token: string,
   blob: Blob,
   rawBarcode?: string,
+  extraFrames?: Blob[],
 ): Promise<{ item_id: number; status: string; scanned_count: number }> {
   const form = new FormData();
   form.append("file", blob, "scan.jpg");
   if (rawBarcode) form.append("raw_barcode", rawBarcode);
+  for (let i = 0; i < (extraFrames?.length ?? 0); i += 1) {
+    const frame = extraFrames?.[i];
+    if (frame) form.append("frame_files", frame, `frame_${i}.jpg`);
+  }
   return requestIntake(`/api/v1/intake/sessions/${token}/items`, {
     method: "POST",
     body: form,

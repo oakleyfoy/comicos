@@ -268,6 +268,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             cover_path=abs_path,
             intake_item_id=item_id,
             log_context=f"intake item_id={item_id}",
+            supplement_frame_bytes=[
+                p.read_bytes()
+                for p in sorted(abs_path.parent.glob(f"{abs_path.stem}_f*.jpg"))
+                if p.is_file()
+            ],
         )
         item.barcode_read_json = p105.to_json()
 
