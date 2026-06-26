@@ -54,6 +54,7 @@ from app.services.p105_upc_addon_decoder import (
     UpAddonDecodeResult,
     addon_debug_crops,
     decode_upc_addon,
+    write_addon_microscope_debug,
 )
 from app.services.photo_import_upc_barcode_decoder import collect_raw_upc_candidates_from_pil
 
@@ -817,6 +818,7 @@ def read_comic_barcode_from_image_bytes(
             extra_crops=addon_crops,
         )
         write_geometry_debug_images(debug_base, geo_viz)
+        write_addon_microscope_debug(debug_base, addon)
 
     final_supplement = decision.final_supplement
     if len(final_supplement) == 5:

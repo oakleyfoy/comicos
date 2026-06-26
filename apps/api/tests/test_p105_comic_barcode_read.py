@@ -219,6 +219,9 @@ def test_blank_first_crop_recovers_03921_via_retry_variants(monkeypatch) -> None
         "app.services.p105_comic_barcode_read_service.decode_upc_addon",
         return_value=_no_addon(),
     ), patch(
+        "app.services.p105_comic_barcode_read_service._vision_supplement_attempt",
+        return_value=None,
+    ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=fake_variant,
     ):
@@ -320,9 +323,6 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
-        return_value=_no_addon(),
-    ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=blank_variant,
     ):
@@ -336,6 +336,8 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
     assert (base / "left_supplement.jpg").is_file()
     assert (base / "full_expanded.jpg").is_file()
     assert (base / "ocr_debug.json").is_file()
+    assert (base / "addon_original.jpg").is_file()
+    assert (base / "decoder_results.json").is_file()
     assert result.region_debug_path == str(base)
 
     # Overlay must be saved at ORIGINAL image size, not a thumbnail.
