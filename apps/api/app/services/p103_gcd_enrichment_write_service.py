@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc, CatalogVariant
 from app.models.intake_queue import ComicIssueBarcode
 from app.services.catalog_ingestion_service import merge_external_ids, normalize_issue_number, normalize_series_name, normalize_upc
+from app.services.gcd_catalog_upc_insert_service import insert_catalog_upc_if_absent
 from app.services.gcd_barcode_import_service import GCD_SOURCE
 from app.services.p101_catalog_cache_service import CatalogCacheContext
 from app.services.p101_modern_catalog_audit_service import canonical_focus_publisher_label
@@ -152,41 +153,6 @@ def _snapshot_variant(variant: CatalogVariant | None) -> dict[str, Any] | None:
     }
 
 
-def _insert_upc_if_allowed(
-    session: Session,
-    *,
-    raw_upc: str,
-    issue_id: int,
-    variant_id: int | None,
-    learned: set[str],
-    upc_map: dict[str, int],
-    trust_upc_map: bool = False,
-) -> int | None:
-    normalized = normalize_upc(raw_upc)
-    if not normalized:
-        return None
-    if normalized in learned:
-        return None
-    if normalized in upc_map and upc_map[normalized] != issue_id:
-        return None
-    if not trust_upc_map:
-        if session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first() is not None:
-            return None
-    row = CatalogUpc(
-        upc=raw_upc.strip(),
-        normalized_upc=normalized,
-        issue_id=issue_id,
-        variant_id=variant_id,
-        source=GCD_SOURCE,
-        confidence=Decimal("1.0"),
-        barcode_type="upc",
-    )
-    session.add(row)
-    session.flush()
-    upc_map[normalized] = issue_id
-    return int(row.id) if row.id is not None else None
-
-
 def _apply_planned_updates(
     session: Session,
     issue: CatalogIssue,
@@ -195,11 +161,11 @@ def _apply_planned_updates(
     *,
     learned: set[str],
     upc_map: dict[str, int],
-    trust_upc_map: bool = False,
-) -> tuple[int, int | None]:
-    """Return (fields_updated_count, inserted_upc_id)."""
+) -> tuple[int, int | None, bool]:
+    """Return (fields_updated_count, upc_id, upc_row_created)."""
     fields_updated = 0
     upc_id: int | None = None
+    upc_created = False
     issue_id = int(issue.id or 0)
     variant_id = int(variant.id) if variant and variant.id is not None else None
 
@@ -232,20 +198,19 @@ def _apply_planned_updates(
             variant.variant_name = str(item["new"])
             fields_updated += 1
         elif field == "catalog_upc" and item.get("action") == "insert":
-            upc_id = _insert_upc_if_allowed(
+            upc_id, upc_created = insert_catalog_upc_if_absent(
                 session,
                 raw_upc=str(item["new"]),
                 issue_id=issue_id,
                 variant_id=variant_id,
                 learned=learned,
                 upc_map=upc_map,
-                trust_upc_map=trust_upc_map,
             )
 
     if variant is not None:
         session.add(variant)
     session.add(issue)
-    return fields_updated, upc_id
+    return fields_updated, upc_id, upc_created
 
 
 BATCH_COMMIT_SIZE = 250
@@ -359,14 +324,13 @@ def _apply_planned_write_batch(
         before_issue = _snapshot_issue(issue)
         before_variant = _snapshot_variant(variant)
         t_upc = time.perf_counter()
-        fields_updated, upc_id = _apply_planned_updates(
+        fields_updated, upc_id, upc_created = _apply_planned_updates(
             session,
             issue,
             variant,
             planned_write.planned,
             learned=learned,
             upc_map=upc_map,
-            trust_upc_map=True,
         )
         if timer:
             timer.upc_insert_sec += time.perf_counter() - t_upc
@@ -376,8 +340,7 @@ def _apply_planned_write_batch(
             continue
 
         batch_updated += 1
-        inserted_upc = upc_id is not None
-        if inserted_upc:
+        if upc_created:
             report.inserted_upcs += 1
 
         pending_rollbacks.append(
@@ -388,7 +351,7 @@ def _apply_planned_write_batch(
                 "variant_before": before_variant,
             }
         )
-        if upc_id is not None:
+        if upc_created and upc_id is not None:
             pending_upc_ids.append(upc_id)
 
         if record_written_rows:
@@ -399,7 +362,7 @@ def _apply_planned_write_batch(
                     "series": planned_write.series_name,
                     "issue_number": planned_write.issue_number,
                     "fields_updated": fields_updated,
-                    "inserted_upc": inserted_upc,
+                    "inserted_upc": upc_created,
                     "barcode": planned_write.gcd_inputs.get("barcode"),
                 }
             )
@@ -452,7 +415,7 @@ def _commit_enrichment_row(
     try:
         before_issue = _snapshot_issue(issue)
         before_variant = _snapshot_variant(variant)
-        fields_updated, upc_id = _apply_planned_updates(
+        fields_updated, upc_id, upc_created = _apply_planned_updates(
             session,
             issue,
             variant,
@@ -467,8 +430,7 @@ def _commit_enrichment_row(
 
         session.commit()
         report.updated_issues += 1
-        inserted_upc = upc_id is not None
-        if inserted_upc:
+        if upc_created:
             report.inserted_upcs += 1
 
         issue_id = int(issue.id or 0)
@@ -481,7 +443,7 @@ def _commit_enrichment_row(
                     "variant_before": before_variant,
                 }
             )
-            if upc_id is not None:
+            if upc_created and upc_id is not None:
                 rollback_collector.setdefault("upc_ids", []).append(upc_id)
 
         report.written_rows.append(
@@ -491,7 +453,7 @@ def _commit_enrichment_row(
                 "series": series_name,
                 "issue_number": number,
                 "fields_updated": fields_updated,
-                "inserted_upc": inserted_upc,
+                "inserted_upc": upc_created,
                 "barcode": gcd_inputs.get("barcode"),
             }
         )
@@ -773,7 +735,7 @@ def run_p103_enrichment_write_batch(
             try:
                 before_issue = _snapshot_issue(issue)
                 before_variant = _snapshot_variant(variant)
-                fields_updated, upc_id = _apply_planned_updates(
+                fields_updated, upc_id, upc_created = _apply_planned_updates(
                     session,
                     issue,
                     variant,
@@ -797,8 +759,7 @@ def run_p103_enrichment_write_batch(
                     verbose=verbose_progress,
                 )
                 report.updated_issues += 1
-                inserted_upc = upc_id is not None
-                if inserted_upc:
+                if upc_created:
                     report.inserted_upcs += 1
 
                 if rollback_collector is not None:
@@ -810,7 +771,7 @@ def run_p103_enrichment_write_batch(
                             "variant_before": before_variant,
                         }
                     )
-                    if upc_id is not None:
+                    if upc_created and upc_id is not None:
                         rollback_collector.setdefault("upc_ids", []).append(upc_id)
 
                 report.written_rows.append(
@@ -820,7 +781,7 @@ def run_p103_enrichment_write_batch(
                         "series": series_name,
                         "issue_number": number,
                         "fields_updated": fields_updated,
-                        "inserted_upc": inserted_upc,
+                        "inserted_upc": upc_created,
                         "barcode": gcd_inputs.get("barcode"),
                     }
                 )

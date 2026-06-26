@@ -24,6 +24,7 @@ from app.services.catalog_ingestion_service import (
     upsert_variant,
 )
 from app.services.gcd_barcode_import_service import GCD_SOURCE, _year_from_key_date, extract_barcodes
+from app.services.gcd_catalog_upc_insert_service import insert_catalog_upc_if_absent
 from app.services.p101_catalog_cache_service import CatalogCacheContext
 from app.services.p101_modern_catalog_audit_service import canonical_focus_publisher_label
 from app.services.p102_gcd_modern_acquisition_service import (
@@ -213,28 +214,15 @@ def _insert_upc_if_absent(
     learned: set[str],
     upc_map: dict[str, int],
 ) -> int | None:
-    normalized = normalize_upc(raw_upc)
-    if not normalized:
-        return None
-    if normalized in learned:
-        return None
-    if normalized in upc_map:
-        return None
-    if session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first() is not None:
-        return None
-    row = CatalogUpc(
-        upc=raw_upc.strip(),
-        normalized_upc=normalized,
+    upc_id, created = insert_catalog_upc_if_absent(
+        session,
+        raw_upc=raw_upc,
         issue_id=issue_id,
         variant_id=variant_id,
-        source=GCD_SOURCE,
-        confidence=Decimal("1.0"),
-        barcode_type="upc",
+        learned=learned,
+        upc_map=upc_map,
     )
-    session.add(row)
-    session.flush()
-    upc_map[normalized] = issue_id
-    return int(row.id) if row.id is not None else None
+    return upc_id if created else None
 
 
 def run_p102_write_batch(
