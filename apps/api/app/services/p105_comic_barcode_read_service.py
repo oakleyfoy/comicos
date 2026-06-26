@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from PIL import Image, ImageOps
+from PIL import Image
 from sqlmodel import Session, select
 
 from app.core.config import get_settings
@@ -26,15 +25,24 @@ from app.services.barcode_validation_service import (
 )
 from app.services.catalog_ingestion_service import (
     direct_market_requires_supplement_key,
-    normalize_upc,
     upc_check_digit_valid,
 )
+from app.services import p105_comic_barcode_regions as _p105_regions
 from app.services.p105_comic_barcode_regions import (
     BarcodeCropConfig,
-    crop_upc_region_pil,
+    compute_barcode_region_geometry,
+    crops_from_geometry,
+    draw_region_overlay,
+    left_supplement_crop_variants,
     pil_to_jpeg_bytes,
-    save_barcode_region_debug_crops,
-    split_barcode_box_regions,
+    save_barcode_region_debug_to_dir,
+)
+from app.services.p105_supplement_ocr import (
+    OcrAttempt,
+    SupplementCandidate,
+    gather_ocr_attempts,
+    hamming5,
+    score_supplement_candidates,
 )
 from app.services.photo_import_fingerprint_service import (
     fingerprint_match_score_for_crop_path,
@@ -66,8 +74,12 @@ class ComicBarcodeReadResult:
     left_supplement_ocr: str = ""
     decoded_supplement: str = ""
     ocr_supplement: str = ""
+    corrected_supplement: str = ""
     final_supplement: str = ""
     supplement_disagreement: bool = False
+    catalog_confirmed: bool = False
+    fingerprint_confirmed: bool = False
+    correction_reason: str = ""
     right_cover_digit_ocr: str = ""
     reconstructed_full: str = ""
     confidence_main: float = 0.0
@@ -80,6 +92,9 @@ class ComicBarcodeReadResult:
     review_reason: str = ""
     auto_match_allowed: bool = False
     region_debug_path: str = ""
+    detection_method: str = "percentage"
+    ocr_attempts: list[dict[str, Any]] = field(default_factory=list)
+    supplement_candidates: list[dict[str, Any]] = field(default_factory=list)
     region_ocr_debug: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -89,8 +104,12 @@ class ComicBarcodeReadResult:
             "left_supplement_ocr": self.left_supplement_ocr,
             "decoded_supplement": self.decoded_supplement,
             "ocr_supplement": self.ocr_supplement,
+            "corrected_supplement": self.corrected_supplement,
             "final_supplement": self.final_supplement,
             "supplement_disagreement": self.supplement_disagreement,
+            "catalog_confirmed": self.catalog_confirmed,
+            "fingerprint_confirmed": self.fingerprint_confirmed,
+            "correction_reason": self.correction_reason,
             "right_cover_digit_ocr": self.right_cover_digit_ocr,
             "reconstructed_full": self.reconstructed_full,
             "confidence_main": self.confidence_main,
@@ -103,6 +122,9 @@ class ComicBarcodeReadResult:
             "review_reason": self.review_reason,
             "auto_match_allowed": self.auto_match_allowed,
             "region_debug_path": self.region_debug_path,
+            "detection_method": self.detection_method,
+            "ocr_attempts": list(self.ocr_attempts),
+            "supplement_candidates": list(self.supplement_candidates),
             "region_ocr_debug": dict(self.region_ocr_debug),
         }
 
@@ -192,57 +214,23 @@ def _vision_ocr_region(image_bytes: bytes, *, system: str, user: str, log_contex
     return "", 0.0
 
 
-def _tesseract_supplement_ocr(pil: Image.Image, log_context: str) -> tuple[str, float, str]:
-    """Local OCR on left supplement crop (preferred for human-readable digits)."""
-    try:
-        from app.services.cover_images import _run_tesseract_ocr_with_test_compat
-    except ImportError:
-        return "", 0.0, ""
-    gray = ImageOps.grayscale(pil)
-    scale = max(2.0, 1200.0 / max(1, gray.width))
-    enlarged = gray.resize(
-        (max(1, int(gray.width * scale)), max(1, int(gray.height * scale))),
-        Image.Resampling.LANCZOS,
+def _vision_supplement_attempt(left_bytes: bytes, log_context: str) -> OcrAttempt | None:
+    digits, conf = _vision_ocr_region(
+        left_bytes,
+        system=_LEFT_SUPPLEMENT_OCR_SYSTEM,
+        user=_LEFT_SUPPLEMENT_OCR_USER,
+        log_context=f"{log_context}:left_vision",
     )
-    processed = ImageOps.autocontrast(enlarged)
-    raw_text = ""
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-            processed.save(tmp_path)
-            raw_text = _run_tesseract_ocr_with_test_compat(tmp_path, timeout_seconds=12.0)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("p105.tesseract_supplement_fail context=%s err=%s", log_context, exc)
-        return "", 0.0, raw_text
-    digits = _digits_only(raw_text)
-    if len(digits) == 5:
-        return digits, 0.78, raw_text
-    if 3 <= len(digits) <= 4:
-        return digits, 0.62, raw_text
-    return "", 0.0, raw_text
-
-
-def _pick_ocr_supplement(
-    *,
-    tesseract_digits: str,
-    tesseract_conf: float,
-    tesseract_raw: str,
-    vision_digits: str,
-    vision_conf: float,
-) -> tuple[str, float, str]:
-    t_digits = _digits_only(tesseract_digits)
-    v_digits = _digits_only(vision_digits)
-    if len(v_digits) == 5 and vision_conf >= tesseract_conf:
-        return v_digits, vision_conf, "vision"
-    if len(t_digits) == 5:
-        return t_digits, tesseract_conf, "tesseract"
-    if len(v_digits) == 5:
-        return v_digits, vision_conf, "vision"
-    if 3 <= len(t_digits) <= 4:
-        return t_digits, tesseract_conf, "tesseract"
-    if 3 <= len(v_digits) <= 4:
-        return v_digits, vision_conf, "vision"
-    return "", 0.0, "none"
+    digits = _digits_only(digits)
+    if not digits:
+        return None
+    return OcrAttempt(
+        variant="vision|gpt",
+        raw_text=digits,
+        digits=digits if len(digits) <= 5 else digits[:5],
+        confidence=conf,
+        source="vision",
+    )
 
 
 def _normalize_supplement_partial(text: str) -> str:
@@ -321,51 +309,188 @@ def _recover_supplement_from_catalog(
     return "", None, 0.0
 
 
-def _choose_final_supplement(
+def _catalog_supplements_for_main(session: Session, main_upc: str) -> dict[str, int]:
+    """Map known 5-digit supplements -> issue_id for this base UPC (catalog truth)."""
+    out: dict[str, int] = {}
+    for full, issue_id in _catalog_full_barcodes_for_main(session, main_upc):
+        supp = full[12:17]
+        if len(supp) == 5 and supp not in out:
+            out[supp] = issue_id
+    return out
+
+
+def _correct_supplement_via_catalog(
+    session: Session | None,
     *,
     main_upc: str,
-    ocr_supplement: str,
-    ocr_conf: float,
+    ocr_digits: str,
+    catalog_map: dict[str, int],
+    cover_path: Path | None,
+) -> tuple[str, int | None, float, int] | None:
+    """When OCR likely substituted a digit, snap to nearest catalog supplement.
+
+    Returns (corrected_supplement, issue_id, fingerprint_score, hamming_distance) or None.
+    Requires single catalog candidate OR cover-fingerprint agreement to justify a rewrite.
+    """
+    if len(ocr_digits) != 5 or not catalog_map:
+        return None
+    near = sorted(
+        ((supp, hamming5(ocr_digits, supp)) for supp in catalog_map),
+        key=lambda pair: pair[1],
+    )
+    near = [(supp, dist) for supp, dist in near if 1 <= dist <= 2]
+    if not near:
+        return None
+    best_dist = near[0][1]
+    group = [supp for supp, dist in near if dist == best_dist]
+
+    if len(catalog_map) == 1 and len(group) == 1:
+        supp = group[0]
+        issue_id = catalog_map[supp]
+        fp = 0.0
+        if session is not None and cover_path is not None and cover_path.is_file():
+            fp = fingerprint_match_score_for_crop_path(session, crop_path=cover_path, catalog_issue_id=issue_id)
+        return supp, issue_id, fp, best_dist
+
+    if session is None or cover_path is None or not cover_path.is_file():
+        return None
+    best_supp = ""
+    best_issue: int | None = None
+    best_fp = 0.0
+    for supp in group:
+        issue_id = catalog_map[supp]
+        fp = fingerprint_match_score_for_crop_path(session, crop_path=cover_path, catalog_issue_id=issue_id)
+        if fp > best_fp:
+            best_fp = fp
+            best_supp = supp
+            best_issue = issue_id
+    if best_supp and best_fp >= 70.0:
+        return best_supp, best_issue, best_fp, best_dist
+    return None
+
+
+@dataclass
+class _SupplementDecision:
+    ocr_supplement: str = ""
+    corrected_supplement: str = ""
+    final_supplement: str = ""
+    inferred: bool = False
+    catalog_confirmed: bool = False
+    fingerprint_confirmed: bool = False
+    disagreement: bool = False
+    confidence: float = 0.0
+    review_reason: str = ""
+    correction_reason: str = ""
+    recovery: RecoveryKind = "none"
+
+
+def _resolve_supplement_decision(
+    scored: list[SupplementCandidate],
+    *,
+    main_upc: str,
     decoded_supplement: str,
+    catalog_map: dict[str, int],
     session: Session | None,
     cover_path: Path | None,
-) -> tuple[str, bool, bool, str, RecoveryKind]:
-    """Prefer left OCR text; bar extension decode is advisory only."""
-    ocr_digits = _digits_only(ocr_supplement)
+) -> _SupplementDecision:
     decoded = _digits_only(decoded_supplement)
-    disagreement = bool(decoded and ocr_digits and len(ocr_digits) == 5 and decoded != ocr_digits)
-    inferred = False
-    recovery: RecoveryKind = "none"
-    review_reason = ""
+    decision = _SupplementDecision()
+    top = scored[0] if scored else None
+    decision.ocr_supplement = top.digits if top else ""
 
-    if disagreement:
-        review_reason = (
-            f"Supplement OCR ({ocr_digits}) disagrees with bar decode ({decoded}); using OCR text."
-        )
+    def _set_disagreement(final: str) -> None:
+        if decoded and len(decoded) == 5 and final and decoded != final:
+            decision.disagreement = True
 
-    if len(ocr_digits) == 5:
-        return ocr_digits, disagreement, False, review_reason, "merged"
+    # Case: no readable 5-digit OCR candidate at all (blank / unreadable).
+    if top is None:
+        if session is not None and catalog_map:
+            best_supp = ""
+            best_issue: int | None = None
+            best_fp = 0.0
+            for supp, issue_id in catalog_map.items():
+                fp = 0.0
+                if cover_path is not None and cover_path.is_file():
+                    fp = fingerprint_match_score_for_crop_path(session, crop_path=cover_path, catalog_issue_id=issue_id)
+                if fp > best_fp:
+                    best_fp, best_supp, best_issue = fp, supp, issue_id
+            if len(catalog_map) == 1 and best_fp >= 70.0 and best_supp:
+                decision.final_supplement = best_supp
+                decision.corrected_supplement = best_supp
+                decision.inferred = True
+                decision.fingerprint_confirmed = True
+                decision.recovery = "inferred_catalog"
+                decision.confidence = min(0.9, best_fp / 100.0)
+                decision.review_reason = (
+                    "Left supplement OCR unreadable; inferred from catalog + cover fingerprint."
+                )
+                decision.correction_reason = decision.review_reason
+                return decision
+        decision.review_reason = "Left supplement OCR unreadable; see debug crops/overlay."
+        return decision
 
-    if 3 <= len(ocr_digits) <= 4 and main_upc and direct_market_requires_supplement_key(main_upc):
-        review_reason = review_reason or "Supplement OCR incomplete (3–4 digits); refusing direct auto-match."
-        if session is not None:
-            recovered, _, conf_rec = _recover_supplement_from_catalog(
-                session, main_upc=main_upc, partial_supplement=ocr_digits, cover_path=cover_path
+    decision.confidence = top.ocr_confidence
+
+    # Case: OCR digits exist in catalog -> confirmed (no rewrite).
+    if top.catalog_exists:
+        decision.final_supplement = top.digits
+        decision.catalog_confirmed = True
+        decision.fingerprint_confirmed = top.fingerprint_score >= 70.0
+        _set_disagreement(top.digits)
+        if decision.disagreement:
+            decision.review_reason = (
+                f"OCR supplement ({top.digits}) disagrees with bar decode ({decoded}); "
+                "OCR matches catalog so OCR wins."
             )
-            if recovered:
-                inferred = True
-                recovery = "inferred_catalog"
-                review_reason = "Supplement inferred from catalog + cover fingerprint."
-                return recovered, disagreement, inferred, review_reason, recovery
-        return "", disagreement, inferred, review_reason, recovery
+        decision.recovery = "merged"
+        return decision
 
-    if decoded and len(decoded) == 5 and not ocr_digits:
-        review_reason = review_reason or (
-            f"Bar decode supplement ({decoded}) without confirming left OCR — review required."
+    # Case: OCR digits NOT in catalog -> try catalog+fingerprint correction.
+    corrected = _correct_supplement_via_catalog(
+        session,
+        main_upc=main_upc,
+        ocr_digits=top.digits,
+        catalog_map=catalog_map,
+        cover_path=cover_path,
+    )
+    if corrected is not None:
+        supp, _issue_id, fp, dist = corrected
+        decision.final_supplement = supp
+        decision.corrected_supplement = supp
+        decision.inferred = True
+        decision.catalog_confirmed = True
+        decision.fingerprint_confirmed = fp >= 70.0
+        decision.recovery = "inferred_catalog"
+        decision.confidence = max(top.ocr_confidence, min(0.95, fp / 100.0) if fp else 0.7)
+        fp_txt = f" + cover fingerprint ({fp:.0f}%)" if fp else ""
+        decision.correction_reason = (
+            f"OCR read {top.digits}; corrected to catalog supplement {supp} "
+            f"(differs by {dist} digit{'s' if dist != 1 else ''}{fp_txt})."
         )
-        return "", disagreement, inferred, review_reason, "none"
+        decision.review_reason = decision.correction_reason
+        _set_disagreement(supp)
+        return decision
 
-    return "", disagreement, inferred, review_reason, recovery
+    # Case: OCR-only (5 digits) with no catalog corroboration.
+    decision.final_supplement = top.digits
+    _set_disagreement(top.digits)
+    if catalog_map:
+        decision.review_reason = (
+            f"OCR supplement {top.digits} not found in catalog for base UPC {main_upc}; review required."
+        )
+    elif decision.disagreement:
+        decision.review_reason = (
+            f"OCR supplement ({top.digits}) disagrees with bar decode ({decoded}); using OCR text."
+        )
+    decision.recovery = "merged"
+    return decision
+
+
+def _publisher_prefix_ok(main_upc: str, catalog_map: dict[str, int]) -> bool:
+    """Light publisher-prefix agreement: a known direct-market prefix with catalog rows."""
+    if not main_upc or len(main_upc) != 12:
+        return False
+    return bool(catalog_map) and direct_market_requires_supplement_key(main_upc)
 
 
 def read_comic_barcode_from_image_bytes(
@@ -374,16 +499,18 @@ def read_comic_barcode_from_image_bytes(
     session: Session | None = None,
     cover_path: Path | None = None,
     intake_item_id: int | None = None,
+    debug_dir: Path | None = None,
     log_context: str = "p105_comic_barcode",
 ) -> ComicBarcodeReadResult:
-    """Decode main UPC from bars; OCR left supplement; reconstruct full comic barcode."""
+    """Decode main UPC from bars; OCR-retry the printed left supplement; reconstruct full barcode."""
     import io as io_mod
 
     config = _barcode_crop_config()
     with Image.open(io_mod.BytesIO(image_bytes)) as img:
         pil = img.convert("RGB")
-    upc_crop = crop_upc_region_pil(pil, config=config)
-    regions = split_barcode_box_regions(upc_crop, config=config)
+
+    geometry = compute_barcode_region_geometry(pil, config=config)
+    regions = crops_from_geometry(pil, geometry)
 
     main_upc, conf_main = _decode_main_upc_from_pil(regions["main_bars"])
     if not main_upc:
@@ -395,21 +522,44 @@ def read_comic_barcode_from_image_bytes(
         if not decoded_supplement:
             decoded_supplement = _decode_supplement_from_pil(regions["full_expanded"], main_upc)
 
-    left_pil = regions["left_supplement"]
-    tess_digits, tess_conf, tess_raw = _tesseract_supplement_ocr(left_pil, f"{log_context}:left_tesseract")
-    left_bytes = pil_to_jpeg_bytes(left_pil)
-    vision_digits, vision_conf = _vision_ocr_region(
-        left_bytes,
-        system=_LEFT_SUPPLEMENT_OCR_SYSTEM,
-        user=_LEFT_SUPPLEMENT_OCR_USER,
-        log_context=f"{log_context}:left_vision",
+    catalog_map: dict[str, int] = {}
+    if session is not None and main_upc:
+        catalog_map = _catalog_supplements_for_main(session, main_upc)
+
+    # --- Left supplement OCR retry pipeline ---------------------------------
+    left_variants = left_supplement_crop_variants(pil, geometry)
+    vision_attempt = _vision_supplement_attempt(
+        pil_to_jpeg_bytes(regions["left_supplement"]), log_context
     )
-    ocr_supplement, conf_left, ocr_source = _pick_ocr_supplement(
-        tesseract_digits=tess_digits,
-        tesseract_conf=tess_conf,
-        tesseract_raw=tess_raw,
-        vision_digits=vision_digits,
-        vision_conf=vision_conf,
+    attempts = gather_ocr_attempts(
+        left_variants,
+        deskew_angle=geometry.deskew_angle,
+        log_context=f"{log_context}:left",
+        vision_attempt=vision_attempt,
+    )
+
+    fingerprint_scorer = None
+    if session is not None and cover_path is not None and cover_path.is_file():
+        def fingerprint_scorer(issue_id: int) -> float:  # noqa: ANN001 - local closure
+            return fingerprint_match_score_for_crop_path(
+                session, crop_path=cover_path, catalog_issue_id=issue_id
+            )
+
+    scored = score_supplement_candidates(
+        attempts,
+        main_upc=main_upc,
+        catalog_supplements=catalog_map,
+        fingerprint_scorer=fingerprint_scorer,
+        publisher_prefix_ok=_publisher_prefix_ok(main_upc, catalog_map),
+    )
+
+    decision = _resolve_supplement_decision(
+        scored,
+        main_upc=main_upc,
+        decoded_supplement=decoded_supplement,
+        catalog_map=catalog_map,
+        session=session,
+        cover_path=cover_path,
     )
 
     right_bytes = pil_to_jpeg_bytes(regions["right_cover_digit"])
@@ -420,53 +570,58 @@ def read_comic_barcode_from_image_bytes(
         log_context=f"{log_context}:right",
     )
 
+    ocr_attempts_payload = [a.to_dict() for a in attempts]
+    candidates_payload = [c.to_dict() for c in scored]
     region_ocr_debug: dict[str, Any] = {
+        "geometry": geometry.as_dict(),
         "left_supplement": {
-            "tesseract_text": tess_raw,
-            "tesseract_digits": tess_digits,
-            "tesseract_confidence": tess_conf,
-            "vision_digits": vision_digits,
-            "vision_confidence": vision_conf,
-            "chosen_source": ocr_source,
-            "ocr_supplement": ocr_supplement,
-            "ocr_confidence": conf_left,
+            "ocr_attempts": ocr_attempts_payload,
+            "candidates": candidates_payload,
+            "ocr_supplement": decision.ocr_supplement,
+            "corrected_supplement": decision.corrected_supplement,
+            "final_supplement": decision.final_supplement,
+            "ocr_confidence": decision.confidence,
+            "correction_reason": decision.correction_reason,
         },
-        "right_cover_digit": {
-            "vision_digit": right_ocr,
-            "vision_confidence": right_conf,
-        },
+        "right_cover_digit": {"vision_digit": right_ocr, "vision_confidence": right_conf},
         "decoded_supplement_from_bars": decoded_supplement,
         "main_upc": main_upc,
         "main_confidence": conf_main,
+        "detection_method": geometry.detection_method,
     }
     logger.info(
-        "p105.barcode_regions item=%s main=%s decoded_supp=%s ocr_supp=%s source=%s tess_conf=%.2f vision_conf=%.2f",
+        "p105.barcode_regions item=%s method=%s main=%s decoded_supp=%s ocr_supp=%s final=%s "
+        "inferred=%s catalog_ok=%s fp_ok=%s disagree=%s attempts=%d",
         intake_item_id or log_context,
+        geometry.detection_method,
         main_upc,
         decoded_supplement,
-        ocr_supplement,
-        ocr_source,
-        tess_conf,
-        vision_conf,
+        decision.ocr_supplement,
+        decision.final_supplement,
+        decision.inferred,
+        decision.catalog_confirmed,
+        decision.fingerprint_confirmed,
+        decision.disagreement,
+        len(attempts),
     )
 
     region_debug_path = ""
-    if intake_item_id is not None:
-        region_debug_path = save_barcode_region_debug_crops(
-            intake_item_id,
+    debug_base: Path | None = None
+    if debug_dir is not None:
+        debug_base = Path(debug_dir)
+    elif intake_item_id is not None:
+        debug_base = _p105_regions.P105_BARCODE_DEBUG_ROOT / str(int(intake_item_id))
+    if debug_base is not None:
+        overlay = draw_region_overlay(pil, geometry)
+        region_debug_path = save_barcode_region_debug_to_dir(
+            debug_base,
             regions,
             ocr_debug=region_ocr_debug,
+            overlay=overlay,
+            left_variants=left_variants,
         )
 
-    final_supplement, disagreement, inferred, review_reason, recovery = _choose_final_supplement(
-        main_upc=main_upc,
-        ocr_supplement=ocr_supplement,
-        ocr_conf=conf_left,
-        decoded_supplement=decoded_supplement,
-        session=session,
-        cover_path=cover_path,
-    )
-
+    final_supplement = decision.final_supplement
     if len(final_supplement) == 5:
         reconstructed = _reconstruct_full(main_upc, final_supplement)
     else:
@@ -476,46 +631,65 @@ def read_comic_barcode_from_image_bytes(
     if reconstructed and len(reconstructed) >= 17:
         raw_decoded = reconstructed
 
+    conf_left = decision.confidence
     conf_reconstructed = 0.0
     if reconstructed and len(reconstructed) >= 17:
         conf_reconstructed = min(0.99, (conf_main + conf_left) / 2.0 if conf_left else conf_main)
+
+    top = scored[0] if scored else None
+    ocr_strong = bool(top and top.repeat_count >= 2 and top.ocr_confidence >= 0.6)
+    confirmed = decision.catalog_confirmed or decision.fingerprint_confirmed or (not catalog_map and ocr_strong)
 
     auto_match = bool(
         reconstructed
         and len(reconstructed) >= 17
         and len(final_supplement) == 5
         and upc_check_digit_valid(reconstructed[:12])
-        and not inferred
-        and not disagreement
+        and not decision.inferred
+        and not decision.disagreement
+        and confirmed
         and conf_main >= 0.85
-        and conf_left >= 0.7
     )
-    if inferred:
+
+    review_reason = decision.review_reason
+    if decision.inferred:
         auto_match = False
         if not review_reason:
-            review_reason = "Inferred supplemental digits — confirm in review."
-    if disagreement:
+            review_reason = "Inferred/corrected supplemental digits — confirm in review."
+    if decision.disagreement:
         auto_match = False
+    if not final_supplement and main_upc and direct_market_requires_supplement_key(main_upc):
+        auto_match = False
+        review_reason = review_reason or (
+            f"Read base UPC {main_upc} but could not confirm the 5-digit supplement."
+        )
 
     return ComicBarcodeReadResult(
         raw_decoded_barcode=raw_decoded,
         main_upc=main_upc,
-        left_supplement_ocr=ocr_supplement,
+        left_supplement_ocr=decision.ocr_supplement,
         decoded_supplement=decoded_supplement,
-        ocr_supplement=ocr_supplement,
+        ocr_supplement=decision.ocr_supplement,
+        corrected_supplement=decision.corrected_supplement,
         final_supplement=final_supplement,
-        supplement_disagreement=disagreement,
+        supplement_disagreement=decision.disagreement,
+        catalog_confirmed=decision.catalog_confirmed,
+        fingerprint_confirmed=decision.fingerprint_confirmed,
+        correction_reason=decision.correction_reason,
         right_cover_digit_ocr=right_ocr,
         reconstructed_full=reconstructed,
         confidence_main=conf_main,
         confidence_left=conf_left,
         confidence_reconstructed=conf_reconstructed,
-        recovery_kind=recovery,
-        inferred_supplement=inferred,
+        recovery_kind=decision.recovery,
+        inferred_supplement=decision.inferred,
         crop_expand_ratio=config.clamped_expand_ratio(),
         review_reason=review_reason,
         auto_match_allowed=auto_match,
         region_debug_path=region_debug_path,
+        detection_method=geometry.detection_method,
+        ocr_attempts=ocr_attempts_payload,
+        supplement_candidates=candidates_payload,
         region_ocr_debug=region_ocr_debug,
     )
 

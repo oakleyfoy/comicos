@@ -252,20 +252,68 @@ export function IntakeReviewPage(): JSX.Element {
                       <p>Reconstructed: {String(item.barcode_read.reconstructed_full ?? "—")}</p>
                       <p>Decoded supplement (bars): {String(item.barcode_read.decoded_supplement ?? "—")}</p>
                       <p>OCR supplement (left text): {String(item.barcode_read.ocr_supplement ?? item.barcode_read.left_supplement_ocr ?? "—")}</p>
-                      <p>Final supplement: {String(item.barcode_read.final_supplement ?? "—")}</p>
+                      {item.barcode_read.corrected_supplement ? (
+                        <p>Corrected supplement: {String(item.barcode_read.corrected_supplement)}</p>
+                      ) : null}
+                      <p>
+                        Final supplement: {String(item.barcode_read.final_supplement || "—")}
+                        {item.barcode_read.catalog_confirmed ? " (catalog ✓)" : ""}
+                        {item.barcode_read.fingerprint_confirmed ? " (fingerprint ✓)" : ""}
+                      </p>
                       <p>
                         Confidence: main {Math.round(Number(item.barcode_read.confidence_main ?? 0) * 100)}%,
                         supplement {Math.round(Number(item.barcode_read.confidence_left ?? 0) * 100)}%
+                        {item.barcode_read.detection_method
+                          ? ` · ${String(item.barcode_read.detection_method)} crop`
+                          : ""}
                       </p>
+                      {Array.isArray(item.barcode_read.supplement_candidates) &&
+                      item.barcode_read.supplement_candidates.length > 0 ? (
+                        <p className="text-slate-400">
+                          OCR candidates:{" "}
+                          {(item.barcode_read.supplement_candidates as Array<Record<string, unknown>>)
+                            .slice(0, 3)
+                            .map(
+                              (c) =>
+                                `${String(c.digits)}×${String(c.repeat_count ?? 0)}${
+                                  c.catalog_exists ? "(cat)" : ""
+                                }`,
+                            )
+                            .join(", ")}
+                        </p>
+                      ) : null}
+                      {Array.isArray(item.barcode_read.ocr_attempts) &&
+                      item.barcode_read.ocr_attempts.length > 0 ? (
+                        <details className="text-slate-500">
+                          <summary className="cursor-pointer">
+                            Raw OCR attempts ({(item.barcode_read.ocr_attempts as unknown[]).length})
+                          </summary>
+                          <ul className="mt-1 space-y-0.5">
+                            {(item.barcode_read.ocr_attempts as Array<Record<string, unknown>>)
+                              .filter((a) => String(a.digits ?? "").length > 0)
+                              .slice(0, 12)
+                              .map((a, idx) => (
+                                <li key={idx}>
+                                  {String(a.variant)}: {String(a.digits) || "∅"} (
+                                  {Math.round(Number(a.confidence ?? 0) * 100)}%)
+                                </li>
+                              ))}
+                          </ul>
+                        </details>
+                      ) : null}
                       {item.barcode_read.supplement_disagreement ? (
                         <p className="text-amber-300/90">
                           Supplement mismatch: bar decode vs left OCR — confirm final supplement.
                         </p>
                       ) : null}
                       {item.barcode_read.inferred_supplement ? (
-                        <p className="text-amber-300/90">Supplement inferred (not raw OCR).</p>
+                        <p className="text-amber-300/90">Supplement inferred/corrected (not raw OCR).</p>
                       ) : null}
-                      {item.barcode_read.review_reason ? (
+                      {item.barcode_read.correction_reason ? (
+                        <p className="text-amber-300/90">{String(item.barcode_read.correction_reason)}</p>
+                      ) : null}
+                      {item.barcode_read.review_reason &&
+                      item.barcode_read.review_reason !== item.barcode_read.correction_reason ? (
                         <p className="text-amber-300/90">{String(item.barcode_read.review_reason)}</p>
                       ) : null}
                     </>
