@@ -651,6 +651,7 @@ def save_barcode_region_debug_to_dir(
     ocr_debug: dict[str, Any],
     overlay: Image.Image | None = None,
     left_variants: list[tuple[str, Image.Image]] | None = None,
+    extra_crops: dict[str, Image.Image] | None = None,
 ) -> str:
     """Persist region crops, overlay, variant crops, and OCR metadata to an explicit dir."""
     base.mkdir(parents=True, exist_ok=True)
@@ -661,6 +662,9 @@ def save_barcode_region_debug_to_dir(
         (base / "barcode_only.jpg").write_bytes(pil_to_jpeg_bytes(regions["main_bars"]))
     if "left_supplement" in regions:
         (base / "supplement_only.jpg").write_bytes(pil_to_jpeg_bytes(regions["left_supplement"]))
+    if extra_crops:
+        for name, pil in extra_crops.items():
+            (base / f"{name}.jpg").write_bytes(pil_to_jpeg_bytes(pil))
     if overlay is not None:
         (base / "overlay.jpg").write_bytes(pil_to_jpeg_bytes(overlay))
     if left_variants:

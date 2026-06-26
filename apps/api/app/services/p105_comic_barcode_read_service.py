@@ -50,6 +50,11 @@ from app.services.p105_supplement_ocr_consensus import (
 from app.services.photo_import_fingerprint_service import (
     fingerprint_match_score_for_crop_path,
 )
+from app.services.p105_upc_addon_decoder import (
+    UpAddonDecodeResult,
+    addon_debug_crops,
+    decode_upc_addon,
+)
 from app.services.photo_import_upc_barcode_decoder import collect_raw_upc_candidates_from_pil
 
 logger = logging.getLogger(__name__)
@@ -80,6 +85,8 @@ class ComicBarcodeReadResult:
     corrected_supplement: str = ""
     final_supplement: str = ""
     supplement_disagreement: bool = False
+    supplement_decode_method: str = ""
+    supplement_decode_confidence: float = 0.0
     catalog_confirmed: bool = False
     fingerprint_confirmed: bool = False
     correction_reason: str = ""
@@ -115,6 +122,8 @@ class ComicBarcodeReadResult:
             "corrected_supplement": self.corrected_supplement,
             "final_supplement": self.final_supplement,
             "supplement_disagreement": self.supplement_disagreement,
+            "supplement_decode_method": self.supplement_decode_method,
+            "supplement_decode_confidence": self.supplement_decode_confidence,
             "catalog_confirmed": self.catalog_confirmed,
             "fingerprint_confirmed": self.fingerprint_confirmed,
             "correction_reason": self.correction_reason,
@@ -395,70 +404,114 @@ class _SupplementDecision:
     review_reason: str = ""
     correction_reason: str = ""
     recovery: RecoveryKind = "none"
+    decode_method: str = ""
+    decode_confidence: float = 0.0
+
+
+def _fingerprint_for_supplement(
+    session: Session | None,
+    cover_path: Path | None,
+    catalog_map: dict[str, int],
+    supplement: str,
+) -> float:
+    if session is None or cover_path is None or not cover_path.is_file():
+        return 0.0
+    issue_id = catalog_map.get(supplement)
+    if issue_id is None:
+        return 0.0
+    return fingerprint_match_score_for_crop_path(session, crop_path=cover_path, catalog_issue_id=issue_id)
 
 
 def _resolve_supplement_decision(
     scored: list[SupplementCandidate],
     *,
     main_upc: str,
-    decoded_supplement: str,
+    addon: UpAddonDecodeResult,
     catalog_map: dict[str, int],
     session: Session | None,
     cover_path: Path | None,
 ) -> _SupplementDecision:
-    decoded = _digits_only(decoded_supplement)
+    """Add-on bar decode is primary; OCR is fallback when bars fail."""
     decision = _SupplementDecision()
     top = scored[0] if scored else None
     decision.ocr_supplement = top.digits if top else ""
+    bar_supp = addon.supplement if addon and len(addon.supplement) == 5 else ""
+    ocr_supp = decision.ocr_supplement
 
-    def _set_disagreement(final: str) -> None:
-        if decoded and len(decoded) == 5 and final and decoded != final:
+    if bar_supp:
+        decision.decode_method = addon.method or "addon_bars"
+        decision.decode_confidence = addon.confidence
+        decision.final_supplement = bar_supp
+        decision.confidence = addon.confidence
+        decision.recovery = "merged"
+
+        if ocr_supp and ocr_supp != bar_supp:
             decision.disagreement = True
+            bar_in_cat = bar_supp in catalog_map
+            ocr_in_cat = ocr_supp in catalog_map
+            fp_bar = _fingerprint_for_supplement(session, cover_path, catalog_map, bar_supp)
+            fp_ocr = _fingerprint_for_supplement(session, cover_path, catalog_map, ocr_supp)
+            decision.review_reason = (
+                f"Add-on bars read {bar_supp} ({decision.decode_method}) but printed OCR read {ocr_supp}; "
+                "using bar decode — confirm in review."
+            )
+            if ocr_in_cat and fp_ocr >= 80.0 and (not bar_in_cat or fp_bar < 65.0):
+                decision.corrected_supplement = ocr_supp
+                decision.review_reason = (
+                    f"Bars ({bar_supp}) disagree with OCR ({ocr_supp}); catalog + fingerprint favor OCR "
+                    f"({fp_ocr:.0f}%) — manual confirm required."
+                )
+            elif bar_in_cat:
+                decision.catalog_confirmed = True
+                if fp_bar >= 70.0:
+                    decision.fingerprint_confirmed = True
+        elif bar_supp in catalog_map:
+            decision.catalog_confirmed = True
+            fp = _fingerprint_for_supplement(session, cover_path, catalog_map, bar_supp)
+            decision.fingerprint_confirmed = fp >= 70.0
+        return decision
 
-    # Case: no readable 5-digit OCR candidate at all (blank / unreadable).
+    # --- Bar add-on decode failed: fall back to OCR / consensus ---
+    decision.decode_method = "ocr"
     if top is None:
         if session is not None and catalog_map:
             best_supp = ""
-            best_issue: int | None = None
             best_fp = 0.0
             for supp, issue_id in catalog_map.items():
                 fp = 0.0
                 if cover_path is not None and cover_path.is_file():
-                    fp = fingerprint_match_score_for_crop_path(session, crop_path=cover_path, catalog_issue_id=issue_id)
+                    fp = fingerprint_match_score_for_crop_path(
+                        session, crop_path=cover_path, catalog_issue_id=issue_id
+                    )
                 if fp > best_fp:
-                    best_fp, best_supp, best_issue = fp, supp, issue_id
+                    best_fp, best_supp = fp, supp
             if len(catalog_map) == 1 and best_fp >= 70.0 and best_supp:
                 decision.final_supplement = best_supp
                 decision.corrected_supplement = best_supp
                 decision.inferred = True
                 decision.fingerprint_confirmed = True
+                decision.decode_method = "inferred"
                 decision.recovery = "inferred_catalog"
                 decision.confidence = min(0.9, best_fp / 100.0)
                 decision.review_reason = (
-                    "Left supplement OCR unreadable; inferred from catalog + cover fingerprint."
+                    "Add-on bars unreadable; inferred from catalog + cover fingerprint."
                 )
                 decision.correction_reason = decision.review_reason
                 return decision
-        decision.review_reason = "Left supplement OCR unreadable; see debug crops/overlay."
+        decision.review_reason = (
+            "Add-on bar decode failed and left supplement OCR unreadable; see debug crops/overlay."
+        )
         return decision
 
     decision.confidence = top.ocr_confidence
 
-    # Case: OCR digits exist in catalog -> confirmed (no rewrite).
     if top.catalog_exists:
         decision.final_supplement = top.digits
         decision.catalog_confirmed = True
         decision.fingerprint_confirmed = top.fingerprint_score >= 70.0
-        _set_disagreement(top.digits)
-        if decision.disagreement:
-            decision.review_reason = (
-                f"OCR supplement ({top.digits}) disagrees with bar decode ({decoded}); "
-                "OCR matches catalog so OCR wins."
-            )
         decision.recovery = "merged"
         return decision
 
-    # Case: OCR digits NOT in catalog -> try catalog+fingerprint correction.
     corrected = _correct_supplement_via_catalog(
         session,
         main_upc=main_upc,
@@ -473,6 +526,7 @@ def _resolve_supplement_decision(
         decision.inferred = True
         decision.catalog_confirmed = True
         decision.fingerprint_confirmed = fp >= 70.0
+        decision.decode_method = "inferred"
         decision.recovery = "inferred_catalog"
         decision.confidence = max(top.ocr_confidence, min(0.95, fp / 100.0) if fp else 0.7)
         fp_txt = f" + cover fingerprint ({fp:.0f}%)" if fp else ""
@@ -481,19 +535,12 @@ def _resolve_supplement_decision(
             f"(differs by {dist} digit{'s' if dist != 1 else ''}{fp_txt})."
         )
         decision.review_reason = decision.correction_reason
-        _set_disagreement(supp)
         return decision
 
-    # Case: OCR-only (5 digits) with no catalog corroboration.
     decision.final_supplement = top.digits
-    _set_disagreement(top.digits)
     if catalog_map:
         decision.review_reason = (
-            f"OCR supplement {top.digits} not found in catalog for base UPC {main_upc}; review required."
-        )
-    elif decision.disagreement:
-        decision.review_reason = (
-            f"OCR supplement ({top.digits}) disagrees with bar decode ({decoded}); using OCR text."
+            f"Add-on bars unreadable; OCR supplement {top.digits} not in catalog for base UPC {main_upc}."
         )
     decision.recovery = "merged"
     return decision
@@ -520,9 +567,9 @@ def _supplement_ocr_for_frame_bytes(
     geometry = compute_barcode_region_geometry(pil, config=_barcode_crop_config())
     if not geometry.supplement_ocr_allowed:
         return SupplementFrameRead(frame_index=frame_index, digits="", confidence=0.0)
-    regions = crops_from_geometry(pil, geometry)
+    text_crop = addon_debug_crops(pil, geometry)["supplement_text_only"]
     attempts = gather_ocr_attempts(
-        [("supplement_only", regions["left_supplement"])],
+        [("supplement_text_only", text_crop)],
         deskew_angle=geometry.deskew_angle,
         log_context=f"{log_context}:frame{frame_index}",
     )
@@ -561,24 +608,26 @@ def read_comic_barcode_from_image_bytes(
     if not main_upc:
         main_upc, conf_main = _decode_main_upc_from_pil(regions["full_expanded"])
 
-    decoded_supplement = ""
-    if main_upc:
-        decoded_supplement = _decode_supplement_from_pil(regions["main_bars"], main_upc)
-        if not decoded_supplement:
-            decoded_supplement = _decode_supplement_from_pil(regions["full_expanded"], main_upc)
+    addon = decode_upc_addon(pil, geometry, main_upc=main_upc) if main_upc else UpAddonDecodeResult()
+    decoded_supplement = addon.supplement
 
     catalog_map: dict[str, int] = {}
     if session is not None and main_upc:
         catalog_map = _catalog_supplements_for_main(session, main_upc)
 
-    # --- Left supplement OCR: only on barcode-anchored supplement_only crop ----
+    addon_crops = addon_debug_crops(pil, geometry)
+    supplement_text_crop = addon_crops["supplement_text_only"]
+
+    # --- OCR fallback only when add-on bar decode did not yield 5 digits ------
     supplement_crop = regions["left_supplement"]
-    left_variants: list[tuple[str, Image.Image]] = [("supplement_only", supplement_crop)]
+    left_variants: list[tuple[str, Image.Image]] = [("supplement_text_only", supplement_text_crop)]
     attempts: list[Any] = []
     vision_attempt = None
-    if geometry.supplement_ocr_allowed:
+    run_ocr = geometry.supplement_ocr_allowed
+    run_ocr_fallback = run_ocr and not decoded_supplement
+    if run_ocr:
         vision_attempt = _vision_supplement_attempt(
-            pil_to_jpeg_bytes(supplement_crop), log_context
+            pil_to_jpeg_bytes(supplement_text_crop), log_context
         )
         attempts = gather_ocr_attempts(
             left_variants,
@@ -586,12 +635,20 @@ def read_comic_barcode_from_image_bytes(
             log_context=f"{log_context}:left",
             vision_attempt=vision_attempt,
         )
-    else:
+    elif not decoded_supplement:
         logger.warning(
-            "p105.supplement_ocr_skipped item=%s reason=%s failed=%s",
+            "p105.supplement_ocr_skipped item=%s reason=%s failed=%s addon_empty=%s",
             intake_item_id or log_context,
             geometry.fallback_reason or "geometry_not_ready",
             geometry.geometry_failed,
+            True,
+        )
+    elif decoded_supplement:
+        logger.info(
+            "p105.supplement_ocr_skipped item=%s addon_bars=%s method=%s",
+            intake_item_id or log_context,
+            decoded_supplement,
+            addon.method,
         )
 
     fingerprint_scorer = None
@@ -611,12 +668,15 @@ def read_comic_barcode_from_image_bytes(
 
     extra_frames = list(supplement_frame_bytes or [])
     frame_bytes_list = [image_bytes] + [fb for fb in extra_frames if fb and fb != image_bytes]
-    frame_reads = [
-        _supplement_ocr_for_frame_bytes(fb, frame_index=idx, log_context=log_context)
-        for idx, fb in enumerate(frame_bytes_list)
-    ]
-    consensus = vote_supplement_digits(frame_reads)
-    if consensus.complete and consensus.digits:
+    frame_reads: list[SupplementFrameRead] = []
+    consensus = vote_supplement_digits([])
+    if run_ocr_fallback and len(frame_bytes_list) > 1:
+        frame_reads = [
+            _supplement_ocr_for_frame_bytes(fb, frame_index=idx, log_context=log_context)
+            for idx, fb in enumerate(frame_bytes_list)
+        ]
+        consensus = vote_supplement_digits(frame_reads)
+    if consensus.complete and consensus.digits and run_ocr_fallback:
         consensus_attempts = [
             OcrAttempt(
                 variant="multi_frame_consensus",
@@ -667,7 +727,7 @@ def read_comic_barcode_from_image_bytes(
     decision = _resolve_supplement_decision(
         scored,
         main_upc=main_upc,
-        decoded_supplement=decoded_supplement,
+        addon=addon,
         catalog_map=catalog_map,
         session=session,
         cover_path=cover_path,
@@ -694,9 +754,12 @@ def read_comic_barcode_from_image_bytes(
             "ocr_confidence": decision.confidence,
             "correction_reason": decision.correction_reason,
             "supplement_consensus": consensus.to_dict(),
+            "addon_decode": addon.to_dict(),
         },
         "right_cover_digit": {"vision_digit": right_ocr, "vision_confidence": right_conf},
         "decoded_supplement_from_bars": decoded_supplement,
+        "supplement_decode_method": decision.decode_method,
+        "supplement_decode_confidence": decision.decode_confidence,
         "main_upc": main_upc,
         "main_confidence": conf_main,
         "detection_method": geometry.detection_method,
@@ -751,6 +814,7 @@ def read_comic_barcode_from_image_bytes(
             ocr_debug=region_ocr_debug,
             overlay=overlay,
             left_variants=left_variants,
+            extra_crops=addon_crops,
         )
         write_geometry_debug_images(debug_base, geo_viz)
 
@@ -771,7 +835,13 @@ def read_comic_barcode_from_image_bytes(
 
     top = scored[0] if scored else None
     ocr_strong = bool(top and top.repeat_count >= 2 and top.ocr_confidence >= 0.6)
-    confirmed = decision.catalog_confirmed or decision.fingerprint_confirmed or (not catalog_map and ocr_strong)
+    bars_confirmed = bool(decoded_supplement and addon.confidence >= 0.75 and (addon.check_valid or decision.catalog_confirmed))
+    confirmed = (
+        decision.catalog_confirmed
+        or decision.fingerprint_confirmed
+        or bars_confirmed
+        or (not catalog_map and ocr_strong)
+    )
 
     auto_match = bool(
         reconstructed
@@ -791,13 +861,13 @@ def read_comic_barcode_from_image_bytes(
             review_reason = "Inferred/corrected supplemental digits — confirm in review."
     if decision.disagreement:
         auto_match = False
-    if not geometry.supplement_ocr_allowed:
+    if not geometry.supplement_ocr_allowed and not decoded_supplement:
         auto_match = False
         review_reason = review_reason or (
-            "Supplement OCR skipped: barcode anchor crop not ready. "
+            "Supplement decode skipped: barcode anchor crop not ready. "
             f"See supplement_only.jpg ({geometry.fallback_reason or 'geometry_failed'})."
         )
-    elif len(frame_bytes_list) > 1 and not consensus.complete:
+    elif run_ocr_fallback and len(frame_bytes_list) > 1 and not consensus.complete:
         auto_match = False
         review_reason = review_reason or consensus.review_reason
     if geometry.geometry_failed:
@@ -825,6 +895,8 @@ def read_comic_barcode_from_image_bytes(
         corrected_supplement=decision.corrected_supplement,
         final_supplement=final_supplement,
         supplement_disagreement=decision.disagreement,
+        supplement_decode_method=decision.decode_method,
+        supplement_decode_confidence=decision.decode_confidence,
         catalog_confirmed=decision.catalog_confirmed,
         fingerprint_confirmed=decision.fingerprint_confirmed,
         correction_reason=decision.correction_reason,

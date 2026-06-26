@@ -279,6 +279,18 @@ export function IntakeReviewPage(): JSX.Element {
                         {item.barcode_read.fingerprint_confirmed ? " (fingerprint ✓)" : ""}
                       </p>
                       <p>
+                        Decode method:{" "}
+                        {String(item.barcode_read.supplement_decode_method || "—")}
+                        {item.barcode_read.supplement_decode_confidence
+                          ? ` (${Math.round(Number(item.barcode_read.supplement_decode_confidence) * 100)}%)`
+                          : ""}
+                      </p>
+                      {item.barcode_read.supplement_disagreement ? (
+                        <p className="text-amber-300/90">
+                          Bars vs OCR disagree — confirm final supplement above.
+                        </p>
+                      ) : null}
+                      <p>
                         Detection method: {String(item.barcode_read.detection_method ?? "percentage")}
                         {item.barcode_read.detection_method === "percentage" &&
                         item.barcode_read.fallback_reason ? (

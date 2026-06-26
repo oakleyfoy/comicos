@@ -45,6 +45,7 @@ from app.services.p105_comic_barcode_read_service import (
     publisher_validation_for_match,
     read_comic_barcode_from_image_bytes,
 )
+from app.services.p105_upc_addon_decoder import UpAddonDecodeResult
 from app.services.p105_supplement_ocr import (
     OcrAttempt,
     hamming5,
@@ -57,6 +58,20 @@ FULL = MAIN + SUPP_FULL
 MAIN2 = "761941343495"
 SUPP2 = "00311"
 FULL2 = MAIN2 + SUPP2
+
+
+def _no_addon() -> UpAddonDecodeResult:
+    return UpAddonDecodeResult()
+
+
+def _addon(supp: str, *, confidence: float = 0.91, method: str = "pyzbar:combined_strip") -> UpAddonDecodeResult:
+    return UpAddonDecodeResult(
+        supplement=supp,
+        confidence=confidence,
+        method=method,
+        check_valid=False,
+        reconstructed_full=f"{MAIN}{supp}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +181,8 @@ def test_ocr_substitution_03311_corrected_to_catalog_00311(monkeypatch) -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=fake_variant,
@@ -201,8 +216,8 @@ def test_blank_first_crop_recovers_03921_via_retry_variants(monkeypatch) -> None
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=fake_variant,
@@ -215,7 +230,7 @@ def test_blank_first_crop_recovers_03921_via_retry_variants(monkeypatch) -> None
 
 
 def test_bar_extension_disagreement_blocks_auto_match(monkeypatch) -> None:
-    """Bar decode supplement disagrees with OCR; OCR wins, auto-match blocked."""
+    """Add-on bars disagree with OCR; bars win, auto-match blocked."""
     _patch_barcode_anchor(monkeypatch)
     image = _price_box_image("03921")
 
@@ -226,8 +241,8 @@ def test_bar_extension_disagreement_blocks_auto_match(monkeypatch) -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="00111",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_addon("00111"),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=fake_variant,
@@ -236,9 +251,58 @@ def test_bar_extension_disagreement_blocks_auto_match(monkeypatch) -> None:
 
     assert result.decoded_supplement == "00111"
     assert result.ocr_supplement == "03921"
-    assert result.final_supplement == "03921"
+    assert result.final_supplement == "00111"
     assert result.supplement_disagreement is True
     assert result.auto_match_allowed is False
+
+
+def test_addon_bars_win_when_ocr_wrong(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch)
+    image = _price_box_image("02111")
+
+    def fake_variant(pil, label, *, psm, log_context):  # noqa: ANN001
+        return OcrAttempt(variant=f"{label}|psm{psm}", raw_text="02111", digits="02111", confidence=0.75)
+
+    with patch(
+        "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
+        return_value=(MAIN, 0.95),
+    ), patch(
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_addon(SUPP_FULL, confidence=0.93),
+    ), patch(
+        "app.services.p105_supplement_ocr._ocr_variant",
+        side_effect=fake_variant,
+    ):
+        result = read_comic_barcode_from_image_bytes(image, session=None)
+
+    assert result.final_supplement == SUPP_FULL
+    assert result.supplement_decode_method.startswith("pyzbar")
+    assert result.ocr_supplement == "02111"
+    assert result.supplement_disagreement is True
+
+
+def test_ocr_fallback_when_addon_unreadable(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch)
+    image = _price_box_image(SUPP_FULL)
+
+    def fake_variant(pil, label, *, psm, log_context):  # noqa: ANN001
+        return OcrAttempt(variant=f"{label}|psm{psm}", raw_text=SUPP_FULL, digits=SUPP_FULL, confidence=0.85)
+
+    with patch(
+        "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
+        return_value=(MAIN, 0.95),
+    ), patch(
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
+    ), patch(
+        "app.services.p105_supplement_ocr._ocr_variant",
+        side_effect=fake_variant,
+    ):
+        result = read_comic_barcode_from_image_bytes(image, session=None)
+
+    assert result.decoded_supplement == ""
+    assert result.final_supplement == SUPP_FULL
+    assert result.supplement_decode_method == "ocr"
 
 
 def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
@@ -256,8 +320,8 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=blank_variant,
@@ -267,7 +331,8 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
     base = tmp_path / "7777"
     assert (base / "overlay.jpg").is_file()
     assert (base / "barcode_only.jpg").is_file()
-    assert (base / "supplement_only.jpg").is_file()
+    assert (base / "addon_bars_only.jpg").is_file()
+    assert (base / "supplement_text_only.jpg").is_file()
     assert (base / "left_supplement.jpg").is_file()
     assert (base / "full_expanded.jpg").is_file()
     assert (base / "ocr_debug.json").is_file()
@@ -321,8 +386,8 @@ def test_thumbnail_input_flags_geometry_failed() -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=("", 0.0),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=blank_variant,
@@ -352,8 +417,8 @@ def test_debug_dir_param_writes_manual_outputs(tmp_path, monkeypatch) -> None:
         "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
         return_value=(MAIN, 0.95),
     ), patch(
-        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
-        return_value="",
+        "app.services.p105_comic_barcode_read_service.decode_upc_addon",
+        return_value=_no_addon(),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=blank_variant,

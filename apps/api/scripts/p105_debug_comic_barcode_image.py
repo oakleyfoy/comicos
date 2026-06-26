@@ -161,6 +161,10 @@ def main() -> int:
     print(f"fallback_reason:       {result.fallback_reason or '(none)'}")
     print(f"main_upc:              {result.main_upc or '(none)'}")
     print(f"decoded_supp (bars):   {result.decoded_supplement or '(none)'}")
+    print(
+        f"addon_decode:          method={result.supplement_decode_method or '(none)'} "
+        f"conf={result.supplement_decode_confidence:.2f}"
+    )
     print(f"ocr_supplement:        {result.ocr_supplement or '(none)'}")
     print(f"corrected_supplement:  {result.corrected_supplement or '(none)'}")
     print(f"final_supplement:      {result.final_supplement or '(none)'}")
