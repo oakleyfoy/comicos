@@ -43,6 +43,8 @@ export type PhotoImportSession = {
   expires_at: string;
   last_seen_at: string | null;
   source_device: string | null;
+  acquisition_id: number | null;
+  acquisition_label: string | null;
   confirmed_count: number;
   uploaded_photo_count: number;
   detected_book_count: number;
@@ -290,12 +292,14 @@ export type PhotoImportCandidatesDebugResponse = {
 };
 
 export function createPhotoImportSession(
+  acquisitionId: number,
   sourceDevice?: string,
   captureMode?: PhotoImportCaptureMode,
 ): Promise<PhotoImportSession> {
   return requestPhotoImport("/api/v1/photo-import/sessions", {
     method: "POST",
     body: JSON.stringify({
+      acquisition_id: acquisitionId,
       ...(sourceDevice ? { source_device: sourceDevice } : {}),
       ...(captureMode ? { capture_mode: captureMode } : {}),
     }),

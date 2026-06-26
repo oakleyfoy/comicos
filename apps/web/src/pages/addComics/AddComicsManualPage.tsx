@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiError, apiClient, type AcquisitionItemRead, type AcquisitionRead } from "../../api/client";
+import {
+  ADD_COMICS_ACQUISITION_STORAGE_KEY,
+  AddComicsAcquisitionSelect,
+} from "../../components/addComics/AddComicsAcquisitionSelect";
 import { AcquisitionTreePickerModal } from "../../components/acquisitions/AcquisitionTreePickerModal";
 import { AppShell } from "../../components/AppShell";
 import { PageHeader } from "../../components/PageHeader";
 import { StatusBanner } from "../../components/StatusBanner";
-
-const MANUAL_ENTRY_STORAGE_KEY = "comicos-manual-entry-acquisition-id";
 
 export function AddComicsManualPage(): JSX.Element {
   const [acquisitionId, setAcquisitionId] = useState<number | null>(null);
@@ -26,55 +28,48 @@ export function AddComicsManualPage(): JSX.Element {
     setItems(itemsResp.items);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function bootstrap(): Promise<void> {
+  const loadAcquisition = useCallback(
+    async (id: number) => {
       setLoading(true);
       setError(null);
+      setStatus(null);
       try {
-        const stored = sessionStorage.getItem(MANUAL_ENTRY_STORAGE_KEY);
-        if (stored) {
-          const parsed = Number(stored);
-          if (Number.isFinite(parsed)) {
-            try {
-              const acq = await apiClient.getAcquisition(parsed);
-              if (acq.status === "OPEN") {
-                if (cancelled) return;
-                setAcquisitionId(parsed);
-                await refreshItems(parsed);
-                return;
-              }
-            } catch {
-              sessionStorage.removeItem(MANUAL_ENTRY_STORAGE_KEY);
-            }
-          }
+        const acq = await apiClient.getAcquisition(id);
+        if (acq.status !== "OPEN") {
+          setError("That acquisition is complete. Choose or create an open group to add more books.");
+          setAcquisitionId(null);
+          setAcquisition(null);
+          setItems([]);
+          sessionStorage.removeItem(ADD_COMICS_ACQUISITION_STORAGE_KEY);
+          return;
         }
-        const created = await apiClient.createAcquisition({
-          acquisition_type: "UNKNOWN",
-          total_paid: "0",
-          shipping_paid: "0",
-          tax_paid: "0",
-          notes: "Manual catalog entry (Add Comics)",
-        });
-        sessionStorage.setItem(MANUAL_ENTRY_STORAGE_KEY, String(created.id));
-        if (cancelled) return;
-        setAcquisitionId(created.id);
-        await refreshItems(created.id);
+        setAcquisitionId(id);
+        await refreshItems(id);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Could not start manual entry session.");
-        }
+        setError(err instanceof ApiError ? err.message : "Could not load acquisition.");
+        setAcquisitionId(null);
+        setAcquisition(null);
+        setItems([]);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
+    },
+    [refreshItems],
+  );
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(ADD_COMICS_ACQUISITION_STORAGE_KEY);
+    if (!stored) {
+      setLoading(false);
+      return;
     }
-    void bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshItems]);
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) {
+      setLoading(false);
+      return;
+    }
+    void loadAcquisition(parsed);
+  }, [loadAcquisition]);
 
   async function onBookAdded(): Promise<void> {
     if (acquisitionId == null) return;
@@ -84,7 +79,9 @@ export function AddComicsManualPage(): JSX.Element {
       setItems(itemsResp.items);
       const acq = await apiClient.getAcquisition(acquisitionId);
       setAcquisition(acq);
-      setStatus(`Added to collection (${itemsResp.items.length} cop${itemsResp.items.length === 1 ? "y" : "ies"} this session).`);
+      setStatus(
+        `Added to collection (${itemsResp.items.length} cop${itemsResp.items.length === 1 ? "y" : "ies"} on this acquisition).`,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not refresh books.");
     }
@@ -95,22 +92,25 @@ export function AddComicsManualPage(): JSX.Element {
     setError(null);
     try {
       await apiClient.completeAcquisition(acquisitionId);
-      sessionStorage.removeItem(MANUAL_ENTRY_STORAGE_KEY);
-      setStatus("Session complete. Books are in your inventory — open Portfolio to view them.");
-      await refreshItems(acquisitionId);
+      sessionStorage.removeItem(ADD_COMICS_ACQUISITION_STORAGE_KEY);
+      setStatus("Acquisition marked complete. Books are in your inventory — open Portfolio to view them.");
+      setAcquisitionId(null);
+      setAcquisition(null);
+      setItems([]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not complete session.");
+      setError(err instanceof ApiError ? err.message : "Could not complete acquisition.");
     }
   }
 
   const copyCount = acquisition?.item_count ?? items.length;
+  const showCatalogTree = acquisitionId != null && !loading && acquisition?.status === "OPEN";
 
   return (
     <AppShell>
       <PageHeader
         eyebrow="Add Comics"
         title="Manual Entry"
-        description="Browse the local catalog tree: pick publisher, series volume, issue number, and cover variant. Books are added to your collection through a lightweight manual session."
+        description="Choose an acquisition group, then browse the local catalog tree to add publisher, series, issue, and variant. Every copy is tied to that group."
         actions={
           <Link
             to="/catalog-universe"
@@ -132,35 +132,43 @@ export function AddComicsManualPage(): JSX.Element {
         </div>
       ) : null}
 
-      {loading || acquisitionId == null ? (
-        <p className="mt-8 text-sm text-slate-400">Preparing manual entry…</p>
-      ) : (
-        <div className="mt-8 space-y-8">
-          <AcquisitionTreePickerModal
-            embedded
-            open
-            acquisitionId={acquisitionId}
-            onClose={() => undefined}
-            onCreated={() => void onBookAdded()}
-          />
+      <div className="mt-8 space-y-8">
+        <AddComicsAcquisitionSelect
+          selectedId={acquisitionId}
+          disabled={loading}
+          onSelect={(id) => void loadAcquisition(id)}
+        />
 
-          <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-white">This session</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  {copyCount} inventory cop{copyCount === 1 ? "y" : "ies"} added
-                  {acquisition?.status === "COMPLETE" ? " · complete" : " · open"}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  to="/dashboard"
-                  className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100"
-                >
-                  Open portfolio
-                </Link>
-                {acquisition?.status === "OPEN" ? (
+        {loading && acquisitionId != null ? (
+          <p className="text-sm text-slate-400">Loading acquisition…</p>
+        ) : null}
+
+        {showCatalogTree ? (
+          <>
+            <AcquisitionTreePickerModal
+              embedded
+              open
+              acquisitionId={acquisitionId}
+              onClose={() => undefined}
+              onCreated={() => void onBookAdded()}
+            />
+
+            <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">This acquisition</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {acquisition?.seller_name ?? `Acquisition #${acquisitionId}`} · {copyCount} inventory cop
+                    {copyCount === 1 ? "y" : "ies"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    to="/dashboard"
+                    className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100"
+                  >
+                    Open portfolio
+                  </Link>
                   <button
                     type="button"
                     onClick={() => void finishSession()}
@@ -168,51 +176,55 @@ export function AddComicsManualPage(): JSX.Element {
                   >
                     Done adding
                   </button>
-                ) : null}
-                <Link
-                  to={`/acquisitions/${acquisitionId}`}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
-                >
-                  Acquisition detail
-                </Link>
+                  <Link
+                    to={`/acquisitions/${acquisitionId}`}
+                    className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5"
+                  >
+                    Acquisition detail
+                  </Link>
+                </div>
               </div>
-            </div>
 
-            {items.length > 0 ? (
-              <ul className="mt-4 divide-y divide-white/5 rounded-xl border border-white/5">
-                {items.slice(0, 12).map((row) => (
-                  <li key={row.inventory_copy_id} className="flex gap-3 px-3 py-2 text-sm text-slate-200">
-                    {row.cover_image_url ? (
-                      <img
-                        src={row.cover_image_url}
-                        alt=""
-                        className="h-14 w-10 shrink-0 rounded object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-slate-800 text-[10px] text-slate-500">
-                        —
+              {items.length > 0 ? (
+                <ul className="mt-4 divide-y divide-white/5 rounded-xl border border-white/5">
+                  {items.slice(0, 12).map((row) => (
+                    <li key={row.inventory_copy_id} className="flex gap-3 px-3 py-2 text-sm text-slate-200">
+                      {row.cover_image_url ? (
+                        <img
+                          src={row.cover_image_url}
+                          alt=""
+                          className="h-14 w-10 shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-slate-800 text-[10px] text-slate-500">
+                          —
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="font-medium">
+                          {row.series ?? "Unknown series"} #{row.issue_number ?? "?"}
+                        </span>
+                        {row.variant_label ? (
+                          <span className="text-slate-400"> · {row.variant_label}</span>
+                        ) : null}
+                        {row.needs_catalog_match ? (
+                          <span className="mt-0.5 block text-xs text-amber-300">Needs catalog match</span>
+                        ) : null}
                       </span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="font-medium">
-                        {row.series ?? "Unknown series"} #{row.issue_number ?? "?"}
-                      </span>
-                      {row.variant_label ? (
-                        <span className="text-slate-400"> · {row.variant_label}</span>
-                      ) : null}
-                      {row.needs_catalog_match ? (
-                        <span className="mt-0.5 block text-xs text-amber-300">Needs catalog match</span>
-                      ) : null}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-4 text-sm text-slate-500">No books yet — use the tree above to add your first copy.</p>
-            )}
-          </section>
-        </div>
-      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">No books yet — use the tree above to add your first copy.</p>
+              )}
+            </section>
+          </>
+        ) : acquisitionId == null && !loading ? (
+          <p className="text-sm text-slate-500">
+            Select or create an acquisition above to open the catalog tree.
+          </p>
+        ) : null}
+      </div>
     </AppShell>
   );
 }

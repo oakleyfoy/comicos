@@ -17,6 +17,7 @@ from app.services.gcd_catalog_import_dashboard_service import ensure_catalog_cac
 from app.services.p103_gcd_catalog_enrichment_service import validate_enrichment_filters  # noqa: E402
 from app.services.p103_gcd_enrichment_write_service import run_p103_enrichment_write_batch  # noqa: E402
 from gcd_pipeline_cli import (  # noqa: E402
+    add_all_catalog_argument,
     add_confirm_write_argument,
     add_gcd_cache_arguments,
     add_json_argument,
@@ -31,7 +32,8 @@ DEFAULT_OUT = Path("data/p103/gcd_enrichment_write_batch.json")
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="P103 enrichment write-batch")
-    add_publisher_year_scope_arguments(parser, publisher_required=True)
+    add_all_catalog_argument(parser)
+    add_publisher_year_scope_arguments(parser, publisher_required=False)
     parser.add_argument("--limit", type=int, required=True)
     add_confirm_write_argument(parser, required=True)
     add_gcd_cache_arguments(parser)
@@ -48,6 +50,7 @@ def main() -> int:
         year_from=args.year_from,
         year_to=args.year_to,
         confirm_write=args.confirm_write,
+        all_catalog=args.all,
     )
     if filters is None:
         return 1

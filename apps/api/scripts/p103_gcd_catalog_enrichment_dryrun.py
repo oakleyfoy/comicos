@@ -4,10 +4,10 @@ Usage:
   cd apps/api
   python scripts/p103_gcd_catalog_enrichment_dryrun.py --publisher DC --year 2018 --refresh-cache
   python scripts/p103_gcd_catalog_enrichment_dryrun.py --publisher DC --year 2018 --limit 500 --benchmark
+  python scripts/p103_gcd_catalog_enrichment_dryrun.py --all --limit 10000 --benchmark --refresh-cache --out data/p103/gcd_enrichment_all_dryrun_10000.json
 """
 from __future__ import annotations
 
-import argparse
 import argparse
 import json
 import sys
@@ -26,6 +26,7 @@ from app.services.p103_gcd_catalog_enrichment_service import (  # noqa: E402
     validate_enrichment_filters,
 )
 from gcd_pipeline_cli import (  # noqa: E402
+    add_all_catalog_argument,
     add_gcd_cache_arguments,
     add_json_argument,
     add_output_argument,
@@ -89,7 +90,8 @@ def _print_summary(payload: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="P103 GCD enrichment dry-run")
-    add_publisher_year_scope_arguments(parser, publisher_required=True)
+    add_all_catalog_argument(parser)
+    add_publisher_year_scope_arguments(parser, publisher_required=False)
     parser.add_argument("--limit", type=int, default=None)
     add_gcd_cache_arguments(parser)
     add_refresh_cache_argument(parser)
@@ -113,6 +115,7 @@ def main() -> int:
         year_from=args.year_from,
         year_to=args.year_to,
         confirm_write=None,
+        all_catalog=args.all,
     )
     if filters is None:
         print("Invalid filters", file=sys.stderr)

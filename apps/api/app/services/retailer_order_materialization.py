@@ -433,9 +433,13 @@ def _mark_retailer_draft_confirmed_without_legacy_order(
 def _seller_label_for_retailer_order(*, account, order: RetailerOrderSnapshot) -> str:
     display = getattr(account, "display_name", None)
     if isinstance(display, str) and display.strip():
-        return display.strip()
-    retailer = (order.retailer or "").strip()
-    return retailer or "Retailer"
+        base = display.strip()
+    else:
+        retailer = (order.retailer or "").strip()
+        base = retailer or "Retailer"
+    if order.order_date is not None:
+        return f"{base} order {order.order_date.strftime('%m/%d/%y')}"
+    return base
 
 
 def _infer_retailer_order_total(

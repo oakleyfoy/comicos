@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as client from "../../../api/client";
+import { ADD_COMICS_ACQUISITION_STORAGE_KEY } from "../../../components/addComics/AddComicsAcquisitionSelect";
 import * as photoImport from "../../../api/photoImport";
 import { AddComicsImportFolderPage } from "../AddComicsImportFolderPage";
 
@@ -17,6 +19,8 @@ const folderSession: photoImport.PhotoImportSession = {
   expires_at: "2026-06-20T00:00:00Z",
   last_seen_at: null,
   source_device: "folder_import",
+  acquisition_id: 5,
+  acquisition_label: "Folder batch",
   confirmed_count: 0,
   uploaded_photo_count: 3,
   detected_book_count: 0,
@@ -39,6 +43,25 @@ beforeEach(() => {
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
+  sessionStorage.setItem(ADD_COMICS_ACQUISITION_STORAGE_KEY, "5");
+  vi.spyOn(client.apiClient, "listAcquisitions").mockResolvedValue({
+    items: [
+      {
+        id: 5,
+        acquisition_type: "OTHER",
+        purchase_date: null,
+        seller_name: "Folder batch",
+        seller_username: null,
+        total_paid: "0",
+        total_cost: "0",
+        item_count: 0,
+        cost_per_book: "0",
+        status: "OPEN",
+        created_at: "2026-06-19T00:00:00Z",
+      },
+    ],
+    total: 1,
+  });
   vi.spyOn(photoImport, "createPhotoImportSession").mockResolvedValue(folderSession);
   vi.spyOn(photoImport, "getPhotoImportSession").mockResolvedValue(folderSession);
   vi.spyOn(photoImport, "getPhotoImportFolderQueue").mockResolvedValue(emptyQueue);
@@ -61,6 +84,7 @@ describe("AddComicsImportFolderPage", () => {
     await waitFor(() => {
       expect(screen.getByAltText(/QR code/i)).toBeInTheDocument();
     });
+    expect(photoImport.createPhotoImportSession).toHaveBeenCalledWith(5, "folder_import", "single_comic");
     expect(screen.getByText(/Background processing/i)).toBeInTheDocument();
     expect(screen.getByText(/Queue empty/i)).toBeInTheDocument();
     expect(localStorage.getItem("comicos.importFolder.sessionToken")).toBe("folder-tok");

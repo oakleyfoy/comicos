@@ -50,6 +50,14 @@ def add_json_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print JSON to stdout")
 
 
+def add_all_catalog_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Whole-catalog mode: enrich existing catalog_issue rows (ignore --publisher; year optional)",
+    )
+
+
 def add_publisher_year_scope_arguments(parser: argparse.ArgumentParser, *, publisher_required: bool = False) -> None:
     if publisher_required:
         parser.add_argument("--publisher", required=True)

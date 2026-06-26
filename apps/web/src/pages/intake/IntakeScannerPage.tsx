@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
-  createIntakeSession,
   enqueueIntakeItem,
   getIntakeSession,
   setIntakeSessionStatus,
@@ -163,16 +162,15 @@ export function IntakeScannerPage(): JSX.Element {
   }, [startDetection]);
 
   const startSession = useCallback(async () => {
+    if (!token) {
+      setError("Open this page from the QR link on Add Comics → Phone Photo (after choosing an acquisition).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       let active = session;
-      if (!token) {
-        active = await createIntakeSession({ source_device: navigator.userAgent.slice(0, 120) });
-        setSession(active);
-        setToken(active.session_token);
-        setScanned(active.scanned_count);
-      } else if (session?.status !== "active") {
+      if (session?.status !== "active") {
         active = await setIntakeSessionStatus(token, "active");
         setSession(active);
       }

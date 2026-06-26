@@ -72,9 +72,14 @@ def create_intake_session(
     session: Session,
     *,
     owner_user_id: int,
+    acquisition_id: int,
     source_device: str | None = None,
     name: str | None = None,
 ) -> IntakeSession:
+    acq = get_acquisition_or_404(
+        session, owner_user_id=owner_user_id, acquisition_id=acquisition_id
+    )
+    require_open(acq)
     now = utc_now()
     row = IntakeSession(
         user_id=owner_user_id,
@@ -82,6 +87,7 @@ def create_intake_session(
         name=name,
         status=INTAKE_SESSION_ACTIVE,
         source_device=source_device,
+        acquisition_id=int(acq.id or 0),
         created_at=now,
         expires_at=now + timedelta(hours=INTAKE_TTL_HOURS),
         last_seen_at=now,

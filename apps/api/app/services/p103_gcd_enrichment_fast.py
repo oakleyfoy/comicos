@@ -192,10 +192,18 @@ def _load_gcd_index(
     *,
     year_from: int,
     year_to: int,
-    focus_publisher: str,
+    focus_publisher: str | None,
+    all_catalog: bool = False,
+    year_filter_explicit: bool = False,
 ) -> _GcdIndex:
     conn = sqlite3.connect(gcd_path)
     conn.execute("PRAGMA query_only = ON")
+    where_parts: list[str] = []
+    params: list[int] = []
+    if not all_catalog or year_filter_explicit:
+        where_parts.append(f"{YEAR_EXPR} BETWEEN ? AND ?")
+        params.extend([year_from, year_to])
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur = conn.execute(
         f"""
         SELECT i.id AS issue_id, p.id AS gcd_publisher_id, p.name AS publisher_name,
@@ -205,9 +213,9 @@ def _load_gcd_index(
         FROM gcd_issue i
         JOIN gcd_series s ON s.id = i.series_id
         LEFT JOIN gcd_publisher p ON p.id = s.publisher_id
-        WHERE {YEAR_EXPR} BETWEEN ? AND ?
+        {where_sql}
         """,
-        (year_from, year_to),
+        tuple(params),
     )
     exact: dict[tuple[str, str, str], dict[str, Any]] = {}
     by_si: dict[tuple[str, str], list[tuple[str, int | None, dict[str, Any]]]] = {}
@@ -230,10 +238,17 @@ def _load_gcd_index(
                 title,
                 notes,
             ) = row
-            focus = canonical_focus_publisher_label(str(publisher_name or ""))
-            if focus is None or focus != focus_publisher:
-                continue
-            pub_norm = normalize_series_name(str(publisher_name or focus))
+            if not all_catalog:
+                focus = canonical_focus_publisher_label(str(publisher_name or ""))
+                if focus is None or focus != focus_publisher:
+                    continue
+                pub_label = str(publisher_name or focus)
+            else:
+                focus = canonical_focus_publisher_label(str(publisher_name or ""))
+                pub_label = str(publisher_name or focus or "")
+                if not pub_label.strip():
+                    continue
+            pub_norm = normalize_series_name(pub_label if all_catalog else str(publisher_name or focus))
             ser_norm = normalize_series_name(str(series_name or ""))
             iss_norm = normalize_issue_number(str(number or ""))
             if not pub_norm or not ser_norm or not iss_norm:
@@ -297,24 +312,32 @@ def _load_catalog_scope(
     filters: EnrichmentFilters,
 ) -> list[EnrichmentIssueSnapshot]:
     conn = sqlite3.connect(cache_path)
-    rows = conn.execute(
-        """
+    base_select = """
         SELECT issue_id, year, publisher_id, series_id, publisher_norm, series_norm, issue_norm,
                publisher_name, series_name, issue_number, cover_date, release_date, store_date,
                title, description, external_source_ids, variant_printing, variant_variant_name, has_upc
         FROM catalog_enrichment_issue
-        WHERE year IS NOT NULL AND year BETWEEN ? AND ?
-        ORDER BY issue_id
-        """,
-        (filters.year_from, filters.year_to),
-    ).fetchall()
+    """
+    if filters.all_catalog and not filters.year_filter_explicit:
+        rows = conn.execute(f"{base_select} ORDER BY issue_id").fetchall()
+    elif filters.all_catalog and filters.year_filter_explicit:
+        rows = conn.execute(
+            f"{base_select} WHERE year IS NOT NULL AND year BETWEEN ? AND ? ORDER BY issue_id",
+            (filters.year_from, filters.year_to),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"{base_select} WHERE year IS NOT NULL AND year BETWEEN ? AND ? ORDER BY issue_id",
+            (filters.year_from, filters.year_to),
+        ).fetchall()
     conn.close()
     out: list[EnrichmentIssueSnapshot] = []
     for row in rows:
         publisher_name = str(row[7] or "")
-        focus = canonical_focus_publisher_label(publisher_name)
-        if focus != filters.publisher:
-            continue
+        if not filters.all_catalog:
+            focus = canonical_focus_publisher_label(publisher_name)
+            if focus != filters.publisher:
+                continue
         ext_raw = row[15]
         try:
             ext = json.loads(ext_raw) if ext_raw else {}
@@ -346,6 +369,11 @@ def _load_catalog_scope(
     return out
 
 
+def load_catalog_enrichment_scope(cache_path: Path, *, filters: EnrichmentFilters) -> list[EnrichmentIssueSnapshot]:
+    """Catalog-first scope for P103 (--all and tests)."""
+    return _load_catalog_scope(cache_path, filters=filters)
+
+
 def run_p103_enrichment_dryrun_fast(
     *,
     gcd_path: Path,
@@ -364,17 +392,14 @@ def run_p103_enrichment_dryrun_fast(
 
     from datetime import datetime, timezone
 
+    from app.services.p103_gcd_catalog_enrichment_service import enrichment_filters_to_dict
+
     report = P103DryRunReport(
         report_at=datetime.now(timezone.utc).isoformat(),
         mode="dry_run_fast",
         gcd_database=str(gcd_path),
         catalog_cache=str(cache_path),
-        filters={
-            "publisher": filters.publisher,
-            "year_from": filters.year_from,
-            "year_to": filters.year_to,
-            "limit": filters.limit,
-        },
+        filters=enrichment_filters_to_dict(filters),
     )
 
     t_cache = time.perf_counter()
@@ -389,6 +414,8 @@ def run_p103_enrichment_dryrun_fast(
         year_from=filters.year_from,
         year_to=filters.year_to,
         focus_publisher=filters.publisher,
+        all_catalog=filters.all_catalog,
+        year_filter_explicit=filters.year_filter_explicit,
     )
     if timer:
         timer.gcd_query_sec = time.perf_counter() - t_gcd

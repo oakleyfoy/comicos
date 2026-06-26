@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class IntakeSessionCreatePayload(BaseModel):
     source_device: str | None = None
     name: str | None = None
+    acquisition_id: int
 
 
 class IntakeSessionRead(BaseModel):
@@ -19,6 +20,8 @@ class IntakeSessionRead(BaseModel):
     status: str
     source_device: str | None
     scanned_count: int
+    acquisition_id: int | None
+    acquisition_label: str | None
     created_at: datetime
     expires_at: datetime
     last_seen_at: datetime | None

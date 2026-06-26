@@ -16,6 +16,10 @@ import {
   type PhotoImportSession,
 } from "../../api/photoImport";
 import { AppShell } from "../../components/AppShell";
+import {
+  ADD_COMICS_ACQUISITION_STORAGE_KEY,
+  AddComicsAcquisitionSelect,
+} from "../../components/addComics/AddComicsAcquisitionSelect";
 import { PageHeader } from "../../components/PageHeader";
 import { StatusBanner } from "../../components/StatusBanner";
 
@@ -30,6 +34,7 @@ const FOLDER_SESSION_STORAGE_KEY = "comicos.importFolder.sessionToken";
 export function AddComicsImportFolderPage(): JSX.Element {
   const navigate = useNavigate();
   const [session, setSession] = useState<PhotoImportSession | null>(null);
+  const [acquisitionId, setAcquisitionId] = useState<number | null>(null);
   const [queue, setQueue] = useState<PhotoImportFolderQueueStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +45,16 @@ export function AddComicsImportFolderPage(): JSX.Element {
   const seenLocalFilesRef = useRef<Set<string>>(new Set());
   const workerBusyRef = useRef(false);
 
+  useEffect(() => {
+    const stored = sessionStorage.getItem(ADD_COMICS_ACQUISITION_STORAGE_KEY);
+    if (stored) {
+      const parsed = Number(stored);
+      if (Number.isFinite(parsed)) {
+        setAcquisitionId(parsed);
+      }
+    }
+  }, []);
+
   const refreshSession = useCallback(async (token: string) => {
     const [row, q] = await Promise.all([getPhotoImportSession(token), getPhotoImportFolderQueue(token)]);
     setSession(row);
@@ -48,10 +63,18 @@ export function AddComicsImportFolderPage(): JSX.Element {
   }, []);
 
   const startSession = useCallback(async () => {
+    if (acquisitionId == null) {
+      setError("Choose or create an acquisition group before starting folder import.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const created = await createPhotoImportSession(PHOTO_IMPORT_FOLDER_SOURCE, "single_comic");
+      const created = await createPhotoImportSession(
+        acquisitionId,
+        PHOTO_IMPORT_FOLDER_SOURCE,
+        "single_comic",
+      );
       localStorage.setItem(FOLDER_SESSION_STORAGE_KEY, created.session_token);
       setSession(created);
       await refreshSession(created.session_token);
@@ -60,7 +83,7 @@ export function AddComicsImportFolderPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [refreshSession]);
+  }, [acquisitionId, refreshSession]);
 
   useEffect(() => {
     const saved = localStorage.getItem(FOLDER_SESSION_STORAGE_KEY);
@@ -187,16 +210,31 @@ export function AddComicsImportFolderPage(): JSX.Element {
       ) : null}
 
       {!session ? (
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => void startSession()}
-          className="mt-8 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
-        >
-          {loading ? "Starting…" : "Start import folder session"}
-        </button>
+        <div className="mt-6 space-y-6">
+          <AddComicsAcquisitionSelect
+            selectedId={acquisitionId}
+            disabled={loading}
+            onSelect={(id) => setAcquisitionId(id)}
+          />
+          <button
+            type="button"
+            disabled={loading || acquisitionId == null}
+            onClick={() => void startSession()}
+            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+          >
+            {loading ? "Starting…" : "Start import folder session"}
+          </button>
+        </div>
       ) : (
         <div className="mt-8 space-y-8">
+          {session.acquisition_label ? (
+            <p className="text-sm text-slate-400">
+              Acquisition:{" "}
+              <Link to={`/acquisitions/${session.acquisition_id}`} className="text-cyan-400 hover:underline">
+                {session.acquisition_label}
+              </Link>
+            </p>
+          ) : null}
           <section className="rounded-2xl border border-white/10 bg-slate-900/70 p-6">
             <div className="flex flex-wrap items-start gap-8">
               <img

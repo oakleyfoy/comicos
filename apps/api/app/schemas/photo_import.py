@@ -13,6 +13,7 @@ class PhotoImportSessionCreatePayload(BaseModel):
         default=None,
         description="single_comic (default) or group (experimental)",
     )
+    acquisition_id: int
 
 
 class PhotoImportSessionRead(BaseModel):
@@ -23,6 +24,8 @@ class PhotoImportSessionRead(BaseModel):
     expires_at: datetime
     last_seen_at: datetime | None
     source_device: str | None
+    acquisition_id: int | None
+    acquisition_label: str | None
     confirmed_count: int
     uploaded_photo_count: int
     detected_book_count: int

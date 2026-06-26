@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.db.session import get_session
 from app.models import User
 from app.models.intake_queue import IntakeSession, IntakeSessionItem
+from app.services.acquisition.acquisition_service import acquisition_display_label
 from app.schemas.intake_queue import (
     IntakeAddAllResponse,
     IntakeCatalogSearchResponse,
@@ -63,8 +64,15 @@ def _session_urls(token: str) -> tuple[str, str]:
     return scanner, review
 
 
-def _session_to_read(row: IntakeSession) -> IntakeSessionRead:
+def _session_to_read(db: Session, row: IntakeSession) -> IntakeSessionRead:
     scanner, review = _session_urls(row.session_token)
+    acquisition_label: str | None = None
+    if row.acquisition_id:
+        from app.models import Acquisition
+
+        acq = db.get(Acquisition, int(row.acquisition_id))
+        if acq is not None:
+            acquisition_label = acquisition_display_label(acq)
     return IntakeSessionRead(
         id=int(row.id or 0),
         session_token=row.session_token,
@@ -72,6 +80,8 @@ def _session_to_read(row: IntakeSession) -> IntakeSessionRead:
         status=row.status,
         source_device=row.source_device,
         scanned_count=int(row.scanned_count),
+        acquisition_id=row.acquisition_id,
+        acquisition_label=acquisition_label,
         created_at=row.created_at,
         expires_at=row.expires_at,
         last_seen_at=row.last_seen_at,
@@ -131,18 +141,18 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
 # --- session lifecycle ---
 @intake_router.post("/sessions", response_model=IntakeSessionRead)
 def create_session_endpoint(
-    payload: IntakeSessionCreatePayload | None = None,
+    payload: IntakeSessionCreatePayload,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> IntakeSessionRead:
-    body = payload or IntakeSessionCreatePayload()
     row = create_intake_session(
         session,
         owner_user_id=int(current_user.id),
-        source_device=body.source_device,
-        name=body.name,
+        acquisition_id=payload.acquisition_id,
+        source_device=payload.source_device,
+        name=payload.name,
     )
-    return _session_to_read(row)
+    return _session_to_read(session, row)
 
 
 @intake_router.get("/sessions/{token}", response_model=IntakeSessionRead)
@@ -151,7 +161,7 @@ def get_session_endpoint(
     session: Session = Depends(get_session),
 ) -> IntakeSessionRead:
     row = get_intake_session_by_token_or_404(session, token=token)
-    return _session_to_read(row)
+    return _session_to_read(session, row)
 
 
 @intake_router.post("/sessions/{token}/status", response_model=IntakeSessionRead)
@@ -161,7 +171,7 @@ def set_status_endpoint(
     session: Session = Depends(get_session),
 ) -> IntakeSessionRead:
     row = set_session_status(session, token=token, new_status=payload.status)
-    return _session_to_read(row)
+    return _session_to_read(session, row)
 
 
 # --- capture (non-blocking, token-based so the phone needs no login) ---
@@ -218,7 +228,7 @@ def review_endpoint(
     assert_owner(row, owner_user_id=int(current_user.id))
     items = list_intake_items(session, session_id=int(row.id or 0), status_filter=status_filter)
     return IntakeReviewResponse(
-        session=_session_to_read(row),
+        session=_session_to_read(session, row),
         counts=IntakeCounts(**intake_counts(session, session_id=int(row.id or 0))),
         items=[_item_to_read(session, it, token=token) for it in items],
     )

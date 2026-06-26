@@ -13,7 +13,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc, CatalogVariant
-from app.services.p101_catalog_cache_service import CatalogCacheContext
+from app.services.p101_catalog_cache_service import CatalogCacheContext, YEAR_MAX, YEAR_MIN
 from app.services.p101_modern_catalog_audit_service import canonical_focus_publisher_label
 from app.services.p102_gcd_modern_acquisition_service import FOCUS_PUBLISHERS, YEAR_EXPR
 from app.services.catalog_ingestion_service import normalize_series_name, normalize_upc
@@ -33,10 +33,12 @@ MAX_ENRICHMENT_WRITE_LIMIT = 50_000
 
 @dataclass
 class EnrichmentFilters:
-    publisher: str
+    publisher: str | None
     year_from: int
     year_to: int
     limit: int | None = None
+    all_catalog: bool = False
+    year_filter_explicit: bool = False
 
 
 @dataclass
@@ -111,18 +113,58 @@ def validate_enrichment_filters(
     year_from: int | None,
     year_to: int | None,
     confirm_write: str | None,
+    all_catalog: bool = False,
 ) -> EnrichmentFilters | None:
+    has_year = year is not None
+    has_range = year_from is not None or year_to is not None
+    if has_year and has_range:
+        raise ValueError("Use either --year or --year-from/--year-to, not both.")
+
+    if all_catalog:
+        if write_batch:
+            missing: list[str] = []
+            if limit is None or limit <= 0:
+                missing.append("--limit (positive integer)")
+            elif int(limit) > MAX_ENRICHMENT_WRITE_LIMIT:
+                raise ValueError(f"P103 write limit must be at most {MAX_ENRICHMENT_WRITE_LIMIT}.")
+            if confirm_write != "YES":
+                missing.append("--confirm-write YES")
+            if missing:
+                raise ValueError(" --write-batch requires: " + ", ".join(missing))
+        elif limit is not None and limit <= 0:
+            raise ValueError("--limit must be positive when provided.")
+
+        year_filter_explicit = has_year or has_range
+        if year_filter_explicit:
+            if has_year:
+                yf = yt = int(year)
+            else:
+                yf = int(year_from if year_from is not None else year_to)
+                yt = int(year_to if year_to is not None else year_from)
+            if yf > yt:
+                yf, yt = yt, yf
+        else:
+            yf, yt = YEAR_MIN, YEAR_MAX
+
+        if publisher is not None and publisher.strip():
+            pass  # ignored in whole-catalog mode
+
+        return EnrichmentFilters(
+            publisher=None,
+            year_from=yf,
+            year_to=yt,
+            limit=limit,
+            all_catalog=True,
+            year_filter_explicit=year_filter_explicit,
+        )
+
     if not write_batch:
         if limit is not None and limit <= 0:
             raise ValueError("--limit must be positive when provided.")
         if not publisher:
-            raise ValueError("--publisher is required.")
+            raise ValueError("--publisher is required (or use --all for whole-catalog mode).")
         if publisher not in FOCUS_PUBLISHERS:
             raise ValueError(f"--publisher must be one of: {', '.join(FOCUS_PUBLISHERS)}")
-        has_year = year is not None
-        has_range = year_from is not None or year_to is not None
-        if has_year and has_range:
-            raise ValueError("Use either --year or --year-from/--year-to, not both.")
         if not has_year and not has_range:
             raise ValueError("--year or --year-from/--year-to required for scoped dry-run.")
         if has_year:
@@ -132,21 +174,24 @@ def validate_enrichment_filters(
             yt = int(year_to if year_to is not None else year_from)
         if yf > yt:
             yf, yt = yt, yf
-        return EnrichmentFilters(publisher=publisher, year_from=yf, year_to=yt, limit=limit)
+        return EnrichmentFilters(
+            publisher=publisher,
+            year_from=yf,
+            year_to=yt,
+            limit=limit,
+            all_catalog=False,
+            year_filter_explicit=True,
+        )
 
-    missing: list[str] = []
+    missing = []
     if limit is None or limit <= 0:
         missing.append("--limit (positive integer)")
     elif int(limit) > MAX_ENRICHMENT_WRITE_LIMIT:
         raise ValueError(f"P103 write limit must be at most {MAX_ENRICHMENT_WRITE_LIMIT}.")
     if not publisher:
-        missing.append("--publisher")
+        missing.append("--publisher (or use --all)")
     elif publisher not in FOCUS_PUBLISHERS:
         raise ValueError(f"--publisher must be one of: {', '.join(FOCUS_PUBLISHERS)}")
-    has_year = year is not None
-    has_range = year_from is not None or year_to is not None
-    if has_year and has_range:
-        raise ValueError("Use either --year or --year-from/--year-to, not both.")
     if not has_year and not has_range:
         missing.append("--year or --year-from/--year-to")
     if confirm_write != "YES":
@@ -160,7 +205,25 @@ def validate_enrichment_filters(
         yt = int(year_to if year_to is not None else year_from)
     if yf > yt:
         yf, yt = yt, yf
-    return EnrichmentFilters(publisher=publisher, year_from=yf, year_to=yt, limit=int(limit))
+    return EnrichmentFilters(
+        publisher=publisher,
+        year_from=yf,
+        year_to=yt,
+        limit=int(limit),
+        all_catalog=False,
+        year_filter_explicit=True,
+    )
+
+
+def enrichment_filters_to_dict(filters: EnrichmentFilters) -> dict[str, Any]:
+    return {
+        "all_catalog": filters.all_catalog,
+        "publisher": filters.publisher,
+        "year_from": filters.year_from,
+        "year_to": filters.year_to,
+        "year_filter_explicit": filters.year_filter_explicit,
+        "limit": filters.limit,
+    }
 
 
 def _load_issues(session: Session, issue_ids: list[int]) -> dict[int, CatalogIssue]:
@@ -286,6 +349,13 @@ def run_p103_enrichment_dryrun(
 ) -> P103DryRunReport:
     from app.services.p103_gcd_enrichment_fast import enrichment_cache_ready, run_p103_enrichment_dryrun_fast
 
+    if filters.all_catalog:
+        if not enrichment_cache_ready(cache_path):
+            raise ValueError(
+                "--all requires catalog_enrichment_issue cache; run with --refresh-cache."
+            )
+        use_fast_path = True
+
     if use_fast_path and enrichment_cache_ready(cache_path):
         report, timer = run_p103_enrichment_dryrun_fast(
             gcd_path=gcd_path,
@@ -304,10 +374,7 @@ def run_p103_enrichment_dryrun(
         gcd_database=str(gcd_path),
         catalog_cache=str(cache_path),
         filters={
-            "publisher": filters.publisher,
-            "year_from": filters.year_from,
-            "year_to": filters.year_to,
-            "limit": filters.limit,
+            **enrichment_filters_to_dict(filters),
         },
     )
     ctx = CatalogCacheContext.load(cache_path)

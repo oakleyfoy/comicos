@@ -114,7 +114,7 @@ def vision_sandbox_status_endpoint() -> PhotoImportVisionSandboxStatusRead:
 
 @photo_import_router.post("/sessions", response_model=PhotoImportSessionRead)
 def create_session_endpoint(
-    payload: PhotoImportSessionCreatePayload | None = None,
+    payload: PhotoImportSessionCreatePayload,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> PhotoImportSessionRead:
@@ -122,8 +122,9 @@ def create_session_endpoint(
     return create_photo_import_session(
         session,
         owner_user_id=int(current_user.id),
-        source_device=(payload.source_device if payload else None) or None,
-        capture_mode=payload.capture_mode if payload else None,
+        acquisition_id=payload.acquisition_id,
+        source_device=payload.source_device or None,
+        capture_mode=payload.capture_mode,
     )
 
 

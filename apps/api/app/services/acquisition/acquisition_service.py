@@ -63,6 +63,14 @@ def require_open(acquisition: Acquisition) -> None:
         )
 
 
+def acquisition_display_label(acquisition: Acquisition) -> str:
+    if acquisition.seller_name and acquisition.seller_name.strip():
+        return acquisition.seller_name.strip()
+    if acquisition.notes and acquisition.notes.strip():
+        return acquisition.notes.strip()[:120]
+    return f"Acquisition #{int(acquisition.id or 0)}"
+
+
 def recompute_actual_book_count(session: Session, acquisition: Acquisition) -> int:
     count = session.exec(
         select(func.count(InventoryCopy.id)).where(InventoryCopy.acquisition_id == acquisition.id)

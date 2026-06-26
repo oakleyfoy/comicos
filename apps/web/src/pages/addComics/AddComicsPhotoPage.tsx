@@ -4,6 +4,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { createIntakeSession, getIntakeSession, type IntakeSession } from "../../api/intake";
 import { qrCodeUrlForLink } from "../../api/photoImport";
 import { AppShell } from "../../components/AppShell";
+import {
+  ADD_COMICS_ACQUISITION_STORAGE_KEY,
+  AddComicsAcquisitionSelect,
+} from "../../components/addComics/AddComicsAcquisitionSelect";
 
 function intakeScannerUrl(token: string): string {
   return `${window.location.origin}/intake/scan/${encodeURIComponent(token)}`;
@@ -12,21 +16,39 @@ function intakeScannerUrl(token: string): string {
 export function AddComicsPhotoPage(): JSX.Element {
   const navigate = useNavigate();
   const [session, setSession] = useState<IntakeSession | null>(null);
+  const [acquisitionId, setAcquisitionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const stored = sessionStorage.getItem(ADD_COMICS_ACQUISITION_STORAGE_KEY);
+    if (stored) {
+      const parsed = Number(stored);
+      if (Number.isFinite(parsed)) {
+        setAcquisitionId(parsed);
+      }
+    }
+  }, []);
+
   const startSession = useCallback(async () => {
+    if (acquisitionId == null) {
+      setError("Choose or create an acquisition group before starting intake.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const created = await createIntakeSession({ source_device: "desktop" });
+      const created = await createIntakeSession({
+        source_device: "desktop",
+        acquisition_id: acquisitionId,
+      });
       setSession(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start session");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [acquisitionId]);
 
   useEffect(() => {
     if (!session?.session_token) return;
@@ -51,6 +73,16 @@ export function AddComicsPhotoPage(): JSX.Element {
           scan is queued and identified in the background. Review and add to inventory here when you're done.
         </p>
 
+        {!session ? (
+          <div className="mt-6 space-y-6">
+            <AddComicsAcquisitionSelect
+              selectedId={acquisitionId}
+              disabled={loading}
+              onSelect={(id) => setAcquisitionId(id)}
+            />
+          </div>
+        ) : null}
+
         {error ? (
           <p role="alert" className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {error}
@@ -60,7 +92,7 @@ export function AddComicsPhotoPage(): JSX.Element {
         {!session ? (
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || acquisitionId == null}
             onClick={() => void startSession()}
             className="mt-8 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
           >
@@ -68,6 +100,17 @@ export function AddComicsPhotoPage(): JSX.Element {
           </button>
         ) : (
           <div className="mt-8 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            {session.acquisition_label ? (
+              <p className="text-sm text-slate-600">
+                Acquisition:{" "}
+                <Link
+                  to={`/acquisitions/${session.acquisition_id}`}
+                  className="font-medium text-blue-700 hover:underline"
+                >
+                  {session.acquisition_label}
+                </Link>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-start gap-6">
               <img src={qrCodeUrlForLink(scannerLink)} alt="QR code for phone scanner" className="rounded-lg border" />
               <div className="min-w-0 flex-1">

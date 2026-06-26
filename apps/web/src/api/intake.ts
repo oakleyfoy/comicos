@@ -42,6 +42,8 @@ export type IntakeSession = {
   status: string;
   source_device: string | null;
   scanned_count: number;
+  acquisition_id: number | null;
+  acquisition_label: string | null;
   created_at: string;
   expires_at: string;
   last_seen_at: string | null;
@@ -111,13 +113,14 @@ export function intakeImageUrl(item: IntakeItem): string {
   return `${API_BASE}${item.image_url}`;
 }
 
-export function createIntakeSession(input?: {
+export function createIntakeSession(input: {
+  acquisition_id: number;
   source_device?: string;
   name?: string;
 }): Promise<IntakeSession> {
   return requestIntake<IntakeSession>("/api/v1/intake/sessions", {
     method: "POST",
-    body: JSON.stringify(input ?? {}),
+    body: JSON.stringify(input),
   });
 }
 

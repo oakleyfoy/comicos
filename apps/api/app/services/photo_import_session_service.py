@@ -20,7 +20,13 @@ from app.models.photo_import import (
     SESSION_STATUS_REVIEW_READY,
     utc_now,
 )
+from app.models import Acquisition
 from app.schemas.photo_import import PhotoImportSessionRead
+from app.services.acquisition.acquisition_service import (
+    acquisition_display_label,
+    get_acquisition_or_404,
+    require_open,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,15 +85,21 @@ def create_photo_import_session(
     session: Session,
     *,
     owner_user_id: int,
+    acquisition_id: int,
     source_device: str | None = None,
     capture_mode: str | None = None,
 ) -> PhotoImportSessionRead:
+    acq = get_acquisition_or_404(
+        session, owner_user_id=owner_user_id, acquisition_id=acquisition_id
+    )
+    require_open(acq)
     token = secrets.token_urlsafe(32)
     now = utc_now()
     row = PhotoImportSession(
         user_id=owner_user_id,
         session_token=token,
         status=SESSION_STATUS_CREATED,
+        acquisition_id=int(acq.id or 0),
         created_at=now,
         expires_at=now
         + timedelta(
@@ -99,7 +111,7 @@ def create_photo_import_session(
     session.add(row)
     session.commit()
     session.refresh(row)
-    return session_to_read(row)
+    return session_to_read(row, db=session, acq=acq)
 
 
 def activate_session(session: Session, row: PhotoImportSession) -> PhotoImportSession:
@@ -111,8 +123,21 @@ def activate_session(session: Session, row: PhotoImportSession) -> PhotoImportSe
     return row
 
 
-def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
+def session_to_read(
+    row: PhotoImportSession,
+    *,
+    db: Session | None = None,
+    acq: Acquisition | None = None,
+) -> PhotoImportSessionRead:
     mobile, review = _session_urls(row.session_token)
+    acquisition_label: str | None = None
+    if row.acquisition_id:
+        if acq is not None and int(acq.id or 0) == int(row.acquisition_id):
+            acquisition_label = acquisition_display_label(acq)
+        elif db is not None:
+            loaded = db.get(Acquisition, int(row.acquisition_id))
+            if loaded is not None:
+                acquisition_label = acquisition_display_label(loaded)
     logger.info(
         "photo_import.session_response token=%s vision_sandbox=%s desktop_review_url=%s",
         row.session_token,
@@ -127,6 +152,8 @@ def session_to_read(row: PhotoImportSession) -> PhotoImportSessionRead:
         expires_at=row.expires_at,
         last_seen_at=row.last_seen_at,
         source_device=row.source_device,
+        acquisition_id=row.acquisition_id,
+        acquisition_label=acquisition_label,
         confirmed_count=int(row.confirmed_count),
         uploaded_photo_count=int(row.uploaded_photo_count),
         detected_book_count=int(row.detected_book_count),
@@ -154,7 +181,7 @@ def heartbeat_session(
     session.add(row)
     session.commit()
     session.refresh(row)
-    return session_to_read(row)
+    return session_to_read(row, db=session)
 
 
 def complete_session(session: Session, *, owner_user_id: int, token: str) -> PhotoImportSessionRead:
@@ -164,7 +191,7 @@ def complete_session(session: Session, *, owner_user_id: int, token: str) -> Pho
     session.add(row)
     session.commit()
     session.refresh(row)
-    return session_to_read(row)
+    return session_to_read(row, db=session)
 
 
 def refresh_session_counts(session: Session, *, session_id: int) -> None:

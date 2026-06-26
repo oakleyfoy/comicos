@@ -8,8 +8,27 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.models import User
+from app.models.acquisition import Acquisition
 from app.models.photo_import import PhotoImportDetectedBook, PhotoImportImage, PhotoImportSession
 from app.services.photo_import_session_service import create_photo_import_session
+
+
+def _open_acquisition(session: Session, owner_id: int) -> Acquisition:
+    from decimal import Decimal
+
+    acq = Acquisition(
+        user_id=owner_id,
+        acquisition_type="OTHER",
+        seller_name="Test",
+        total_paid=Decimal("0"),
+        shipping_paid=Decimal("0"),
+        tax_paid=Decimal("0"),
+        status="OPEN",
+    )
+    session.add(acq)
+    session.commit()
+    session.refresh(acq)
+    return acq
 
 
 def _add_detection(session: Session, *, import_row: PhotoImportSession, image_id: int, label: str) -> None:
@@ -31,7 +50,9 @@ def test_unauthenticated_get_session_counts(client: TestClient, session: Session
     session.commit()
     session.refresh(user)
 
-    created = create_photo_import_session(session, owner_user_id=int(user.id))
+    created = create_photo_import_session(
+        session, owner_user_id=int(user.id), acquisition_id=int(_open_acquisition(session, int(user.id)).id or 0)
+    )
     resp = client.get(f"/api/v1/photo-import/sessions/{created.session_token}")
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -45,7 +66,9 @@ def test_unauthenticated_list_detections_by_valid_token(client: TestClient, sess
     session.commit()
     session.refresh(user)
 
-    created = create_photo_import_session(session, owner_user_id=int(user.id))
+    created = create_photo_import_session(
+        session, owner_user_id=int(user.id), acquisition_id=int(_open_acquisition(session, int(user.id)).id or 0)
+    )
     import_row = session.get(PhotoImportSession, created.id)
     assert import_row is not None
 
@@ -102,8 +125,9 @@ def test_session_token_only_returns_own_detections(client: TestClient, session: 
     session.refresh(user)
     owner_id = int(user.id)
 
-    session_a = create_photo_import_session(session, owner_user_id=owner_id)
-    session_b = create_photo_import_session(session, owner_user_id=owner_id)
+    acq = _open_acquisition(session, owner_id)
+    session_a = create_photo_import_session(session, owner_user_id=owner_id, acquisition_id=int(acq.id or 0))
+    session_b = create_photo_import_session(session, owner_user_id=owner_id, acquisition_id=int(acq.id or 0))
     row_a = session.get(PhotoImportSession, session_a.id)
     row_b = session.get(PhotoImportSession, session_b.id)
     assert row_a is not None and row_b is not None
