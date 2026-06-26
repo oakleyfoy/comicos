@@ -33,7 +33,6 @@ from app.services.p105_comic_barcode_regions import (
     compute_barcode_region_geometry,
     crops_from_geometry,
     draw_region_overlay,
-    left_supplement_crop_variants,
     pil_to_jpeg_bytes,
     save_barcode_region_debug_to_dir,
 )
@@ -536,17 +535,28 @@ def read_comic_barcode_from_image_bytes(
     if session is not None and main_upc:
         catalog_map = _catalog_supplements_for_main(session, main_upc)
 
-    # --- Left supplement OCR retry pipeline ---------------------------------
-    left_variants = left_supplement_crop_variants(pil, geometry)
-    vision_attempt = _vision_supplement_attempt(
-        pil_to_jpeg_bytes(regions["left_supplement"]), log_context
-    )
-    attempts = gather_ocr_attempts(
-        left_variants,
-        deskew_angle=geometry.deskew_angle,
-        log_context=f"{log_context}:left",
-        vision_attempt=vision_attempt,
-    )
+    # --- Left supplement OCR: only on barcode-anchored supplement_only crop ----
+    supplement_crop = regions["left_supplement"]
+    left_variants: list[tuple[str, Image.Image]] = [("supplement_only", supplement_crop)]
+    attempts: list[Any] = []
+    vision_attempt = None
+    if geometry.supplement_ocr_allowed:
+        vision_attempt = _vision_supplement_attempt(
+            pil_to_jpeg_bytes(supplement_crop), log_context
+        )
+        attempts = gather_ocr_attempts(
+            left_variants,
+            deskew_angle=geometry.deskew_angle,
+            log_context=f"{log_context}:left",
+            vision_attempt=vision_attempt,
+        )
+    else:
+        logger.warning(
+            "p105.supplement_ocr_skipped item=%s reason=%s failed=%s",
+            intake_item_id or log_context,
+            geometry.fallback_reason or "geometry_not_ready",
+            geometry.geometry_failed,
+        )
 
     fingerprint_scorer = None
     if session is not None and cover_path is not None and cover_path.is_file():
@@ -689,6 +699,12 @@ def read_comic_barcode_from_image_bytes(
             review_reason = "Inferred/corrected supplemental digits — confirm in review."
     if decision.disagreement:
         auto_match = False
+    if not geometry.supplement_ocr_allowed:
+        auto_match = False
+        review_reason = review_reason or (
+            "Supplement OCR skipped: barcode anchor crop not ready. "
+            f"See supplement_only.jpg ({geometry.fallback_reason or 'geometry_failed'})."
+        )
     if geometry.geometry_failed:
         auto_match = False
         ow, oh = geometry.original_size

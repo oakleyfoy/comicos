@@ -16,15 +16,27 @@ from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSer
 from app.services.barcode_validation_service import validate_barcode_catalog_match
 from app.services.p105_comic_barcode_regions import (
     BarcodeCropConfig,
+    FALLBACK_BARCODE_NOT_DETECTED,
     FALLBACK_DETECTED_BOX_TOO_SMALL,
     FALLBACK_IMAGE_TOO_SMALL,
-    FALLBACK_NO_VALID_PRICE_BOX_CONTOUR,
-    FALLBACK_OPENCV_UNAVAILABLE,
-    PriceBoxDetectionDiagnostics,
     compute_barcode_region_geometry,
     expand_box,
     opencv_import_status,
 )
+from app.services.p105_barcode_anchor import (
+    BarcodeBoundsDetection,
+    compute_supplement_box_from_barcode,
+)
+
+# Synthetic price-box image draws vertical bars in this band.
+TEST_BARCODE_BOX = (190, 220, 430, 320)
+
+
+def _patch_barcode_anchor(monkeypatch, box: tuple[int, int, int, int] = TEST_BARCODE_BOX) -> None:
+    def fake(_pil):  # noqa: ANN001
+        return BarcodeBoundsDetection(box=box, source="test", opencv_barcode_module=True)
+
+    monkeypatch.setattr("app.services.p105_barcode_anchor.detect_upc_barcode_bounds", fake)
 from app.services.p105_comic_barcode_read_service import (
     _correct_supplement_via_catalog,
     _main_upc_from_candidates,
@@ -140,8 +152,9 @@ def _memory_session() -> Session:
     return Session(engine)
 
 
-def test_ocr_substitution_03311_corrected_to_catalog_00311() -> None:
+def test_ocr_substitution_03311_corrected_to_catalog_00311(monkeypatch) -> None:
     """Expected 00311 but OCR returns 03311 → corrected via catalog, not blindly accepted."""
+    _patch_barcode_anchor(monkeypatch)
     image = _price_box_image("03311")
     session = _memory_session()
     _seed_catalog(session, full_upc=MAIN + "00311")
@@ -170,8 +183,9 @@ def test_ocr_substitution_03311_corrected_to_catalog_00311() -> None:
     assert "corrected" in result.correction_reason.lower()
 
 
-def test_blank_first_crop_recovers_03921_via_retry_variants() -> None:
-    """First crops blank; an upscaled retry variant recovers 03921."""
+def test_blank_first_crop_recovers_03921_via_retry_variants(monkeypatch) -> None:
+    """Preprocess retry on supplement_only crop recovers 03921."""
+    _patch_barcode_anchor(monkeypatch)
     image = _price_box_image("03921")
 
     def fake_variant(pil, label, *, psm, log_context):  # noqa: ANN001
@@ -200,8 +214,9 @@ def test_blank_first_crop_recovers_03921_via_retry_variants() -> None:
     assert result.reconstructed_full == FULL
 
 
-def test_bar_extension_disagreement_blocks_auto_match() -> None:
+def test_bar_extension_disagreement_blocks_auto_match(monkeypatch) -> None:
     """Bar decode supplement disagrees with OCR; OCR wins, auto-match blocked."""
+    _patch_barcode_anchor(monkeypatch)
     image = _price_box_image("03921")
 
     def fake_variant(pil, label, *, psm, log_context):  # noqa: ANN001
@@ -228,6 +243,7 @@ def test_bar_extension_disagreement_blocks_auto_match() -> None:
 
 def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
     image = _price_box_image("03921")
+    _patch_barcode_anchor(monkeypatch)
     monkeypatch.setattr(
         "app.services.p105_comic_barcode_regions.P105_BARCODE_DEBUG_ROOT",
         tmp_path,
@@ -250,11 +266,11 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
 
     base = tmp_path / "7777"
     assert (base / "overlay.jpg").is_file()
+    assert (base / "barcode_only.jpg").is_file()
+    assert (base / "supplement_only.jpg").is_file()
     assert (base / "left_supplement.jpg").is_file()
     assert (base / "full_expanded.jpg").is_file()
     assert (base / "ocr_debug.json").is_file()
-    assert (base / "left_variants").is_dir()
-    assert any((base / "left_variants").iterdir())
     assert result.region_debug_path == str(base)
 
     # Overlay must be saved at ORIGINAL image size, not a thumbnail.
@@ -265,13 +281,15 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
         assert left.width > 40 and left.height > 40
 
 
-def test_geometry_reports_dims_and_rectangles() -> None:
+def test_geometry_reports_dims_and_rectangles(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch)
     with Image.open(BytesIO(_price_box_image("03921"))) as img:
         pil = img.convert("RGB")
     geo = compute_barcode_region_geometry(pil)
     data = geo.as_dict()
     assert data["original_size"] == {"width": 520, "height": 360}
-    assert data["working_size"] == {"width": 520, "height": 360}
+    assert data["detection_method"] == "barcode_anchor"
+    assert geo.supplement_ocr_allowed is True
     rect = data["rectangles"]["left_supplement"]
     assert rect["width"] > 40 and rect["height"] > 40
     assert geo.geometry_failed is False
@@ -281,33 +299,14 @@ def test_geometry_reports_dims_and_rectangles() -> None:
         assert name in text
 
 
-def test_tiny_detected_price_box_falls_back_to_percentage() -> None:
+def test_tiny_barcode_yields_supplement_too_small(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch, box=(48, 220, 68, 260))
     with Image.open(BytesIO(_price_box_image("03921"))) as img:
         pil = img.convert("RGB")
-    tiny_box = (5, 5, 17, 14)  # 12x9 px — the catastrophic real-world case
-    fake_det = PriceBoxDetectionDiagnostics(
-        box=tiny_box,
-        deskew_angle=0.0,
-        detection_size=(520, 200),
-        detection_scale=1.0,
-        opencv_available=True,
-        contour_count=3,
-        area_candidate_count=1,
-        aspect_candidate_count=1,
-        chosen_candidate={"x": 5, "y": 5, "width": 12, "height": 9, "selected": True},
-    )
-    with patch(
-        "app.services.p105_comic_barcode_regions._detect_price_box",
-        return_value=fake_det,
-    ):
-        geo = compute_barcode_region_geometry(pil)
-    assert geo.detection_method == "percentage"
-    assert geo.fallback_reason == FALLBACK_DETECTED_BOX_TOO_SMALL
-    assert geo.geometry_rejection_reason == FALLBACK_DETECTED_BOX_TOO_SMALL
-    assert geo.price_box is None
-    assert geo.left_supplement[2] - geo.left_supplement[0] >= 40
-    assert geo.left_supplement[3] - geo.left_supplement[1] >= 40
-    assert geo.geometry_failed is False
+    geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "barcode_anchor"
+    assert geo.supplement_ocr_allowed is False
+    assert geo.geometry_failed is True
 
 
 def test_thumbnail_input_flags_geometry_failed() -> None:
@@ -333,15 +332,16 @@ def test_thumbnail_input_flags_geometry_failed() -> None:
     geom = result.region_ocr_debug["geometry"]
     assert geom["geometry_failed"] is True
     assert geom["original_size"] == {"width": 40, "height": 20}
-    assert geom.get("fallback_reason") == FALLBACK_IMAGE_TOO_SMALL
+    assert geom.get("fallback_reason") in {FALLBACK_IMAGE_TOO_SMALL, FALLBACK_BARCODE_NOT_DETECTED}
     reason = result.review_reason.lower()
     assert "too small for reliable barcode ocr" in reason
     assert "original_size=40x20" in reason
     assert result.auto_match_allowed is False
 
 
-def test_debug_dir_param_writes_manual_outputs(tmp_path) -> None:
+def test_debug_dir_param_writes_manual_outputs(tmp_path, monkeypatch) -> None:
     """The CLI path: debug_dir writes overlay + attempts without intake item id."""
+    _patch_barcode_anchor(monkeypatch)
     image = _price_box_image("03921")
     out_dir = tmp_path / "manual_run"
 
@@ -387,53 +387,32 @@ def test_correct_supplement_via_catalog_single_candidate() -> None:
     assert dist == 1
 
 
-def test_fallback_reason_opencv_unavailable() -> None:
-    pil = Image.new("RGB", (800, 1200), color=(120, 120, 120))
-    det = PriceBoxDetectionDiagnostics(
-        opencv_available=False,
-        exception_message="ImportError: cv2",
-        detection_size=(800, 600),
-    )
-    with patch("app.services.p105_comic_barcode_regions._detect_price_box", return_value=det):
-        geo = compute_barcode_region_geometry(pil)
-    assert geo.detection_method == "percentage"
-    assert geo.fallback_reason == FALLBACK_OPENCV_UNAVAILABLE
-    assert geo.opencv_available is False
+def test_fallback_reason_barcode_not_detected() -> None:
+    pil = Image.new("RGB", (520, 360), color=(40, 40, 40))
+    geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "barcode_anchor"
+    assert geo.fallback_reason == FALLBACK_BARCODE_NOT_DETECTED
+    assert geo.supplement_ocr_allowed is False
+
+
+def test_supplement_box_computed_from_barcode_edges() -> None:
+    barcode = (200, 100, 400, 140)
+    supp = compute_supplement_box_from_barcode(barcode, 520, 360)
+    bw = barcode[2] - barcode[0]
+    assert supp[2] == barcode[0] - 4
+    assert supp[3] - supp[1] == barcode[3] - barcode[1]
+    assert supp[2] - supp[0] == int(bw * 0.28)
 
 
 def test_fallback_reason_image_too_small() -> None:
     pil = Image.new("RGB", (40, 20), color=(255, 255, 255))
     geo = compute_barcode_region_geometry(pil)
-    assert geo.detection_method == "percentage"
-    assert geo.fallback_reason == FALLBACK_IMAGE_TOO_SMALL
-
-
-def test_fallback_reason_no_valid_price_box_contour() -> None:
-    pil = Image.new("RGB", (520, 360), color=(40, 40, 40))
-    det = PriceBoxDetectionDiagnostics(
-        opencv_available=True,
-        contour_count=6,
-        area_candidate_count=2,
-        aspect_candidate_count=0,
-        detection_size=(520, 200),
-        candidate_boxes=[
-            {"x": 1, "y": 2, "width": 80, "height": 80, "passes_area": True, "passes_aspect": False},
-        ],
-    )
-    with patch("app.services.p105_comic_barcode_regions._detect_price_box", return_value=det):
-        geo = compute_barcode_region_geometry(pil)
-    assert geo.detection_method == "percentage"
-    assert geo.fallback_reason == FALLBACK_NO_VALID_PRICE_BOX_CONTOUR
-
-
-def test_opencv_import_status_reports_availability() -> None:
-    ok, err = opencv_import_status()
-    assert ok is True or ok is False
-    if not ok:
-        assert err
+    assert geo.fallback_reason in {FALLBACK_IMAGE_TOO_SMALL, FALLBACK_BARCODE_NOT_DETECTED}
+    assert geo.supplement_ocr_allowed is False
 
 
 def test_geometry_debug_visuals_mark_outside_intended(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch)
     from app.services.p105_geometry_debug_viz import build_geometry_ocr_debug_visuals
     from app.services.p105_supplement_ocr import TesseractWordBox
 
@@ -469,13 +448,14 @@ def test_find_word_boxes_for_digits_joins_words() -> None:
     assert len(hit) == 2
 
 
-def test_geometry_overlay_runs_on_synthetic_image() -> None:
+def test_geometry_overlay_runs_on_synthetic_image(monkeypatch) -> None:
+    _patch_barcode_anchor(monkeypatch)
     with Image.open(BytesIO(_price_box_image("03921"))) as img:
         pil = img.convert("RGB")
     geometry = compute_barcode_region_geometry(pil)
     assert geometry.left_supplement[2] > geometry.left_supplement[0]
     assert geometry.main_bars[2] > geometry.main_bars[0]
-    assert geometry.detection_method in {"geometry", "percentage"}
+    assert geometry.detection_method == "barcode_anchor"
 
 
 # ---------------------------------------------------------------------------

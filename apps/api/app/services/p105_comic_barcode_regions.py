@@ -108,6 +108,7 @@ FALLBACK_DETECTED_BOX_TOO_SMALL = "detected_box_too_small"
 FALLBACK_LOW_CONTOUR_SCORE = "low_contour_score"
 FALLBACK_COORDINATE_MAPPING_INVALID = "coordinate_mapping_invalid"
 FALLBACK_EXCEPTION = "exception"
+FALLBACK_BARCODE_NOT_DETECTED = "barcode_not_detected"
 
 
 def opencv_import_status() -> tuple[bool, str | None]:
@@ -177,6 +178,8 @@ class BarcodeRegionGeometry:
     contour_count: int = 0
     candidate_boxes: list[dict[str, Any]] = field(default_factory=list)
     chosen_candidate: dict[str, Any] | None = None
+    barcode_bounds: dict[str, Any] = field(default_factory=dict)
+    supplement_ocr_allowed: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -204,6 +207,8 @@ class BarcodeRegionGeometry:
                 "right_cover_digit": _box_xywh(self.right_cover_digit),
             },
             "notes": list(self.notes),
+            "barcode_bounds": dict(self.barcode_bounds),
+            "supplement_ocr_allowed": self.supplement_ocr_allowed,
         }
 
     def report_lines(self) -> list[str]:
@@ -433,7 +438,14 @@ def compute_barcode_region_geometry(
     config: BarcodeCropConfig = DEFAULT_BARCODE_CROP_CONFIG,
     min_region_px: int = MIN_LEFT_SUPPLEMENT_PX,
 ) -> BarcodeRegionGeometry:
-    """Compute region boxes in ORIGINAL image coordinates, with size guards + diagnostics."""
+    """Compute regions from detected UPC bar bounds; supplement box is pure math."""
+    from app.services.p105_barcode_anchor import (
+        compute_cover_digit_box_from_barcode,
+        compute_supplement_box_from_barcode,
+        detect_upc_barcode_bounds,
+        union_boxes,
+    )
+
     w, h = pil.size
     notes: list[str] = []
     input_too_small = max(w, h) < MIN_SANE_IMAGE_LONG_EDGE_PX
@@ -448,93 +460,83 @@ def compute_barcode_region_geometry(
             h,
         )
 
-    fe = _clamp_box(expand_box(0, int(h * 0.52), w, h, w, h, expand_ratio=config.clamped_expand_ratio()), w, h)
+    bounds = detect_upc_barcode_bounds(pil)
+    fe = _clamp_box(
+        expand_box(0, int(h * 0.52), w, h, w, h, expand_ratio=config.clamped_expand_ratio()),
+        w,
+        h,
+    )
+    if bounds.box is None:
+        roi = pil.crop(fe)
+        bounds = detect_upc_barcode_bounds(roi)
+        if bounds.box is not None:
+            bl, bt, br, bb = bounds.box
+            bounds.box = _clamp_box((fe[0] + bl, fe[1] + bt, fe[0] + br, fe[1] + bb), w, h)
+            bounds.source = f"{bounds.source}+lower_roi"
 
-    price_box: Box | None = None
-    deskew_angle = 0.0
-    method = "percentage"
+    method = "barcode_anchor"
     fallback_reason = ""
-    geometry_rejection_reason = ""
-    rejected_detected_box = False
-    roi = pil.crop(fe)
-    det = _detect_price_box(roi)
-    detected = det.box
-    if detected is not None:
-        dl, dt, dr, db = detected
-        candidate_pb = _clamp_box((fe[0] + dl, fe[1] + dt, fe[0] + dr, fe[1] + db), w, h)
-        candidate_splits = _splits_from_base(candidate_pb, w, h)
-        ls = candidate_splits["left_supplement"]
-        if _box_w(ls) >= min_region_px and _box_h(ls) >= min_region_px:
-            price_box = candidate_pb
-            deskew_angle = det.deskew_angle
-            method = "geometry"
-        else:
-            rejected_detected_box = True
-            notes.append(
-                f"rejected detected price_box {_box_xywh(candidate_pb)}: "
-                f"left_supplement {_box_w(ls)}x{_box_h(ls)} < {min_region_px}px; using percentage fallback"
-            )
-            logger.warning(
-                "p105.geometry_rejected_tiny_box original=%sx%s box=%s left=%sx%s min=%s",
-                w,
-                h,
-                _box_xywh(candidate_pb),
-                _box_w(ls),
-                _box_h(ls),
-                min_region_px,
-            )
+    deskew_angle = 0.0
+    price_box: Box | None = None
+    supplement_ocr_allowed = False
 
-    if method != "geometry":
-        fallback_reason, geometry_rejection_reason = _resolve_percentage_fallback_reason(
-            input_too_small=input_too_small,
-            det=det,
-            rejected_detected_box=rejected_detected_box,
+    if bounds.box is None:
+        fallback_reason = FALLBACK_BARCODE_NOT_DETECTED
+        notes.append("UPC bar strip not detected — supplement OCR disabled (no percentage crop).")
+        splits = _splits_from_base(fe, w, h)
+        main_bars = splits["main_bars"]
+        left_supplement = splits["left_supplement"]
+        right_cover_digit = splits["right_cover_digit"]
+    else:
+        barcode = bounds.box
+        left_supplement = compute_supplement_box_from_barcode(barcode, w, h)
+        main_bars = barcode
+        right_cover_digit = compute_cover_digit_box_from_barcode(barcode, w, h)
+        price_box = union_boxes([left_supplement, main_bars, right_cover_digit], w, h)
+        fe = union_boxes([price_box, fe], w, h)
+        notes.append(
+            f"supplement computed from barcode {_box_xywh(barcode)} -> {_box_xywh(left_supplement)}"
         )
-        logger.info(
-            "p105.geometry_fallback original=%sx%s method=percentage fallback_reason=%s "
-            "rejection=%s opencv=%s contours=%s candidates=%s",
-            w,
-            h,
-            fallback_reason,
-            geometry_rejection_reason,
-            det.opencv_available,
-            det.contour_count,
-            len(det.candidate_boxes),
-        )
-
-    base = price_box if price_box is not None else fe
-    splits = _splits_from_base(base, w, h)
+        if _box_w(left_supplement) >= min_region_px and _box_h(left_supplement) >= min_region_px:
+            supplement_ocr_allowed = not input_too_small
 
     geometry = BarcodeRegionGeometry(
         full_expanded=fe,
-        main_bars=splits["main_bars"],
-        left_supplement=splits["left_supplement"],
-        right_cover_digit=splits["right_cover_digit"],
+        main_bars=main_bars,
+        left_supplement=left_supplement,
+        right_cover_digit=right_cover_digit,
         price_box=price_box,
         deskew_angle=deskew_angle,
         detection_method=method,
         original_size=(w, h),
         working_size=(w, h),
-        detection_size=det.detection_size,
-        detection_scale=det.detection_scale,
+        detection_size=(w, h),
+        detection_scale=1.0,
         min_region_px=min_region_px,
         notes=notes,
         geometry_attempted=True,
-        opencv_available=det.opencv_available,
+        opencv_available=bounds.opencv_barcode_module,
         fallback_reason=fallback_reason,
-        geometry_rejection_reason=geometry_rejection_reason,
-        exception_message=det.exception_message,
-        contour_count=det.contour_count,
-        candidate_boxes=list(det.candidate_boxes),
-        chosen_candidate=det.chosen_candidate,
+        geometry_rejection_reason="",
+        exception_message=bounds.exception_message,
+        contour_count=0,
+        candidate_boxes=[],
+        chosen_candidate=None,
+        barcode_bounds=bounds.as_dict(),
+        supplement_ocr_allowed=supplement_ocr_allowed,
     )
 
     ls = geometry.left_supplement
-    if _box_w(ls) < min_region_px or _box_h(ls) < min_region_px:
+    if bounds.box is None:
         geometry.geometry_failed = True
+        geometry.supplement_ocr_allowed = False
+    elif _box_w(ls) < min_region_px or _box_h(ls) < min_region_px:
+        geometry.geometry_failed = True
+        geometry.supplement_ocr_allowed = False
+        if not geometry.fallback_reason:
+            geometry.fallback_reason = FALLBACK_DETECTED_BOX_TOO_SMALL
         geometry.notes.append(
-            f"left_supplement crop {_box_w(ls)}x{_box_h(ls)} below minimum {min_region_px}px — "
-            "geometry failed (input image is likely too small)"
+            f"computed supplement {_box_w(ls)}x{_box_h(ls)} below minimum {min_region_px}px"
         )
         logger.error(
             "p105.geometry_failed original=%sx%s left_supplement=%sx%s min=%s",
@@ -544,6 +546,10 @@ def compute_barcode_region_geometry(
             _box_h(ls),
             min_region_px,
         )
+    elif input_too_small:
+        geometry.geometry_failed = True
+        geometry.supplement_ocr_allowed = False
+        geometry.fallback_reason = FALLBACK_IMAGE_TOO_SMALL
 
     for line in geometry.report_lines():
         logger.info("p105.geometry %s", line)
@@ -651,6 +657,10 @@ def save_barcode_region_debug_to_dir(
     for name, pil in regions.items():
         out = base / f"{name}.jpg"
         out.write_bytes(pil_to_jpeg_bytes(pil))
+    if "main_bars" in regions:
+        (base / "barcode_only.jpg").write_bytes(pil_to_jpeg_bytes(regions["main_bars"]))
+    if "left_supplement" in regions:
+        (base / "supplement_only.jpg").write_bytes(pil_to_jpeg_bytes(regions["left_supplement"]))
     if overlay is not None:
         (base / "overlay.jpg").write_bytes(pil_to_jpeg_bytes(overlay))
     if left_variants:
