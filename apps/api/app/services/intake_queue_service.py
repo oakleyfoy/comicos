@@ -44,7 +44,7 @@ from app.services.acquisition.acquisition_service import (
     recompute_actual_book_count,
     require_open,
 )
-from app.services.catalog_ingestion_service import normalize_upc
+from app.services.barcode_scan_consensus_service import validate_single_barcode_read
 from app.services.intake_worker_service import run_intake_item_async
 from app.services.photo_import_storage_service import (
     REPO_ROOT,
@@ -159,15 +159,29 @@ async def enqueue_intake_item(
     dest_path = dest_dir / f"{uuid.uuid4().hex}{ext}"
     dest_path.write_bytes(raw)
 
-    normalized = normalize_upc(raw_barcode) if raw_barcode else None
+    validation = None
+    normalized = None
+    raw_stored = (raw_barcode or "").strip()
+    if raw_stored:
+        validation = validate_single_barcode_read(raw_stored)
+        if validation.acceptance == "rejected_checksum":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=validation.reason,
+            )
+        if validation.acceptance == "accepted":
+            normalized = validation.normalized
+            raw_stored = validation.raw_scan
     item = IntakeSessionItem(
         session_id=int(row.id or 0),
         user_id=int(row.user_id),
         storage_path=relative_path_under_repo_root(dest_path),
         mime_type=upload.content_type or "image/jpeg",
         file_size=len(raw),
-        raw_barcode=(raw_barcode or None),
-        normalized_barcode=(normalized or None),
+        raw_barcode=raw_stored[:64] if raw_stored else None,
+        normalized_barcode=(normalized[:64] if normalized else None),
+        base_upc=(validation.base_upc[:16] if validation and validation.acceptance == "accepted" else None),
+        extension=((validation.extension or None) if validation and validation.acceptance == "accepted" else None),
         status=ITEM_QUEUED,
     )
     session.add(item)

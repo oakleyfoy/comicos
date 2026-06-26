@@ -272,7 +272,7 @@ from app.models.catalog_master import (
     CatalogUpc,
     CatalogVariant,
 )
-from app.models.inventory_scan_session import InventoryScanItem, InventoryScanSession
+from app.models.catalog_cover_assets import CatalogCoverAsset, CatalogCoverHydrationRun
 from app.models.catalog_p97 import (
     CatalogDuplicateCandidate,
     CatalogImportError,
@@ -1400,6 +1400,8 @@ __all__ = [
     "CatalogStoryArc",
     "CatalogRelationship",
     "CatalogMatchFeedback",
+    "CatalogCoverAsset",
+    "CatalogCoverHydrationRun",
     "InventoryScanSession",
     "InventoryScanItem",
     "CatalogImportJob",

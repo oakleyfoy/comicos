@@ -237,9 +237,39 @@ export function IntakeReviewPage(): JSX.Element {
                 <p className="truncate text-sm font-medium text-slate-100">
                   {title || item.matched_publisher || "Unidentified"}
                 </p>
-                <p className="truncate text-xs text-slate-500">
-                  {item.normalized_barcode || item.raw_barcode || "No barcode read"}
-                </p>
+                <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                  <p>Raw scan: {item.raw_barcode || "—"}</p>
+                  <p>Normalized: {item.normalized_barcode || "—"}</p>
+                  {item.base_upc ? <p>Base UPC: {item.base_upc}</p> : null}
+                  {item.extension ? <p>Supplement: {item.extension}</p> : null}
+                  {item.possible_corrected_barcode ? (
+                    <p className="text-amber-300/90">
+                      Possible correction: {item.possible_corrected_barcode}
+                    </p>
+                  ) : null}
+                  {item.barcode_read ? (
+                    <>
+                      <p>Reconstructed: {String(item.barcode_read.reconstructed_full ?? "—")}</p>
+                      <p>
+                        Confidence: main {Math.round(Number(item.barcode_read.confidence_main ?? 0) * 100)}%,
+                        supplement {Math.round(Number(item.barcode_read.confidence_left ?? 0) * 100)}%
+                      </p>
+                      {item.barcode_read.inferred_supplement ? (
+                        <p className="text-amber-300/90">Supplement inferred (not raw OCR).</p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+                {item.candidates.length > 0 ? (
+                  <ul className="mt-2 space-y-1 text-xs text-slate-400">
+                    {item.candidates.slice(0, 5).map((c) => (
+                      <li key={c.id}>
+                        Candidate: {c.series ?? "Unknown"} #{c.issue_number ?? "?"} ({c.source},{" "}
+                        {Math.round(c.score * 100)}%)
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {item.reason ? <p className="mt-1 text-xs text-orange-300/80">{item.reason}</p> : null}
                 {item.error ? <p className="mt-1 text-xs text-rose-300/80">{item.error}</p> : null}
 

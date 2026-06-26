@@ -63,7 +63,16 @@ def crop_barcode_primary_bytes(image_bytes: bytes) -> bytes:
 
 
 def crop_upc_region_bytes(image_bytes: bytes) -> bytes:
-    """Crop lower-left where UPC boxes usually appear; upscale small crops for legibility."""
+    """Crop lower-left UPC box with P105 margin expansion, then upscale for legibility."""
+    try:
+        from app.core.config import get_settings
+        from app.services.p105_comic_barcode_regions import BarcodeCropConfig, crop_upc_region_bytes_expanded
+
+        ratio = float(get_settings().p105_barcode_crop_expand_ratio or 0.12)
+        expanded = crop_upc_region_bytes_expanded(image_bytes, config=BarcodeCropConfig(expand_ratio=ratio))
+        image_bytes = expanded
+    except Exception:
+        pass
     try:
         from PIL import Image
 

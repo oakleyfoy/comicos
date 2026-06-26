@@ -16,6 +16,7 @@ import logging
 import re
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlmodel import Session, select
@@ -40,18 +41,31 @@ from app.services.barcode_validation_service import (
     supplement_extension,
     validate_barcode_catalog_match,
 )
+from app.services.barcode_scan_consensus_service import (
+    normalize_scan_preserving_supplement,
+    validate_single_barcode_read,
+)
 from app.services.catalog_ingestion_service import (
     comic_barcode_lookup_keys_for_search,
     direct_market_requires_supplement_key,
     normalize_upc,
 )
 from app.services.p100_barcode_extraction_service import extract_barcode_from_image
+from app.services.p105_comic_barcode_read_service import (
+    publisher_validation_for_match,
+    read_comic_barcode_from_image_bytes,
+)
 from app.services.p100_comicvine_barcode_lookup_service import lookup_comicvine_by_barcode
-from app.services.photo_import_barcode_vision import normalize_comic_scan_barcode
+from app.services.photo_import_fingerprint_service import (
+    fingerprint_match_score_for_crop_path,
+    search_catalog_fingerprint_hits_for_crop_path,
+)
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 
 logger = logging.getLogger(__name__)
+
+COVER_FINGERPRINT_AGREE_SCORE = 70.0
 
 
 def _year_from_cover_date(cover_date: str | None) -> str:
@@ -160,6 +174,27 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
     return None
 
 
+def _cover_confirms_barcode_match(
+    session: Session,
+    *,
+    image_path: Path,
+    catalog_issue_id: int,
+) -> tuple[bool, str]:
+    score = fingerprint_match_score_for_crop_path(
+        session, crop_path=image_path, catalog_issue_id=catalog_issue_id
+    )
+    if score >= COVER_FINGERPRINT_AGREE_SCORE:
+        return True, f"Cover fingerprint agrees ({score:.0f}%)."
+    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=1)
+    if hits and int(hits[0].issue_id) != int(catalog_issue_id):
+        return (
+            False,
+            f"Cover fingerprint points to a different issue (top score {hits[0].confidence:.0%}) "
+            f"than barcode match #{catalog_issue_id} (cover score {score:.0f}%).",
+        )
+    return False, f"Low cover fingerprint confidence ({score:.0f}%) for barcode match."
+
+
 def process_intake_item(session: Session, *, item_id: int) -> str:
     """Identify a single queued intake item. Returns the resulting status."""
     item = session.get(IntakeSessionItem, item_id)
@@ -176,12 +211,22 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             return _fail(session, item, "Captured image is missing from storage.")
         image_bytes = abs_path.read_bytes()
 
-        extraction = extract_barcode_from_image(
+        p105 = read_comic_barcode_from_image_bytes(
             image_bytes,
-            allow_gpt_fallback=True,
+            session=session,
+            cover_path=abs_path,
             log_context=f"intake item_id={item_id}",
         )
-        barcode = extraction.get("barcode") or item.raw_barcode
+        item.barcode_read_json = p105.to_json()
+
+        barcode = p105.reconstructed_full or p105.main_upc or item.raw_barcode
+        if not barcode and not p105.main_upc:
+            extraction = extract_barcode_from_image(
+                image_bytes,
+                allow_gpt_fallback=True,
+                log_context=f"intake item_id={item_id}",
+            )
+            barcode = extraction.get("barcode") or item.raw_barcode
         if not barcode:
             return _finish(
                 session,
@@ -190,11 +235,32 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 reason="Could not read a barcode from this photo.",
             )
 
-        normalized = normalize_comic_scan_barcode(str(barcode)) or normalize_upc(str(barcode))
-        item.raw_barcode = str(barcode)[:64]
+        raw_digits = str(barcode)
+        if p105.reconstructed_full and len(p105.reconstructed_full) >= 17:
+            normalized = p105.reconstructed_full[:64]
+            scan_validation = validate_single_barcode_read(normalized)
+        else:
+            scan_validation = validate_single_barcode_read(raw_digits)
+        if scan_validation.acceptance == "rejected_checksum":
+            corrected = scan_validation.possible_corrected
+            hint = f" Suggested correction: {corrected}." if corrected else ""
+            return _finish(
+                session,
+                item,
+                status=ITEM_FAILED,
+                reason=f"UPC/EAN check digit failed.{hint}",
+            )
+
+        normalized = scan_validation.normalized or normalize_scan_preserving_supplement(raw_digits)
+        item.raw_barcode = scan_validation.raw_scan[:64] or raw_digits[:64]
         item.normalized_barcode = normalized[:64]
-        item.base_upc = base_upc(normalized)[:16]
-        item.extension = (supplement_extension(normalized) or None)
+        item.base_upc = (scan_validation.base_upc or base_upc(normalized))[:16]
+        item.extension = scan_validation.extension or supplement_extension(normalized) or None
+
+        if p105.inferred_supplement or not p105.auto_match_allowed:
+            p105_reason = p105.review_reason or "Barcode components unstable — review required."
+        else:
+            p105_reason = ""
         logger.info(
             "intake.item.detected item_id=%s raw=%s normalized=%s base=%s ext=%s",
             item_id,
@@ -242,6 +308,20 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 reason=f"Match failed validation: {validation.reason}",
             )
 
+        prefix_reason = publisher_validation_for_match(
+            normalized,
+            publisher=candidate.get("publisher"),
+            issue_number=candidate.get("issue_number"),
+            year=candidate.get("year"),
+        )
+        if prefix_reason:
+            return _finish(
+                session,
+                item,
+                status=ITEM_NEEDS_REVIEW,
+                reason=f"Publisher prefix guard: {prefix_reason}",
+            )
+
         # Store the validated candidate + apply it to the item.
         _clear_candidates(session, item_id)
         _add_candidate(
@@ -267,13 +347,42 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             learned_row.updated_at = utc_now()
             session.add(learned_row)
 
+        catalog_issue_id = candidate.get("catalog_issue_id")
+        cover_ok = True
+        cover_reason = ""
+        if (
+            catalog_issue_id is not None
+            and candidate["source"] == MATCH_SOURCE_CATALOG_UPC
+        ):
+            cover_ok, cover_reason = _cover_confirms_barcode_match(
+                session,
+                image_path=abs_path,
+                catalog_issue_id=int(catalog_issue_id),
+            )
+            if not cover_ok:
+                item.confidence = min(item.confidence, 0.75)
+                return _finish(
+                    session,
+                    item,
+                    status=ITEM_NEEDS_REVIEW,
+                    reason=f"Barcode match needs cover confirmation: {cover_reason}",
+                )
+
+        if p105_reason and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
+            return _finish(
+                session,
+                item,
+                status=ITEM_NEEDS_REVIEW,
+                reason=p105_reason,
+            )
+
         # Local high-confidence match -> auto matched. ComicVine -> needs human confirm.
         final_status = (
             ITEM_AUTO_MATCHED
             if candidate["source"] in {MATCH_SOURCE_LEARNED, MATCH_SOURCE_CATALOG_UPC}
             else ITEM_READY_FOR_REVIEW
         )
-        return _finish(session, item, status=final_status, reason=None)
+        return _finish(session, item, status=final_status, reason=cover_reason if cover_ok and cover_reason else None)
     except Exception as exc:  # noqa: BLE001
         logger.exception("intake.item.failed item_id=%s", item_id)
         return _fail(session, item, f"Processing error: {exc}")

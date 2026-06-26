@@ -304,6 +304,29 @@ def _clear_inventory_copy_dependencies(session: Session, copy_ids: list[int]) ->
     session.flush()
 
 
+def _unlink_acquisition_session_references(session: Session, acquisition_id: int) -> None:
+    """Drop FK pointers from intake/photo sessions so acquisitions can be removed."""
+    from app.models.intake_queue import IntakeSession, IntakeSessionItem
+    from app.models.photo_import import PhotoImportSession
+
+    for row in session.exec(
+        select(PhotoImportSession).where(PhotoImportSession.acquisition_id == acquisition_id)
+    ).all():
+        row.acquisition_id = None
+        session.add(row)
+    for row in session.exec(
+        select(IntakeSession).where(IntakeSession.acquisition_id == acquisition_id)
+    ).all():
+        row.acquisition_id = None
+        session.add(row)
+    for row in session.exec(
+        select(IntakeSessionItem).where(IntakeSessionItem.acquisition_id == acquisition_id)
+    ).all():
+        row.acquisition_id = None
+        session.add(row)
+    session.flush()
+
+
 def delete_acquisition(
     session: Session,
     *,
@@ -349,6 +372,7 @@ def delete_acquisition(
         ).all():
             session.delete(placeholder)
         session.flush()
+        _unlink_acquisition_session_references(session, acquisition_id)
         session.delete(acquisition)
         session.commit()
     except IntegrityError:

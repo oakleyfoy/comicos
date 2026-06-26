@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile, status
@@ -47,6 +48,7 @@ from app.services.intake_queue_service import (
     set_session_status,
 )
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
+from app.services.barcode_scan_consensus_service import suggest_corrected_barcode
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,14 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
         )
         for c in candidates_for_item(session, item_id=int(item.id or 0))
     ]
+    barcode_read: dict | None = None
+    if item.barcode_read_json:
+        try:
+            parsed = json.loads(item.barcode_read_json)
+            if isinstance(parsed, dict):
+                barcode_read = parsed
+        except json.JSONDecodeError:
+            barcode_read = None
     return IntakeItemRead(
         id=int(item.id or 0),
         session_id=int(item.session_id),
@@ -120,6 +130,12 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
         normalized_barcode=item.normalized_barcode,
         base_upc=item.base_upc,
         extension=item.extension,
+        possible_corrected_barcode=(
+            suggest_corrected_barcode(item.raw_barcode or "")
+            if item.raw_barcode
+            else None
+        ),
+        barcode_read=barcode_read,
         selected_catalog_issue_id=item.selected_catalog_issue_id,
         selected_variant_id=item.selected_variant_id,
         matched_publisher=item.matched_publisher,

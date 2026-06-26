@@ -89,6 +89,7 @@ class IntakeSessionItem(SQLModel, table=True):
 
     reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    barcode_read_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
     acquisition_id: int | None = Field(default=None, nullable=True)
     inventory_copy_id: int | None = Field(default=None, nullable=True)

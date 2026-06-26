@@ -85,7 +85,7 @@ export function AcquisitionDetailPage(): JSX.Element {
   if (loading) {
     return (
       <AppShell>
-        <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-300">Loading…</div>
+        <div className="px-4 py-8 text-slate-600">Loading…</div>
       </AppShell>
     );
   }
@@ -93,11 +93,11 @@ export function AcquisitionDetailPage(): JSX.Element {
   if (!acquisition) {
     return (
       <AppShell>
-        <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-300">
-          <p role="alert" className="text-rose-300">
+        <div className="px-4 py-8">
+          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {error ?? "Acquisition not found."}
           </p>
-          <Link to="/acquisitions" className="mt-3 inline-block text-sky-300 hover:underline">
+          <Link to="/acquisitions" className="mt-3 inline-block text-sm text-patriot-blue hover:underline">
             ← Back to acquisitions
           </Link>
         </div>
@@ -109,26 +109,25 @@ export function AcquisitionDetailPage(): JSX.Element {
 
   return (
     <AppShell>
-      <div className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="mx-auto max-w-5xl px-4 py-8">
-          <Link to="/acquisitions" className="text-sm text-sky-300 hover:underline">
+      <div className="mx-auto max-w-5xl">
+          <Link to="/acquisitions" className="text-sm text-patriot-blue hover:underline">
             ← All acquisitions
           </Link>
 
-          <header className="mt-3 rounded-2xl border border-slate-700 bg-slate-900 p-5">
+          <header className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-patriot-blue">
                   {acquisitionSourceLabel(acquisition.acquisition_type)}
                 </span>
-                <h1 className="mt-2 text-2xl font-semibold text-white">
+                <h1 className="mt-2 text-2xl font-semibold text-patriot-navy">
                   {acquisition.seller_name || "Unknown seller"}
                 </h1>
-                <p className="text-sm text-slate-400">{acquisition.purchase_date || "No purchase date"}</p>
+                <p className="text-sm text-slate-500">{acquisition.purchase_date || "No purchase date"}</p>
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                  isOpen ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-800 text-slate-400"
+                  isOpen ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
                 }`}
               >
                 {acquisition.status}
@@ -147,7 +146,7 @@ export function AcquisitionDetailPage(): JSX.Element {
                 type="button"
                 onClick={() => setShowAddBooks((v) => !v)}
                 disabled={!isOpen}
-                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+                className="rounded-lg bg-patriot-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-900 disabled:opacity-50"
               >
                 Add Books
               </button>
@@ -155,7 +154,7 @@ export function AcquisitionDetailPage(): JSX.Element {
                 type="button"
                 onClick={() => setShowTreePicker(true)}
                 disabled={!isOpen}
-                className="rounded-lg border border-emerald-700 px-4 py-2 text-sm text-emerald-200 hover:border-emerald-400 disabled:opacity-50"
+                className="rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
               >
                 Universe Tree Picker
               </button>
@@ -163,14 +162,14 @@ export function AcquisitionDetailPage(): JSX.Element {
                 type="button"
                 onClick={markComplete}
                 disabled={!isOpen}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 Mark Complete
               </button>
               <button
                 type="button"
                 onClick={deleteAcquisition}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-rose-400 hover:text-rose-300"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800"
               >
                 Delete
               </button>
@@ -178,7 +177,10 @@ export function AcquisitionDetailPage(): JSX.Element {
           </header>
 
           {error ? (
-            <p role="alert" className="mt-4 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">
+            <p
+              role="alert"
+              className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+            >
               {error}
             </p>
           ) : null}
@@ -198,46 +200,46 @@ export function AcquisitionDetailPage(): JSX.Element {
           </div>
 
           <section aria-label="Books in this acquisition" className="mt-5">
-            <h2 className="text-lg font-semibold text-white">Books ({items.length})</h2>
+            <h2 className="text-lg font-semibold text-patriot-navy">Books ({items.length})</h2>
             {items.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-400">No books added yet. Tap “Add Books” to begin.</p>
+              <p className="mt-2 text-sm text-slate-600">No books added yet. Tap “Add Books” to begin.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-slate-800 rounded-2xl border border-slate-700 bg-slate-900">
+              <ul className="mt-3 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {items.map((item) => (
                   <li key={item.inventory_copy_id} className="flex items-center gap-3 p-3">
                     {item.cover_image_url ? (
                       <img src={item.cover_image_url} alt="" className="h-14 w-10 rounded object-cover" />
                     ) : (
-                      <span className="flex h-14 w-10 items-center justify-center rounded bg-slate-800 text-[10px] text-slate-400">
+                      <span className="flex h-14 w-10 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-500">
                         No cover
                       </span>
                     )}
                     <div className="min-w-0 flex-1">
                       <Link
                         to={`/inventory/${item.inventory_copy_id}`}
-                        className="block truncate font-semibold text-white hover:text-sky-300"
+                        className="block truncate font-semibold text-patriot-navy hover:text-patriot-blue"
                       >
                         {item.series || "Unknown series"} #{item.issue_number || "?"}
                         {item.variant_label ? (
-                          <span className="ml-1 text-slate-400">({item.variant_label})</span>
+                          <span className="ml-1 text-slate-500">({item.variant_label})</span>
                         ) : null}
                       </Link>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-600">
                         {item.publisher || "Unknown publisher"} · ${item.cost_basis}
                         {item.is_placeholder ? (
                           <>
-                            <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Placeholder</span>
+                            <span className="ml-2 rounded bg-amber-100 px-1 text-amber-900">Placeholder</span>
                             {item.is_tree_linked ? (
-                              <span className="ml-1 rounded bg-emerald-500/20 px-1 text-emerald-300">Tree Linked</span>
+                              <span className="ml-1 rounded bg-emerald-100 px-1 text-emerald-900">Tree Linked</span>
                             ) : null}
                             {item.needs_catalog_match ? (
-                              <span className="ml-1 rounded bg-rose-500/20 px-1 text-rose-300">
+                              <span className="ml-1 rounded bg-red-100 px-1 text-red-800">
                                 Needs Catalog Match
                               </span>
                             ) : null}
                           </>
                         ) : item.variant_status === "UNKNOWN" ? (
-                          <span className="ml-2 rounded bg-amber-500/20 px-1 text-amber-300">Needs review</span>
+                          <span className="ml-2 rounded bg-amber-100 px-1 text-amber-900">Needs review</span>
                         ) : null}
                       </span>
                     </div>
@@ -245,7 +247,7 @@ export function AcquisitionDetailPage(): JSX.Element {
                       <button
                         type="button"
                         onClick={() => removeItem(item.inventory_copy_id)}
-                        className="rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:border-rose-400 hover:text-rose-300"
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-400 hover:bg-red-50 hover:text-red-800"
                       >
                         Remove
                       </button>
@@ -255,7 +257,6 @@ export function AcquisitionDetailPage(): JSX.Element {
               </ul>
             )}
           </section>
-        </div>
       </div>
 
       <AcquisitionTreePickerModal
@@ -270,9 +271,9 @@ export function AcquisitionDetailPage(): JSX.Element {
 
 function Stat({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-      <dt className="text-xs text-slate-400">{label}</dt>
-      <dd className="font-semibold text-white">{value}</dd>
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className="font-semibold text-patriot-navy">{value}</dd>
     </div>
   );
 }

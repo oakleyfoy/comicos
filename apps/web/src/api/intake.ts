@@ -86,6 +86,8 @@ export type IntakeItem = {
   normalized_barcode: string | null;
   base_upc: string | null;
   extension: string | null;
+  possible_corrected_barcode: string | null;
+  barcode_read: Record<string, unknown> | null;
   selected_catalog_issue_id: number | null;
   selected_variant_id: number | null;
   matched_publisher: string | null;

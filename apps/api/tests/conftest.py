@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app
 from app.services.receiving_live_capture_service import reset_live_capture_cache
-from app.models.catalog_master import CatalogCharacter, CatalogCreator, CatalogImage, CatalogImageFingerprint, CatalogIssue, CatalogPublisher, CatalogRelationship, CatalogSeries, CatalogUpc, CatalogVariant  # noqa: F401
+from app.models.catalog_cover_assets import CatalogCoverAsset, CatalogCoverHydrationRun  # noqa: F401
 from app.models.inventory_scan_session import InventoryScanItem, InventoryScanSession  # noqa: F401
 from app.models.catalog_p97 import CatalogImportJob, CatalogUpcConflict, ComicVineVolumeUniverse, P97ComicVineVolumeQueue, P97VolumeIssueImportQueue, RecognitionGap  # noqa: F401
 from app.models.p90_fmv_snapshot import P90FmvSnapshot  # noqa: F401

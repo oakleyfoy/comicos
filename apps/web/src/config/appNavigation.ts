@@ -148,6 +148,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Universe Tree", to: "/catalog-universe", prominent: true },
       { label: "GCD Import Dashboard", to: "/catalog/import", prominent: true },
       { label: "GCD Enrichment (P103)", to: "/catalog/enrichment", prominent: true },
+      { label: "Cover Hydration (P104)", to: "/catalog/cover-hydration", prominent: true },
       { label: "Placeholder Match Queue", to: "/catalog-universe/placeholders" },
     ],
   },

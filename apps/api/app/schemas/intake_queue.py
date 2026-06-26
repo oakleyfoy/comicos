@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -74,6 +75,8 @@ class IntakeItemRead(BaseModel):
     normalized_barcode: str | None
     base_upc: str | None
     extension: str | None
+    possible_corrected_barcode: str | None = None
+    barcode_read: dict | None = None
     selected_catalog_issue_id: int | None
     selected_variant_id: int | None
     matched_publisher: str | None

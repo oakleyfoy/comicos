@@ -88,6 +88,11 @@ class Settings(BaseSettings):
         alias="PHOTO_IMPORT_BARCODE_READ_TIMEOUT_SECONDS",
         description="Hard timeout for the barcode digit-read vision call so the scan never hangs",
     )
+    p105_barcode_crop_expand_ratio: float = Field(
+        default=0.12,
+        alias="P105_BARCODE_CROP_EXPAND_RATIO",
+        description="Expand UPC box crops by this fraction on each side before decode/OCR (0.10–0.15)",
+    )
     redis_url: str = "redis://localhost:6379/0"
     frontend_url: str = "http://127.0.0.1:5173"
     cors_origins_raw: str = Field(
@@ -176,6 +181,16 @@ class Settings(BaseSettings):
     locg_import_enabled: bool = Field(default=True, alias="LOCG_IMPORT_ENABLED")
     gcd_import_enabled: bool = Field(default=True, alias="GCD_IMPORT_ENABLED")
     gcd_enrichment_enabled: bool = Field(default=True, alias="GCD_ENRICHMENT_ENABLED")
+    p104_cover_hydration_enabled: bool = Field(default=True, alias="P104_COVER_HYDRATION_ENABLED")
+    p104_downloads_per_minute: float = Field(default=30.0, alias="P104_DOWNLOADS_PER_MINUTE")
+    p104_max_retries: int = Field(default=5, alias="P104_MAX_RETRIES")
+    p104_retry_backoff_base_seconds: float = Field(default=60.0, alias="P104_RETRY_BACKOFF_BASE_SECONDS")
+    p104_year_from: int = Field(default=2000, alias="P104_YEAR_FROM")
+    p104_year_to: int = Field(default=2026, alias="P104_YEAR_TO")
+    p104_derivative_sizes: str = Field(
+        default="thumbnail:150,small:300,medium:600,large:1200",
+        alias="P104_DERIVATIVE_SIZES",
+    )
     gcd_sqlite_path_raw: str = Field(default="", alias="GCD_SQLITE_PATH")
     comicvine_api_key: str = Field(default="", alias="COMICVINE_API_KEY")
     comicvine_api_base_url: str = Field(default="", alias="COMICVINE_API_BASE_URL")

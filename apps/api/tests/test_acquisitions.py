@@ -452,6 +452,38 @@ def test_delete_empty_acquisition(client: TestClient) -> None:
     assert client.get(f"/api/v1/acquisitions/{body['id']}", headers=auth_headers(token)).status_code == 404
 
 
+def test_delete_photo_import_linked_acquisition(client: TestClient, session: Session) -> None:
+    """Photo import sessions FK acquisitions.id; delete must unlink sessions first."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models import Acquisition
+    from app.models.photo_import import PhotoImportSession
+
+    token = register_and_login(client, "acq-del-photo@example.com")
+    owner_id = _owner_id(session, "acq-del-photo@example.com")
+    body = _create_acq(client, token)
+    acq_id = int(body["id"])
+    session.add(
+        PhotoImportSession(
+            user_id=owner_id,
+            session_token="tok1234567890123456789012345678901234",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            status="active",
+            acquisition_id=acq_id,
+        )
+    )
+    session.commit()
+
+    resp = client.delete(f"/api/v1/acquisitions/{acq_id}", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted_inventory_count"] == 0
+    assert session.get(Acquisition, acq_id) is None
+    pis = session.exec(
+        select(PhotoImportSession).where(PhotoImportSession.session_token == "tok1234567890123456789012345678901234")
+    ).one()
+    assert pis.acquisition_id is None
+
+
 def test_delete_acquisition_with_books_requires_confirm(client: TestClient, session: Session) -> None:
     token = register_and_login(client, "acq-del-books@example.com")
     ids = _seed_catalog(session)

@@ -50,6 +50,46 @@ def fingerprint_image_path(path: str | Path) -> tuple[str, str, str]:
     return _bits_from_image(Path(path))
 
 
+def color_histogram_hex(path: str | Path, *, bins: int = 8) -> str:
+    """Compact RGB histogram for scanner matching (8 bins per channel → 24 hex chars)."""
+    with Image.open(Path(path)) as img:
+        rgb = img.convert("RGB").resize((64, 64), Image.Resampling.LANCZOS)
+        pixels = list(rgb.getdata())
+    if not pixels:
+        return ""
+    r_bins = [0] * bins
+    g_bins = [0] * bins
+    b_bins = [0] * bins
+    step = 256 // bins
+    for r, g, b in pixels:
+        r_bins[min(bins - 1, r // max(step, 1))] += 1
+        g_bins[min(bins - 1, g // max(step, 1))] += 1
+        b_bins[min(bins - 1, b // max(step, 1))] += 1
+    total = len(pixels)
+    parts: list[str] = []
+    for bucket in (r_bins, g_bins, b_bins):
+        for count in bucket:
+            parts.append(f"{int(count * 15 / total):x}")
+    return "".join(parts)
+
+
+def fingerprint_image_metadata(path: str | Path) -> dict[str, int | str]:
+    p = Path(path)
+    phash, dhash, ahash = fingerprint_image_path(p)
+    with Image.open(p) as img:
+        width, height = img.size
+    file_size = p.stat().st_size
+    return {
+        "phash": phash,
+        "dhash": dhash,
+        "ahash": ahash,
+        "colorhash": color_histogram_hex(p),
+        "width": int(width),
+        "height": int(height),
+        "file_size_bytes": int(file_size),
+    }
+
+
 def fingerprint_catalog_image(session: Session, image_id: int, *, dry_run: bool = False) -> CatalogImageFingerprint | None:
     image = session.get(CatalogImage, image_id)
     if image is None or not image.local_path:
@@ -58,8 +98,9 @@ def fingerprint_catalog_image(session: Session, image_id: int, *, dry_run: bool 
     if path is None:
         return None
     phash, dhash, ahash = fingerprint_image_path(path)
+    colorhash = color_histogram_hex(path)
     if dry_run:
-        return CatalogImageFingerprint(image_id=image_id, phash=phash, dhash=dhash, ahash=ahash)
+        return CatalogImageFingerprint(image_id=image_id, phash=phash, dhash=dhash, ahash=ahash, colorhash=colorhash)
     row = session.exec(select(CatalogImageFingerprint).where(CatalogImageFingerprint.image_id == image_id)).first()
     if row is None:
         row = CatalogImageFingerprint(
@@ -69,12 +110,14 @@ def fingerprint_catalog_image(session: Session, image_id: int, *, dry_run: bool 
             phash=phash,
             dhash=dhash,
             ahash=ahash,
+            colorhash=colorhash,
         )
         session.add(row)
     else:
         row.phash = phash
         row.dhash = dhash
         row.ahash = ahash
+        row.colorhash = colorhash
         row.updated_at = utc_now()
         session.add(row)
     session.flush()

@@ -32,6 +32,7 @@ from app.services.catalog_ingestion_service import (
 from app.services.photo_import_barcode_vision import normalize_comic_scan_barcode
 from app.services.p100_barcode_extraction_service import extract_barcode_from_image
 from app.services.p100_comicvine_barcode_lookup_service import lookup_comicvine_by_barcode
+from app.services.barcode_scan_consensus_service import validate_single_barcode_read
 from app.services.photo_import_vision_sandbox_service import (
     VisionSandboxReadResult,
     persist_vision_read,
@@ -191,6 +192,19 @@ def identify_and_persist_barcode_primary(
         )
 
     normalized = normalize_comic_scan_barcode(raw_detected) or normalize_upc(raw_detected)
+    scan_validation = validate_single_barcode_read(raw_detected)
+    if scan_validation.acceptance == "rejected_checksum":
+        logger.info("photo_import.barcode_primary.bad_checksum image_id=%s", image_id)
+        _mark_image(session, image, IMAGE_STATUS_FAILED)
+        corrected = scan_validation.possible_corrected
+        hint = f" Try {corrected}." if corrected else ""
+        return BarcodeIdentifyOutcome(
+            status="unreadable",
+            detected_barcode=scan_validation.raw_scan,
+            base_upc=scan_validation.base_upc,
+            reason=f"UPC/EAN check digit failed.{hint}",
+            suggested_action=SUGGESTED_ACTION_COVER,
+        )
     ext = supplement_extension(normalized)
     logger.info(
         "photo_import.barcode_primary.detected image_id=%s raw=%s normalized=%s base=%s extension=%s",

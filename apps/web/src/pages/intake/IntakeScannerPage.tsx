@@ -7,6 +7,11 @@ import {
   setIntakeSessionStatus,
   type IntakeSession,
 } from "../../api/intake";
+import {
+  createBarcodeVoteState,
+  recordBarcodeVote,
+  resetBarcodeVotes,
+} from "../../lib/barcodeConsensus";
 
 type ScanState = "idle" | "scanning" | "paused" | "stopped";
 
@@ -54,6 +59,8 @@ export function IntakeScannerPage(): JSX.Element {
   const streamRef = useRef<MediaStream | null>(null);
   const lastBarcodeRef = useRef<{ value: string; at: number } | null>(null);
   const detectTimerRef = useRef<number | null>(null);
+  const voteStateRef = useRef(createBarcodeVoteState());
+  const capturingRef = useRef(false);
 
   useEffect(() => {
     if (!tokenParam) return;
@@ -126,12 +133,18 @@ export function IntakeScannerPage(): JSX.Element {
         const found = await detector.detect(video);
         if (!found.length) return;
         const value = found[0].rawValue;
+        const consensus = recordBarcodeVote(voteStateRef.current, value);
+        if (!consensus) return;
         const now = Date.now();
         const last = lastBarcodeRef.current;
-        if (last && last.value === value && now - last.at < DUPLICATE_WINDOW_MS) return;
-        lastBarcodeRef.current = { value, at: now };
+        if (last && last.value === consensus.accepted && now - last.at < DUPLICATE_WINDOW_MS) return;
+        if (capturingRef.current) return;
+        capturingRef.current = true;
+        lastBarcodeRef.current = { value: consensus.accepted, at: now };
         const blob = await captureFrame();
-        if (blob) await enqueueBlob(blob, value);
+        if (blob) await enqueueBlob(blob, consensus.raw);
+        resetBarcodeVotes(voteStateRef.current);
+        capturingRef.current = false;
       } catch {
         /* detector hiccup; keep scanning */
       }
