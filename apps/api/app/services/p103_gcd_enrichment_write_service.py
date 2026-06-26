@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -31,6 +32,7 @@ from app.services.p103_gcd_enrichment_fast import (
     _load_gcd_index,
     _lookup_gcd,
     enrichment_cache_ready,
+    plan_enrichment_updates,
 )
 from app.services.p103_gcd_enrichment_helpers import (
     extract_gcd_issue_id,
@@ -53,9 +55,12 @@ class P103WriteBatchReport:
     skipped_conflicts: int = 0
     errors: list[str] = field(default_factory=list)
     written_rows: list[dict[str, Any]] = field(default_factory=list)
+    scanned: int = 0
+    matched: int = 0
+    perf: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
-        return {
+        out = {
             "mode": self.mode,
             "report_at": self.report_at,
             "filters": self.filters,
@@ -65,7 +70,48 @@ class P103WriteBatchReport:
             "skipped_conflicts": self.skipped_conflicts,
             "errors": self.errors,
             "written_rows": self.written_rows,
+            "scanned": self.scanned,
+            "matched": self.matched,
         }
+        if self.perf is not None:
+            out["perf"] = self.perf
+        return out
+
+
+@dataclass
+class P103WriteBatchTimer:
+    cache_load_sec: float = 0.0
+    gcd_index_load_sec: float = 0.0
+    match_plan_sec: float = 0.0
+    issue_update_sec: float = 0.0
+    upc_insert_sec: float = 0.0
+    commit_sec: float = 0.0
+    rollback_serialize_sec: float = 0.0
+    scanned: int = 0
+    matched: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cache_load_sec": round(self.cache_load_sec, 3),
+            "gcd_index_load_sec": round(self.gcd_index_load_sec, 3),
+            "match_plan_sec": round(self.match_plan_sec, 3),
+            "issue_update_sec": round(self.issue_update_sec, 3),
+            "upc_insert_sec": round(self.upc_insert_sec, 3),
+            "commit_sec": round(self.commit_sec, 3),
+            "rollback_serialize_sec": round(self.rollback_serialize_sec, 3),
+            "scanned": self.scanned,
+            "matched": self.matched,
+        }
+
+
+@dataclass
+class _PlannedCatalogWrite:
+    issue_id: int
+    gcd_issue_id: int
+    series_name: str | None
+    issue_number: str | None
+    planned: list[dict[str, Any]]
+    gcd_inputs: dict[str, Any]
 
 
 def _reload_barcode_guard(session: Session) -> tuple[set[str], dict[str, int]]:
@@ -114,6 +160,7 @@ def _insert_upc_if_allowed(
     variant_id: int | None,
     learned: set[str],
     upc_map: dict[str, int],
+    trust_upc_map: bool = False,
 ) -> int | None:
     normalized = normalize_upc(raw_upc)
     if not normalized:
@@ -122,8 +169,9 @@ def _insert_upc_if_allowed(
         return None
     if normalized in upc_map and upc_map[normalized] != issue_id:
         return None
-    if session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first() is not None:
-        return None
+    if not trust_upc_map:
+        if session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == normalized)).first() is not None:
+            return None
     row = CatalogUpc(
         upc=raw_upc.strip(),
         normalized_upc=normalized,
@@ -147,6 +195,7 @@ def _apply_planned_updates(
     *,
     learned: set[str],
     upc_map: dict[str, int],
+    trust_upc_map: bool = False,
 ) -> tuple[int, int | None]:
     """Return (fields_updated_count, inserted_upc_id)."""
     fields_updated = 0
@@ -190,6 +239,7 @@ def _apply_planned_updates(
                 variant_id=variant_id,
                 learned=learned,
                 upc_map=upc_map,
+                trust_upc_map=trust_upc_map,
             )
 
     if variant is not None:
@@ -198,20 +248,189 @@ def _apply_planned_updates(
     return fields_updated, upc_id
 
 
-logger = logging.getLogger(__name__)
-
+BATCH_COMMIT_SIZE = 250
 PROGRESS_LOG_EVERY = 250
 
 
-def _log_write_progress(*, written: int, limit: int, all_catalog: bool) -> None:
+def _batch_load_issues(session: Session, issue_ids: list[int]) -> dict[int, CatalogIssue]:
+    if not issue_ids:
+        return {}
+    rows = session.exec(select(CatalogIssue).where(CatalogIssue.id.in_(issue_ids))).all()
+    return {int(r.id): r for r in rows if r.id is not None}
+
+
+def _batch_primary_variants(session: Session, issue_ids: list[int]) -> dict[int, CatalogVariant]:
+    if not issue_ids:
+        return {}
+    rows = session.exec(
+        select(CatalogVariant)
+        .where(CatalogVariant.issue_id.in_(issue_ids))
+        .order_by(CatalogVariant.issue_id.asc(), CatalogVariant.id.asc())
+    ).all()
+    out: dict[int, CatalogVariant] = {}
+    for variant in rows:
+        iid = int(variant.issue_id)
+        if iid not in out:
+            out[iid] = variant
+    return out
+
+
+def _filter_planned_for_conflicts(
+    planned: list[dict[str, Any]],
+    conflicts: list[dict[str, Any]],
+    report: P103WriteBatchReport,
+) -> list[dict[str, Any]] | None:
+    if any(c.get("reason") in ("learned_barcode_guard", "upc_mapped_elsewhere") for c in conflicts):
+        report.skipped_conflicts += 1
+        return None
+    if conflicts:
+        planned = [p for p in planned if p.get("field") != "catalog_upc"]
+    if not planned:
+        report.skipped_no_updates += 1
+        return None
+    return planned
+
+
+def _emit_write_progress(
+    *,
+    report: P103WriteBatchReport,
+    written: int,
+    limit: int,
+    timer: P103WriteBatchTimer | None,
+    verbose: bool,
+) -> None:
     if written <= 0 or written % PROGRESS_LOG_EVERY != 0:
         return
-    logger.info(
-        "p103 enrichment write progress written=%s limit=%s all_catalog=%s",
+    msg = (
+        "p103 write progress updated=%s limit=%s scanned=%s matched=%s "
+        "inserted_upcs=%s skipped_no_update=%s conflicts=%s errors=%s"
+    )
+    args = (
         written,
         limit,
-        all_catalog,
+        report.scanned,
+        report.matched,
+        report.inserted_upcs,
+        report.skipped_no_updates,
+        report.skipped_conflicts,
+        len(report.errors),
     )
+    logger.info(msg, *args)
+    if verbose:
+        perf = timer.to_dict() if timer else {}
+        print(
+            f"P103 write: updated={written}/{limit} scanned={report.scanned} matched={report.matched} "
+            f"upcs={report.inserted_upcs} skipped={report.skipped_no_updates} conflicts={report.skipped_conflicts} "
+            f"errors={len(report.errors)} perf={perf}",
+            flush=True,
+        )
+
+
+def _apply_planned_write_batch(
+    session: Session,
+    *,
+    batch: list[_PlannedCatalogWrite],
+    learned: set[str],
+    upc_map: dict[str, int],
+    rollback_collector: dict[str, Any] | None,
+    report: P103WriteBatchReport,
+    record_written_rows: bool,
+    timer: P103WriteBatchTimer | None,
+) -> tuple[set[str], dict[str, int]]:
+    issue_ids = [p.issue_id for p in batch]
+    t_load = time.perf_counter()
+    issues = _batch_load_issues(session, issue_ids)
+    variants = _batch_primary_variants(session, issue_ids)
+    if timer:
+        timer.issue_update_sec += time.perf_counter() - t_load
+
+    pending_rollbacks: list[dict[str, Any]] = []
+    pending_upc_ids: list[int] = []
+    pending_written: list[dict[str, Any]] = []
+    batch_updated = 0
+
+    t_apply = time.perf_counter()
+    for planned_write in batch:
+        issue = issues.get(planned_write.issue_id)
+        if issue is None:
+            report.errors.append(f"catalog_issue_id={planned_write.issue_id}: missing issue row")
+            continue
+        variant = variants.get(planned_write.issue_id)
+        before_issue = _snapshot_issue(issue)
+        before_variant = _snapshot_variant(variant)
+        t_upc = time.perf_counter()
+        fields_updated, upc_id = _apply_planned_updates(
+            session,
+            issue,
+            variant,
+            planned_write.planned,
+            learned=learned,
+            upc_map=upc_map,
+            trust_upc_map=True,
+        )
+        if timer:
+            timer.upc_insert_sec += time.perf_counter() - t_upc
+
+        if fields_updated == 0 and upc_id is None:
+            report.skipped_no_updates += 1
+            continue
+
+        batch_updated += 1
+        inserted_upc = upc_id is not None
+        if inserted_upc:
+            report.inserted_upcs += 1
+
+        pending_rollbacks.append(
+            {
+                "catalog_issue_id": planned_write.issue_id,
+                "catalog_variant_id": int(variant.id) if variant and variant.id else None,
+                "before": before_issue,
+                "variant_before": before_variant,
+            }
+        )
+        if upc_id is not None:
+            pending_upc_ids.append(upc_id)
+
+        if record_written_rows:
+            pending_written.append(
+                {
+                    "gcd_issue_id": planned_write.gcd_issue_id,
+                    "catalog_issue_id": planned_write.issue_id,
+                    "series": planned_write.series_name,
+                    "issue_number": planned_write.issue_number,
+                    "fields_updated": fields_updated,
+                    "inserted_upc": inserted_upc,
+                    "barcode": planned_write.gcd_inputs.get("barcode"),
+                }
+            )
+
+    if timer:
+        timer.issue_update_sec += time.perf_counter() - t_apply
+
+    if batch_updated == 0:
+        session.rollback()
+        return learned, upc_map
+
+    t_commit = time.perf_counter()
+    try:
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        report.errors.append(f"batch commit failed ({batch_updated} rows): {exc}")
+        learned, upc_map = _reload_barcode_guard(session)
+        return learned, upc_map
+    if timer:
+        timer.commit_sec += time.perf_counter() - t_commit
+
+    report.updated_issues += batch_updated
+    if rollback_collector is not None:
+        rollback_collector.setdefault("issue_snapshots", []).extend(pending_rollbacks)
+        if pending_upc_ids:
+            rollback_collector.setdefault("upc_ids", []).extend(pending_upc_ids)
+    if record_written_rows:
+        report.written_rows.extend(pending_written)
+
+    return learned, upc_map
 
 
 def _commit_enrichment_row(
@@ -295,11 +514,19 @@ def _run_p103_enrichment_write_batch_all_catalog(
     learned: set[str],
     upc_map: dict[str, int],
     rollback_collector: dict[str, Any] | None,
+    timer: P103WriteBatchTimer | None = None,
+    verbose_progress: bool = False,
+    record_written_rows: bool = True,
 ) -> P103WriteBatchReport:
     if not enrichment_cache_ready(cache_path):
         raise ValueError("--all requires catalog_enrichment_issue cache; run with --refresh-cache.")
 
+    t0 = time.perf_counter()
     catalog_scope = _load_catalog_scope(cache_path, filters=filters)
+    if timer:
+        timer.cache_load_sec += time.perf_counter() - t0
+
+    t_gcd = time.perf_counter()
     gcd_index = _load_gcd_index(
         gcd_path,
         year_from=filters.year_from,
@@ -308,61 +535,76 @@ def _run_p103_enrichment_write_batch_all_catalog(
         all_catalog=True,
         year_filter_explicit=filters.year_filter_explicit,
     )
+    if timer:
+        timer.gcd_index_load_sec = time.perf_counter() - t_gcd
 
-    seen_issues: set[int] = set()
-    written = 0
     limit = int(filters.limit or 0)
+    seen_issues: set[int] = set()
+    pending: list[_PlannedCatalogWrite] = []
+    written = 0
 
+    t_match = time.perf_counter()
     for snap in catalog_scope:
+        report.scanned += 1
+        if timer:
+            timer.scanned += 1
         if written >= limit:
             break
         if snap.issue_id in seen_issues:
             continue
+
         gcd_row = _lookup_gcd(gcd_index, snap)
         if gcd_row is None:
             continue
 
-        issue = session.get(CatalogIssue, snap.issue_id)
-        if issue is None:
-            continue
+        report.matched += 1
+        if timer:
+            timer.matched += 1
 
         gcd_inputs = gcd_row_to_plan_inputs(gcd_row)
-        variant = session.exec(
-            select(CatalogVariant).where(CatalogVariant.issue_id == snap.issue_id).order_by(CatalogVariant.id.asc())
-        ).first()
-
-        planned, conflicts, _ = _plan_updates_for_pair(session, issue, gcd_inputs, ctx=ctx)
-        if any(c.get("reason") in ("learned_barcode_guard", "upc_mapped_elsewhere") for c in conflicts):
-            report.skipped_conflicts += 1
-            seen_issues.add(snap.issue_id)
-            continue
-        if conflicts:
-            planned = [p for p in planned if p.get("field") != "catalog_upc"]
-        if not planned:
-            report.skipped_no_updates += 1
+        planned, conflicts, _ = plan_enrichment_updates(snap, gcd_inputs, ctx=ctx)
+        planned = _filter_planned_for_conflicts(planned, conflicts, report)
+        if planned is None:
             seen_issues.add(snap.issue_id)
             continue
 
-        ok, learned, upc_map = _commit_enrichment_row(
+        seen_issues.add(snap.issue_id)
+        pending.append(
+            _PlannedCatalogWrite(
+                issue_id=snap.issue_id,
+                gcd_issue_id=int(gcd_row["issue_id"]),
+                series_name=snap.series_name,
+                issue_number=snap.issue_number,
+                planned=planned,
+                gcd_inputs=gcd_inputs,
+            )
+        )
+        written += 1
+
+    if timer:
+        timer.match_plan_sec = time.perf_counter() - t_match
+
+    for offset in range(0, len(pending), BATCH_COMMIT_SIZE):
+        chunk = pending[offset : offset + BATCH_COMMIT_SIZE]
+        learned, upc_map = _apply_planned_write_batch(
             session,
-            issue=issue,
-            variant=variant,
-            planned=planned,
-            gcd_issue_id=int(gcd_row["issue_id"]),
-            series_name=snap.series_name,
-            number=snap.issue_number,
-            gcd_inputs=gcd_inputs,
+            batch=chunk,
             learned=learned,
             upc_map=upc_map,
             rollback_collector=rollback_collector,
             report=report,
+            record_written_rows=record_written_rows,
+            timer=timer,
         )
         ctx.learned_barcodes = learned
         ctx.upc_to_issue = upc_map
-        if ok:
-            seen_issues.add(snap.issue_id)
-            written += 1
-            _log_write_progress(written=written, limit=limit, all_catalog=True)
+        _emit_write_progress(
+            report=report,
+            written=report.updated_issues,
+            limit=limit,
+            timer=timer,
+            verbose=verbose_progress,
+        )
 
     return report
 
@@ -374,22 +616,46 @@ def run_p103_enrichment_write_batch(
     cache_path: Path,
     filters: EnrichmentFilters,
     rollback_collector: dict[str, Any] | None = None,
+    benchmark_write_limit: int | None = None,
+    verbose_progress: bool = False,
 ) -> P103WriteBatchReport:
+    effective_limit = int(filters.limit or 0)
+    if benchmark_write_limit is not None:
+        effective_limit = min(effective_limit, int(benchmark_write_limit))
+        verbose_progress = True
+    if effective_limit <= 0:
+        raise ValueError("P103 write limit must be positive")
+
+    filters = EnrichmentFilters(
+        publisher=filters.publisher,
+        year_from=filters.year_from,
+        year_to=filters.year_to,
+        limit=effective_limit,
+        all_catalog=filters.all_catalog,
+        year_filter_explicit=filters.year_filter_explicit,
+    )
+
     if filters.limit is None or filters.limit > MAX_ENRICHMENT_WRITE_LIMIT:
         raise ValueError(f"P103 write limit must be 1–{MAX_ENRICHMENT_WRITE_LIMIT}")
+
+    timer = P103WriteBatchTimer() if verbose_progress or benchmark_write_limit is not None else None
+    record_written_rows = benchmark_write_limit is None
 
     report = P103WriteBatchReport(
         report_at=datetime.now(timezone.utc).isoformat(),
         filters=enrichment_filters_to_dict(filters),
     )
 
+    t_ctx = time.perf_counter()
     ctx = CatalogCacheContext.load(cache_path)
+    if timer:
+        timer.cache_load_sec = time.perf_counter() - t_ctx
     learned, upc_map = _reload_barcode_guard(session)
     ctx.learned_barcodes = learned
     ctx.upc_to_issue = upc_map
 
     if filters.all_catalog:
-        return _run_p103_enrichment_write_batch_all_catalog(
+        report = _run_p103_enrichment_write_batch_all_catalog(
             session,
             gcd_path=gcd_path,
             cache_path=cache_path,
@@ -399,7 +665,15 @@ def run_p103_enrichment_write_batch(
             learned=learned,
             upc_map=upc_map,
             rollback_collector=rollback_collector,
+            timer=timer,
+            verbose_progress=verbose_progress,
+            record_written_rows=record_written_rows,
         )
+        report.scanned = timer.scanned if timer else report.scanned
+        report.matched = timer.matched if timer else report.matched
+        if timer:
+            report.perf = timer.to_dict()
+        return report
 
     conn = sqlite3.connect(gcd_path)
     conn.execute("PRAGMA query_only = ON")
@@ -515,7 +789,13 @@ def run_p103_enrichment_write_batch(
                 session.commit()
                 seen_issues.add(issue_id)
                 written += 1
-                _log_write_progress(written=written, limit=int(filters.limit or 0), all_catalog=False)
+                _emit_write_progress(
+                    report=report,
+                    written=written,
+                    limit=int(filters.limit or 0),
+                    timer=None,
+                    verbose=verbose_progress,
+                )
                 report.updated_issues += 1
                 inserted_upc = upc_id is not None
                 if inserted_upc:

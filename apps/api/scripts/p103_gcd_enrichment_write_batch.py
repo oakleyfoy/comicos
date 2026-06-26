@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from p97_bootstrap import bootstrap_api_path
@@ -18,6 +19,7 @@ from app.services.p103_gcd_catalog_enrichment_service import validate_enrichment
 from app.services.p103_gcd_enrichment_write_service import run_p103_enrichment_write_batch  # noqa: E402
 from gcd_pipeline_cli import (  # noqa: E402
     add_all_catalog_argument,
+    add_benchmark_write_limit_argument,
     add_confirm_write_argument,
     add_gcd_cache_arguments,
     add_json_argument,
@@ -33,6 +35,7 @@ DEFAULT_OUT = Path("data/p103/gcd_enrichment_write_batch.json")
 def main() -> int:
     parser = argparse.ArgumentParser(description="P103 enrichment write-batch")
     add_all_catalog_argument(parser)
+    add_benchmark_write_limit_argument(parser)
     add_publisher_year_scope_arguments(parser, publisher_required=False)
     parser.add_argument("--limit", type=int, required=True)
     add_confirm_write_argument(parser, required=True)
@@ -68,6 +71,8 @@ def main() -> int:
             cache_path=cache_path,
             filters=filters,
             rollback_collector=rollback,
+            benchmark_write_limit=args.benchmark_write_limit,
+            verbose_progress=args.benchmark_write_limit is not None,
         )
 
     payload = {
@@ -76,11 +81,18 @@ def main() -> int:
     }
     out_path = resolve_output_path(args, DEFAULT_OUT)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    t_ser = time.perf_counter()
+    serialized = json.dumps(payload, indent=2)
+    serialize_sec = time.perf_counter() - t_ser
+    out_path.write_text(serialized, encoding="utf-8")
+    if report.perf is not None:
+        report.perf["rollback_serialize_sec"] = round(serialize_sec, 3)
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
         print(json.dumps(report.to_json(), indent=2))
+        if report.perf:
+            print(f"rollback_serialize_sec={report.perf.get('rollback_serialize_sec')}", flush=True)
         print(f"Full report: {out_path}")
     return 0
 

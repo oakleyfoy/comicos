@@ -100,6 +100,16 @@ def add_audit_mode_arguments(parser: argparse.ArgumentParser, *, default_sample_
     add_json_argument(parser)
 
 
+def add_benchmark_write_limit_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--benchmark-write-limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Cap effective --limit to N (e.g. 500) for timing benchmark; prints stage progress",
+    )
+
+
 def resolve_output_path(args: argparse.Namespace, default: Path) -> Path:
     raw = getattr(args, "output", None)
     if raw is None or str(raw).strip() == "":
