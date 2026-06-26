@@ -93,9 +93,36 @@ def main() -> int:
     left_path = base / "left_supplement.jpg"
     ocr_debug_path = base / "ocr_debug.json"
 
+    geometry = result.region_ocr_debug.get("geometry", {}) if result.region_ocr_debug else {}
+
     print("=" * 64)
     print(f"P105 manual barcode debug - {image_path}")
     print("=" * 64)
+    if geometry:
+        orig = geometry.get("original_size", {})
+        work = geometry.get("working_size", {})
+        det = geometry.get("detection_size", {})
+        print("GEOMETRY DIAGNOSTICS")
+        print(f"  original_size:  {orig.get('width')}x{orig.get('height')}")
+        print(f"  working_size:   {work.get('width')}x{work.get('height')}")
+        print(
+            f"  detection_size: {det.get('width')}x{det.get('height')} "
+            f"(scale={geometry.get('detection_scale')})"
+        )
+        print(f"  geometry_failed: {geometry.get('geometry_failed')}")
+        rects = geometry.get("rectangles", {})
+        for name in ("full_expanded", "price_box", "main_bars", "left_supplement", "right_cover_digit"):
+            r = rects.get(name)
+            if not r:
+                print(f"  {name:18s} (none)")
+                continue
+            print(
+                f"  {name:18s} x={r.get('x')} y={r.get('y')} "
+                f"w={r.get('width')} h={r.get('height')}"
+            )
+        for note in geometry.get("notes", []):
+            print(f"  note: {note}")
+        print("-" * 64)
     print(f"detection_method:      {result.detection_method}")
     print(f"main_upc:              {result.main_upc or '(none)'}")
     print(f"decoded_supp (bars):   {result.decoded_supplement or '(none)'}")

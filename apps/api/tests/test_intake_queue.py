@@ -19,6 +19,7 @@ from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSer
 from app.models.intake_queue import (
     ComicIssueBarcode,
     ITEM_AUTO_MATCHED,
+    ITEM_FAILED,
     ITEM_NEEDS_REVIEW,
     ITEM_QUEUED,
     ITEM_READY_FOR_REVIEW,
@@ -88,9 +89,16 @@ def _intake_session(session: Session) -> IntakeSession:
 
 
 def _fake_jpeg(tmp_path) -> str:
+    # Full-resolution scan: large enough to clear the recognition min-size guard.
     p = tmp_path / "scan.jpg"
-    Image.new("RGB", (40, 20), color=(2, 2, 2)).save(p, format="JPEG")
+    Image.new("RGB", (800, 1200), color=(2, 2, 2)).save(p, format="JPEG")
     return str(p)
+
+
+def _jpeg_bytes(width: int, height: int) -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (width, height), color=(8, 8, 8)).save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 def test_worker_auto_matches_via_learned_barcode(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -292,7 +300,7 @@ def test_enqueue_is_nonblocking_and_increments_count(tmp_path, monkeypatch: pyte
 
         upload = UploadFile(
             filename="scan.jpg",
-            file=BytesIO(b"\xff\xd8\xff\xe0jpegbytes"),
+            file=BytesIO(_jpeg_bytes(800, 1200)),
             headers=Headers({"content-type": "image/jpeg"}),
         )
 
@@ -302,3 +310,51 @@ def test_enqueue_is_nonblocking_and_increments_count(tmp_path, monkeypatch: pyte
         assert kicked == [int(item.id)]
         session.refresh(intake)
         assert intake.scanned_count == 1
+
+
+def test_enqueue_flags_tiny_thumbnail_and_skips_worker(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        intake = _intake_session(session)
+
+        kicked: list[int] = []
+        monkeypatch.setattr(svc, "run_intake_item_async", lambda item_id: kicked.append(item_id))
+        monkeypatch.setattr(svc, "_intake_storage_dir", lambda **k: tmp_path)
+        monkeypatch.setattr(svc, "relative_path_under_repo_root", lambda p: f"data/intake/test/{p.name}")
+
+        upload = UploadFile(
+            filename="thumb.jpg",
+            file=BytesIO(_jpeg_bytes(40, 20)),
+            headers=Headers({"content-type": "image/jpeg"}),
+        )
+
+        item = asyncio.run(svc.enqueue_intake_item(session, token="tok-intake", upload=upload))
+
+        assert item.status == ITEM_FAILED
+        assert kicked == []  # never enters the recognition pipeline
+        assert item.error and "too small" in item.error.lower()
+        assert "40x20" in item.error
+
+
+def test_worker_rejects_thumbnail_before_barcode_ocr(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="ignored.jpg")
+
+        tiny = tmp_path / "thumb.jpg"
+        Image.new("RGB", (40, 20), color=(2, 2, 2)).save(tiny, format="JPEG")
+
+        called: list[int] = []
+        monkeypatch.setattr(worker, "extract_barcode_from_image", lambda *a, **k: called.append(1) or {"barcode": FULL_BARCODE})
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: tiny)
+
+        result = worker.process_intake_item(session, item_id=int(item.id))
+
+        assert result == ITEM_FAILED
+        assert called == []  # OCR/barcode extraction never runs on a thumbnail
+        session.refresh(item)
+        assert item.reason and "too small" in item.reason.lower()
+        assert "40x20" in item.reason

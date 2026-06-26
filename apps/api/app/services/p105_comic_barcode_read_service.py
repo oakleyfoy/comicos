@@ -658,6 +658,16 @@ def read_comic_barcode_from_image_bytes(
             review_reason = "Inferred/corrected supplemental digits — confirm in review."
     if decision.disagreement:
         auto_match = False
+    if geometry.geometry_failed:
+        auto_match = False
+        ow, oh = geometry.original_size
+        lw = geometry.left_supplement[2] - geometry.left_supplement[0]
+        lh = geometry.left_supplement[3] - geometry.left_supplement[1]
+        review_reason = (
+            f"Input image too small for reliable barcode OCR: original_size={ow}x{oh}, "
+            f"uploaded {len(image_bytes)} bytes, left supplement crop only {lw}x{lh}px. "
+            "Capture/store a higher-resolution photo. See overlay.jpg."
+        )
     if not final_supplement and main_upc and direct_market_requires_supplement_key(main_upc):
         auto_match = False
         review_reason = review_reason or (

@@ -18,6 +18,9 @@ type ScanState = "idle" | "scanning" | "paused" | "stopped";
 // Avoid re-enqueuing the same barcode while the book lingers in frame.
 const DUPLICATE_WINDOW_MS = 2500;
 
+// Recognition images below this long edge are unusable for barcode OCR downstream.
+const MIN_CAPTURE_LONG_EDGE = 600;
+
 function quickFeedback(): void {
   try {
     navigator.vibrate?.(40);
@@ -107,13 +110,38 @@ export function IntakeScannerPage(): JSX.Element {
   const captureFrame = useCallback(async (): Promise<Blob | null> => {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0) return null;
+    // Always capture at the camera's intrinsic resolution, never the CSS/display size.
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.85));
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92),
+    );
+    const longEdge = Math.max(canvas.width, canvas.height);
+    console.info(
+      "[intake.capture] video=%dx%d canvas=%dx%d longEdge=%d blobBytes=%d",
+      video.videoWidth,
+      video.videoHeight,
+      canvas.width,
+      canvas.height,
+      longEdge,
+      blob?.size ?? 0,
+    );
+    if (longEdge < MIN_CAPTURE_LONG_EDGE) {
+      console.warn(
+        "[intake.capture] capture resolution too low (%dx%d, need long edge >= %d). Recognition may be rejected.",
+        canvas.width,
+        canvas.height,
+        MIN_CAPTURE_LONG_EDGE,
+      );
+      setError(
+        `Camera resolution is too low (${canvas.width}×${canvas.height}). Move closer or use a higher-resolution camera.`,
+      );
+    }
+    return blob;
   }, []);
 
   const manualCapture = useCallback(async () => {
@@ -158,13 +186,34 @@ export function IntakeScannerPage(): JSX.Element {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        // Request a high-resolution rear camera so the recognition capture is full-frame,
+        // not a low-res default stream that yields thumbnail-sized scans.
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
         audio: false,
       });
       streamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      const settings = track?.getSettings?.();
+      if (settings) {
+        console.info(
+          "[intake.camera] stream settings width=%s height=%s deviceId=%s",
+          settings.width,
+          settings.height,
+          settings.deviceId,
+        );
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => undefined);
+        console.info(
+          "[intake.camera] video intrinsic %dx%d",
+          videoRef.current.videoWidth,
+          videoRef.current.videoHeight,
+        );
       }
       setCameraReady(true);
       startDetection();

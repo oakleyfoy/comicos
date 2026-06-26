@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -92,6 +92,27 @@ def split_barcode_box_regions(
 # ---------------------------------------------------------------------------
 
 
+# Minimum acceptable printed-supplement crop size (px). Below this OCR is hopeless.
+MIN_LEFT_SUPPLEMENT_PX = 40
+# A normal phone photo of a full cover is far larger than this on its long edge.
+MIN_SANE_IMAGE_LONG_EDGE_PX = 200
+# Cap the detection image size for speed; coords are mapped back to original.
+_MAX_DETECT_LONG_EDGE_PX = 1600
+
+
+def _box_xywh(box: Box) -> dict[str, int]:
+    left, top, right, bottom = box
+    return {"x": int(left), "y": int(top), "width": int(right - left), "height": int(bottom - top)}
+
+
+def _box_w(box: Box) -> int:
+    return int(box[2] - box[0])
+
+
+def _box_h(box: Box) -> int:
+    return int(box[3] - box[1])
+
+
 @dataclass
 class BarcodeRegionGeometry:
     """Region boxes in ORIGINAL image coordinates (for overlay + crops)."""
@@ -103,17 +124,59 @@ class BarcodeRegionGeometry:
     price_box: Box | None = None
     deskew_angle: float = 0.0
     detection_method: str = "percentage"
+    original_size: tuple[int, int] = (0, 0)
+    working_size: tuple[int, int] = (0, 0)
+    detection_size: tuple[int, int] = (0, 0)
+    detection_scale: float = 1.0
+    geometry_failed: bool = False
+    min_region_px: int = MIN_LEFT_SUPPLEMENT_PX
+    notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "full_expanded": list(self.full_expanded),
-            "main_bars": list(self.main_bars),
-            "left_supplement": list(self.left_supplement),
-            "right_cover_digit": list(self.right_cover_digit),
-            "price_box": list(self.price_box) if self.price_box else None,
-            "deskew_angle": self.deskew_angle,
+            "original_size": {"width": self.original_size[0], "height": self.original_size[1]},
+            "working_size": {"width": self.working_size[0], "height": self.working_size[1]},
+            "detection_size": {"width": self.detection_size[0], "height": self.detection_size[1]},
+            "detection_scale": self.detection_scale,
             "detection_method": self.detection_method,
+            "deskew_angle": self.deskew_angle,
+            "geometry_failed": self.geometry_failed,
+            "min_region_px": self.min_region_px,
+            "rectangles": {
+                "full_expanded": _box_xywh(self.full_expanded),
+                "price_box": _box_xywh(self.price_box) if self.price_box else None,
+                "main_bars": _box_xywh(self.main_bars),
+                "left_supplement": _box_xywh(self.left_supplement),
+                "right_cover_digit": _box_xywh(self.right_cover_digit),
+            },
+            "notes": list(self.notes),
         }
+
+    def report_lines(self) -> list[str]:
+        lines = [
+            f"original_size: {self.original_size[0]}x{self.original_size[1]}",
+            f"working_size:  {self.working_size[0]}x{self.working_size[1]}",
+            f"detection_size:{self.detection_size[0]}x{self.detection_size[1]} (scale={self.detection_scale:.4f})",
+            f"detection_method: {self.detection_method}  deskew={self.deskew_angle:.1f}  failed={self.geometry_failed}",
+        ]
+        rects: list[tuple[str, Box | None]] = [
+            ("full_expanded", self.full_expanded),
+            ("price_box", self.price_box),
+            ("main_bars", self.main_bars),
+            ("left_supplement", self.left_supplement),
+            ("right_cover_digit", self.right_cover_digit),
+        ]
+        for name, box in rects:
+            if box is None:
+                lines.append(f"  {name:18s} (none)")
+                continue
+            d = _box_xywh(box)
+            lines.append(
+                f"  {name:18s} x={d['x']:5d} y={d['y']:5d} w={d['width']:5d} h={d['height']:5d}"
+            )
+        for note in self.notes:
+            lines.append(f"  note: {note}")
+        return lines
 
 
 def _clamp_box(box: Box, width: int, height: int) -> Box:
@@ -125,18 +188,33 @@ def _clamp_box(box: Box, width: int, height: int) -> Box:
     return left, top, right, bottom
 
 
-def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float]:
+def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float, tuple[int, int], float]:
     """Detect the bright rectangular UPC/price box inside the ROI (OpenCV optional).
 
-    Returns ((left, top, right, bottom) in ROI coords, deskew_angle) or (None, 0.0).
+    Detection may run on a downscaled copy for speed; the returned box is mapped
+    back to ROI coordinates. Returns
+    (box_in_roi_coords | None, deskew_angle, detection_image_size, detection_scale).
     """
+    roi_w, roi_h = pil_roi.size
     try:
         import cv2
         import numpy as np
     except Exception:  # noqa: BLE001 - OpenCV optional; fall back to percentages
-        return None, 0.0
+        return None, 0.0, (roi_w, roi_h), 1.0
+
+    scale = 1.0
+    detect_img = pil_roi
+    long_edge = max(roi_w, roi_h)
+    if long_edge > _MAX_DETECT_LONG_EDGE_PX:
+        scale = _MAX_DETECT_LONG_EDGE_PX / float(long_edge)
+        detect_img = pil_roi.resize(
+            (max(1, int(roi_w * scale)), max(1, int(roi_h * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    det_w, det_h = detect_img.size
+
     try:
-        rgb = np.asarray(pil_roi.convert("RGB"))
+        rgb = np.asarray(detect_img.convert("RGB"))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         h, w = gray.shape[:2]
         _thr, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -163,54 +241,127 @@ def _detect_price_box(pil_roi: Image.Image) -> tuple[Box | None, float]:
                 if angle < -45:
                     angle += 90
                 best_angle = max(-15.0, min(15.0, angle))
-        return best, best_angle
+        if best is None:
+            return None, 0.0, (det_w, det_h), scale
+        # Map detection-image coords back to ROI coords.
+        inv = 1.0 / scale if scale else 1.0
+        mapped = (
+            int(best[0] * inv),
+            int(best[1] * inv),
+            int(best[2] * inv),
+            int(best[3] * inv),
+        )
+        return mapped, best_angle, (det_w, det_h), scale
     except Exception as exc:  # noqa: BLE001
         logger.debug("p105.price_box_detect_fail err=%s", exc)
-        return None, 0.0
+        return None, 0.0, (det_w, det_h), scale
 
 
-def compute_barcode_region_geometry(
-    pil: Image.Image,
-    *,
-    config: BarcodeCropConfig = DEFAULT_BARCODE_CROP_CONFIG,
-) -> BarcodeRegionGeometry:
-    """Compute region boxes in original-image coordinates, preferring detected price box."""
-    w, h = pil.size
-    fe = expand_box(0, int(h * 0.52), w, h, w, h, expand_ratio=config.clamped_expand_ratio())
-    fe = _clamp_box(fe, w, h)
-
-    price_box: Box | None = None
-    deskew_angle = 0.0
-    method = "percentage"
-    roi = pil.crop(fe)
-    detected, angle = _detect_price_box(roi)
-    if detected is not None:
-        dl, dt, dr, db = detected
-        price_box = _clamp_box((fe[0] + dl, fe[1] + dt, fe[0] + dr, fe[1] + db), w, h)
-        deskew_angle = angle
-        method = "geometry"
-
-    base = price_box if price_box is not None else fe
+def _splits_from_base(base: Box, width: int, height: int) -> dict[str, Box]:
     bl, bt, br, bb = base
     bw = max(1, br - bl)
     bh = max(1, bb - bt)
-
     row_top = bt + int(bh * 0.16)
     row_bottom = bb - int(bh * 0.16)
     left_end = bl + int(bw * 0.32)
     bars_left = bl + int(bw * 0.16)
     bars_right = bl + int(bw * 0.74)
     right_start = bl + int(bw * 0.74)
+    return {
+        "main_bars": _clamp_box((bars_left, bt, bars_right, bb), width, height),
+        "left_supplement": _clamp_box((bl, row_top, left_end, row_bottom), width, height),
+        "right_cover_digit": _clamp_box((right_start, row_top, br, row_bottom), width, height),
+    }
+
+
+def compute_barcode_region_geometry(
+    pil: Image.Image,
+    *,
+    config: BarcodeCropConfig = DEFAULT_BARCODE_CROP_CONFIG,
+    min_region_px: int = MIN_LEFT_SUPPLEMENT_PX,
+) -> BarcodeRegionGeometry:
+    """Compute region boxes in ORIGINAL image coordinates, with size guards + diagnostics."""
+    w, h = pil.size
+    notes: list[str] = []
+    if max(w, h) < MIN_SANE_IMAGE_LONG_EDGE_PX:
+        notes.append(
+            f"input image is only {w}x{h}px (long edge < {MIN_SANE_IMAGE_LONG_EDGE_PX}); "
+            "looks like a thumbnail, not a full-resolution capture"
+        )
+        logger.error(
+            "p105.geometry_input_too_small original=%sx%s — supplement OCR cannot work on a thumbnail",
+            w,
+            h,
+        )
+
+    fe = _clamp_box(expand_box(0, int(h * 0.52), w, h, w, h, expand_ratio=config.clamped_expand_ratio()), w, h)
+
+    price_box: Box | None = None
+    deskew_angle = 0.0
+    method = "percentage"
+    roi = pil.crop(fe)
+    detected, angle, det_size, det_scale = _detect_price_box(roi)
+    if detected is not None:
+        dl, dt, dr, db = detected
+        candidate_pb = _clamp_box((fe[0] + dl, fe[1] + dt, fe[0] + dr, fe[1] + db), w, h)
+        candidate_splits = _splits_from_base(candidate_pb, w, h)
+        ls = candidate_splits["left_supplement"]
+        if _box_w(ls) >= min_region_px and _box_h(ls) >= min_region_px:
+            price_box = candidate_pb
+            deskew_angle = angle
+            method = "geometry"
+        else:
+            notes.append(
+                f"rejected detected price_box {_box_xywh(candidate_pb)}: "
+                f"left_supplement {_box_w(ls)}x{_box_h(ls)} < {min_region_px}px; using percentage fallback"
+            )
+            logger.warning(
+                "p105.geometry_rejected_tiny_box original=%sx%s box=%s left=%sx%s min=%s",
+                w,
+                h,
+                _box_xywh(candidate_pb),
+                _box_w(ls),
+                _box_h(ls),
+                min_region_px,
+            )
+
+    base = price_box if price_box is not None else fe
+    splits = _splits_from_base(base, w, h)
 
     geometry = BarcodeRegionGeometry(
         full_expanded=fe,
-        main_bars=_clamp_box((bars_left, bt, bars_right, bb), w, h),
-        left_supplement=_clamp_box((bl, row_top, left_end, row_bottom), w, h),
-        right_cover_digit=_clamp_box((right_start, row_top, br, row_bottom), w, h),
+        main_bars=splits["main_bars"],
+        left_supplement=splits["left_supplement"],
+        right_cover_digit=splits["right_cover_digit"],
         price_box=price_box,
         deskew_angle=deskew_angle,
         detection_method=method,
+        original_size=(w, h),
+        working_size=(w, h),
+        detection_size=det_size,
+        detection_scale=det_scale,
+        min_region_px=min_region_px,
+        notes=notes,
     )
+
+    ls = geometry.left_supplement
+    if _box_w(ls) < min_region_px or _box_h(ls) < min_region_px:
+        geometry.geometry_failed = True
+        geometry.notes.append(
+            f"left_supplement crop {_box_w(ls)}x{_box_h(ls)} below minimum {min_region_px}px — "
+            "geometry failed (input image is likely too small)"
+        )
+        logger.error(
+            "p105.geometry_failed original=%sx%s left_supplement=%sx%s min=%s",
+            w,
+            h,
+            _box_w(ls),
+            _box_h(ls),
+            min_region_px,
+        )
+
+    for line in geometry.report_lines():
+        logger.info("p105.geometry %s", line)
     return geometry
 
 

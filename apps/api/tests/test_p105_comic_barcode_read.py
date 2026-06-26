@@ -251,6 +251,74 @@ def test_debug_overlay_and_crops_generated(tmp_path, monkeypatch) -> None:
     assert any((base / "left_variants").iterdir())
     assert result.region_debug_path == str(base)
 
+    # Overlay must be saved at ORIGINAL image size, not a thumbnail.
+    with Image.open(base / "overlay.jpg") as ov:
+        assert ov.size == (520, 360)
+    # Crops saved at true size; left supplement must be a usable region.
+    with Image.open(base / "left_supplement.jpg") as left:
+        assert left.width > 40 and left.height > 40
+
+
+def test_geometry_reports_dims_and_rectangles() -> None:
+    with Image.open(BytesIO(_price_box_image("03921"))) as img:
+        pil = img.convert("RGB")
+    geo = compute_barcode_region_geometry(pil)
+    data = geo.as_dict()
+    assert data["original_size"] == {"width": 520, "height": 360}
+    assert data["working_size"] == {"width": 520, "height": 360}
+    rect = data["rectangles"]["left_supplement"]
+    assert rect["width"] > 40 and rect["height"] > 40
+    assert geo.geometry_failed is False
+    # report_lines should mention every region.
+    text = "\n".join(geo.report_lines())
+    for name in ("full_expanded", "main_bars", "left_supplement", "right_cover_digit"):
+        assert name in text
+
+
+def test_tiny_detected_price_box_falls_back_to_percentage() -> None:
+    with Image.open(BytesIO(_price_box_image("03921"))) as img:
+        pil = img.convert("RGB")
+    tiny_box = (5, 5, 17, 14)  # 12x9 px — the catastrophic real-world case
+    with patch(
+        "app.services.p105_comic_barcode_regions._detect_price_box",
+        return_value=(tiny_box, 0.0, (520, 200), 1.0),
+    ):
+        geo = compute_barcode_region_geometry(pil)
+    assert geo.detection_method == "percentage"
+    assert geo.price_box is None
+    assert geo.left_supplement[2] - geo.left_supplement[0] >= 40
+    assert geo.left_supplement[3] - geo.left_supplement[1] >= 40
+    assert geo.geometry_failed is False
+
+
+def test_thumbnail_input_flags_geometry_failed() -> None:
+    thumb = Image.new("RGB", (40, 20), (255, 255, 255))
+    buf = BytesIO()
+    thumb.save(buf, format="JPEG")
+
+    def blank_variant(pil, label, *, psm, log_context):  # noqa: ANN001
+        return OcrAttempt(variant=f"{label}|psm{psm}", raw_text="", digits="", confidence=0.0)
+
+    with patch(
+        "app.services.p105_comic_barcode_read_service._decode_main_upc_from_pil",
+        return_value=("", 0.0),
+    ), patch(
+        "app.services.p105_comic_barcode_read_service._decode_supplement_from_pil",
+        return_value="",
+    ), patch(
+        "app.services.p105_supplement_ocr._ocr_variant",
+        side_effect=blank_variant,
+    ):
+        result = read_comic_barcode_from_image_bytes(buf.getvalue(), session=None)
+
+    geom = result.region_ocr_debug["geometry"]
+    assert geom["geometry_failed"] is True
+    assert geom["original_size"] == {"width": 40, "height": 20}
+    reason = result.review_reason.lower()
+    assert "too small for reliable barcode ocr" in reason
+    assert "original_size=40x20" in reason
+    assert result.auto_match_allowed is False
+
 
 def test_debug_dir_param_writes_manual_outputs(tmp_path) -> None:
     """The CLI path: debug_dir writes overlay + attempts without intake item id."""

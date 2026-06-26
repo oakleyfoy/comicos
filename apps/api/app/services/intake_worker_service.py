@@ -66,6 +66,43 @@ from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 logger = logging.getLogger(__name__)
 
 COVER_FINGERPRINT_AGREE_SCORE = 70.0
+# Recognition images below this long edge are too small for barcode OCR/fingerprint.
+MIN_RECOGNITION_LONG_EDGE_PX = 600
+# Below this byte size an "image" is almost certainly a preview/thumbnail, not a scan.
+SUSPICIOUS_MIN_IMAGE_BYTES = 8 * 1024
+
+
+def image_dimensions_from_bytes(raw: bytes) -> tuple[int, int] | None:
+    """Decode width/height without loading pixels into the recognition path; None on failure."""
+    import io as _io
+
+    try:
+        from PIL import Image as _Image
+
+        with _Image.open(_io.BytesIO(raw)) as im:
+            return int(im.width), int(im.height)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def recognition_image_too_small(raw: bytes) -> tuple[bool, int, int, str]:
+    """Return (too_small, width, height, reason) for a candidate recognition image."""
+    dims = image_dimensions_from_bytes(raw)
+    byte_len = len(raw)
+    if dims is None:
+        return True, 0, 0, f"Captured image could not be decoded ({byte_len} bytes)."
+    w_img, h_img = dims
+    if max(w_img, h_img) < MIN_RECOGNITION_LONG_EDGE_PX:
+        return (
+            True,
+            w_img,
+            h_img,
+            (
+                f"Input image too small for reliable barcode OCR ({w_img}x{h_img}, {byte_len} bytes; "
+                f"need long edge >= {MIN_RECOGNITION_LONG_EDGE_PX}px). Re-scan closer / higher resolution."
+            ),
+        )
+    return False, w_img, h_img, ""
 
 
 def _year_from_cover_date(cover_date: str | None) -> str:
@@ -210,6 +247,20 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         if not abs_path.is_file():
             return _fail(session, item, "Captured image is missing from storage.")
         image_bytes = abs_path.read_bytes()
+
+        too_small, img_w, img_h, small_reason = recognition_image_too_small(image_bytes)
+        logger.info(
+            "intake.item.image item_id=%s bytes=%s width=%s height=%s path=%s too_small=%s",
+            item_id,
+            len(image_bytes),
+            img_w,
+            img_h,
+            abs_path,
+            too_small,
+        )
+        if too_small:
+            # Never run barcode OCR / fingerprint matching on thumbnail-sized input.
+            return _finish(session, item, status=ITEM_FAILED, reason=small_reason)
 
         p105 = read_comic_barcode_from_image_bytes(
             image_bytes,

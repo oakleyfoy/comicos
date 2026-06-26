@@ -25,6 +25,7 @@ from app.models.intake_queue import (
     INTAKE_SESSION_STOPPED,
     ITEM_ADDED_TO_INVENTORY,
     ITEM_AUTO_MATCHED,
+    ITEM_FAILED,
     ITEM_NEEDS_REVIEW,
     ITEM_PROCESSING,
     ITEM_QUEUED,
@@ -45,7 +46,11 @@ from app.services.acquisition.acquisition_service import (
     require_open,
 )
 from app.services.barcode_scan_consensus_service import validate_single_barcode_read
-from app.services.intake_worker_service import run_intake_item_async
+from app.services.intake_worker_service import (
+    SUSPICIOUS_MIN_IMAGE_BYTES,
+    recognition_image_too_small,
+    run_intake_item_async,
+)
 from app.services.photo_import_storage_service import (
     REPO_ROOT,
     relative_path_under_repo_root,
@@ -159,6 +164,25 @@ async def enqueue_intake_item(
     dest_path = dest_dir / f"{uuid.uuid4().hex}{ext}"
     dest_path.write_bytes(raw)
 
+    too_small, img_w, img_h, small_reason = recognition_image_too_small(raw)
+    logger.info(
+        "intake.enqueue.image session=%s bytes=%s width=%s height=%s stored_path=%s too_small=%s",
+        row.id,
+        len(raw),
+        img_w,
+        img_h,
+        relative_path_under_repo_root(dest_path),
+        too_small,
+    )
+    if len(raw) < SUSPICIOUS_MIN_IMAGE_BYTES:
+        logger.warning(
+            "intake.enqueue.suspicious_small_bytes session=%s bytes=%s width=%s height=%s",
+            row.id,
+            len(raw),
+            img_w,
+            img_h,
+        )
+
     validation = None
     normalized = None
     raw_stored = (raw_barcode or "").strip()
@@ -182,8 +206,11 @@ async def enqueue_intake_item(
         normalized_barcode=(normalized[:64] if normalized else None),
         base_upc=(validation.base_upc[:16] if validation and validation.acceptance == "accepted" else None),
         extension=((validation.extension or None) if validation and validation.acceptance == "accepted" else None),
-        status=ITEM_QUEUED,
+        status=ITEM_FAILED if too_small else ITEM_QUEUED,
     )
+    if too_small:
+        item.error = small_reason
+        item.processed_at = utc_now()
     session.add(item)
     row.scanned_count = int(row.scanned_count) + 1
     row.last_seen_at = utc_now()
@@ -192,6 +219,18 @@ async def enqueue_intake_item(
     session.add(row)
     session.commit()
     session.refresh(item)
+
+    if too_small:
+        # Thumbnail-sized capture: flagged failed up front, never enters recognition.
+        logger.warning(
+            "intake.enqueue.rejected_small item_id=%s session=%s width=%s height=%s bytes=%s",
+            item.id,
+            row.id,
+            img_w,
+            img_h,
+            len(raw),
+        )
+        return item
 
     # Kick the background worker; the scanner does not wait for this.
     run_intake_item_async(int(item.id or 0))
