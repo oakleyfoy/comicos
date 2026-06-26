@@ -66,7 +66,7 @@ export function CoverHydrationDashboardPage(): JSX.Element {
   };
 
   return (
-    <AppShell title="Cover Hydration">
+    <AppShell>
       <div className="mx-auto max-w-5xl space-y-6 p-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Cover Hydration (P104)</h1>
